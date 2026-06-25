@@ -1,4 +1,4 @@
-//! Authentication — Supabase OAuth (GitHub), JWT session cookies, admin guards.
+//! Authentication — GitHub OAuth, email magic links, SIWX, JWT session cookies.
 
 pub mod email;
 pub mod guard;

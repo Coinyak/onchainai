@@ -3,10 +3,11 @@
 //! Defines the top-level router, the HTML shell, and placeholder page
 //! components for all routes required by the website-core milestone.
 
+use crate::components::top_nav::TopNav;
 use crate::pages::admin::admin_page_shell;
 use crate::pages::{
     AdminCategoriesPage, AdminCommentsPage, AdminCrawlerPage, AdminSettingsPage, AdminToolsPage,
-    AdminUsersPage, CategoryPage, HomePage, ToolDetailPage, ToolsListPage,
+    AdminUsersPage, CategoryPage, HomePage, LoginPage, ToolDetailPage, ToolsListPage,
 };
 use leptos::prelude::*;
 use leptos_meta::{provide_meta_context, Link, Meta, MetaTags, Stylesheet, Title};
@@ -68,6 +69,7 @@ pub fn App() -> impl IntoView {
                     <Route path=(StaticSegment("tools"), ParamSegment("slug")) view=ToolDetailPage/>
                     <Route path=(StaticSegment("categories"), ParamSegment("id")) view=CategoryPage/>
                     <Route path=StaticSegment("about") view=AboutPage/>
+                    <Route path=StaticSegment("login") view=LoginPage/>
                     <Route path=StaticSegment("admin") view=AdminHomePage/>
                     <Route path=(StaticSegment("admin"), StaticSegment("tools")) view=AdminToolsPage/>
                     <Route path=(StaticSegment("admin"), StaticSegment("settings")) view=AdminSettingsPage/>
@@ -84,6 +86,7 @@ pub fn App() -> impl IntoView {
 #[component]
 fn AboutPage() -> impl IntoView {
     view! {
+        <TopNav/>
         <div class="px-6 py-8 max-w-[720px] mx-auto">
             <h2 class="text-[20px] font-semibold mb-4">"About OnchainAI"</h2>
             <p class="text-[#6B6B6B]">"OnchainAI is a crypto tool directory for humans and agents."</p>

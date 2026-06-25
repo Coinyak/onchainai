@@ -219,9 +219,14 @@ pub async fn verify(
         return Err(StatusCode::UNAUTHORIZED);
     }
 
-    let user_id = ensure_siwx_profile(&state.pool, &row.wallet_address, &row.chain_id)
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let user_id = ensure_siwx_profile(
+        &state.pool,
+        config,
+        &row.wallet_address,
+        &row.chain_id,
+    )
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     sqlx::query(
         r#"

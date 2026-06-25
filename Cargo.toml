@@ -6,6 +6,11 @@ rust-version = "1.85"
 description = "Crypto tool directory — auto-discover, normalize, and expose fragmented crypto tools for humans and agents."
 license = "MIT"
 
+[package.metadata.leptos]
+output-name = "onchainai"
+site-root = "target/site"
+site-pkg-dir = "pkg"
+
 [[bin]]
 name = "onchainai"
 path = "src/main.rs"
