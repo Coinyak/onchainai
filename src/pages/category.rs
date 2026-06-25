@@ -1,79 +1,90 @@
 //! Category page — tools filtered by category id.
 
 use crate::components::{tool_card::ToolCard, top_nav::TopNav};
+use crate::models::{Category, Tool};
 use crate::server::functions::{get_categories, list_tools, ToolFilters};
 use leptos::prelude::*;
 use leptos_router::hooks::use_params_map;
+
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
+struct CategoryPageData {
+    categories: Vec<(Category, i64)>,
+    tools: Vec<Tool>,
+    cat_id: String,
+}
+
+async fn load_category_page(cat_id: String) -> CategoryPageData {
+    let categories = get_categories().await.unwrap_or_default();
+    let tools = if cat_id.is_empty() {
+        Vec::new()
+    } else {
+        list_tools(
+            "hot".into(),
+            0,
+            50,
+            ToolFilters {
+                function: Some(cat_id.clone()),
+                ..Default::default()
+            },
+            None,
+        )
+        .await
+        .unwrap_or_default()
+    };
+    CategoryPageData {
+        categories,
+        tools,
+        cat_id,
+    }
+}
 
 #[component]
 pub fn CategoryPage() -> impl IntoView {
     let params = use_params_map();
     let cat_id = Memo::new(move |_| params.with(|p| p.get("id").unwrap_or_default()));
 
-    let categories =
-        Resource::new(|| (), |_| async move { get_categories().await });
-    let tools = Resource::new(
+    let page = Resource::new_blocking(
         move || cat_id.get(),
-        |id| async move {
-            if id.is_empty() {
-                Err(ServerFnError::new("missing category"))
-            } else {
-                list_tools(
-                    "hot".into(),
-                    0,
-                    50,
-                    ToolFilters {
-                        function: Some(id),
-                        ..Default::default()
-                    },
-                    None,
-                )
-                .await
-            }
-        },
+        |id| async move { load_category_page(id).await },
     );
 
     view! {
         <TopNav/>
         <div class="max-w-[960px] mx-auto px-4 py-8">
-            <Suspense fallback=|| view! { <h1>"Loading..."</h1> }>
-                {move || {
-                    let id = cat_id.get();
-                    categories.get().map(|res| match res {
-                        Ok(cats) => {
-                            let label = cats
-                                .iter()
-                                .find(|(c, _)| c.id == id)
-                                .map(|(c, _)| c.label.clone())
-                                .unwrap_or_else(|| "Category".into());
-                            if cats.iter().any(|(c, _)| c.id == id) {
-                                view! { <h1 class="text-[28px] font-bold mb-4">{label}</h1> }.into_any()
-                            } else {
-                                view! {
-                                    <h1 class="text-[28px] font-bold">"404"</h1>
-                                    <p class="text-[#6B6B6B]">"Category not found."</p>
-                                }
-                                .into_any()
+            {move || {
+                page.get().map(|data| {
+                    let label = data
+                        .categories
+                        .iter()
+                        .find(|(c, _)| c.id == data.cat_id)
+                        .map(|(c, _)| c.label.clone())
+                        .unwrap_or_else(|| "Category".into());
+                    let found = data.categories.iter().any(|(c, _)| c.id == data.cat_id);
+                    view! {
+                        {if found {
+                            view! { <h1 class="text-[28px] font-bold mb-4">{label}</h1> }.into_any()
+                        } else if !data.cat_id.is_empty() {
+                            view! {
+                                <h1 class="text-[28px] font-bold">"404"</h1>
+                                <p class="text-[#6B6B6B]">"Category not found."</p>
                             }
-                        }
-                        Err(_) => view! { <h1>"Category"</h1> }.into_any(),
-                    })
-                }}
-            </Suspense>
-            <Suspense fallback=|| view! { <p>"Loading tools..."</p> }>
-                {move || {
-                    tools.get().map(|res| match res {
-                        Ok(list) => view! {
-                            <div class="tool-list">
-                                {list.into_iter().map(|t| view! { <ToolCard tool=t/> }).collect_view()}
-                            </div>
-                        }
-                        .into_any(),
-                        Err(_) => view! { <p class="text-[#6B6B6B]">"Tools unavailable."</p> }
-                            .into_any(),
-                    })
-                }}
-            </Suspense>
+                            .into_any()
+                        } else {
+                            view! { <h1 class="text-[28px] font-bold mb-4">"Category"</h1> }.into_any()
+                        }}
+                        {if found {
+                            view! {
+                                <div class="tool-list">
+                                    {data.tools.clone().into_iter().map(|t| view! { <ToolCard tool=t/> }).collect_view()}
+                                </div>
+                            }
+                            .into_any()
+                        } else {
+                            ().into_any()
+                        }}
+                    }
+                })
+            }}
         </div>
     }
 }

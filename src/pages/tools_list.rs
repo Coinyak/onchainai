@@ -4,7 +4,10 @@ use crate::components::{
     bottom_sheet::BottomSheet, preview_panel::PreviewPanel, sidebar::Sidebar,
     tool_card::ToolCard, top_nav::TopNav,
 };
-use crate::server::functions::{count_tools, get_categories, get_chain_counts, get_tool_by_slug, list_tools, ToolFilters};
+use crate::models::{Category, Tool};
+use crate::server::functions::{
+    count_tools, get_categories, get_chain_counts, get_tool_by_slug, list_tools, ToolFilters,
+};
 use leptos::prelude::*;
 use leptos_router::hooks::use_query_map;
 
@@ -78,6 +81,40 @@ fn without_selected(base: &str) -> String {
     }
 }
 
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
+struct ToolsPageData {
+    categories: Vec<(Category, i64)>,
+    chains: Vec<(String, i64)>,
+    total: i64,
+    tools: Vec<Tool>,
+    preview_tool: Option<Tool>,
+}
+
+async fn load_tools_page(
+    sort: String,
+    filters: ToolFilters,
+    search_q: Option<String>,
+    selected: Option<String>,
+) -> ToolsPageData {
+    let categories = get_categories().await.unwrap_or_default();
+    let chains = get_chain_counts(12).await.unwrap_or_default();
+    let total = count_tools(filters.clone()).await.unwrap_or(0);
+    let tools = list_tools(sort, 0, 20, filters, search_q)
+        .await
+        .unwrap_or_default();
+    let preview_tool = match selected.filter(|s| !s.is_empty()) {
+        Some(s) => get_tool_by_slug(s).await.ok(),
+        None => None,
+    };
+    ToolsPageData {
+        categories,
+        chains,
+        total,
+        tools,
+        preview_tool,
+    }
+}
+
 #[component]
 pub fn ToolsListPage() -> impl IntoView {
     let query = use_query_map();
@@ -118,128 +155,93 @@ pub fn ToolsListPage() -> impl IntoView {
         chain: chain.get(),
     });
 
-    let categories = Resource::new(|| (), |_| async move { get_categories().await });
-    let chains = Resource::new(|| (), |_| async move { get_chain_counts(12).await });
-    let total = Resource::new(
-        move || filters.get(),
-        |f| async move { count_tools(f).await },
-    );
-    let tools = Resource::new(
-        move || (sort.get(), filters.get(), search_q.get()),
-        |(sort, filters, q)| async move { list_tools(sort, 0, 20, filters, q).await },
-    );
-    let preview_tool = Resource::new(
-        move || selected.get(),
-        |slug| async move {
-            match slug {
-                Some(s) if !s.is_empty() => get_tool_by_slug(s).await,
-                _ => Err(ServerFnError::new("no selection")),
-            }
+    let page_deps = Memo::new(move |_| {
+        (
+            sort.get(),
+            filters.get(),
+            search_q.get(),
+            selected.get(),
+        )
+    });
+
+    let page = Resource::new_blocking(
+        move || page_deps.get(),
+        |(sort, filters, search_q, selected)| async move {
+            load_tools_page(sort, filters, search_q, selected).await
         },
     );
 
     view! {
         <TopNav/>
-        <div class="tools-layout">
-            <Suspense fallback=|| view! { <aside class="tools-sidebar"><p>"..."</p></aside> }>
-                {move || {
-                    let (cats_res, chains_res) = (categories.get(), chains.get());
-                    match (cats_res, chains_res) {
-                        (Some(Ok(cats)), Some(Ok(chain_opts))) => view! {
-                            <Sidebar
-                                categories=cats
-                                query_base=query_base.get()
-                                active_function=function.get()
-                                active_asset_class=asset_class.get()
-                                active_actor=actor.get()
-                                active_type=tool_type.get()
-                                active_status=status.get()
-                                active_chain=chain.get()
-                                chain_options=chain_opts
-                            />
-                        }
-                        .into_any(),
-                        _ => view! { <aside class="tools-sidebar"/> }.into_any(),
-                    }
-                }}
-            </Suspense>
-            <div class="tools-main">
-                <div class="tools-toolbar sticky-toolbar">
-                    <form action="/tools" method="get" class="toolbar-search">
-                        <input
-                            type="search"
-                            name="q"
-                            placeholder="Search tools..."
-                            prop:value=move || search_q.get().unwrap_or_default()
+        {move || {
+            page.get().map(|data| {
+                let base = query_base.get();
+                view! {
+                    <div class="tools-layout">
+                        <Sidebar
+                            categories=data.categories.clone()
+                            query_base=base.clone()
+                            active_function=function.get()
+                            active_asset_class=asset_class.get()
+                            active_actor=actor.get()
+                            active_type=tool_type.get()
+                            active_status=status.get()
+                            active_chain=chain.get()
+                            chain_options=data.chains.clone()
                         />
-                        {move || function.get().map(|f| view! { <input type="hidden" name="function" value=f/> })}
-                        {move || asset_class.get().map(|v| view! { <input type="hidden" name="asset_class" value=v/> })}
-                        {move || actor.get().map(|v| view! { <input type="hidden" name="actor" value=v/> })}
-                        {move || tool_type.get().map(|v| view! { <input type="hidden" name="type" value=v/> })}
-                        {move || status.get().map(|v| view! { <input type="hidden" name="status" value=v/> })}
-                        {move || chain.get().map(|v| view! { <input type="hidden" name="chain" value=v/> })}
-                        <input type="hidden" name="sort" prop:value=move || sort.get()/>
-                    </form>
-                    <div class="toolbar-sort">
-                        <a href="/tools?sort=hot" class="sort-link">"HOT"</a>
-                        <a href="/tools?sort=new" class="sort-link">"New"</a>
-                        <a href="/tools?sort=comments" class="sort-link">"Comments"</a>
-                    </div>
-                    <Suspense fallback=|| view! { <span class="tool-count">"..."</span> }>
-                        {move || {
-                            total.get().map(|res| match res {
-                                Ok(n) => view! { <span class="tool-count">{n}" tools"</span> }.into_any(),
-                                Err(_) => view! { <span class="tool-count">"— tools"</span> }.into_any(),
-                            })
-                        }}
-                    </Suspense>
-                </div>
-                <Suspense fallback=|| view! { <p class="text-[#6B6B6B]">"Loading..."</p> }>
-                    {move || {
-                        tools.get().map(|res| match res {
-                            Ok(list) if list.is_empty() => {
+                        <div class="tools-main">
+                            <div class="tools-toolbar sticky-toolbar">
+                                <form action="/tools" method="get" class="toolbar-search">
+                                    <input
+                                        type="search"
+                                        name="q"
+                                        placeholder="Search tools..."
+                                        prop:value=move || search_q.get().unwrap_or_default()
+                                    />
+                                    {move || function.get().map(|f| view! { <input type="hidden" name="function" value=f/> })}
+                                    {move || asset_class.get().map(|v| view! { <input type="hidden" name="asset_class" value=v/> })}
+                                    {move || actor.get().map(|v| view! { <input type="hidden" name="actor" value=v/> })}
+                                    {move || tool_type.get().map(|v| view! { <input type="hidden" name="type" value=v/> })}
+                                    {move || status.get().map(|v| view! { <input type="hidden" name="status" value=v/> })}
+                                    {move || chain.get().map(|v| view! { <input type="hidden" name="chain" value=v/> })}
+                                    <input type="hidden" name="sort" prop:value=move || sort.get()/>
+                                </form>
+                                <div class="toolbar-sort">
+                                    <a href="/tools?sort=hot" class="sort-link">"HOT"</a>
+                                    <a href="/tools?sort=new" class="sort-link">"New"</a>
+                                    <a href="/tools?sort=comments" class="sort-link">"Comments"</a>
+                                </div>
+                                <span class="tool-count">{data.total}" tools"</span>
+                            </div>
+                            {if data.tools.is_empty() {
                                 view! { <p class="empty-state">"No tools match your filters."</p> }.into_any()
-                            }
-                            Ok(list) => {
-                                let base = query_base.get();
+                            } else {
                                 view! {
                                     <div class="tool-list">
-                                        {list
-                                            .into_iter()
-                                            .map(|t| {
-                                                let slug = t.slug.clone();
-                                                let preview = with_selected(&base, &slug);
-                                                view! { <ToolCard tool=t preview_href=preview/> }
-                                            })
-                                            .collect_view()}
+                                        {data.tools.clone().into_iter().map(|t| {
+                                            let slug = t.slug.clone();
+                                            let preview = with_selected(&base, &slug);
+                                            view! { <ToolCard tool=t preview_href=preview/> }
+                                        }).collect_view()}
                                     </div>
-                                }
-                                .into_any()
-                            }
-                            Err(_) => view! { <p class="empty-state">"Failed to load tools."</p> }.into_any(),
-                        })
-                    }}
-                </Suspense>
-            </div>
-        </div>
+                                }.into_any()
+                            }}
+                        </div>
+                    </div>
 
-        {move || {
-            selected.get().and_then(|_| preview_tool.get()).map(|res| match res {
-                Ok(tool) => {
-                    let base = query_base.get();
-                    let close = without_selected(&base);
-                    let full = format!("/tools/{}", tool.slug);
-                    view! {
-                        <div class="preview-desktop">
-                            <PreviewPanel tool=tool.clone() close_href=close.clone() full_page_href=full.clone()/>
-                        </div>
-                        <div class="preview-mobile">
-                            <BottomSheet tool=tool close_href=close full_page_href=full/>
-                        </div>
-                    }
-                    .into_any()
+                    {data.preview_tool.clone().map(|tool| {
+                        let close = without_selected(&base);
+                        let full = format!("/tools/{}", tool.slug);
+                        view! {
+                            <div class="preview-desktop">
+                                <PreviewPanel tool=tool.clone() close_href=close.clone() full_page_href=full.clone()/>
+                            </div>
+                            <div class="preview-mobile">
+                                <BottomSheet tool=tool close_href=close full_page_href=full/>
+                            </div>
+                        }
+                    })}
                 }
-                Err(_) => ().into_any(),
             })
         }}
     }

@@ -29,6 +29,9 @@ Thumbs.db
 # Logs
 *.log
 
+# Playwright CLI artifacts
+.playwright-cli/
+
 # Supabase
 supabase/.branches
 supabase/.temp
