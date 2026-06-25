@@ -119,5 +119,7 @@ wasm-bindgen-futures = { version = "0.4", optional = true }
 web-sys = { version = "0.3", features = ["RequestCredentials", "Window", "Navigator", "Clipboard", "Storage", "Location"], optional = true }
 
 [dev-dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 wiremock = "0.6"
-tokio = { version = "1", features = ["full", "test-util"] }
