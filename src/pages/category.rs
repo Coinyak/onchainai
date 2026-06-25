@@ -23,7 +23,7 @@ async fn load_category_page(cat_id: String) -> CategoryPageData {
             0,
             50,
             ToolFilters {
-                function: Some(cat_id.clone()),
+                function: vec![cat_id.clone()],
                 ..Default::default()
             },
             None,

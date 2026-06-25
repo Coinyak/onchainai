@@ -4,8 +4,10 @@
 
 pub mod app;
 pub mod auth;
+pub mod client_storage;
 pub mod components;
 pub mod config;
+pub mod filter_query;
 pub mod crawler;
 pub mod models;
 pub mod pages;

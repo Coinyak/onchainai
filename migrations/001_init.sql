@@ -178,7 +178,7 @@ CREATE TABLE site_settings (
     site_name TEXT NOT NULL DEFAULT 'OnchainAI',
     slogan TEXT NOT NULL DEFAULT 'Crypto tools, unified.',
     description TEXT NOT NULL DEFAULT 'Discover, install, and share crypto MCP, CLI, SDK, API, x402, RWA, and AI agent tools — all in one place.',
-    mcp_endpoint TEXT NOT NULL DEFAULT 'npx mcp-remote www.onchain-ai.xyz/mcp',
+    mcp_endpoint TEXT NOT NULL DEFAULT 'npx mcp-remote onchainai.xyz/mcp',
     search_keywords TEXT[] NOT NULL DEFAULT ARRAY['mcp-server', 'crypto-mcp', 'web3-mcp', 'blockchain-mcp'],
     allow_free_registration BOOLEAN NOT NULL DEFAULT true,
     require_tool_approval BOOLEAN NOT NULL DEFAULT true,

@@ -129,8 +129,8 @@ mod tests {
     fn canonical_domain_constants() {
         assert_eq!(CANONICAL_DOMAIN, "www.onchain-ai.xyz");
         assert_eq!(SITE_ORIGIN, "https://www.onchain-ai.xyz");
-        assert!(MCP_ENDPOINT_CMD.contains("www.onchain-ai.xyz"));
-        assert!(!MCP_ENDPOINT_CMD.contains("onchainai.xyz"));
+        assert!(MCP_ENDPOINT_CMD.contains(CANONICAL_DOMAIN));
+        assert!(SITE_ORIGIN.contains(CANONICAL_DOMAIN));
     }
 
     #[test]

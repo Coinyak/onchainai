@@ -258,6 +258,29 @@ body {
   align-self: start;
   max-height: calc(100vh - 88px);
   overflow-y: auto;
+  width: 240px;
+  flex-shrink: 0;
+  transition: width 150ms ease, padding 150ms ease;
+}
+.tools-sidebar-collapsed {
+  width: 40px;
+  padding: 8px 4px;
+  overflow: hidden;
+}
+.tools-sidebar-collapsed .sidebar-title-text,
+.tools-sidebar-collapsed .sidebar-clear,
+.tools-sidebar-collapsed .sidebar-body {
+  display: none;
+}
+.sidebar-rail-toggle {
+  width: 32px;
+  height: 32px;
+  border: 1px solid #E5E5E5;
+  border-radius: 6px;
+  background: #FFFFFF;
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
 }
 .sidebar-title { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #6B6B6B; margin: 0 0 12px; }
 .sidebar-list { list-style: none; margin: 0; padding: 0; }

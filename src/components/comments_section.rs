@@ -1,4 +1,4 @@
-//! Tool comments, upvotes, and bookmark controls.
+//! Tool comments, upvotes, replies, bookmark controls.
 
 use crate::components::login_modal::LoginModal;
 use crate::server::functions::{
@@ -17,25 +17,20 @@ pub fn CommentsSection(slug: String, tool_name: String) -> impl IntoView {
     let slug = Arc::new(slug);
 
     let user = Resource::new(|| (), |_| async move { get_current_user().await });
+    let slug_for_comments = slug.clone();
     let comments = Resource::new(
-        move || refresh.get(),
-        {
-            let slug = slug.clone();
-            move |_| {
-                let slug = (*slug).clone();
-                async move { get_tool_comments(slug).await }
-            }
-        },
+        move || (refresh.get(), comment_sort.get(), (*slug_for_comments).clone()),
+        move |(_, sort, slug)| async move { get_tool_comments(slug, sort).await },
     );
+    let slug_for_bookmark_res = slug.clone();
     let bookmarked = Resource::new(
-        {
-            let slug = slug.clone();
-            move || ((*slug).clone(), refresh.get())
-        },
+        move || ((*slug_for_bookmark_res).clone(), refresh.get()),
         |(s, _)| async move { is_bookmarked(s).await },
     );
-    let slug_for_comment = slug.clone();
+    let slug_for_comment = (*slug).clone();
     let tool_name_for_comment = tool_name.clone();
+    let slug_for_bookmark = (*slug).clone();
+    let slug_for_items = (*slug).clone();
 
     view! {
         <LoginModal show=show_login/>
@@ -45,7 +40,10 @@ pub fn CommentsSection(slug: String, tool_name: String) -> impl IntoView {
                 <select
                     class="text-[13px] border border-[#E5E5E5] rounded-md px-2 py-1 bg-white"
                     prop:value=move || comment_sort.get()
-                    on:change=move |ev| comment_sort.set(event_target_value(&ev))
+                    on:change=move |ev| {
+                        comment_sort.set(event_target_value(&ev));
+                        refresh.update(|n| *n = n.wrapping_add(1));
+                    }
                 >
                     <option value="new">"Newest"</option>
                     <option value="top">"Top"</option>
@@ -53,7 +51,7 @@ pub fn CommentsSection(slug: String, tool_name: String) -> impl IntoView {
                 <Suspense fallback=|| ()>
                     {move || bookmarked.get().map(|res| {
                         let active = res.unwrap_or(false);
-                        let slug_bm = (*slug).clone();
+                        let slug_bm = slug_for_bookmark.clone();
                         view! {
                             <button
                                 type="button"
@@ -79,8 +77,9 @@ pub fn CommentsSection(slug: String, tool_name: String) -> impl IntoView {
             </div>
 
             <CommentForm
-                slug=(*slug_for_comment).clone()
+                slug=slug_for_comment.clone()
                 tool_name=tool_name_for_comment
+                parent_id=None
                 user=user
                 show_login=show_login
                 on_posted=move || refresh.update(|n| *n = n.wrapping_add(1))
@@ -94,10 +93,9 @@ pub fn CommentsSection(slug: String, tool_name: String) -> impl IntoView {
                         <p class="text-[#6B6B6B] text-[14px] mt-4">"No comments yet. Be the first."</p>
                     }.into_any(),
                     Some(Ok(rows)) => {
-                        let mut tops: Vec<_> = rows.iter().filter(|c| c.parent_id.is_none()).cloned().collect();
-                        if comment_sort.get() == "top" {
-                            tops.sort_by(|a, b| b.upvote_count.cmp(&a.upvote_count));
-                        }
+                        let tops: Vec<_> = rows.iter().filter(|c| c.parent_id.is_none()).cloned().collect();
+                        let slug_for_items = slug_for_items.clone();
+                        let tool_name_items = tool_name.clone();
                         view! {
                             <ul class="mt-6 space-y-4">
                                 {tops.into_iter().map(|c| {
@@ -107,10 +105,13 @@ pub fn CommentsSection(slug: String, tool_name: String) -> impl IntoView {
                                         .collect();
                                     view! {
                                         <CommentItem
+                                            slug=slug_for_items.clone()
+                                            tool_name=tool_name_items.clone()
                                             comment=c
                                             replies=replies
+                                            user=user
                                             show_login=show_login
-                                            on_change=move || refresh.update(|n| *n = n.wrapping_add(1))
+                                            refresh=refresh
                                         />
                                     }
                                 }).collect_view()}
@@ -131,6 +132,7 @@ pub fn CommentsSection(slug: String, tool_name: String) -> impl IntoView {
 fn CommentForm(
     slug: String,
     tool_name: String,
+    parent_id: Option<uuid::Uuid>,
     user: Resource<Result<Option<crate::auth::session::SessionUser>, ServerFnError>>,
     show_login: RwSignal<bool>,
     on_posted: impl Fn() + Copy + 'static,
@@ -138,16 +140,29 @@ fn CommentForm(
     let content = RwSignal::new(String::new());
     let error = RwSignal::new(None::<String>);
     let busy = RwSignal::new(false);
+    let label = if parent_id.is_some() {
+        "Reply"
+    } else {
+        "Post"
+    };
+    let heading = if parent_id.is_some() {
+        "Write a reply"
+    } else {
+        "Comment on"
+    };
 
     view! {
         <div class="rounded-lg border border-[#E5E5E5] p-4 bg-[#FAFAFA]">
             <label class="block text-[14px] font-medium mb-2" for="comment-input">
-                {"Comment on "}{tool_name}
+                {if parent_id.is_some() {
+                    heading.into_any()
+                } else {
+                    view! { {heading} " " {tool_name.clone()} }.into_any()
+                }}
             </label>
             <textarea
-                id="comment-input"
-                class="w-full min-h-[88px] rounded-md border border-[#E5E5E5] px-3 py-2 text-[14px] bg-white resize-y"
-                placeholder="Write a comment..."
+                class="w-full min-h-[72px] rounded-md border border-[#E5E5E5] px-3 py-2 text-[14px] bg-white resize-y"
+                placeholder=if parent_id.is_some() { "Write a reply..." } else { "Write a comment..." }
                 prop:value=move || content.get()
                 on:input=move |ev| content.set(event_target_value(&ev))
             />
@@ -162,6 +177,7 @@ fn CommentForm(
                     on:click=move |_| {
                         let slug = slug.clone();
                         let text = content.get_untracked();
+                        let pid = parent_id;
                         if text.trim().is_empty() {
                             return;
                         }
@@ -170,7 +186,7 @@ fn CommentForm(
                         spawn_local(async move {
                             match user.get_untracked() {
                                 Some(Ok(Some(_))) => {
-                                    match create_comment(slug, text, None).await {
+                                    match create_comment(slug, text, pid).await {
                                         Ok(_) => {
                                             content.set(String::new());
                                             on_posted();
@@ -184,7 +200,7 @@ fn CommentForm(
                         });
                     }
                 >
-                    "Post"
+                    {label}
                 </button>
             </div>
         </div>
@@ -193,20 +209,49 @@ fn CommentForm(
 
 #[component]
 fn CommentItem(
+    slug: String,
+    tool_name: String,
     comment: CommentView,
     replies: Vec<CommentView>,
+    user: Resource<Result<Option<crate::auth::session::SessionUser>, ServerFnError>>,
     show_login: RwSignal<bool>,
-    on_change: impl Fn() + Copy + 'static,
+    refresh: RwSignal<u32>,
 ) -> impl IntoView {
+    let show_reply = RwSignal::new(false);
+    let parent_id = comment.id;
+    let on_refresh = move || refresh.update(|n| *n = n.wrapping_add(1));
+
     view! {
         <li class="rounded-lg border border-[#E5E5E5] p-4">
-            <CommentBody comment=comment show_login=show_login on_change=on_change/>
+            <CommentBody comment=comment show_login=show_login on_change=on_refresh/>
+            <button
+                type="button"
+                class="mt-2 text-[13px] text-[#6B6B6B] hover:text-[#1A1A1A]"
+                on:click=move |_| show_reply.update(|v| *v = !*v)
+            >
+                "Reply"
+            </button>
+            {move || show_reply.get().then(|| view! {
+                <div class="mt-3">
+                    <CommentForm
+                        slug=slug.clone()
+                        tool_name=tool_name.clone()
+                        parent_id=Some(parent_id)
+                        user=user
+                        show_login=show_login
+                        on_posted=move || {
+                            show_reply.set(false);
+                            on_refresh();
+                        }
+                    />
+                </div>
+            })}
             {if !replies.is_empty() {
                 view! {
                     <ul class="mt-3 ml-4 space-y-3 border-l border-[#E5E5E5] pl-4">
                         {replies.into_iter().map(|r| view! {
                             <li>
-                                <CommentBody comment=r show_login=show_login on_change=on_change/>
+                                <CommentBody comment=r show_login=show_login on_change=on_refresh/>
                             </li>
                         }).collect_view()}
                     </ul>

@@ -3,8 +3,10 @@
 
 use crate::components::{
     bottom_sheet::BottomSheet, empty_state::EmptyState, error_state::ErrorState,
-    preview_panel::PreviewPanel, sidebar::Sidebar, skeleton::ToolListSkeleton, tool_card::ToolCard,
+    preview_panel::PreviewPanel, search_bar::ToolbarSearch, sidebar::Sidebar,
+    skeleton::ToolListSkeleton, tool_card::ToolCard,
 };
+use crate::filter_query::build_tool_filters;
 use crate::models::{Category, Tool};
 use crate::server::functions::{
     count_tools, get_categories, get_chain_counts, get_tool_by_slug, list_tools, ToolFilters,
@@ -172,13 +174,15 @@ pub fn ToolsBrowser(
         )
     });
 
-    let filters = Memo::new(move |_| ToolFilters {
-        function: function.get(),
-        asset_class: asset_class.get(),
-        actor: actor.get(),
-        tool_type: tool_type.get(),
-        status: status.get(),
-        chain: chain.get(),
+    let filters = Memo::new(move |_| {
+        build_tool_filters(
+            function.get(),
+            asset_class.get(),
+            actor.get(),
+            tool_type.get(),
+            status.get(),
+            chain.get(),
+        )
     });
 
     let retry_tick = RwSignal::new(0u32);
@@ -199,7 +203,6 @@ pub fn ToolsBrowser(
         },
     );
 
-    let base_path = base.path();
     let sort_hot = Memo::new(move |_| {
         let q = query_base.get();
         if q.contains('?') {
@@ -247,23 +250,7 @@ pub fn ToolsBrowser(
                             <div class="tools-main">
                                 <div class="tools-toolbar sticky-toolbar">
                                     {if show_toolbar_search {
-                                        view! {
-                                            <form action=base_path method="get" class="toolbar-search">
-                                                <input
-                                                    type="search"
-                                                    name="q"
-                                                    placeholder="Search tools..."
-                                                    prop:value=move || search_q.get().unwrap_or_default()
-                                                />
-                                                {move || function.get().map(|f| view! { <input type="hidden" name="function" value=f/> })}
-                                                {move || asset_class.get().map(|v| view! { <input type="hidden" name="asset_class" value=v/> })}
-                                                {move || actor.get().map(|v| view! { <input type="hidden" name="actor" value=v/> })}
-                                                {move || tool_type.get().map(|v| view! { <input type="hidden" name="type" value=v/> })}
-                                                {move || status.get().map(|v| view! { <input type="hidden" name="status" value=v/> })}
-                                                {move || chain.get().map(|v| view! { <input type="hidden" name="chain" value=v/> })}
-                                                <input type="hidden" name="sort" prop:value=move || sort.get()/>
-                                            </form>
-                                        }.into_any()
+                                        view! { <ToolbarSearch base=base/> }.into_any()
                                     } else {
                                         ().into_any()
                                     }}
@@ -327,10 +314,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn home_query_includes_filters_and_selected() {
+    fn home_query_includes_multi_filters_and_selected() {
         let q = build_query_base(
             BrowserBase::Home,
-            Some("swap".into()),
+            Some("bridge,swap".into()),
             None,
             None,
             Some("mcp".into()),
@@ -341,7 +328,7 @@ mod tests {
             Some("zapper".into()),
         );
         assert!(q.starts_with("/?"));
-        assert!(q.contains("function=swap"));
+        assert!(q.contains("function=bridge,swap"));
         assert!(q.contains("type=mcp"));
         assert!(q.contains("selected=zapper"));
     }

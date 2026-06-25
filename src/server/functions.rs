@@ -307,40 +307,40 @@ pub async fn get_tool_by_slug(slug: String) -> Result<Tool, ServerFnError> {
     tool.ok_or_else(|| ServerFnError::new(format!("tool not found: {slug}")))
 }
 
-/// Optional axis filters for tool list/count queries (AND across set fields).
+/// Optional axis filters for tool list/count queries (AND across axes; OR within axis via ANY).
 #[derive(Debug, Clone, Default, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct ToolFilters {
-    pub function: Option<String>,
-    pub asset_class: Option<String>,
-    pub actor: Option<String>,
-    pub tool_type: Option<String>,
-    pub status: Option<String>,
-    pub chain: Option<String>,
+    pub function: Vec<String>,
+    pub asset_class: Vec<String>,
+    pub actor: Vec<String>,
+    pub tool_type: Vec<String>,
+    pub status: Vec<String>,
+    pub chain: Vec<String>,
 }
 
 fn append_tool_filters(sql: &mut String, filters: &ToolFilters, idx: &mut i32) {
-    if filters.function.is_some() {
-        sql.push_str(&format!(" AND function = ${idx}"));
+    if !filters.function.is_empty() {
+        sql.push_str(&format!(" AND function = ANY(${idx})"));
         *idx += 1;
     }
-    if filters.asset_class.is_some() {
-        sql.push_str(&format!(" AND asset_class = ${idx}"));
+    if !filters.asset_class.is_empty() {
+        sql.push_str(&format!(" AND asset_class = ANY(${idx})"));
         *idx += 1;
     }
-    if filters.actor.is_some() {
-        sql.push_str(&format!(" AND actor = ${idx}"));
+    if !filters.actor.is_empty() {
+        sql.push_str(&format!(" AND actor = ANY(${idx})"));
         *idx += 1;
     }
-    if filters.tool_type.is_some() {
-        sql.push_str(&format!(" AND type = ${idx}"));
+    if !filters.tool_type.is_empty() {
+        sql.push_str(&format!(" AND type = ANY(${idx})"));
         *idx += 1;
     }
-    if filters.status.is_some() {
-        sql.push_str(&format!(" AND status = ${idx}"));
+    if !filters.status.is_empty() {
+        sql.push_str(&format!(" AND status = ANY(${idx})"));
         *idx += 1;
     }
-    if filters.chain.is_some() {
-        sql.push_str(&format!(" AND ${idx} = ANY(chains)"));
+    if !filters.chain.is_empty() {
+        sql.push_str(&format!(" AND chains && ${idx}"));
         *idx += 1;
     }
 }
@@ -356,23 +356,23 @@ pub async fn count_tools(filters: ToolFilters) -> Result<i64, ServerFnError> {
     append_tool_filters(&mut sql, &filters, &mut idx);
 
     let mut q = sqlx::query_as::<_, (i64,)>(&sql);
-    if let Some(f) = &filters.function {
-        q = q.bind(f);
+    if !filters.function.is_empty() {
+        q = q.bind(&filters.function);
     }
-    if let Some(v) = &filters.asset_class {
-        q = q.bind(v);
+    if !filters.asset_class.is_empty() {
+        q = q.bind(&filters.asset_class);
     }
-    if let Some(v) = &filters.actor {
-        q = q.bind(v);
+    if !filters.actor.is_empty() {
+        q = q.bind(&filters.actor);
     }
-    if let Some(v) = &filters.tool_type {
-        q = q.bind(v);
+    if !filters.tool_type.is_empty() {
+        q = q.bind(&filters.tool_type);
     }
-    if let Some(v) = &filters.status {
-        q = q.bind(v);
+    if !filters.status.is_empty() {
+        q = q.bind(&filters.status);
     }
-    if let Some(v) = &filters.chain {
-        q = q.bind(v);
+    if !filters.chain.is_empty() {
+        q = q.bind(&filters.chain);
     }
 
     let count = q
@@ -422,7 +422,9 @@ pub async fn list_tools(
 
     let order = match sort.as_str() {
         "new" => "created_at DESC",
-        "comments" => "stars DESC, created_at DESC", // comments milestone wires real sort
+        "comments" => {
+            "(SELECT COUNT(*)::bigint FROM comments cm WHERE cm.tool_id = tools.id) DESC, created_at DESC"
+        }
         _ => "stars DESC, created_at DESC",
     };
 
@@ -443,23 +445,23 @@ pub async fn list_tools(
     if let Some(text) = query.as_ref().filter(|q| !q.trim().is_empty()) {
         q = q.bind(text);
     }
-    if let Some(f) = &filters.function {
-        q = q.bind(f);
+    if !filters.function.is_empty() {
+        q = q.bind(&filters.function);
     }
-    if let Some(v) = &filters.asset_class {
-        q = q.bind(v);
+    if !filters.asset_class.is_empty() {
+        q = q.bind(&filters.asset_class);
     }
-    if let Some(v) = &filters.actor {
-        q = q.bind(v);
+    if !filters.actor.is_empty() {
+        q = q.bind(&filters.actor);
     }
-    if let Some(v) = &filters.tool_type {
-        q = q.bind(v);
+    if !filters.tool_type.is_empty() {
+        q = q.bind(&filters.tool_type);
     }
-    if let Some(v) = &filters.status {
-        q = q.bind(v);
+    if !filters.status.is_empty() {
+        q = q.bind(&filters.status);
     }
-    if let Some(v) = &filters.chain {
-        q = q.bind(v);
+    if !filters.chain.is_empty() {
+        q = q.bind(&filters.chain);
     }
     q = q.bind(offset).bind(limit);
 
@@ -673,9 +675,9 @@ pub(crate) fn validate_comment_content(content: &str) -> Result<(), &'static str
     Ok(())
 }
 
-/// List top-level comments (with replies) for an approved tool.
+/// List comments for an approved tool (`sort`: `new` | `top`).
 #[server(GetToolComments, "/api")]
-pub async fn get_tool_comments(slug: String) -> Result<Vec<CommentView>, ServerFnError> {
+pub async fn get_tool_comments(slug: String, sort: String) -> Result<Vec<CommentView>, ServerFnError> {
     let (parts, pool, jwt_secret) = request_context()?;
     let viewer = session_from_parts(&parts, &pool, &jwt_secret)
         .await
@@ -691,7 +693,12 @@ pub async fn get_tool_comments(slug: String) -> Result<Vec<CommentView>, ServerF
     .map_err(|e| ServerFnError::new(format!("failed to resolve tool: {e}")))?
     .ok_or_else(|| ServerFnError::new(format!("tool not found: {slug}")))?;
 
-    let rows = sqlx::query_as::<_, CommentRow>(
+    let order = if sort == "top" {
+        "COUNT(u.id) DESC, c.created_at DESC"
+    } else {
+        "c.created_at DESC"
+    };
+    let sql = format!(
         r#"
         SELECT
             c.id, c.tool_id, c.parent_id, c.user_id, c.content, c.created_at,
@@ -704,9 +711,10 @@ pub async fn get_tool_comments(slug: String) -> Result<Vec<CommentView>, ServerF
         LEFT JOIN upvotes u ON u.comment_id = c.id
         WHERE c.tool_id = $1
         GROUP BY c.id, p.nickname, p.is_admin
-        ORDER BY c.created_at ASC
-        "#,
-    )
+        ORDER BY {order}
+        "#
+    );
+    let rows = sqlx::query_as::<_, CommentRow>(&sql)
     .bind(tool_id)
     .bind(viewer.as_ref().map(|v| v.id))
     .fetch_all(&pool)
@@ -1455,6 +1463,25 @@ pub async fn delete_comment_and_ban_user(comment_id: Uuid) -> Result<(), ServerF
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn append_tool_filters_supports_multi_select_any() {
+        let mut sql = String::from("SELECT * FROM tools WHERE true");
+        let mut idx = 1;
+        let filters = ToolFilters {
+            function: vec!["bridge".into(), "swap".into()],
+            ..Default::default()
+        };
+        append_tool_filters(&mut sql, &filters, &mut idx);
+        assert!(sql.contains("function = ANY($1)"));
+    }
+
+    #[test]
+    fn list_tools_comments_sort_uses_comment_count() {
+        let order = "(SELECT COUNT(*)::bigint FROM comments cm WHERE cm.tool_id = tools.id) DESC, created_at DESC";
+        assert!(order.contains("comments cm"));
+        assert!(order.contains("COUNT(*)"));
+    }
 
     #[test]
     fn public_queries_include_approved_filter() {

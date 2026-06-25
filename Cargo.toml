@@ -21,7 +21,7 @@ path = "src/main.rs"
 [features]
 default = ["ssr"]
 ssr = []
-hydrate = ["leptos/hydrate", "dep:wasm-bindgen", "dep:console_error_panic_hook"]
+hydrate = ["leptos/hydrate", "dep:console_error_panic_hook"]
 
 [dependencies]
 leptos = { version = "0.8", features = ["ssr"] }
@@ -58,8 +58,13 @@ governor = "0.6"
 leptos_meta = { version = "0.8" }
 leptos_router = { version = "0.8" }
 tower_governor = { version = "0.8.0", features = ["tracing"] }
-wasm-bindgen = { version = "0.2", optional = true }
+wasm-bindgen = "0.2"
 console_error_panic_hook = { version = "0.1", optional = true }
+gloo-net = "0.6"
+gloo-timers = { version = "0.3", features = ["futures"] }
+js-sys = "0.3"
+wasm-bindgen-futures = "0.4"
+web-sys = { version = "0.3", features = ["RequestCredentials", "Window", "Navigator", "Clipboard", "Storage"] }
 
 [dev-dependencies]
 wiremock = "0.6"
