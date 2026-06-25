@@ -29,6 +29,7 @@ use sources::SourceCrawler;
 ///
 /// Callers that also want to persist results should pass the returned tools to
 /// [`upsert_tools`] and update the `sources` table with [`update_source_status`].
+#[allow(dead_code)]
 pub async fn run_pipeline(crawlers: Vec<Arc<dyn SourceCrawler>>) -> Vec<models::Tool> {
     use std::collections::HashSet;
 
@@ -272,16 +273,6 @@ pub async fn persist_crawl_results(
             update_source_status(pool, name, url, "error", 0, Some(&e.to_string())).await;
         }
     }
-}
-
-/// Convenience helper: persist crawl results (replaces sources-only updates).
-pub async fn upsert_source_results(
-    pool: &sqlx::PgPool,
-    name: &str,
-    url: &str,
-    raws: Vec<normalizer::RawTool>,
-) {
-    persist_crawl_results(pool, name, url, raws).await;
 }
 
 /// Start the crawler scheduler.

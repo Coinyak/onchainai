@@ -29,9 +29,6 @@ use crate::crawler::sources::SourceCrawler;
 
 const GITHUB_API_BASE: &str = "https://api.github.com";
 
-/// Topics used for the discovery search.
-const TOPICS: &[&str] = &["mcp-server", "crypto-mcp", "web3-mcp", "blockchain-mcp"];
-
 /// Source identifier for the discovery source.
 const SOURCE_NAME: &str = "github";
 
@@ -319,7 +316,7 @@ async fn fetch_readme(
     decode_readme(&readme)
 }
 
-/// Crawl GitHub topics from `keywords` (empty → [`TOPICS`] fallback via settings helper).
+/// Crawl GitHub topics from `keywords` (empty → default keywords via settings helper).
 pub async fn crawl_topics_with_token_and_keywords(
     token: Option<&str>,
     keywords: &[String],
@@ -347,11 +344,6 @@ pub async fn crawl_topics_with_token_and_keywords(
         tokio::time::sleep(std::time::Duration::from_millis(10)).await;
     }
     Ok(out)
-}
-
-/// Crawl all default GitHub topics using the configured API token (if any).
-pub async fn crawl_topics_with_token(token: Option<&str>) -> Result<Vec<RawTool>> {
-    crawl_topics_with_token_and_keywords(token, &[]).await
 }
 
 /// Crawl topics using live `site_settings.search_keywords` when provided.
@@ -636,7 +628,7 @@ mod tests {
     async fn crawl_topics_queries_all_topics_and_parses_stars_pushed_at() {
         let server = MockServer::start().await;
 
-        for topic in TOPICS {
+        for topic in crate::crawler::settings::DEFAULT_SEARCH_KEYWORDS {
             Mock::given(method("GET"))
                 .and(path("/search/repositories"))
                 .and(query_param("q", format!("topic:{topic}")))
