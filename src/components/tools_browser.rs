@@ -88,6 +88,34 @@ pub fn with_selected(base_path: BrowserBase, base: &str, slug: &str) -> String {
     }
 }
 
+/// Sort toolbar link — rebuilds query via `build_query_base` (no duplicate `sort=` params).
+#[allow(clippy::too_many_arguments)]
+pub fn build_sort_href(
+    base: BrowserBase,
+    function: Option<String>,
+    asset_class: Option<String>,
+    actor: Option<String>,
+    tool_type: Option<String>,
+    status: Option<String>,
+    chain: Option<String>,
+    sort: &str,
+    search_q: Option<String>,
+    selected: Option<String>,
+) -> String {
+    build_query_base(
+        base,
+        function,
+        asset_class,
+        actor,
+        tool_type,
+        status,
+        chain,
+        sort.to_string(),
+        search_q,
+        selected,
+    )
+}
+
 pub fn without_selected(base_path: BrowserBase, base: &str) -> String {
     let root = base_path.path();
     let trimmed = base.trim_start_matches('?');
@@ -204,28 +232,46 @@ pub fn ToolsBrowser(
     );
 
     let sort_hot = Memo::new(move |_| {
-        let q = query_base.get();
-        if q.contains('?') {
-            format!("{q}&sort=hot").replace("&sort=hot&sort=hot", "&sort=hot")
-        } else {
-            format!("{q}?sort=hot")
-        }
+        build_sort_href(
+            base,
+            function.get(),
+            asset_class.get(),
+            actor.get(),
+            tool_type.get(),
+            status.get(),
+            chain.get(),
+            "hot",
+            search_q.get(),
+            selected.get(),
+        )
     });
     let sort_new = Memo::new(move |_| {
-        let b = query_base.get();
-        if b.contains('?') {
-            format!("{b}&sort=new")
-        } else {
-            format!("{b}?sort=new")
-        }
+        build_sort_href(
+            base,
+            function.get(),
+            asset_class.get(),
+            actor.get(),
+            tool_type.get(),
+            status.get(),
+            chain.get(),
+            "new",
+            search_q.get(),
+            selected.get(),
+        )
     });
     let sort_comments = Memo::new(move |_| {
-        let b = query_base.get();
-        if b.contains('?') {
-            format!("{b}&sort=comments")
-        } else {
-            format!("{b}?sort=comments")
-        }
+        build_sort_href(
+            base,
+            function.get(),
+            asset_class.get(),
+            actor.get(),
+            tool_type.get(),
+            status.get(),
+            chain.get(),
+            "comments",
+            search_q.get(),
+            selected.get(),
+        )
     });
 
     view! {
@@ -340,5 +386,73 @@ mod tests {
             without_selected(BrowserBase::Tools, "/tools?function=swap&selected=foo"),
             "/tools?function=swap"
         );
+    }
+
+    #[test]
+    fn sort_href_rebuilds_without_duplicate_sort_param() {
+        let filters = (
+            Some("bridge,swap".into()),
+            None,
+            None,
+            Some("mcp".into()),
+            None,
+            None,
+        );
+        let from_new = build_sort_href(
+            BrowserBase::Tools,
+            filters.0.clone(),
+            filters.1.clone(),
+            filters.2.clone(),
+            filters.3.clone(),
+            filters.4.clone(),
+            filters.5.clone(),
+            "new",
+            None,
+            None,
+        );
+        assert_eq!(from_new.matches("sort=").count(), 1);
+        assert!(from_new.contains("function=bridge,swap"));
+        assert!(from_new.contains("sort=new"));
+
+        let to_hot = build_sort_href(
+            BrowserBase::Tools,
+            filters.0,
+            filters.1,
+            filters.2,
+            filters.3,
+            filters.4,
+            filters.5,
+            "hot",
+            None,
+            None,
+        );
+        assert!(!to_hot.contains("sort="));
+        assert!(to_hot.contains("function=bridge,swap"));
+        assert!(to_hot.contains("type=mcp"));
+    }
+
+    #[test]
+    fn sidebar_toggle_link_produces_multi_function_url() {
+        use crate::filter_query::toggle_multi;
+
+        let query_base = build_query_base(
+            BrowserBase::Tools,
+            Some("bridge".into()),
+            None,
+            None,
+            None,
+            None,
+            None,
+            "new".into(),
+            None,
+            None,
+        );
+        let href = toggle_multi("/tools", &query_base, "function", "swap", &["bridge".into()]);
+        assert!(
+            href.contains("function=bridge,swap") || href.contains("function=swap,bridge"),
+            "expected comma-separated function param, got: {href}"
+        );
+        assert_eq!(href.matches("sort=").count(), 1, "sort must not duplicate: {href}");
+        assert!(href.contains("sort=new"));
     }
 }
