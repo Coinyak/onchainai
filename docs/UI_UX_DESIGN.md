@@ -1384,7 +1384,7 @@ ALTER TABLE tools ADD COLUMN logo_monogram TEXT; -- 로고 없을 때 첫 글자
 | 바텀 시트 닫기 | 아래로 드래그 / 외부 탭 / Close 버튼 | Leptos 시그널 |
 | 사이드바 접기 | `☰` 클릭 → 40px로 축소, localStorage 저장 | Leptos + localStorage |
 | 복사 버튼 | 클립보드 복사 + "복사됨" 인라인 텍스트 | `navigator.clipboard` |
-| 북마크 | 클릭 시 토글, 로컬 스토리지 저장 | Leptos + localStorage |
+| 북마크 (§10 초안 — 폐기) | ~~로컬 스토리지~~ → 아래 Supabase 행 참고 | — |
 | 댓글 작성 | 폼 제출, 서버펑션, 낙관적 업데이트. **인증 필요** (미인증 시 로그인 모달) | Leptos server function + Supabase Auth |
 | 업보트 | 클릭 시 카운트 +1 (중복 방지). **인증 필요** | Supabase upvotes 테이블 (unique constraint) |
 | 북마크 | 클릭 시 토글. **인증 필요** | Supabase bookmarks 테이블 |

@@ -1,0 +1,338 @@
+- generic [active] [ref=e1]:
+  - banner [ref=e2]:
+    - link "주 콘텐츠로 건너뛰기" [ref=e3] [cursor=pointer]:
+      - /url: "#main"
+      - generic [ref=e4]: 주 콘텐츠로 건너뛰기
+    - generic [ref=e6]:
+      - generic [ref=e8]:
+        - button [ref=e9] [cursor=pointer]
+        - link "GoDaddy" [ref=e11] [cursor=pointer]:
+          - /url: https://venture-redirector.godaddy.com/
+          - figure "GoDaddy" [ref=e12]:
+            - img [ref=e13]
+        - list [ref=e15]:
+          - listitem [ref=e16]:
+            - link "포트폴리오" [ref=e17] [cursor=pointer]:
+              - /url: https://dcc.godaddy.com/control/portfolio
+              - generic [ref=e22]: 포트폴리오
+          - listitem [ref=e23]:
+            - link "DNS" [ref=e24] [cursor=pointer]:
+              - /url: /control/dnsmanagement
+              - generic [ref=e29]: DNS
+          - listitem [ref=e30]:
+            - link "이전" [ref=e31] [cursor=pointer]:
+              - /url: https://dcc.godaddy.com/control/transfers
+              - generic [ref=e36]: 이전
+          - listitem [ref=e37]:
+            - button "서비스" [ref=e38] [cursor=pointer]:
+              - generic [ref=e43]: 서비스
+            - list:
+              - listitem [ref=e46]:
+                - link "DNS 호스팅" [ref=e47] [cursor=pointer]:
+                  - /url: https://dcc.godaddy.com/control/dnshosting
+                  - generic [ref=e50]: DNS 호스팅
+              - listitem [ref=e51]:
+                - link "도메인 브로커" [ref=e52] [cursor=pointer]:
+                  - /url: https://dbs.godaddy.com
+                  - generic [ref=e55]: 도메인 브로커
+              - listitem [ref=e56]:
+                - link "사전 등록" [ref=e57] [cursor=pointer]:
+                  - /url: https://preregistration.godaddy.com
+                  - generic [ref=e60]: 사전 등록
+              - listitem [ref=e61]:
+                - link "블록" [ref=e62] [cursor=pointer]:
+                  - /url: https://dcc.godaddy.com/control/blocks
+                  - generic [ref=e65]: 블록
+              - listitem [ref=e66]:
+                - link "협상" [ref=e67] [cursor=pointer]:
+                  - /url: https://aftermarket.godaddy.com/negotiations
+                  - generic [ref=e70]: 협상
+          - listitem [ref=e71]:
+            - button "도메인 투자자 센터" [ref=e72] [cursor=pointer]:
+              - generic [ref=e77]: 도메인 투자자 센터
+            - list:
+              - listitem [ref=e80]:
+                - link "경매" [ref=e81] [cursor=pointer]:
+                  - /url: https://www.auctions.godaddy.com?itc=dcc_portfolio_auctions
+                  - generic [ref=e84]: 경매
+              - listitem [ref=e85]:
+                - link "Afternic" [ref=e86] [cursor=pointer]:
+                  - /url: https://sso.godaddy.com/federate/afternic?path=/dashboard/activity?itc=dcc_portfolio_afternic
+                  - generic [ref=e89]: Afternic
+              - listitem [ref=e90]:
+                - link "도메인 파킹" [ref=e91] [cursor=pointer]:
+                  - /url: https://www.godaddy.com/domain-parking/dashboard?itc=dcc_portfolio_parking
+                  - generic [ref=e94]: 도메인 파킹
+              - listitem [ref=e95]:
+                - link "도메인 아카데미" [ref=e96] [cursor=pointer]:
+                  - /url: https://community.godaddy.com/s/domain-academy?itc=dcc_portfolio_domain_academy
+                  - generic [ref=e99]: 도메인 아카데미
+              - listitem [ref=e100]:
+                - link "대량 검색" [ref=e101] [cursor=pointer]:
+                  - /url: https://www.godaddy.com/domains/bulk-domain-search?itc=dcc_portfolio_bulk_search
+                  - generic [ref=e104]: 대량 검색
+          - listitem [ref=e105]:
+            - button "설정" [ref=e106] [cursor=pointer]:
+              - generic [ref=e111]: 설정
+            - list:
+              - listitem [ref=e114]:
+                - link "대리인 액세스" [ref=e115] [cursor=pointer]:
+                  - /url: https://account.godaddy.com/access
+                  - generic [ref=e118]: 대리인 액세스
+              - listitem [ref=e119]:
+                - link "DNS 템플릿" [ref=e120] [cursor=pointer]:
+                  - /url: https://dcc.godaddy.com/control/dns/templates
+                  - generic [ref=e123]: DNS 템플릿
+              - listitem [ref=e124]:
+                - link "내보낸 목록" [ref=e125] [cursor=pointer]:
+                  - /url: https://dcc.godaddy.com/control/exported-lists
+                  - generic [ref=e128]: 내보낸 목록
+          - listitem [ref=e129]:
+            - link "활동 로그" [ref=e130] [cursor=pointer]:
+              - /url: https://dcc.godaddy.com/control/activity/log
+              - generic [ref=e135]: 활동 로그
+      - generic [ref=e136]:
+        - link "헬프 센터" [ref=e137] [cursor=pointer]:
+          - /url: https://www.godaddy.com/help
+          - generic [ref=e138]: 헬프 센터
+        - button "최근 실행 앱" [ref=e140] [cursor=pointer]
+        - button "고객 정보" [ref=e142] [cursor=pointer]:
+          - generic [ref=e143]: HL
+        - link "카트 비우기" [ref=e172] [cursor=pointer]:
+          - /url: https://kr.godaddy.com/pricing
+          - generic "카트 비우기" [ref=e173]
+  - main [ref=e145]:
+    - generic [ref=e149]:
+      - heading "DNS 관리" [level=1] [ref=e152]
+      - generic [ref=e154]:
+        - heading "onchain-ai.xyz" [level=2] [ref=e155]
+        - generic [ref=e156]:
+          - button "도메인 설정" [ref=e157] [cursor=pointer]:
+            - generic: 도메인 설정
+          - button "다른 도메인 선택" [ref=e160] [cursor=pointer]:
+            - generic: 다른 도메인 선택
+      - generic [ref=e175]:
+        - navigation [ref=e176]:
+          - tablist "Navigation" [ref=e178]:
+            - tab "DNS 레코드" [selected] [ref=e179] [cursor=pointer]
+            - tab "전달" [ref=e180] [cursor=pointer]
+            - tab "네임서버" [ref=e181] [cursor=pointer]
+            - tab "호스트 이름" [ref=e182] [cursor=pointer]
+            - tab "DNSSEC" [ref=e183] [cursor=pointer]
+            - tab "고급" [ref=e184] [cursor=pointer]: 고급
+        - tabpanel "DNS 레코드" [ref=e185]:
+          - generic [ref=e187]:
+            - generic [ref=e189]:
+              - generic [ref=e190]:
+                - heading "쉽게 도메인 소유권 인증" [level=5] [ref=e191]
+                - paragraph [ref=e192]: 외부 서비스에 연결하기 위해 도메인 소유권을 인증해야 하나요? 그 어느 때보다 훨씬 쉽게 만들었습니다.
+                - button "도메인 소유권 확인" [ref=e193] [cursor=pointer]:
+                  - generic: 도메인 소유권 확인
+              - generic [ref=e194]:
+                - generic [ref=e195]:
+                  - generic [ref=e196]:
+                    - heading "MX 레코드 만들기" [level=5] [ref=e197]
+                    - paragraph [ref=e198]: 도메인을 이메일 서비스에 연결하기 위해 MX 레코드를 빠르게 만드세요.
+                  - img [ref=e200]
+                - button "지금 만들기" [ref=e223] [cursor=pointer]:
+                  - generic: 지금 만들기
+            - generic [ref=e224]:
+              - generic [ref=e225]:
+                - button "신규 레코드 추가" [ref=e226] [cursor=pointer]:
+                  - generic: 신규 레코드 추가
+                - generic [ref=e227]:
+                  - button "필터" [ref=e228] [cursor=pointer]:
+                    - generic: 필터
+                  - button "동작" [ref=e230] [cursor=pointer]:
+                    - generic: 동작
+              - table [ref=e234]:
+                - rowgroup [ref=e235]:
+                  - row "유형 자세한 정보를 보려면 여기를 클릭하세요. 이름 자세한 정보를 보려면 여기를 클릭하세요. 데이터 자세한 정보를 보려면 여기를 클릭하세요. TTL 자세한 정보를 보려면 여기를 클릭하세요. 복사 삭제 편집" [ref=e236]:
+                    - columnheader [ref=e237]
+                    - columnheader "유형 자세한 정보를 보려면 여기를 클릭하세요." [ref=e238]:
+                      - generic [ref=e239]:
+                        - text: 유형
+                        - button "자세한 정보를 보려면 여기를 클릭하세요." [ref=e242] [cursor=pointer]
+                    - columnheader "이름 자세한 정보를 보려면 여기를 클릭하세요." [ref=e243]:
+                      - generic [ref=e244]:
+                        - text: 이름
+                        - button "자세한 정보를 보려면 여기를 클릭하세요." [ref=e247] [cursor=pointer]
+                    - columnheader "데이터 자세한 정보를 보려면 여기를 클릭하세요." [ref=e248]:
+                      - generic [ref=e249]:
+                        - text: 데이터
+                        - button "자세한 정보를 보려면 여기를 클릭하세요." [ref=e252] [cursor=pointer]
+                    - columnheader "TTL 자세한 정보를 보려면 여기를 클릭하세요." [ref=e253]:
+                      - generic [ref=e254]:
+                        - text: TTL
+                        - button "자세한 정보를 보려면 여기를 클릭하세요." [ref=e257] [cursor=pointer]
+                    - columnheader "복사" [ref=e258]:
+                      - generic [ref=e260]: 복사
+                    - columnheader "삭제" [ref=e261]:
+                      - generic [ref=e263]: 삭제
+                    - columnheader "편집" [ref=e264]:
+                      - generic [ref=e266]: 편집
+                - rowgroup [ref=e267]:
+                  - row "a @ WebsiteBuilder Site 1시간 복사 삭제 편집" [ref=e268]:
+                    - cell [ref=e269]:
+                      - checkbox [ref=e272] [cursor=pointer]
+                    - cell "a" [ref=e273]
+                    - cell "@" [ref=e274]
+                    - cell "WebsiteBuilder Site" [ref=e275]
+                    - cell "1시간" [ref=e276]
+                    - cell "복사" [ref=e277]:
+                      - button "복사" [ref=e278] [cursor=pointer]
+                    - cell "삭제" [ref=e279]:
+                      - button "삭제" [ref=e281] [cursor=pointer]
+                    - cell "편집" [ref=e282]:
+                      - button "편집" [ref=e284] [cursor=pointer]
+                  - 'row "ns @ ns67.domaincontrol.com. 1시간 복사 삭제: GoDaddy 네임서버 사용 시 이러한 기본 NS 레코드는 수정할 수 없습니다. 네임서버 탭에서 네임서버 설정을 변경하거나, 별도의 DNS 서비스를 사용하여 하위 도메인의 사용자 지정 NS 레코드를 추가할 수 있습니다. GoDaddy 네임서버 사용 시 이러한 기본 NS 레코드는 수정할 수 없습니다. 네임서버 탭에서 네임서버 설정을 변경하거나, 별도의 DNS 서비스를 사용하여 하위 도메인의 사용자 지정 NS 레코드를 추가할 수 있습니다. 편집: GoDaddy 네임서버 사용 시 이러한 기본 NS 레코드는 수정할 수 없습니다. 네임서버 탭에서 네임서버 설정을 변경하거나, 별도의 DNS 서비스를 사용하여 하위 도메인의 사용자 지정 NS 레코드를 추가할 수 있습니다. GoDaddy 네임서버 사용 시 이러한 기본 NS 레코드는 수정할 수 없습니다. 네임서버 탭에서 네임서버 설정을 변경하거나, 별도의 DNS 서비스를 사용하여 하위 도메인의 사용자 지정 NS 레코드를 추가할 수 있습니다." [ref=e285]':
+                    - cell [ref=e286]:
+                      - checkbox [disabled] [ref=e289]
+                    - cell "ns" [ref=e290]
+                    - cell "@" [ref=e291]
+                    - cell "ns67.domaincontrol.com." [ref=e292]
+                    - cell "1시간" [ref=e293]
+                    - cell "복사" [ref=e294]:
+                      - button "복사" [ref=e295] [cursor=pointer]
+                    - 'cell "삭제: GoDaddy 네임서버 사용 시 이러한 기본 NS 레코드는 수정할 수 없습니다. 네임서버 탭에서 네임서버 설정을 변경하거나, 별도의 DNS 서비스를 사용하여 하위 도메인의 사용자 지정 NS 레코드를 추가할 수 있습니다. GoDaddy 네임서버 사용 시 이러한 기본 NS 레코드는 수정할 수 없습니다. 네임서버 탭에서 네임서버 설정을 변경하거나, 별도의 DNS 서비스를 사용하여 하위 도메인의 사용자 지정 NS 레코드를 추가할 수 있습니다." [ref=e296]':
+                      - generic [ref=e298]:
+                        - 'button "삭제: GoDaddy 네임서버 사용 시 이러한 기본 NS 레코드는 수정할 수 없습니다. 네임서버 탭에서 네임서버 설정을 변경하거나, 별도의 DNS 서비스를 사용하여 하위 도메인의 사용자 지정 NS 레코드를 추가할 수 있습니다." [disabled] [ref=e299]'
+                        - button "GoDaddy 네임서버 사용 시 이러한 기본 NS 레코드는 수정할 수 없습니다. 네임서버 탭에서 네임서버 설정을 변경하거나, 별도의 DNS 서비스를 사용하여 하위 도메인의 사용자 지정 NS 레코드를 추가할 수 있습니다." [ref=e302] [cursor=pointer]
+                    - 'cell "편집: GoDaddy 네임서버 사용 시 이러한 기본 NS 레코드는 수정할 수 없습니다. 네임서버 탭에서 네임서버 설정을 변경하거나, 별도의 DNS 서비스를 사용하여 하위 도메인의 사용자 지정 NS 레코드를 추가할 수 있습니다. GoDaddy 네임서버 사용 시 이러한 기본 NS 레코드는 수정할 수 없습니다. 네임서버 탭에서 네임서버 설정을 변경하거나, 별도의 DNS 서비스를 사용하여 하위 도메인의 사용자 지정 NS 레코드를 추가할 수 있습니다." [ref=e303]':
+                      - generic [ref=e305]:
+                        - 'button "편집: GoDaddy 네임서버 사용 시 이러한 기본 NS 레코드는 수정할 수 없습니다. 네임서버 탭에서 네임서버 설정을 변경하거나, 별도의 DNS 서비스를 사용하여 하위 도메인의 사용자 지정 NS 레코드를 추가할 수 있습니다." [disabled] [ref=e306]'
+                        - button "GoDaddy 네임서버 사용 시 이러한 기본 NS 레코드는 수정할 수 없습니다. 네임서버 탭에서 네임서버 설정을 변경하거나, 별도의 DNS 서비스를 사용하여 하위 도메인의 사용자 지정 NS 레코드를 추가할 수 있습니다." [ref=e309] [cursor=pointer]
+                  - 'row "ns @ ns68.domaincontrol.com. 1시간 복사 삭제: GoDaddy 네임서버 사용 시 이러한 기본 NS 레코드는 수정할 수 없습니다. 네임서버 탭에서 네임서버 설정을 변경하거나, 별도의 DNS 서비스를 사용하여 하위 도메인의 사용자 지정 NS 레코드를 추가할 수 있습니다. GoDaddy 네임서버 사용 시 이러한 기본 NS 레코드는 수정할 수 없습니다. 네임서버 탭에서 네임서버 설정을 변경하거나, 별도의 DNS 서비스를 사용하여 하위 도메인의 사용자 지정 NS 레코드를 추가할 수 있습니다. 편집: GoDaddy 네임서버 사용 시 이러한 기본 NS 레코드는 수정할 수 없습니다. 네임서버 탭에서 네임서버 설정을 변경하거나, 별도의 DNS 서비스를 사용하여 하위 도메인의 사용자 지정 NS 레코드를 추가할 수 있습니다. GoDaddy 네임서버 사용 시 이러한 기본 NS 레코드는 수정할 수 없습니다. 네임서버 탭에서 네임서버 설정을 변경하거나, 별도의 DNS 서비스를 사용하여 하위 도메인의 사용자 지정 NS 레코드를 추가할 수 있습니다." [ref=e310]':
+                    - cell [ref=e311]:
+                      - checkbox [disabled] [ref=e314]
+                    - cell "ns" [ref=e315]
+                    - cell "@" [ref=e316]
+                    - cell "ns68.domaincontrol.com." [ref=e317]
+                    - cell "1시간" [ref=e318]
+                    - cell "복사" [ref=e319]:
+                      - button "복사" [ref=e320] [cursor=pointer]
+                    - 'cell "삭제: GoDaddy 네임서버 사용 시 이러한 기본 NS 레코드는 수정할 수 없습니다. 네임서버 탭에서 네임서버 설정을 변경하거나, 별도의 DNS 서비스를 사용하여 하위 도메인의 사용자 지정 NS 레코드를 추가할 수 있습니다. GoDaddy 네임서버 사용 시 이러한 기본 NS 레코드는 수정할 수 없습니다. 네임서버 탭에서 네임서버 설정을 변경하거나, 별도의 DNS 서비스를 사용하여 하위 도메인의 사용자 지정 NS 레코드를 추가할 수 있습니다." [ref=e321]':
+                      - generic [ref=e323]:
+                        - 'button "삭제: GoDaddy 네임서버 사용 시 이러한 기본 NS 레코드는 수정할 수 없습니다. 네임서버 탭에서 네임서버 설정을 변경하거나, 별도의 DNS 서비스를 사용하여 하위 도메인의 사용자 지정 NS 레코드를 추가할 수 있습니다." [disabled] [ref=e324]'
+                        - button "GoDaddy 네임서버 사용 시 이러한 기본 NS 레코드는 수정할 수 없습니다. 네임서버 탭에서 네임서버 설정을 변경하거나, 별도의 DNS 서비스를 사용하여 하위 도메인의 사용자 지정 NS 레코드를 추가할 수 있습니다." [ref=e327] [cursor=pointer]
+                    - 'cell "편집: GoDaddy 네임서버 사용 시 이러한 기본 NS 레코드는 수정할 수 없습니다. 네임서버 탭에서 네임서버 설정을 변경하거나, 별도의 DNS 서비스를 사용하여 하위 도메인의 사용자 지정 NS 레코드를 추가할 수 있습니다. GoDaddy 네임서버 사용 시 이러한 기본 NS 레코드는 수정할 수 없습니다. 네임서버 탭에서 네임서버 설정을 변경하거나, 별도의 DNS 서비스를 사용하여 하위 도메인의 사용자 지정 NS 레코드를 추가할 수 있습니다." [ref=e328]':
+                      - generic [ref=e330]:
+                        - 'button "편집: GoDaddy 네임서버 사용 시 이러한 기본 NS 레코드는 수정할 수 없습니다. 네임서버 탭에서 네임서버 설정을 변경하거나, 별도의 DNS 서비스를 사용하여 하위 도메인의 사용자 지정 NS 레코드를 추가할 수 있습니다." [disabled] [ref=e331]'
+                        - button "GoDaddy 네임서버 사용 시 이러한 기본 NS 레코드는 수정할 수 없습니다. 네임서버 탭에서 네임서버 설정을 변경하거나, 별도의 DNS 서비스를 사용하여 하위 도메인의 사용자 지정 NS 레코드를 추가할 수 있습니다." [ref=e334] [cursor=pointer]
+                  - row "cname www onchain-ai.xyz. 1시간 복사 삭제 편집" [ref=e335]:
+                    - cell [ref=e336]:
+                      - checkbox [ref=e339] [cursor=pointer]
+                    - cell "cname" [ref=e340]
+                    - cell "www" [ref=e341]
+                    - cell "onchain-ai.xyz." [ref=e342]
+                    - cell "1시간" [ref=e343]
+                    - cell "복사" [ref=e344]:
+                      - button "복사" [ref=e345] [cursor=pointer]
+                    - cell "삭제" [ref=e346]:
+                      - button "삭제" [ref=e348] [cursor=pointer]
+                    - cell "편집" [ref=e349]:
+                      - button "편집" [ref=e351] [cursor=pointer]
+                  - row "cname _domainconnect _domainconnect.gd.domaincontrol.com. 1시간 복사 삭제 편집" [ref=e352]:
+                    - cell [ref=e353]:
+                      - checkbox [ref=e356] [cursor=pointer]
+                    - cell "cname" [ref=e357]
+                    - cell "_domainconnect" [ref=e358]
+                    - cell "_domainconnect.gd.domaincontrol.com." [ref=e359]
+                    - cell "1시간" [ref=e360]
+                    - cell "복사" [ref=e361]:
+                      - button "복사" [ref=e362] [cursor=pointer]
+                    - cell "삭제" [ref=e363]:
+                      - button "삭제" [ref=e365] [cursor=pointer]
+                    - cell "편집" [ref=e366]:
+                      - button "편집" [ref=e368] [cursor=pointer]
+                  - 'row "soa @ 기본 네임서버: ns67.domaincontrol.com. 1시간 복사 삭제: DNS 영역에는 SOA 레코드가 반드시 필요하며 삭제할 수 없습니다. DNS 영역에는 SOA 레코드가 반드시 필요하며 삭제할 수 없습니다. 편집" [ref=e369]':
+                    - cell [ref=e370]:
+                      - checkbox [disabled] [ref=e373]
+                    - cell "soa" [ref=e374]
+                    - cell "@" [ref=e375]
+                    - 'cell "기본 네임서버: ns67.domaincontrol.com." [ref=e376]'
+                    - cell "1시간" [ref=e377]
+                    - cell "복사" [ref=e378]:
+                      - button "복사" [ref=e379] [cursor=pointer]
+                    - 'cell "삭제: DNS 영역에는 SOA 레코드가 반드시 필요하며 삭제할 수 없습니다. DNS 영역에는 SOA 레코드가 반드시 필요하며 삭제할 수 없습니다." [ref=e380]':
+                      - generic [ref=e382]:
+                        - 'button "삭제: DNS 영역에는 SOA 레코드가 반드시 필요하며 삭제할 수 없습니다." [disabled] [ref=e383]'
+                        - button "DNS 영역에는 SOA 레코드가 반드시 필요하며 삭제할 수 없습니다." [ref=e386] [cursor=pointer]
+                    - cell "편집" [ref=e387]:
+                      - button "편집" [disabled] [ref=e389]
+                  - row "txt _dmarc v=DMARC1; p=quarantine; adkim=r; aspf=r; rua=mailto:dmarc_rua@onsecureserver.net; 1시간 복사 삭제 편집" [ref=e390]:
+                    - cell [ref=e391]:
+                      - checkbox [ref=e394] [cursor=pointer]
+                    - cell "txt" [ref=e395]
+                    - cell "_dmarc" [ref=e396]
+                    - cell "v=DMARC1; p=quarantine; adkim=r; aspf=r; rua=mailto:dmarc_rua@onsecureserver.net;" [ref=e397]
+                    - cell "1시간" [ref=e398]
+                    - cell "복사" [ref=e399]:
+                      - button "복사" [ref=e400] [cursor=pointer]
+                    - cell "삭제" [ref=e401]:
+                      - button "삭제" [ref=e403] [cursor=pointer]
+                    - cell "편집" [ref=e404]:
+                      - button "편집" [ref=e406] [cursor=pointer]
+        - generic [ref=e409]:
+          - img [ref=e411]
+          - generic [ref=e475]:
+            - generic [ref=e476]: 무료로 소셜 미디어 하위 도메인 설정하기!
+            - generic [ref=e477]:
+              - text: 귀하의 도메인에는 귀하의 소셜 미디어 페이지에 연결할 수 있는 facebook.onchain-ai.xyz 등의 사용자 정의 가능한 하위 도메인이
+              - text: 무료로 제공됩니다.
+            - generic [ref=e480]:
+              - generic [ref=e481]:
+                - generic [ref=e485]: 향상된 SEO
+                - generic [ref=e486]: 소셜 하위 도메인은 귀하의 웹사이트가 검색 엔진에서 더 높은 순위를 차지하는 데 도움이 될 수 있습니다.
+              - generic [ref=e487]:
+                - generic [ref=e491]: 소셜 페이지 홍보하기
+                - generic [ref=e493]: facebook.onchain-ai.xyz 등의 소셜 하위 도메인을 방문하는 사람은 누구나 귀하의 소셜 미디어 페이지를 볼 수 있습니다.
+              - generic [ref=e494]:
+                - generic [ref=e498]: 기본 도메인에 추가하기
+                - generic [ref=e500]: 소셜 하위 도메인을 만들어도 현재 onchain-ai.xyz에 연결된 어떤 것에도 영향을 미치지 않습니다.
+            - generic [ref=e501]: "시작할 플랫폼 선택:"
+            - generic [ref=e502]:
+              - button "Instagram" [ref=e503] [cursor=pointer]:
+                - generic: Instagram
+              - button "Facebook" [ref=e504] [cursor=pointer]:
+                - generic: Facebook
+              - button "Yelp" [ref=e505] [cursor=pointer]:
+                - generic: Yelp
+              - button "Google" [ref=e506] [cursor=pointer]:
+                - generic: Google
+              - button "기타" [ref=e507] [cursor=pointer]:
+                - generic: 기타
+      - generic [ref=e509]:
+        - article [ref=e510]:
+          - img "관리형 워드프레스 제품 일러스트" [ref=e512]
+          - generic [ref=e513]:
+            - generic [ref=e516]: 세밀한 사용자 정의 가능
+            - heading "관리형 워드프레스" [level=3] [ref=e517]
+            - paragraph [ref=e518]: 워드프레스 사이트를 더 쉽게 만들고, 시작하고, 관리할 수 있도록 개선했습니다.
+            - button "플랜 둘러보기" [ref=e519] [cursor=pointer]:
+              - text: 플랜 둘러보기
+              - img [ref=e520]
+        - article [ref=e522]:
+          - img "웹 호스팅 제품 일러스트" [ref=e524]
+          - generic [ref=e525]:
+            - generic [ref=e528]: 고급 사용자
+            - heading "웹 호스팅" [level=3] [ref=e529]
+            - paragraph [ref=e530]: 개인용 사이트부터 고성능 사이트까지, 믿을 수 있는 웹 호스팅을 경험하세요.
+            - button "플랜 둘러보기" [ref=e531] [cursor=pointer]:
+              - text: 플랜 둘러보기
+              - img [ref=e532]
+        - article [ref=e534]:
+          - img "웹 디자인 서비스 제품 일러스트" [ref=e536]
+          - generic [ref=e537]:
+            - generic [ref=e540]: 알아서 처리해드림
+            - heading "웹 디자인 서비스" [level=3] [ref=e541]
+            - paragraph [ref=e542]: 웹사이트를 구축할 전문가를 채용하여 최대 2.9배 더 많은 웹사이트 트래픽을 얻으세요
+            - link "자세히 알아보기" [ref=e543] [cursor=pointer]:
+              - /url: https://onboarding.godaddy.com/launch?lid=wsb-vnext-freemat-3&itc=slp_wsb_ft_getstarted_plans_nocc&firstaccess=true
+              - text: 자세히 알아보기
+              - img [ref=e544]
+  - alert [ref=e167]
+  - button "문의하기 문의하기" [ref=e548]:
+    - generic [ref=e550] [cursor=pointer]:
+      - img "문의하기" [ref=e551]
+      - generic [ref=e552]: 문의하기

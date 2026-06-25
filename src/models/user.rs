@@ -8,7 +8,8 @@ use uuid::Uuid;
 /// `id` mirrors `auth.users(id)` on Supabase. Public exposure should go
 /// through the `profiles_public` view (nickname + avatar + auth_method only)
 /// to avoid leaking email, wallet address, or GitHub username.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, sqlx::FromRow)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "ssr", derive(sqlx::FromRow))]
 pub struct Profile {
     pub id: Uuid,
     pub nickname: Option<String>,
@@ -29,7 +30,8 @@ pub struct Profile {
 /// Public-facing profile projection — never exposes PII.
 ///
 /// Mirrors the `profiles_public` view created in `002_auth.sql`.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, sqlx::FromRow)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "ssr", derive(sqlx::FromRow))]
 pub struct ProfilePublic {
     pub id: Uuid,
     pub nickname: Option<String>,

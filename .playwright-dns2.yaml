@@ -1,0 +1,176 @@
+- generic [active] [ref=e1]:
+  - banner [ref=e2]:
+    - link "주 콘텐츠로 건너뛰기" [ref=e3] [cursor=pointer]:
+      - /url: "#main"
+      - generic [ref=e4]: 주 콘텐츠로 건너뛰기
+    - generic [ref=e6]:
+      - generic [ref=e8]:
+        - button [ref=e9] [cursor=pointer]
+        - link "GoDaddy" [ref=e11] [cursor=pointer]:
+          - /url: https://venture-redirector.godaddy.com/
+          - figure "GoDaddy" [ref=e12]:
+            - img [ref=e13]
+        - list [ref=e15]:
+          - listitem [ref=e16]:
+            - link "포트폴리오" [ref=e17] [cursor=pointer]:
+              - /url: https://dcc.godaddy.com/control/portfolio
+              - generic [ref=e22]: 포트폴리오
+          - listitem [ref=e23]:
+            - link "DNS" [ref=e24] [cursor=pointer]:
+              - /url: /control/dnsmanagement
+              - generic [ref=e29]: DNS
+          - listitem [ref=e30]:
+            - link "이전" [ref=e31] [cursor=pointer]:
+              - /url: https://dcc.godaddy.com/control/transfers
+              - generic [ref=e36]: 이전
+          - listitem [ref=e37]:
+            - button "서비스" [ref=e38] [cursor=pointer]:
+              - generic [ref=e43]: 서비스
+            - list:
+              - listitem [ref=e46]:
+                - link "DNS 호스팅" [ref=e47] [cursor=pointer]:
+                  - /url: https://dcc.godaddy.com/control/dnshosting
+                  - generic [ref=e50]: DNS 호스팅
+              - listitem [ref=e51]:
+                - link "도메인 브로커" [ref=e52] [cursor=pointer]:
+                  - /url: https://dbs.godaddy.com
+                  - generic [ref=e55]: 도메인 브로커
+              - listitem [ref=e56]:
+                - link "사전 등록" [ref=e57] [cursor=pointer]:
+                  - /url: https://preregistration.godaddy.com
+                  - generic [ref=e60]: 사전 등록
+              - listitem [ref=e61]:
+                - link "블록" [ref=e62] [cursor=pointer]:
+                  - /url: https://dcc.godaddy.com/control/blocks
+                  - generic [ref=e65]: 블록
+              - listitem [ref=e66]:
+                - link "협상" [ref=e67] [cursor=pointer]:
+                  - /url: https://aftermarket.godaddy.com/negotiations
+                  - generic [ref=e70]: 협상
+          - listitem [ref=e71]:
+            - button "도메인 투자자 센터" [ref=e72] [cursor=pointer]:
+              - generic [ref=e77]: 도메인 투자자 센터
+            - list:
+              - listitem [ref=e80]:
+                - link "경매" [ref=e81] [cursor=pointer]:
+                  - /url: https://www.auctions.godaddy.com?itc=dcc_portfolio_auctions
+                  - generic [ref=e84]: 경매
+              - listitem [ref=e85]:
+                - link "Afternic" [ref=e86] [cursor=pointer]:
+                  - /url: https://sso.godaddy.com/federate/afternic?path=/dashboard/activity?itc=dcc_portfolio_afternic
+                  - generic [ref=e89]: Afternic
+              - listitem [ref=e90]:
+                - link "도메인 파킹" [ref=e91] [cursor=pointer]:
+                  - /url: https://www.godaddy.com/domain-parking/dashboard?itc=dcc_portfolio_parking
+                  - generic [ref=e94]: 도메인 파킹
+              - listitem [ref=e95]:
+                - link "도메인 아카데미" [ref=e96] [cursor=pointer]:
+                  - /url: https://community.godaddy.com/s/domain-academy?itc=dcc_portfolio_domain_academy
+                  - generic [ref=e99]: 도메인 아카데미
+              - listitem [ref=e100]:
+                - link "대량 검색" [ref=e101] [cursor=pointer]:
+                  - /url: https://www.godaddy.com/domains/bulk-domain-search?itc=dcc_portfolio_bulk_search
+                  - generic [ref=e104]: 대량 검색
+          - listitem [ref=e105]:
+            - button "설정" [ref=e106] [cursor=pointer]:
+              - generic [ref=e111]: 설정
+            - list:
+              - listitem [ref=e114]:
+                - link "대리인 액세스" [ref=e115] [cursor=pointer]:
+                  - /url: https://account.godaddy.com/access
+                  - generic [ref=e118]: 대리인 액세스
+              - listitem [ref=e119]:
+                - link "DNS 템플릿" [ref=e120] [cursor=pointer]:
+                  - /url: https://dcc.godaddy.com/control/dns/templates
+                  - generic [ref=e123]: DNS 템플릿
+              - listitem [ref=e124]:
+                - link "내보낸 목록" [ref=e125] [cursor=pointer]:
+                  - /url: https://dcc.godaddy.com/control/exported-lists
+                  - generic [ref=e128]: 내보낸 목록
+          - listitem [ref=e129]:
+            - link "활동 로그" [ref=e130] [cursor=pointer]:
+              - /url: https://dcc.godaddy.com/control/activity/log
+              - generic [ref=e135]: 활동 로그
+      - generic [ref=e136]:
+        - link "헬프 센터" [ref=e137] [cursor=pointer]:
+          - /url: https://www.godaddy.com/help
+          - generic [ref=e138]: 헬프 센터
+        - button "알림" [ref=e145] [cursor=pointer]:
+          - generic "알림" [ref=e146]
+        - button "최근 실행 앱" [ref=e150] [cursor=pointer]
+        - button "고객 정보" [ref=e152] [cursor=pointer]:
+          - generic [ref=e153]: H
+        - link "카트 비우기" [ref=e158] [cursor=pointer]:
+          - /url: https://kr.godaddy.com/pricing
+          - generic "카트 비우기" [ref=e159]
+  - main [ref=e162]:
+    - generic [ref=e166]:
+      - heading "DNS 관리" [level=1] [ref=e169]
+      - alert "5개의 무료 DNSSEC 크레딧이 있습니다 DNSSEC는 DNS 레코드에 추가 보안 계층 을 더하여 전송 중에 레코드가 변조되거나 위조되지 않도록 합니다. 이러한 추가 보안은 사이버 범죄자가 도메인 트래픽을 피싱 웹사이트와 같은 악성 웹사이트로 리디렉션하는 것을 방지하는 데 도움이 됩니다." [ref=e171]:
+        - generic [ref=e174]:
+          - button "Close" [ref=e176] [cursor=pointer]
+          - generic [ref=e177]:
+            - paragraph [ref=e178]: 5개의 무료 DNSSEC 크레딧이 있습니다
+            - paragraph [ref=e179]:
+              - text: DNSSEC는 DNS 레코드에
+              - link "추가 보안 계층" [ref=e180] [cursor=pointer]:
+                - /url: https://www.godaddy.com/help/a-6135?plid=1
+                - generic [ref=e181]: 추가 보안 계층
+              - text: 을 더하여 전송 중에 레코드가 변조되거나 위조되지 않도록 합니다. 이러한 추가 보안은 사이버 범죄자가 도메인 트래픽을 피싱 웹사이트와 같은 악성 웹사이트로 리디렉션하는 것을 방지하는 데 도움이 됩니다.
+          - group [ref=e182]:
+            - link "내 무료 DNSSEC 크레딧 사용 방법 알아보기" [ref=e184] [cursor=pointer]:
+              - /url: https://www.godaddy.com/help/a-6420?plid=1
+              - generic [ref=e185]: 내 무료 DNSSEC 크레딧 사용 방법 알아보기
+      - generic [ref=e188]:
+        - heading [level=2]
+        - paragraph [ref=e189]: 아래에서 DNS를 관리할 도메인 이름을 검색합니다.
+        - generic [ref=e190]:
+          - combobox "검색" [ref=e193]
+          - button "검색" [disabled] [ref=e194]:
+            - generic: 검색
+      - generic [ref=e196]:
+        - article [ref=e197]:
+          - img "관리형 워드프레스 제품 일러스트" [ref=e199]
+          - generic [ref=e200]:
+            - generic [ref=e203]: 세밀한 사용자 정의 가능
+            - heading "관리형 워드프레스" [level=3] [ref=e204]
+            - paragraph [ref=e205]: 워드프레스 사이트를 더 쉽게 만들고, 시작하고, 관리할 수 있도록 개선했습니다.
+            - button "플랜 둘러보기" [ref=e206] [cursor=pointer]:
+              - text: 플랜 둘러보기
+              - img [ref=e207]
+        - article [ref=e209]:
+          - img "웹 호스팅 제품 일러스트" [ref=e211]
+          - generic [ref=e212]:
+            - generic [ref=e215]: 고급 사용자
+            - heading "웹 호스팅" [level=3] [ref=e216]
+            - paragraph [ref=e217]: 개인용 사이트부터 고성능 사이트까지, 믿을 수 있는 웹 호스팅을 경험하세요.
+            - button "플랜 둘러보기" [ref=e218] [cursor=pointer]:
+              - text: 플랜 둘러보기
+              - img [ref=e219]
+        - article [ref=e221]:
+          - img "웹 디자인 서비스 제품 일러스트" [ref=e223]
+          - generic [ref=e224]:
+            - generic [ref=e227]: 알아서 처리해드림
+            - heading "웹 디자인 서비스" [level=3] [ref=e228]
+            - paragraph [ref=e229]: 웹사이트를 구축할 전문가를 채용하여 최대 2.9배 더 많은 웹사이트 트래픽을 얻으세요
+            - link "자세히 알아보기" [ref=e230] [cursor=pointer]:
+              - /url: https://onboarding.godaddy.com/launch?lid=wsb-vnext-freemat-3&itc=slp_wsb_ft_getstarted_plans_nocc&firstaccess=true
+              - text: 자세히 알아보기
+              - img [ref=e231]
+  - alert "privacyAlert" [ref=e234]:
+    - button "배너 닫기" [ref=e236] [cursor=pointer]:
+      - img
+    - generic [ref=e237]:
+      - strong [ref=e239]: 당사는 쿠키를 사용합니다.
+      - text: 당사는 쿠키 같은 도구를 사용하여 당사 사이트에서 필수 서비스 및 기능을 사용할 수 있도록 하고 방문자가 사이트, 제품, 서비스와 상호 작용하는 방식에 대한 데이터를 수집합니다. 동의를 클릭하면 당사의 광고, 분석 및 지원 업무에 이러한 도구를 사용한다는 데 동의하는 것입니다
+      - link "개인정보 취급방침" [ref=e240] [cursor=pointer]:
+        - /url: https://www.godaddy.com/legal/agreements/privacy-policy
+        - generic [ref=e241]: 개인정보 취급방침
+    - generic [ref=e242]:
+      - button "관리" [ref=e243] [cursor=pointer]:
+        - generic: 관리
+      - button "거부" [ref=e244] [cursor=pointer]:
+        - generic: 거부
+      - button "동의" [ref=e245] [cursor=pointer]:
+        - generic: 동의
+  - alert [ref=e246]

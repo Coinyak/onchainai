@@ -7,6 +7,7 @@ pub mod copy_button;
 pub mod empty_state;
 pub mod error_state;
 pub mod icons;
+pub mod login_form;
 pub mod login_modal;
 pub mod preview_panel;
 pub mod promo_cards;

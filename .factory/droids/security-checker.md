@@ -40,7 +40,7 @@ You are a security verification specialist for the OnchainAI project.
 ### SIWX (Wallet Auth)
 - Server-side message generation (not client)
 - Nonce: 16-byte random, single-use, discarded after verification
-- Domain binding: onchainai.xyz in message
+- Domain binding: www.onchain-ai.xyz in message
 - Signature: eip191 (EOA), EIP-1271 (smart wallet), ed25519 (Solana)
 - Expiration: 5min signature, 24h session
 
@@ -54,7 +54,7 @@ You are a security verification specialist for the OnchainAI project.
 
 ### HTTP Security
 - Headers: X-Frame-Options DENY, X-Content-Type-Options nosniff, CSP, HSTS, Referrer-Policy
-- CORS: onchainai.xyz only (production)
+- CORS: www.onchain-ai.xyz only (production)
 - CSRF: SameSite=Strict + Origin header check
 
 ### Admin Access

@@ -7,7 +7,8 @@ use uuid::Uuid;
 ///
 /// Threading is one level deep: top-level comments have `parent_id = None`;
 /// replies have `parent_id` pointing to a top-level comment.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, sqlx::FromRow)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "ssr", derive(sqlx::FromRow))]
 pub struct Comment {
     pub id: Uuid,
     pub tool_id: Uuid,
@@ -22,7 +23,8 @@ pub struct Comment {
 /// An upvote row from the `upvotes` table.
 ///
 /// Unique per `(comment_id, user_id)` via a DB unique index.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, sqlx::FromRow)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "ssr", derive(sqlx::FromRow))]
 pub struct Upvote {
     pub id: Uuid,
     pub comment_id: Uuid,
@@ -33,7 +35,8 @@ pub struct Upvote {
 /// A bookmark row from the `bookmarks` table.
 ///
 /// Unique per `(tool_id, user_id)` via a DB unique index.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, sqlx::FromRow)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "ssr", derive(sqlx::FromRow))]
 pub struct Bookmark {
     pub id: Uuid,
     pub tool_id: Uuid,

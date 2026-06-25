@@ -1,0 +1,194 @@
+- generic [ref=e1]:
+  - banner [ref=e2]:
+    - link "주 콘텐츠로 건너뛰기" [ref=e3] [cursor=pointer]:
+      - /url: "#main"
+      - generic [ref=e4]: 주 콘텐츠로 건너뛰기
+    - generic [ref=e6]:
+      - generic [ref=e8]:
+        - button [ref=e9] [cursor=pointer]
+        - link "GoDaddy" [ref=e11] [cursor=pointer]:
+          - /url: https://venture-redirector.godaddy.com/
+          - figure "GoDaddy" [ref=e12]:
+            - img [ref=e13]
+        - list [ref=e15]:
+          - listitem [ref=e16]:
+            - link "포트폴리오" [ref=e17] [cursor=pointer]:
+              - /url: https://dcc.godaddy.com/control/portfolio
+              - generic [ref=e22]: 포트폴리오
+          - listitem [ref=e23]:
+            - link "DNS" [ref=e24] [cursor=pointer]:
+              - /url: /control/dnsmanagement
+              - generic [ref=e29]: DNS
+          - listitem [ref=e30]:
+            - link "이전" [ref=e31] [cursor=pointer]:
+              - /url: https://dcc.godaddy.com/control/transfers
+              - generic [ref=e36]: 이전
+          - listitem [ref=e37]:
+            - button "서비스" [ref=e38] [cursor=pointer]:
+              - generic [ref=e43]: 서비스
+            - list:
+              - listitem [ref=e46]:
+                - link "DNS 호스팅" [ref=e47] [cursor=pointer]:
+                  - /url: https://dcc.godaddy.com/control/dnshosting
+                  - generic [ref=e50]: DNS 호스팅
+              - listitem [ref=e51]:
+                - link "도메인 브로커" [ref=e52] [cursor=pointer]:
+                  - /url: https://dbs.godaddy.com
+                  - generic [ref=e55]: 도메인 브로커
+              - listitem [ref=e56]:
+                - link "사전 등록" [ref=e57] [cursor=pointer]:
+                  - /url: https://preregistration.godaddy.com
+                  - generic [ref=e60]: 사전 등록
+              - listitem [ref=e61]:
+                - link "블록" [ref=e62] [cursor=pointer]:
+                  - /url: https://dcc.godaddy.com/control/blocks
+                  - generic [ref=e65]: 블록
+              - listitem [ref=e66]:
+                - link "협상" [ref=e67] [cursor=pointer]:
+                  - /url: https://aftermarket.godaddy.com/negotiations
+                  - generic [ref=e70]: 협상
+          - listitem [ref=e71]:
+            - button "도메인 투자자 센터" [ref=e72] [cursor=pointer]:
+              - generic [ref=e77]: 도메인 투자자 센터
+            - list:
+              - listitem [ref=e80]:
+                - link "경매" [ref=e81] [cursor=pointer]:
+                  - /url: https://www.auctions.godaddy.com?itc=dcc_portfolio_auctions
+                  - generic [ref=e84]: 경매
+              - listitem [ref=e85]:
+                - link "Afternic" [ref=e86] [cursor=pointer]:
+                  - /url: https://sso.godaddy.com/federate/afternic?path=/dashboard/activity?itc=dcc_portfolio_afternic
+                  - generic [ref=e89]: Afternic
+              - listitem [ref=e90]:
+                - link "도메인 파킹" [ref=e91] [cursor=pointer]:
+                  - /url: https://www.godaddy.com/domain-parking/dashboard?itc=dcc_portfolio_parking
+                  - generic [ref=e94]: 도메인 파킹
+              - listitem [ref=e95]:
+                - link "도메인 아카데미" [ref=e96] [cursor=pointer]:
+                  - /url: https://community.godaddy.com/s/domain-academy?itc=dcc_portfolio_domain_academy
+                  - generic [ref=e99]: 도메인 아카데미
+              - listitem [ref=e100]:
+                - link "대량 검색" [ref=e101] [cursor=pointer]:
+                  - /url: https://www.godaddy.com/domains/bulk-domain-search?itc=dcc_portfolio_bulk_search
+                  - generic [ref=e104]: 대량 검색
+          - listitem [ref=e105]:
+            - button "설정" [ref=e106] [cursor=pointer]:
+              - generic [ref=e111]: 설정
+            - list:
+              - listitem [ref=e114]:
+                - link "대리인 액세스" [ref=e115] [cursor=pointer]:
+                  - /url: https://account.godaddy.com/access
+                  - generic [ref=e118]: 대리인 액세스
+              - listitem [ref=e119]:
+                - link "DNS 템플릿" [ref=e120] [cursor=pointer]:
+                  - /url: https://dcc.godaddy.com/control/dns/templates
+                  - generic [ref=e123]: DNS 템플릿
+              - listitem [ref=e124]:
+                - link "내보낸 목록" [ref=e125] [cursor=pointer]:
+                  - /url: https://dcc.godaddy.com/control/exported-lists
+                  - generic [ref=e128]: 내보낸 목록
+          - listitem [ref=e129]:
+            - link "활동 로그" [ref=e130] [cursor=pointer]:
+              - /url: https://dcc.godaddy.com/control/activity/log
+              - generic [ref=e135]: 활동 로그
+      - generic [ref=e136]:
+        - link "헬프 센터" [ref=e137] [cursor=pointer]:
+          - /url: https://www.godaddy.com/help
+          - generic [ref=e138]: 헬프 센터
+        - button "최근 실행 앱" [ref=e140] [cursor=pointer]
+        - button "고객 정보" [ref=e142] [cursor=pointer]:
+          - generic [ref=e143]: HL
+        - link "카트 비우기" [ref=e170] [cursor=pointer]:
+          - /url: https://kr.godaddy.com/pricing
+          - generic "카트 비우기" [ref=e171]
+  - main [ref=e145]:
+    - generic [ref=e149]:
+      - heading "DNS 관리" [level=1] [ref=e152]
+      - generic [ref=e811]:
+        - heading "onchain-ai.xyz" [level=2] [ref=e812]
+        - generic [ref=e813]:
+          - button "도메인 설정" [ref=e814] [cursor=pointer]:
+            - generic: 도메인 설정
+          - button "다른 도메인 선택" [ref=e815] [cursor=pointer]:
+            - generic: 다른 도메인 선택
+      - generic [ref=e173]:
+        - navigation [ref=e174]:
+          - tablist "Navigation" [ref=e176]:
+            - tab "DNS 레코드" [ref=e177] [cursor=pointer]
+            - tab "전달" [ref=e178] [cursor=pointer]
+            - tab "네임서버" [ref=e179] [cursor=pointer]
+            - tab "호스트 이름" [active] [selected] [ref=e180] [cursor=pointer]
+            - tab "DNSSEC" [ref=e181] [cursor=pointer]
+            - tab "고급" [ref=e182] [cursor=pointer]: 고급
+        - tabpanel "호스트 이름" [ref=e816]:
+          - generic [ref=e818]:
+            - paragraph [ref=e819]:
+              - link "호스트 이름" [ref=e820] [cursor=pointer]:
+                - /url: https://www.godaddy.com/help/a-12320?plid=1
+                - generic [ref=e821]: 호스트 이름
+              - text: 을 사용하면 도메인을 사용하여 이 도메인과 다른 도메인에서 사용할 수 있는 사용자 정의 네임서버를 만들 수 있습니다.
+            - button "호스트 이름 추가" [ref=e822] [cursor=pointer]:
+              - generic: 호스트 이름 추가
+        - generic [ref=e437]:
+          - img [ref=e439]
+          - generic [ref=e503]:
+            - generic [ref=e504]: 무료로 소셜 미디어 하위 도메인 설정하기!
+            - generic [ref=e505]:
+              - text: 귀하의 도메인에는 귀하의 소셜 미디어 페이지에 연결할 수 있는 facebook.onchain-ai.xyz 등의 사용자 정의 가능한 하위 도메인이
+              - text: 무료로 제공됩니다.
+            - generic [ref=e508]:
+              - generic [ref=e509]:
+                - generic [ref=e513]: 향상된 SEO
+                - generic [ref=e514]: 소셜 하위 도메인은 귀하의 웹사이트가 검색 엔진에서 더 높은 순위를 차지하는 데 도움이 될 수 있습니다.
+              - generic [ref=e515]:
+                - generic [ref=e519]: 소셜 페이지 홍보하기
+                - generic [ref=e521]: facebook.onchain-ai.xyz 등의 소셜 하위 도메인을 방문하는 사람은 누구나 귀하의 소셜 미디어 페이지를 볼 수 있습니다.
+              - generic [ref=e522]:
+                - generic [ref=e526]: 기본 도메인에 추가하기
+                - generic [ref=e528]: 소셜 하위 도메인을 만들어도 현재 onchain-ai.xyz에 연결된 어떤 것에도 영향을 미치지 않습니다.
+            - generic [ref=e529]: "시작할 플랫폼 선택:"
+            - generic [ref=e530]:
+              - button "Instagram" [ref=e531] [cursor=pointer]:
+                - generic: Instagram
+              - button "Facebook" [ref=e532] [cursor=pointer]:
+                - generic: Facebook
+              - button "Yelp" [ref=e533] [cursor=pointer]:
+                - generic: Yelp
+              - button "Google" [ref=e534] [cursor=pointer]:
+                - generic: Google
+              - button "기타" [ref=e535] [cursor=pointer]:
+                - generic: 기타
+      - generic [ref=e537]:
+        - article [ref=e538]:
+          - img "관리형 워드프레스 제품 일러스트" [ref=e540]
+          - generic [ref=e541]:
+            - generic [ref=e544]: 세밀한 사용자 정의 가능
+            - heading "관리형 워드프레스" [level=3] [ref=e545]
+            - paragraph [ref=e546]: 워드프레스 사이트를 더 쉽게 만들고, 시작하고, 관리할 수 있도록 개선했습니다.
+            - button "플랜 둘러보기" [ref=e547] [cursor=pointer]:
+              - text: 플랜 둘러보기
+              - img [ref=e548]
+        - article [ref=e550]:
+          - img "웹 호스팅 제품 일러스트" [ref=e552]
+          - generic [ref=e553]:
+            - generic [ref=e556]: 고급 사용자
+            - heading "웹 호스팅" [level=3] [ref=e557]
+            - paragraph [ref=e558]: 개인용 사이트부터 고성능 사이트까지, 믿을 수 있는 웹 호스팅을 경험하세요.
+            - button "플랜 둘러보기" [ref=e559] [cursor=pointer]:
+              - text: 플랜 둘러보기
+              - img [ref=e560]
+        - article [ref=e562]:
+          - img "웹 디자인 서비스 제품 일러스트" [ref=e564]
+          - generic [ref=e565]:
+            - generic [ref=e568]: 알아서 처리해드림
+            - heading "웹 디자인 서비스" [level=3] [ref=e569]
+            - paragraph [ref=e570]: 웹사이트를 구축할 전문가를 채용하여 최대 2.9배 더 많은 웹사이트 트래픽을 얻으세요
+            - link "자세히 알아보기" [ref=e571] [cursor=pointer]:
+              - /url: https://onboarding.godaddy.com/launch?lid=wsb-vnext-freemat-3&itc=slp_wsb_ft_getstarted_plans_nocc&firstaccess=true
+              - text: 자세히 알아보기
+              - img [ref=e572]
+  - alert [ref=e165]: DNS 관리
+  - button "문의하기 문의하기" [ref=e576]:
+    - generic [ref=e578] [cursor=pointer]:
+      - img "문의하기" [ref=e579]
+      - generic [ref=e580]: 문의하기

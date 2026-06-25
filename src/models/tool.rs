@@ -11,7 +11,8 @@ use uuid::Uuid;
 /// See `migrations/001_init.sql` for the full column list. All fields match
 /// the DB schema exactly; the `type` column is renamed to `tool_type` because
 /// `type` is a reserved Rust keyword.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, sqlx::FromRow)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "ssr", derive(sqlx::FromRow))]
 pub struct Tool {
     pub id: Uuid,
     pub name: String,
@@ -23,7 +24,7 @@ pub struct Tool {
     pub asset_class: String,
     pub actor: String,
     /// Maps to the DB column `type`. Renamed because `type` is a Rust keyword.
-    #[sqlx(rename = "type")]
+    #[cfg_attr(feature = "ssr", sqlx(rename = "type"))]
     #[serde(rename = "type")]
     pub tool_type: String,
 

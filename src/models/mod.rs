@@ -26,7 +26,8 @@ use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
 /// A `sources` row — crawler status tracking.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, sqlx::FromRow)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "ssr", derive(sqlx::FromRow))]
 pub struct Source {
     pub id: Uuid,
     pub name: String,
@@ -41,7 +42,8 @@ pub struct Source {
 }
 
 /// A `siwx_sessions` row — server-side only, no client RLS policies.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, sqlx::FromRow)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "ssr", derive(sqlx::FromRow))]
 pub struct SiwxSession {
     pub id: Uuid,
     pub nonce: String,
@@ -58,7 +60,8 @@ pub struct SiwxSession {
 }
 
 /// A `site_settings` row — singleton (`id = 1`).
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, sqlx::FromRow)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "ssr", derive(sqlx::FromRow))]
 pub struct SiteSettings {
     pub id: i32,
     pub site_name: String,

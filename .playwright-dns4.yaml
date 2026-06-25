@@ -1,0 +1,122 @@
+- generic [active] [ref=e1]:
+  - banner [ref=e2]:
+    - link "주 콘텐츠로 건너뛰기" [ref=e3] [cursor=pointer]:
+      - /url: "#main"
+      - generic [ref=e4]: 주 콘텐츠로 건너뛰기
+    - generic [ref=e6]:
+      - generic [ref=e8]:
+        - button [ref=e9] [cursor=pointer]
+        - link "GoDaddy" [ref=e11] [cursor=pointer]:
+          - /url: https://venture-redirector.godaddy.com/
+          - figure "GoDaddy" [ref=e12]:
+            - img [ref=e13]
+        - list [ref=e15]:
+          - listitem [ref=e16]:
+            - link "포트폴리오" [ref=e17] [cursor=pointer]:
+              - /url: https://dcc.godaddy.com/control/portfolio
+              - generic [ref=e22]: 포트폴리오
+          - listitem [ref=e23]:
+            - link "DNS" [ref=e24] [cursor=pointer]:
+              - /url: /control/dnsmanagement
+              - generic [ref=e29]: DNS
+          - listitem [ref=e30]:
+            - link "이전" [ref=e31] [cursor=pointer]:
+              - /url: https://dcc.godaddy.com/control/transfers
+              - generic [ref=e36]: 이전
+          - listitem [ref=e37]:
+            - button "서비스" [ref=e38] [cursor=pointer]:
+              - generic [ref=e43]: 서비스
+            - list:
+              - listitem [ref=e46]:
+                - link "DNS 호스팅" [ref=e47] [cursor=pointer]:
+                  - /url: https://dcc.godaddy.com/control/dnshosting
+                  - generic [ref=e50]: DNS 호스팅
+              - listitem [ref=e51]:
+                - link "도메인 브로커" [ref=e52] [cursor=pointer]:
+                  - /url: https://dbs.godaddy.com
+                  - generic [ref=e55]: 도메인 브로커
+              - listitem [ref=e56]:
+                - link "사전 등록" [ref=e57] [cursor=pointer]:
+                  - /url: https://preregistration.godaddy.com
+                  - generic [ref=e60]: 사전 등록
+              - listitem [ref=e61]:
+                - link "블록" [ref=e62] [cursor=pointer]:
+                  - /url: https://dcc.godaddy.com/control/blocks
+                  - generic [ref=e65]: 블록
+              - listitem [ref=e66]:
+                - link "협상" [ref=e67] [cursor=pointer]:
+                  - /url: https://aftermarket.godaddy.com/negotiations
+                  - generic [ref=e70]: 협상
+          - listitem [ref=e71]:
+            - button "도메인 투자자 센터" [ref=e72] [cursor=pointer]:
+              - generic [ref=e77]: 도메인 투자자 센터
+            - list:
+              - listitem [ref=e80]:
+                - link "경매" [ref=e81] [cursor=pointer]:
+                  - /url: https://www.auctions.godaddy.com?itc=dcc_portfolio_auctions
+                  - generic [ref=e84]: 경매
+              - listitem [ref=e85]:
+                - link "Afternic" [ref=e86] [cursor=pointer]:
+                  - /url: https://sso.godaddy.com/federate/afternic?path=/dashboard/activity?itc=dcc_portfolio_afternic
+                  - generic [ref=e89]: Afternic
+              - listitem [ref=e90]:
+                - link "도메인 파킹" [ref=e91] [cursor=pointer]:
+                  - /url: https://www.godaddy.com/domain-parking/dashboard?itc=dcc_portfolio_parking
+                  - generic [ref=e94]: 도메인 파킹
+              - listitem [ref=e95]:
+                - link "도메인 아카데미" [ref=e96] [cursor=pointer]:
+                  - /url: https://community.godaddy.com/s/domain-academy?itc=dcc_portfolio_domain_academy
+                  - generic [ref=e99]: 도메인 아카데미
+              - listitem [ref=e100]:
+                - link "대량 검색" [ref=e101] [cursor=pointer]:
+                  - /url: https://www.godaddy.com/domains/bulk-domain-search?itc=dcc_portfolio_bulk_search
+                  - generic [ref=e104]: 대량 검색
+          - listitem [ref=e105]:
+            - button "설정" [ref=e106] [cursor=pointer]:
+              - generic [ref=e111]: 설정
+            - list:
+              - listitem [ref=e114]:
+                - link "대리인 액세스" [ref=e115] [cursor=pointer]:
+                  - /url: https://account.godaddy.com/access
+                  - generic [ref=e118]: 대리인 액세스
+              - listitem [ref=e119]:
+                - link "DNS 템플릿" [ref=e120] [cursor=pointer]:
+                  - /url: https://dcc.godaddy.com/control/dns/templates
+                  - generic [ref=e123]: DNS 템플릿
+              - listitem [ref=e124]:
+                - link "내보낸 목록" [ref=e125] [cursor=pointer]:
+                  - /url: https://dcc.godaddy.com/control/exported-lists
+                  - generic [ref=e128]: 내보낸 목록
+          - listitem [ref=e129]:
+            - link "활동 로그" [ref=e130] [cursor=pointer]:
+              - /url: https://dcc.godaddy.com/control/activity/log
+              - generic [ref=e135]: 활동 로그
+      - generic [ref=e136]:
+        - link "헬프 센터" [ref=e137] [cursor=pointer]:
+          - /url: https://www.godaddy.com/help
+          - generic [ref=e138]: 헬프 센터
+        - button "알림" [ref=e145] [cursor=pointer]:
+          - generic "알림" [ref=e146]
+        - button "최근 실행 앱" [ref=e150] [cursor=pointer]
+        - button "고객 정보" [ref=e152] [cursor=pointer]:
+          - generic [ref=e153]: H
+        - link "카트 비우기" [ref=e158] [cursor=pointer]:
+          - /url: https://kr.godaddy.com/pricing
+          - generic "카트 비우기" [ref=e159]
+  - main [ref=e162]:
+    - generic [ref=e166]:
+      - heading "DNS 관리" [level=1] [ref=e169]
+      - generic [ref=e256]:
+        - paragraph [ref=e257]: 아래에서 DNS를 관리할 도메인 이름을 검색합니다.
+        - generic [ref=e258]:
+          - generic [ref=e259]:
+            - combobox "검색" [ref=e261]: onchainai.xyz
+            - button "검색 지우기" [ref=e262] [cursor=pointer]
+          - button "검색" [ref=e263] [cursor=pointer]:
+            - generic: 검색
+        - alert [ref=e264]: 도메인을 찾을 수 없습니다.
+  - alert [ref=e246]: DNS 관리
+  - button "문의하기 문의하기" [ref=e250]:
+    - generic [ref=e252] [cursor=pointer]:
+      - img "문의하기" [ref=e253]
+      - generic [ref=e254]: 문의하기

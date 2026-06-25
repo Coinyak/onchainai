@@ -178,6 +178,36 @@ pub fn Sidebar(
                 <A href=clear_href.clone() attr:class="sidebar-clear sidebar-title-text">"Clear"</A>
             </div>
 
+            <div class="sidebar-rail-icons">
+                {[
+                    ("function", "Fn", "Function"),
+                    ("asset_class", "Ac", "Asset Class"),
+                    ("actor", "Hu", "Actor"),
+                    ("type", "Ty", "Type"),
+                    ("status", "St", "Status"),
+                    ("chain", "Ch", "Chain"),
+                ].into_iter().map(|(id, short, label)| {
+                    let section_id = id.to_string();
+                    view! {
+                        <button
+                            type="button"
+                            class="sidebar-rail-icon"
+                            title=label
+                            aria-label=label
+                            on:click=move |_| {
+                                sidebar_collapsed.set(false);
+                                open_map.update(|m| {
+                                    m.insert(section_id.clone(), true);
+                                    write_sidebar_sections(m);
+                                });
+                            }
+                        >
+                            {short}
+                        </button>
+                    }
+                }).collect_view()}
+            </div>
+
             <div class="sidebar-body">
                 <CollapsibleSection section_id="function" title="Function" open_map=open_map sidebar_collapsed=sidebar_collapsed>
                     <ul class="sidebar-list">

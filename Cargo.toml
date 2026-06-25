@@ -29,6 +29,30 @@ required-features = ["ssr"]
 [features]
 default = ["ssr"]
 ssr = [
+    "dep:leptos_axum",
+    "dep:axum",
+    "dep:tower",
+    "dep:tower-http",
+    "dep:rmcp",
+    "dep:sqlx",
+    "dep:reqwest",
+    "dep:scraper",
+    "dep:tokio",
+    "dep:tokio-cron-scheduler",
+    "dep:dotenvy",
+    "dep:supabase-auth",
+    "dep:jsonwebtoken",
+    "dep:sha2",
+    "dep:getrandom",
+    "dep:ethers-core",
+    "dep:solana-sdk",
+    "dep:governor",
+    "dep:tower_governor",
+    "dep:base64",
+    "dep:tracing",
+    "dep:tracing-subscriber",
+    "dep:gloo-net",
+    "dep:gloo-timers",
     "leptos/ssr",
     "leptos_meta/ssr",
     "leptos_router/ssr",
@@ -36,6 +60,12 @@ ssr = [
 hydrate = [
     "leptos/hydrate",
     "dep:console_error_panic_hook",
+    "dep:wasm-bindgen",
+    "dep:wasm-bindgen-futures",
+    "dep:js-sys",
+    "dep:gloo-net",
+    "dep:gloo-timers",
+    "dep:web-sys",
 ]
 
 [profile.wasm-release]
@@ -47,18 +77,20 @@ panic = "abort"
 
 [dependencies]
 leptos = { version = "0.8", default-features = false }
-leptos_axum = "0.8"
-axum = "0.8"
-tower = "0.5"
-tower-http = { version = "0.6", features = ["fs", "cors", "trace", "set-header", "limit", "compression-gzip"] }
-rmcp = { version = "0.1", features = ["server", "transport-sse"] }
-sqlx = { version = "0.8", features = ["postgres", "uuid", "chrono", "json", "macros", "runtime-tokio", "migrate"] }
-reqwest = { version = "0.12", features = ["json"] }
-scraper = "0.22"
-base64 = "0.22"
+leptos_meta = { version = "0.8", default-features = false }
+leptos_router = { version = "0.8", default-features = false }
+leptos_axum = { version = "0.8", optional = true }
+axum = { version = "0.8", optional = true }
+tower = { version = "0.5", optional = true }
+tower-http = { version = "0.6", features = ["fs", "cors", "trace", "set-header", "limit", "compression-gzip"], optional = true }
+rmcp = { version = "0.1", features = ["server", "transport-sse"], optional = true }
+sqlx = { version = "0.8", features = ["postgres", "uuid", "chrono", "json", "macros", "runtime-tokio", "migrate"], optional = true }
+reqwest = { version = "0.12", features = ["json"], optional = true }
+scraper = { version = "0.22", optional = true }
+base64 = { version = "0.22", optional = true }
 urlencoding = "2"
-tokio = { version = "1", features = ["full"] }
-tokio-cron-scheduler = "0.14"
+tokio = { version = "1", features = ["full"], optional = true }
+tokio-cron-scheduler = { version = "0.14", optional = true }
 async-trait = "0.1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -66,27 +98,25 @@ uuid = { version = "1", features = ["v4", "serde"] }
 chrono = { version = "0.4", features = ["serde"] }
 slug = "0.1"
 anyhow = "1"
-tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-dotenvy = "0.15"
-supabase-auth = "0.10"
-jsonwebtoken = "9"
-sha2 = "0.10"
-getrandom = "0.2"
-ethers-core = "2"
-solana-sdk = "2"
+tracing = { version = "0.1", optional = true }
+tracing-subscriber = { version = "0.3", features = ["env-filter"], optional = true }
+dotenvy = { version = "0.15", optional = true }
+supabase-auth = { version = "0.10", optional = true }
+jsonwebtoken = { version = "9", optional = true }
+sha2 = { version = "0.10", optional = true }
+getrandom = { version = "0.2", optional = true }
+ethers-core = { version = "2", optional = true }
+solana-sdk = { version = "2", optional = true }
 validator = { version = "0.18", features = ["derive"] }
-governor = "0.6"
-leptos_meta = { version = "0.8", default-features = false }
-leptos_router = { version = "0.8", default-features = false }
-tower_governor = { version = "0.8.0", features = ["tracing"] }
-wasm-bindgen = "0.2"
+governor = { version = "0.6", optional = true }
+tower_governor = { version = "0.8.0", features = ["tracing"], optional = true }
+wasm-bindgen = { version = "0.2", optional = true }
 console_error_panic_hook = { version = "0.1", optional = true }
-gloo-net = "0.6"
-gloo-timers = { version = "0.3", features = ["futures"] }
-js-sys = "0.3"
-wasm-bindgen-futures = "0.4"
-web-sys = { version = "0.3", features = ["RequestCredentials", "Window", "Navigator", "Clipboard", "Storage"] }
+gloo-net = { version = "0.6", optional = true }
+gloo-timers = { version = "0.3", features = ["futures"], optional = true }
+js-sys = { version = "0.3", optional = true }
+wasm-bindgen-futures = { version = "0.4", optional = true }
+web-sys = { version = "0.3", features = ["RequestCredentials", "Window", "Navigator", "Clipboard", "Storage", "Location"], optional = true }
 
 [dev-dependencies]
 wiremock = "0.6"

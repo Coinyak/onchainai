@@ -3,7 +3,8 @@
 /// A function category row from the `categories` table.
 ///
 /// `id` is a TEXT primary key (e.g. `"bridge"`), not a UUID.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, sqlx::FromRow)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "ssr", derive(sqlx::FromRow))]
 pub struct Category {
     pub id: String,
     pub label: String,

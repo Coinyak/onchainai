@@ -113,6 +113,7 @@ fn required(key: &str) -> anyhow::Result<String> {
 ///
 /// Uses [`PgPoolOptions`](sqlx::postgres::PgPoolOptions) with a modest
 /// connection limit. Returns an error (not a panic) on a bad URL.
+#[cfg(feature = "ssr")]
 pub async fn setup_db(database_url: &str) -> anyhow::Result<sqlx::PgPool> {
     sqlx::postgres::PgPoolOptions::new()
         .max_connections(10)

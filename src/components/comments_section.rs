@@ -7,30 +7,23 @@ use crate::server::functions::{
 };
 use leptos::prelude::*;
 use leptos::task::spawn_local;
-use std::sync::Arc;
 
 #[component]
-pub fn CommentsSection(slug: String, tool_name: String) -> impl IntoView {
+pub fn CommentsSection(slug: Memo<String>, tool_name: String) -> impl IntoView {
     let refresh = RwSignal::new(0u32);
     let show_login = RwSignal::new(false);
     let comment_sort = RwSignal::new("new".to_string());
-    let slug = Arc::new(slug);
 
     let user = Resource::new(|| (), |_| async move { get_current_user().await });
-    let slug_for_comments = slug.clone();
     let comments = Resource::new(
-        move || (refresh.get(), comment_sort.get(), (*slug_for_comments).clone()),
+        move || (refresh.get(), comment_sort.get(), slug.get()),
         move |(_, sort, slug)| async move { get_tool_comments(slug, sort).await },
     );
-    let slug_for_bookmark_res = slug.clone();
     let bookmarked = Resource::new(
-        move || ((*slug_for_bookmark_res).clone(), refresh.get()),
+        move || (slug.get(), refresh.get()),
         |(s, _)| async move { is_bookmarked(s).await },
     );
-    let slug_for_comment = (*slug).clone();
     let tool_name_for_comment = tool_name.clone();
-    let slug_for_bookmark = (*slug).clone();
-    let slug_for_items = (*slug).clone();
 
     view! {
         <LoginModal show=show_login/>
@@ -51,7 +44,7 @@ pub fn CommentsSection(slug: String, tool_name: String) -> impl IntoView {
                 <Suspense fallback=|| ()>
                     {move || bookmarked.get().map(|res| {
                         let active = res.unwrap_or(false);
-                        let slug_bm = slug_for_bookmark.clone();
+                        let slug_bm = slug.get();
                         view! {
                             <button
                                 type="button"
@@ -77,7 +70,7 @@ pub fn CommentsSection(slug: String, tool_name: String) -> impl IntoView {
             </div>
 
             <CommentForm
-                slug=slug_for_comment.clone()
+                slug=slug
                 tool_name=tool_name_for_comment
                 parent_id=None
                 user=user
@@ -94,7 +87,6 @@ pub fn CommentsSection(slug: String, tool_name: String) -> impl IntoView {
                     }.into_any(),
                     Some(Ok(rows)) => {
                         let tops: Vec<_> = rows.iter().filter(|c| c.parent_id.is_none()).cloned().collect();
-                        let slug_for_items = slug_for_items.clone();
                         let tool_name_items = tool_name.clone();
                         view! {
                             <ul class="mt-6 space-y-4">
@@ -106,7 +98,7 @@ pub fn CommentsSection(slug: String, tool_name: String) -> impl IntoView {
                                     replies.sort_by(|a, b| a.created_at.cmp(&b.created_at));
                                     view! {
                                         <CommentItem
-                                            slug=slug_for_items.clone()
+                                            slug=slug
                                             tool_name=tool_name_items.clone()
                                             comment=c
                                             replies=replies
@@ -131,7 +123,7 @@ pub fn CommentsSection(slug: String, tool_name: String) -> impl IntoView {
 
 #[component]
 fn CommentForm(
-    slug: String,
+    slug: Memo<String>,
     tool_name: String,
     parent_id: Option<uuid::Uuid>,
     user: Resource<Result<Option<crate::auth::session::SessionUser>, ServerFnError>>,
@@ -176,7 +168,7 @@ fn CommentForm(
                     class="px-4 py-2 rounded-lg bg-[#1A1A1A] text-white text-[14px] font-medium hover:opacity-90 disabled:opacity-50"
                     disabled=move || busy.get()
                     on:click=move |_| {
-                        let slug = slug.clone();
+                        let slug = slug.get();
                         let text = content.get_untracked();
                         let pid = parent_id;
                         if text.trim().is_empty() {
@@ -210,7 +202,7 @@ fn CommentForm(
 
 #[component]
 fn CommentItem(
-    slug: String,
+    slug: Memo<String>,
     tool_name: String,
     comment: CommentView,
     replies: Vec<CommentView>,
@@ -235,7 +227,7 @@ fn CommentItem(
             {move || show_reply.get().then(|| view! {
                 <div class="mt-3">
                     <CommentForm
-                        slug=slug.clone()
+                        slug=slug
                         tool_name=tool_name.clone()
                         parent_id=Some(parent_id)
                         user=user

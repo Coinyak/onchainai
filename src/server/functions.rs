@@ -53,7 +53,8 @@ pub async fn check_admin_access() -> Result<SessionUser, ServerFnError> {
 }
 
 /// Row shape for category listings with live approved-tool counts.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, sqlx::FromRow)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "ssr", derive(sqlx::FromRow))]
 pub struct CategoryWithCount {
     pub id: String,
     pub label: String,
@@ -733,6 +734,7 @@ pub async fn get_tool_comments(slug: String, sort: String) -> Result<Vec<Comment
     Ok(rows.into_iter().map(CommentRow::into_view).collect())
 }
 
+#[cfg(feature = "ssr")]
 #[derive(Debug, sqlx::FromRow)]
 struct CommentRow {
     id: Uuid,
@@ -1214,6 +1216,7 @@ pub async fn list_admin_users(
     Ok(rows.into_iter().map(AdminUserRow::into_view).collect())
 }
 
+#[cfg(feature = "ssr")]
 #[derive(Debug, sqlx::FromRow)]
 struct AdminUserRow {
     id: Uuid,
@@ -1387,6 +1390,7 @@ pub async fn list_admin_comments(
     Ok(rows.into_iter().map(AdminCommentRow::into_view).collect())
 }
 
+#[cfg(feature = "ssr")]
 #[derive(Debug, sqlx::FromRow)]
 struct AdminCommentRow {
     id: Uuid,

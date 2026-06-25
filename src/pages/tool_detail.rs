@@ -37,7 +37,7 @@ pub fn ToolDetailPage() -> impl IntoView {
                     Some(Ok(t)) => view! {
                         <a href="/tools" class="back-link">"← Back to tools"</a>
                         <ToolDetailContent tool=t.clone() compact=false/>
-                        <CommentsSection slug=t.slug.clone() tool_name=t.name.clone()/>
+                        <CommentsSection slug=slug tool_name=t.name.clone()/>
                     }.into_any(),
                     Some(Err(e)) => view! {
                         <ErrorState
