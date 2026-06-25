@@ -105,22 +105,39 @@ fn github_client(token: Option<&str>) -> Result<reqwest::Client> {
 }
 
 /// Parse a GitHub URL into `(owner, repo)`.
-fn parse_github_url(url: &str) -> Option<(&str, &str)> {
-    // Accept both https://github.com/owner/repo and optional .git suffix.
-    let url = url.strip_suffix(".git").unwrap_or(url);
-    let parts: Vec<&str> = url
+fn parse_github_url(url: &str) -> Option<(String, String)> {
+    // Strip query/fragment first, then .git suffix, then trailing slash.
+    let mut owned = url.to_string();
+    if let Some((u, _)) = owned.split_once('?') {
+        owned = u.to_string();
+    }
+    if let Some((u, _)) = owned.split_once('#') {
+        owned = u.to_string();
+    }
+    while owned.ends_with('/') {
+        owned.pop();
+    }
+    if owned.ends_with(".git") {
+        owned.truncate(owned.len() - 4);
+    }
+    if !owned.starts_with("https://github.com/") && !owned.starts_with("http://github.com/") {
+        return None;
+    }
+    let parts: Vec<&str> = owned
         .trim_start_matches("https://github.com/")
         .trim_start_matches("http://github.com/")
         .split('/')
+        .filter(|p| !p.is_empty())
         .collect();
-    if parts.len() >= 2 {
-        Some((parts[0], parts[1]))
+    if parts.len() >= 2 && !parts[0].is_empty() && !parts[1].is_empty() {
+        Some((parts[0].to_string(), parts[1].to_string()))
     } else {
         None
     }
 }
 
 /// Decode base64 README content if necessary.
+#[allow(dead_code)]
 fn decode_readme(readme: &ReadmeResponse) -> Option<String> {
     if readme.encoding == "base64" {
         base64::Engine::decode(
@@ -278,6 +295,7 @@ async fn search_topic(
 }
 
 /// Fetch and parse the README for a repo, returning its decoded text.
+#[allow(dead_code)]
 async fn fetch_readme(
     client: &reqwest::Client,
     token: Option<&str>,
@@ -335,22 +353,154 @@ pub async fn crawl_topics() -> Result<Vec<RawTool>> {
     crawl_topics_with_token(token.as_deref()).await
 }
 
-/// Update stars and last_commit_at for up to 100 existing tools.
-pub async fn sync_stars(_pool: &sqlx::PgPool) {
-    // Full implementation uses sqlx queries against the DB; wiring to the
-    // `tools` table is exercised in the `crawler-scheduler-star-sync`
-    // milestone. This stub logs so the scheduler can call it without failing.
-    tracing::info!("star sync: stub (DB wiring in next milestone)");
+/// Update stars and last_commit_at for up to 100 existing tools with repo_url.
+///
+/// Selects the 100 least-recently-updated tools that have a non-null
+/// `repo_url`, calls the GitHub API for each, and updates `stars` and
+/// `last_commit_at`. Tools without a parseable GitHub URL are skipped. A 10ms
+/// sleep between API calls keeps us well under GitHub's 5000 req/h rate limit.
+/// Errors for individual tools are logged and do not abort the batch.
+#[allow(dead_code)]
+pub async fn sync_stars(pool: &sqlx::PgPool) {
+    let tools = match sqlx::query_as::<_, crate::models::Tool>(
+        "SELECT * FROM tools WHERE repo_url IS NOT NULL ORDER BY updated_at ASC LIMIT 100",
+    )
+    .fetch_all(pool)
+    .await
+    {
+        Ok(t) => t,
+        Err(e) => {
+            tracing::error!(error = %e, "star sync failed to load tools");
+            return;
+        }
+    };
+
+    let token = std::env::var("GITHUB_API_TOKEN")
+        .ok()
+        .filter(|s| !s.is_empty());
+    let client = match github_client(token.as_deref()) {
+        Ok(c) => c,
+        Err(e) => {
+            tracing::error!(error = %e, "star sync failed to build HTTP client");
+            return;
+        }
+    };
+
+    for tool in tools {
+        let Some(repo_url) = &tool.repo_url else {
+            continue;
+        };
+        let Some((owner, repo)) = parse_github_url(repo_url) else {
+            tracing::warn!(tool_id = %tool.id, repo_url, "star sync skipped unparseable repo_url");
+            continue;
+        };
+
+        match fetch_repo_api(&client, token.as_deref(), &owner, &repo).await {
+            Ok(repo) => {
+                let last_commit_at = repo.pushed_at.as_ref().and_then(|s| parse_datetime(s));
+                if let Err(e) = sqlx::query(
+                    "UPDATE tools SET stars = $1, last_commit_at = $2, updated_at = now() WHERE id = $3",
+                )
+                .bind(repo.stargazers_count)
+                .bind(last_commit_at)
+                .bind(tool.id)
+                .execute(pool)
+                .await
+                {
+                    tracing::error!(tool_id = %tool.id, error = %e, "star sync update failed");
+                } else {
+                    tracing::debug!(tool_id = %tool.id, stars = repo.stargazers_count, "star sync updated");
+                }
+            }
+            Err(e) => {
+                tracing::error!(tool_id = %tool.id, repo_url, error = %e, "star sync API call failed");
+            }
+        }
+
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    }
+
+    tracing::info!("star sync completed");
+}
+
+/// Fetch a single repo from the GitHub API at a configurable base URL.
+async fn fetch_repo_api_at_url(
+    client: &reqwest::Client,
+    token: Option<&str>,
+    url: &str,
+) -> Result<RepoResponse> {
+    let mut request = client.get(url);
+    if let Some(t) = token {
+        request = request.header(
+            reqwest::header::AUTHORIZATION,
+            reqwest::header::HeaderValue::from_str(&format!("Bearer {t}"))
+                .context("invalid GitHub API token for header")?,
+        );
+    }
+
+    let response = request
+        .send()
+        .await
+        .with_context(|| format!("GitHub repo request failed for {url}"))?;
+
+    let status = response.status();
+    if !status.is_success() {
+        let body = response.text().await.unwrap_or_default();
+        anyhow::bail!("GitHub repo API returned HTTP {status}: {body}");
+    }
+
+    response
+        .json()
+        .await
+        .context("parsing GitHub repo response JSON")
+}
+
+/// Fetch a single repo from the production GitHub API.
+async fn fetch_repo_api(
+    client: &reqwest::Client,
+    token: Option<&str>,
+    owner: &str,
+    repo: &str,
+) -> Result<RepoResponse> {
+    let url = format!("{GITHUB_API_BASE}/repos/{owner}/{repo}");
+    fetch_repo_api_at_url(client, token, &url).await
 }
 
 /// Insert the OnchainAI tool row into the database (idempotent).
-pub async fn self_register(_pool: &sqlx::PgPool) {
-    // Full DB upsert is added in the `crawler-scheduler-star-sync` milestone.
-    tracing::info!("self-register: stub (DB wiring in next milestone)");
+///
+/// `source` is `'self'`, `status` is `'official'`, and the insert uses
+/// `ON CONFLICT (slug) DO NOTHING` so repeated calls are safe.
+#[allow(dead_code)]
+pub async fn self_register(pool: &sqlx::PgPool) {
+    let repo_url = "https://github.com/love/onchainai";
+    let homepage = "https://onchainai.xyz";
+    let result = sqlx::query(
+        r#"
+        INSERT INTO tools (
+            name, slug, description, function, asset_class, actor, type,
+            repo_url, homepage, status, official_team, source, license, stars
+        )
+        VALUES ($1, $2, $3, 'dev-tool', 'crypto', 'ai-agent', 'mcp',
+                $4, $5, 'official', 'OnchainAI', 'self', 'MIT', 0)
+        ON CONFLICT (slug) DO NOTHING
+        "#,
+    )
+    .bind("OnchainAI")
+    .bind("onchainai")
+    .bind("Crypto tool directory — discover, install, and share MCP, CLI, SDK, API, x402, RWA, and AI agent tools — all in one place.")
+    .bind(repo_url)
+    .bind(homepage)
+    .execute(pool)
+    .await;
+
+    match result {
+        Ok(_) => tracing::info!("self-register: OnchainAI tool inserted or already present"),
+        Err(e) => tracing::error!(error = %e, "self-register: failed to insert OnchainAI tool"),
+    }
 }
 
 /// Run a full topics crawl.
-pub async fn run_once(_pool: &sqlx::PgPool) {
+pub async fn run_once(pool: &sqlx::PgPool) {
     match crawl_topics().await {
         Ok(raws) => {
             tracing::info!(
@@ -358,14 +508,31 @@ pub async fn run_once(_pool: &sqlx::PgPool) {
                 count = raws.len(),
                 "topics crawl completed"
             );
+            crate::crawler::upsert_source_results(
+                pool,
+                SOURCE_NAME,
+                "https://github.com/topics",
+                raws,
+            )
+            .await;
         }
         Err(e) => {
             tracing::error!(source = SOURCE_NAME, error = %e, "topics crawl failed");
+            crate::crawler::update_source_status(
+                pool,
+                SOURCE_NAME,
+                "https://github.com/topics",
+                "error",
+                0,
+                Some(&e.to_string()),
+            )
+            .await;
         }
     }
 }
 
 /// Crawler instance implementing [`SourceCrawler`] for GitHub topic search.
+#[allow(dead_code)]
 pub struct GitHubTopicsCrawler;
 
 #[async_trait::async_trait]
@@ -538,13 +705,27 @@ mod tests {
     fn parse_github_url_variants() {
         assert_eq!(
             parse_github_url("https://github.com/owner/repo"),
-            Some(("owner", "repo"))
+            Some(("owner".to_string(), "repo".to_string()))
         );
         assert_eq!(
             parse_github_url("https://github.com/owner/repo.git"),
-            Some(("owner", "repo"))
+            Some(("owner".to_string(), "repo".to_string()))
+        );
+        assert_eq!(
+            parse_github_url("https://github.com/owner/repo/"),
+            Some(("owner".to_string(), "repo".to_string()))
+        );
+        assert_eq!(
+            parse_github_url("https://github.com/owner/repo?tab=readme"),
+            Some(("owner".to_string(), "repo".to_string()))
+        );
+        assert_eq!(
+            parse_github_url("https://github.com/owner/repo#readme"),
+            Some(("owner".to_string(), "repo".to_string()))
         );
         assert_eq!(parse_github_url("not-a-url"), None);
+        assert_eq!(parse_github_url("https://github.com/owner"), None);
+        assert_eq!(parse_github_url("https://example.com/owner/repo"), None);
     }
 
     #[test]
@@ -576,5 +757,61 @@ mod tests {
         assert_eq!(raw.stars, 99);
         assert!(raw.chains.contains(&"solana".to_string()));
         assert!(raw.last_commit_at.is_some());
+    }
+
+    #[tokio::test]
+    async fn fetch_repo_api_parses_stars_and_pushed_at() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/repos/owner/repo"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "stargazers_count": 1234,
+                "pushed_at": "2026-06-24T18:00:00Z"
+            })))
+            .mount(&server)
+            .await;
+
+        let client = reqwest::Client::builder()
+            .user_agent(crate::crawler::sources::CRAWLER_USER_AGENT)
+            .timeout(std::time::Duration::from_secs(30))
+            .build()
+            .unwrap();
+
+        let repo =
+            fetch_repo_api_at_url(&client, None, &format!("{}/repos/owner/repo", server.uri()))
+                .await
+                .expect("repo API should succeed");
+
+        assert_eq!(repo.stargazers_count, 1234);
+        assert_eq!(repo.pushed_at.as_deref(), Some("2026-06-24T18:00:00Z"));
+    }
+
+    #[tokio::test]
+    async fn fetch_repo_api_includes_authorization_header() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/repos/owner/repo"))
+            .and(header("authorization", "Bearer token-42"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "stargazers_count": 0,
+                "pushed_at": null
+            })))
+            .mount(&server)
+            .await;
+
+        let client = reqwest::Client::builder()
+            .user_agent(crate::crawler::sources::CRAWLER_USER_AGENT)
+            .timeout(std::time::Duration::from_secs(30))
+            .build()
+            .unwrap();
+
+        let repo = fetch_repo_api_at_url(
+            &client,
+            Some("token-42"),
+            &format!("{}/repos/owner/repo", server.uri()),
+        )
+        .await
+        .expect("repo API should succeed with token");
+        assert_eq!(repo.stargazers_count, 0);
     }
 }

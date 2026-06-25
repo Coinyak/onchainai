@@ -27,6 +27,11 @@ const CRYPTOSKILL_DETAIL_BASE: &str = "https://cryptoskill.org/skills";
 /// Source identifier.
 const SOURCE_NAME: &str = "cryptoskill";
 
+// Suppress dead-code warnings for helpers only used in tests until the
+// normalizer consumes them in a later milestone.
+#[allow(dead_code)]
+const _CRYPTOSKILL_REGISTRY_URL: &str = CRYPTOSKILL_REGISTRY_URL;
+
 /// CryptoSkill skill entry as returned by `skills.json`.
 ///
 /// Only fields needed for normalization are read after deserialization; the
@@ -56,6 +61,7 @@ struct RegistryResponse {
 /// 3-axis classification. Categories that are close to OnchainAI functions
 /// are mapped to that function's keywords; the rest use their own text so
 /// classification can still pick them up.
+#[allow(dead_code)]
 fn category_corpus(category: &str, name: &str, description: &str, tags: &[String]) -> String {
     let tags_text = tags.join(" ");
     let base = format!("{name} {description} {category} {tags_text}");
@@ -70,6 +76,7 @@ fn category_corpus(category: &str, name: &str, description: &str, tags: &[String
     format!("{base}{extra}")
 }
 
+#[allow(dead_code)]
 fn map_category_to_function(category: &str) -> &'static str {
     match category {
         "exchanges" => "swap",
@@ -150,21 +157,36 @@ pub async fn crawl() -> Result<Vec<RawTool>> {
 
 /// Run a full crawl.
 ///
-/// DB upsert and `sources` table updates are added in the
-/// `crawler-scheduler-star-sync` milestone; this function only logs results
-/// so the scheduler can call it without failing.
-pub async fn run_once(_pool: &sqlx::PgPool) {
+/// Results are normalized/upserted and the `sources` table is updated.
+pub async fn run_once(pool: &sqlx::PgPool) {
     match crawl().await {
         Ok(raws) => {
             tracing::info!(source = SOURCE_NAME, count = raws.len(), "crawl completed");
+            crate::crawler::upsert_source_results(
+                pool,
+                SOURCE_NAME,
+                "https://cryptoskill.org/skills.json",
+                raws,
+            )
+            .await;
         }
         Err(e) => {
             tracing::error!(source = SOURCE_NAME, error = %e, "crawl failed");
+            crate::crawler::update_source_status(
+                pool,
+                SOURCE_NAME,
+                "https://cryptoskill.org/skills.json",
+                "error",
+                0,
+                Some(&e.to_string()),
+            )
+            .await;
         }
     }
 }
 
 /// Crawler instance implementing [`SourceCrawler`].
+#[allow(dead_code)]
 pub struct CryptoSkillCrawler;
 
 #[async_trait::async_trait]

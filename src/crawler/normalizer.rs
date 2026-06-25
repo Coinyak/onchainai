@@ -275,6 +275,7 @@ pub fn classify_actor(text: &str) -> &'static str {
 /// Uses the `slug` crate which handles Unicode + punctuation stripping. The
 /// result is lowercased ASCII with hyphens. Empty/whitespace names fall back
 /// to `tool` so we never produce an empty slug.
+#[allow(dead_code)]
 pub fn base_slug(name: &str) -> String {
     let s = slug::slugify(name);
     if s.is_empty() {
@@ -289,6 +290,7 @@ pub fn base_slug(name: &str) -> String {
 /// If the base slug is already taken, append `-2`, `-3`, ... until a free
 /// slug is found. This satisfies VAL-CRAWL-011 ("foo-bar" + "foo-bar" →
 /// "foo-bar" and "foo-bar-2").
+#[allow(dead_code)]
 pub fn unique_slug(name: &str, taken: &std::collections::HashSet<String>) -> String {
     let base = base_slug(name);
     if !taken.contains(&base) {
@@ -311,6 +313,7 @@ pub fn unique_slug(name: &str, taken: &std::collections::HashSet<String>) -> Str
 /// supplied `taken` set (which is **not** mutated here — callers should add
 /// the returned slug to the set before normalizing the next tool). Crawled
 /// tools are marked `approval_status = "approved"` per MVP_DESIGN.md.
+#[allow(dead_code)]
 pub fn normalize(raw: &RawTool, taken: &std::collections::HashSet<String>) -> Tool {
     let corpus = match &raw.description {
         Some(d) => format!("{} {}", raw.name, d),
@@ -365,6 +368,7 @@ pub fn normalize(raw: &RawTool, taken: &std::collections::HashSet<String>) -> To
 /// Slugs are tracked across the batch so two tools with the same name get
 /// distinct slugs (`foo-bar`, `foo-bar-2`). Returned in the same order as
 /// input.
+#[allow(dead_code)]
 pub fn normalize_batch(raws: &[RawTool]) -> Vec<Tool> {
     let mut taken: std::collections::HashSet<String> = std::collections::HashSet::new();
     let mut out = Vec::with_capacity(raws.len());

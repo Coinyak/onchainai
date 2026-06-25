@@ -16,6 +16,7 @@ use crate::models::Tool;
 /// - Order of `None`-repo_url tools is preserved.
 /// - Order of the kept `Some`-repo_url tools follows first occurrence of
 ///   their (winning) entry.
+#[allow(dead_code)]
 pub fn dedupe(tools: Vec<Tool>) -> Vec<Tool> {
     use std::collections::HashMap;
 

@@ -6,16 +6,16 @@
 //! and upserts into the database. Per-source errors are logged and do not
 //! abort the run.
 //!
-//! This module (crawler-core) implements the trait, normalizer, deduper, and
-//! orchestrator. Source implementations land in the `crawler-sources`
-//! milestone; the orchestrator is written against the [`SourceCrawler`] trait
-//! so it works with any set of sources.
+//! This module (crawler-core) implements the trait, normalizer, deduper,
+//! orchestrator, source-status helpers, and the DB upsert used by the
+//! `crawler-scheduler-star-sync` milestone.
 
 pub mod deduper;
 pub mod normalizer;
 pub mod scheduler;
 pub mod sources;
 
+// Re-export normalizer helpers so the public module API is easy to consume.
 use std::sync::Arc;
 
 use sources::SourceCrawler;
@@ -26,9 +26,8 @@ use sources::SourceCrawler;
 /// sources are logged via `tracing::error!` and do not abort the other
 /// sources. Returns the combined, normalized, deduplicated tool list.
 ///
-/// The DB upsert step (writing tools into the `tools` table) is added in the
-/// `crawler-scheduler-star-sync` milestone; this function performs the
-/// in-memory pipeline only, which is what unit tests exercise.
+/// Callers that also want to persist results should pass the returned tools to
+/// [`upsert_tools`] and update the `sources` table with [`update_source_status`].
 pub async fn run_pipeline(crawlers: Vec<Arc<dyn SourceCrawler>>) -> Vec<models::Tool> {
     use std::collections::HashSet;
 
@@ -74,6 +73,175 @@ pub async fn run_pipeline(crawlers: Vec<Arc<dyn SourceCrawler>>) -> Vec<models::
     let _taken: HashSet<String> = tools.iter().map(|t| t.slug.clone()).collect();
 
     tools
+}
+
+/// Upsert a batch of crawled tools into the `tools` table.
+///
+/// Matching is by `slug` (unique). Existing rows keep their `status` and
+/// `approval_status` when present (`official` / `verified` are preserved); all
+/// other fields are overwritten with the freshly crawled values. This satisfies
+/// VAL-CRAWL-014 (re-crawl preserves official/verified status).
+pub async fn upsert_tools(pool: &sqlx::PgPool, tools: &[models::Tool]) -> anyhow::Result<()> {
+    use anyhow::Context;
+
+    for tool in tools {
+        sqlx::query(
+            r#"
+            INSERT INTO tools (
+                name, slug, description, function, asset_class, actor, type,
+                repo_url, homepage, npm_package, install_command, mcp_endpoint,
+                chains, status, official_team, trust_score, approval_status,
+                submitted_by, rejection_reason, license, pricing, x402_price,
+                stars, last_commit_at, source, source_url, created_at, updated_at
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, now())
+            ON CONFLICT (slug) DO UPDATE SET
+                name = EXCLUDED.name,
+                description = EXCLUDED.description,
+                function = EXCLUDED.function,
+                asset_class = EXCLUDED.asset_class,
+                actor = EXCLUDED.actor,
+                type = EXCLUDED.type,
+                repo_url = EXCLUDED.repo_url,
+                homepage = EXCLUDED.homepage,
+                npm_package = EXCLUDED.npm_package,
+                install_command = EXCLUDED.install_command,
+                mcp_endpoint = EXCLUDED.mcp_endpoint,
+                chains = EXCLUDED.chains,
+                status = CASE
+                    WHEN tools.status IN ('official', 'verified') THEN tools.status
+                    ELSE EXCLUDED.status
+                END,
+                official_team = COALESCE(tools.official_team, EXCLUDED.official_team),
+                trust_score = EXCLUDED.trust_score,
+                approval_status = COALESCE(NULLIF(tools.approval_status, ''), EXCLUDED.approval_status),
+                submitted_by = tools.submitted_by,
+                rejection_reason = tools.rejection_reason,
+                license = EXCLUDED.license,
+                pricing = EXCLUDED.pricing,
+                x402_price = EXCLUDED.x402_price,
+                stars = EXCLUDED.stars,
+                last_commit_at = EXCLUDED.last_commit_at,
+                source = EXCLUDED.source,
+                source_url = EXCLUDED.source_url,
+                updated_at = now()
+            "#,
+        )
+        .bind(&tool.name)
+        .bind(&tool.slug)
+        .bind(&tool.description)
+        .bind(&tool.function)
+        .bind(&tool.asset_class)
+        .bind(&tool.actor)
+        .bind(&tool.tool_type)
+        .bind(&tool.repo_url)
+        .bind(&tool.homepage)
+        .bind(&tool.npm_package)
+        .bind(&tool.install_command)
+        .bind(&tool.mcp_endpoint)
+        .bind(&tool.chains)
+        .bind(&tool.status)
+        .bind(&tool.official_team)
+        .bind(tool.trust_score)
+        .bind(&tool.approval_status)
+        .bind(tool.submitted_by)
+        .bind(&tool.rejection_reason)
+        .bind(&tool.license)
+        .bind(&tool.pricing)
+        .bind(&tool.x402_price)
+        .bind(tool.stars)
+        .bind(tool.last_commit_at)
+        .bind(&tool.source)
+        .bind(&tool.source_url)
+        .bind(tool.created_at)
+        .execute(pool)
+        .await
+        .with_context(|| format!("upserting tool slug={}", tool.slug))?;
+    }
+
+    Ok(())
+}
+
+/// Run the default production pipeline: all four source crawlers in parallel,
+/// normalize, dedupe, upsert to DB, and update `sources` status.
+///
+/// Errors from individual sources are logged and do not abort the run; the
+/// `sources` table is updated for both successes and failures.
+#[allow(dead_code)]
+pub async fn run_all_sources(pool: &sqlx::PgPool) {
+    use crate::crawler::sources::{
+        cryptoskill::CryptoSkillCrawler, github::GitHubTopicsCrawler, npm::NpmCrawler,
+        web3mcp::Web3McpHubCrawler,
+    };
+    use std::sync::Arc;
+
+    let crawlers: Vec<Arc<dyn SourceCrawler>> = vec![
+        Arc::new(NpmCrawler),
+        Arc::new(CryptoSkillCrawler),
+        Arc::new(Web3McpHubCrawler),
+        Arc::new(GitHubTopicsCrawler),
+    ];
+
+    // Run pipeline in memory first.
+    let tools = run_pipeline(crawlers).await;
+
+    // Upsert normalized tools. The total count is logged regardless of source origin.
+    if let Err(e) = upsert_tools(pool, &tools).await {
+        tracing::error!(error = %e, "failed to upsert crawled tools");
+    } else {
+        tracing::info!(count = tools.len(), "crawled tools upserted");
+    }
+
+    // Per-source status updates are written by the individual `run_once` helpers
+    // (github/npm/cryptoskill/web3mcp) so exact source-level counts are preserved.
+}
+
+/// Update the `sources` table after a crawl finishes.
+///
+/// Inserts the source row if missing, then sets `last_crawled_at = now()`,
+/// `crawl_status`, `items_found`, and an optional `error_message`.
+pub async fn update_source_status(
+    pool: &sqlx::PgPool,
+    name: &str,
+    url: &str,
+    status: &str,
+    items_found: i32,
+    error_message: Option<&str>,
+) {
+    let result = sqlx::query(
+        r#"
+        INSERT INTO sources (name, url, last_crawled_at, crawl_status, items_found, error_message)
+        VALUES ($1, $2, now(), $3, $4, $5)
+        ON CONFLICT (name) DO UPDATE SET
+            url = EXCLUDED.url,
+            last_crawled_at = EXCLUDED.last_crawled_at,
+            crawl_status = EXCLUDED.crawl_status,
+            items_found = EXCLUDED.items_found,
+            error_message = EXCLUDED.error_message,
+            updated_at = now()
+        "#,
+    )
+    .bind(name)
+    .bind(url)
+    .bind(status)
+    .bind(items_found)
+    .bind(error_message)
+    .execute(pool)
+    .await;
+
+    if let Err(e) = result {
+        tracing::error!(source = name, error = %e, "failed to update sources table");
+    }
+}
+
+/// Convenience helper: update source status from a successful raw result set.
+pub async fn upsert_source_results(
+    pool: &sqlx::PgPool,
+    name: &str,
+    url: &str,
+    raws: Vec<normalizer::RawTool>,
+) {
+    update_source_status(pool, name, url, "success", raws.len() as i32, None).await;
 }
 
 /// Start the crawler scheduler.

@@ -13,9 +13,16 @@
 use anyhow::Result;
 use tokio_cron_scheduler::{Job, JobScheduler};
 
+/// Number of cron jobs registered by the crawler scheduler.
+pub const SCHEDULER_JOB_COUNT: usize = 5;
+
 /// Start the scheduler with all cron jobs registered.
 pub async fn start(pool: sqlx::PgPool) -> Result<()> {
     let scheduler = JobScheduler::new().await?;
+
+    // Self-register OnchainAI once at scheduler startup before any scheduled
+    // jobs run. This is idempotent (`ON CONFLICT (slug) DO NOTHING`).
+    crate::crawler::sources::github::self_register(&pool).await;
 
     // npm: every hour.
     let npm_pool = pool.clone();
@@ -73,7 +80,10 @@ pub async fn start(pool: sqlx::PgPool) -> Result<()> {
     scheduler.add(star_job).await?;
 
     scheduler.start().await?;
-    tracing::info!("crawler scheduler started with 5 jobs");
+    tracing::info!(
+        "crawler scheduler started with {} jobs",
+        SCHEDULER_JOB_COUNT
+    );
 
     // Keep the scheduler task alive indefinitely.
     // The scheduler runs jobs on its own runtime; we just don't return.

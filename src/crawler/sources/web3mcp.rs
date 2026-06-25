@@ -103,6 +103,7 @@ fn derive_install_command(
 }
 
 /// Map a web3-mcp-hub category to an OnchainAI function id.
+#[allow(dead_code)]
 fn map_category_to_function(category: &str) -> &'static str {
     match category {
         "identity-reputation" => "identity",
@@ -202,20 +203,31 @@ pub async fn crawl() -> Result<Vec<RawTool>> {
 
 /// Run a full crawl.
 ///
-/// DB upsert and `sources` table updates are added in the
-/// `crawler-scheduler-star-sync` milestone; this function only logs results.
-pub async fn run_once(_pool: &sqlx::PgPool) {
+/// Results are normalized/upserted and the `sources` table is updated.
+pub async fn run_once(pool: &sqlx::PgPool) {
     match crawl().await {
         Ok(raws) => {
             tracing::info!(source = SOURCE_NAME, count = raws.len(), "crawl completed");
+            crate::crawler::upsert_source_results(pool, SOURCE_NAME, WEB3MCP_REGISTRY_URL, raws)
+                .await;
         }
         Err(e) => {
             tracing::error!(source = SOURCE_NAME, error = %e, "crawl failed");
+            crate::crawler::update_source_status(
+                pool,
+                SOURCE_NAME,
+                WEB3MCP_REGISTRY_URL,
+                "error",
+                0,
+                Some(&e.to_string()),
+            )
+            .await;
         }
     }
 }
 
 /// Crawler instance implementing [`SourceCrawler`].
+#[allow(dead_code)]
 pub struct Web3McpHubCrawler;
 
 #[async_trait::async_trait]
