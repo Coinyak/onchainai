@@ -58,6 +58,8 @@ fn build_app(pool: sqlx::PgPool, config: Config) -> axum::Router {
     let leptos_options = conf.leptos_options;
     let routes = generate_route_list(app::App);
 
+    let siwx_domain = config.siwx_domain.clone();
+
     let state = AppState {
         pool,
         config,
@@ -67,12 +69,15 @@ fn build_app(pool: sqlx::PgPool, config: Config) -> axum::Router {
     let leptos_options_for_handler = leptos_options.clone();
     let state_for_context = state.clone();
     let state_for_fallback = state.clone();
-
     let cors = CorsLayer::new()
-        .allow_origin(AllowOrigin::predicate(|origin, _request_head| {
-            let allowed = ["https://onchainai.xyz", "http://localhost:3000"];
+        .allow_origin(AllowOrigin::predicate(move |origin, _request_head| {
+            let allowed = [
+                format!("https://{siwx_domain}"),
+                "https://onchainai.xyz".to_string(),
+                "http://localhost:3000".to_string(),
+            ];
             if let Ok(origin_str) = origin.to_str() {
-                allowed.contains(&origin_str)
+                allowed.iter().any(|a| a == origin_str)
             } else {
                 false
             }
