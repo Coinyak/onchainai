@@ -8,6 +8,7 @@ pub mod client_storage;
 pub mod components;
 pub mod config;
 pub mod filter_query;
+#[cfg(feature = "ssr")]
 pub mod crawler;
 pub mod models;
 pub mod pages;
@@ -16,6 +17,7 @@ pub mod server;
 pub use config::{Config, CANONICAL_DOMAIN, MCP_ENDPOINT_CMD, SITE_ORIGIN};
 
 /// Shared application state for Axum + Leptos SSR.
+#[cfg(feature = "ssr")]
 #[derive(Clone)]
 pub struct AppState {
     pub pool: sqlx::PgPool,
@@ -23,6 +25,7 @@ pub struct AppState {
     pub leptos_options: leptos::config::LeptosOptions,
 }
 
+#[cfg(feature = "ssr")]
 impl axum::extract::FromRef<AppState> for leptos::config::LeptosOptions {
     fn from_ref(state: &AppState) -> Self {
         state.leptos_options.clone()
@@ -30,6 +33,7 @@ impl axum::extract::FromRef<AppState> for leptos::config::LeptosOptions {
 }
 
 /// Build the Axum application router.
+#[cfg(feature = "ssr")]
 pub fn build_app(pool: sqlx::PgPool, config: Config) -> axum::Router {
     use axum::Router;
     use leptos::config::get_configuration;
@@ -187,6 +191,7 @@ pub fn build_app(pool: sqlx::PgPool, config: Config) -> axum::Router {
         .layer(TraceLayer::new_for_http())
 }
 
+#[cfg(feature = "ssr")]
 async fn run_migrations(pool: &sqlx::PgPool) -> anyhow::Result<()> {
     sqlx::migrate!("./migrations")
         .run(pool)
@@ -195,6 +200,7 @@ async fn run_migrations(pool: &sqlx::PgPool) -> anyhow::Result<()> {
 }
 
 /// Start the Axum server (SSR binary entry).
+#[cfg(feature = "ssr")]
 pub async fn run_server() -> anyhow::Result<()> {
     use std::net::SocketAddr;
 

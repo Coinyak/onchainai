@@ -23,6 +23,17 @@ use leptos_router::{
 /// It pulls in the generated CSS, Google Fonts, and global meta tags, then
 /// mounts the client-side router inside `<body>`.
 pub fn shell(options: LeptosOptions) -> impl IntoView {
+    // Hydration requires /pkg/onchainai.js + onchainai_bg.wasm. When missing (404),
+    // injecting HydrationScripts breaks the page — auto-detect bundle on disk.
+    let enable_hydration = std::env::var("LEPTOS_HYDRATION")
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or_else(|_| std::path::Path::new("target/site/pkg/onchainai.js").exists());
+    let enable_reload = std::env::var("LEPTOS_ENV")
+        .map(|v| v == "DEV")
+        .unwrap_or(false);
+    let options_reload = options.clone();
+    let options_hydrate = options.clone();
+
     view! {
         <!DOCTYPE html>
         <html lang="en">
@@ -30,8 +41,8 @@ pub fn shell(options: LeptosOptions) -> impl IntoView {
                 <meta charset="utf-8"/>
                 <meta name="viewport" content="width=device-width, initial-scale=1"/>
                 <MetaTags/>
-                <AutoReload options=options.clone()/>
-                <HydrationScripts options/>
+                {enable_reload.then(|| view! { <AutoReload options=options_reload.clone()/> })}
+                {enable_hydration.then(|| view! { <HydrationScripts options=options_hydrate.clone()/> })}
                 <Stylesheet id="leptos" href="/pkg/onchainai.css"/>
                 <Link rel="preconnect" href="https://fonts.googleapis.com"/>
                 <Link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous"/>

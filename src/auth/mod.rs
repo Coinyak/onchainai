@@ -1,10 +1,16 @@
 //! Authentication — GitHub OAuth, email magic links, SIWX, JWT session cookies.
 
-pub mod email;
-pub mod guard;
-pub mod onboarding;
-pub mod pkce;
-pub mod routes;
 pub mod session;
-pub mod siwx;
 
+#[cfg(feature = "ssr")]
+pub mod email;
+#[cfg(feature = "ssr")]
+pub mod guard;
+#[cfg(feature = "ssr")]
+pub mod onboarding;
+#[cfg(feature = "ssr")]
+pub mod pkce;
+#[cfg(feature = "ssr")]
+pub mod routes;
+#[cfg(feature = "ssr")]
+pub mod siwx;

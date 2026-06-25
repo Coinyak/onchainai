@@ -5,16 +5,25 @@
 //! These functions are auto-registered by the Leptos runtime and are
 //! available to both server-rendered and hydrated components.
 
-use crate::auth::guard::{require_admin, require_user};
-use crate::auth::session::{session_from_parts, SessionUser};
-use crate::config::Config;
-use crate::crawler::{self, default_source_registry_url};
+use crate::auth::session::SessionUser;
 use crate::models::{Category, Comment, SiteSettings, Source, Tool};
-use uuid::Uuid;
-use crate::server::queries::TOOLS_APPROVED_WHERE;
-use axum::http::request::Parts;
 use leptos::prelude::*;
+use uuid::Uuid;
 
+#[cfg(feature = "ssr")]
+use crate::auth::guard::{require_admin, require_user};
+#[cfg(feature = "ssr")]
+use crate::auth::session::session_from_parts;
+#[cfg(feature = "ssr")]
+use crate::config::Config;
+#[cfg(feature = "ssr")]
+use crate::crawler::{self, default_source_registry_url};
+#[cfg(feature = "ssr")]
+use crate::server::queries::TOOLS_APPROVED_WHERE;
+#[cfg(feature = "ssr")]
+use axum::http::request::Parts;
+
+#[cfg(feature = "ssr")]
 fn request_context() -> Result<(Parts, sqlx::PgPool, String), ServerFnError> {
     let parts = use_context::<Parts>()
         .ok_or_else(|| ServerFnError::new("request context not available"))?;

@@ -10,21 +10,43 @@ license = "MIT"
 output-name = "onchainai"
 site-root = "target/site"
 site-pkg-dir = "pkg"
+site-addr = "127.0.0.1:3000"
+reload-port = 3001
+bin-features = ["ssr"]
+bin-default-features = false
+lib-features = ["hydrate"]
+lib-default-features = false
+lib-profile-release = "wasm-release"
 
 [lib]
-crate-type = ["rlib"]
+crate-type = ["cdylib", "rlib"]
 
 [[bin]]
 name = "onchainai"
 path = "src/main.rs"
+required-features = ["ssr"]
 
 [features]
 default = ["ssr"]
-ssr = []
-hydrate = ["leptos/hydrate", "dep:console_error_panic_hook"]
+ssr = [
+    "leptos/ssr",
+    "leptos_meta/ssr",
+    "leptos_router/ssr",
+]
+hydrate = [
+    "leptos/hydrate",
+    "dep:console_error_panic_hook",
+]
+
+[profile.wasm-release]
+inherits = "release"
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
 
 [dependencies]
-leptos = { version = "0.8", features = ["ssr"] }
+leptos = { version = "0.8", default-features = false }
 leptos_axum = "0.8"
 axum = "0.8"
 tower = "0.5"
@@ -55,8 +77,8 @@ ethers-core = "2"
 solana-sdk = "2"
 validator = { version = "0.18", features = ["derive"] }
 governor = "0.6"
-leptos_meta = { version = "0.8" }
-leptos_router = { version = "0.8" }
+leptos_meta = { version = "0.8", default-features = false }
+leptos_router = { version = "0.8", default-features = false }
 tower_governor = { version = "0.8.0", features = ["tracing"] }
 wasm-bindgen = "0.2"
 console_error_panic_hook = { version = "0.1", optional = true }
