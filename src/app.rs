@@ -3,7 +3,7 @@
 //! Defines the top-level router, the HTML shell, and placeholder page
 //! components for all routes required by the website-core milestone.
 
-use crate::pages::{CategoryPage, HomePage, ToolDetailPage, ToolsListPage};
+use crate::pages::{AdminToolsPage, CategoryPage, HomePage, ToolDetailPage, ToolsListPage};
 use leptos::prelude::*;
 use leptos_meta::{provide_meta_context, Link, Meta, MetaTags, Stylesheet, Title};
 use leptos_router::{
@@ -62,7 +62,8 @@ pub fn App() -> impl IntoView {
                     <Route path=(StaticSegment("tools"), ParamSegment("slug")) view=ToolDetailPage/>
                     <Route path=(StaticSegment("categories"), ParamSegment("id")) view=CategoryPage/>
                     <Route path=StaticSegment("about") view=AboutPage/>
-                    <Route path=(StaticSegment("admin"), ParamSegment("*")) view=AdminPage/>
+                    <Route path=StaticSegment("admin") view=AdminHomePage/>
+                    <Route path=(StaticSegment("admin"), StaticSegment("tools")) view=AdminToolsPage/>
                 </FlatRoutes>
             </main>
         </Router>
@@ -80,11 +81,24 @@ fn AboutPage() -> impl IntoView {
 }
 
 #[component]
-fn AdminPage() -> impl IntoView {
+fn AdminHomePage() -> impl IntoView {
     view! {
         <div class="px-6 py-8 max-w-[960px] mx-auto">
             <h2 class="text-[20px] font-semibold mb-4">"Admin"</h2>
-            <p class="text-[#6B6B6B]">"Admin panel will appear here."</p>
+            <p class="text-[#6B6B6B] text-[14px] mb-6">
+                "Manage crawled tools, site settings, and moderation."
+            </p>
+            <nav class="flex flex-col gap-2 max-w-[320px]">
+                <a
+                    href="/admin/tools"
+                    class="rounded-lg border border-[#E5E5E5] px-4 py-3 text-[14px] font-medium hover:bg-[#FAFAFA]"
+                >
+                    "Tool Management"
+                    <span class="block text-[12px] text-[#6B6B6B] font-normal mt-0.5">
+                        "Approve or reject pending tools"
+                    </span>
+                </a>
+            </nav>
         </div>
     }
 }
