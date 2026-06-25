@@ -62,14 +62,16 @@ fi
 
 echo "Railway user: $(railway whoami)"
 
+SERVICE_NAME="${RAILWAY_SERVICE:-onchainai}"
+
 if [[ ! -f .railway/project.json ]]; then
-  echo "Creating Railway project onchainai..."
-  railway init --name onchainai
+  echo "Creating Railway project ${SERVICE_NAME}..."
+  railway init --name "${SERVICE_NAME}"
 fi
 
 sync_vars() {
   echo "Syncing environment variables (SIWX_DOMAIN=${SIWX_DOMAIN})..."
-  railway variable set --skip-deploys \
+  railway variable set -s "${SERVICE_NAME}" --skip-deploys \
     "DATABASE_URL=${DATABASE_URL}" \
     "SUPABASE_URL=${SUPABASE_URL}" \
     "SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}" \
@@ -93,13 +95,13 @@ fi
 # First deploy creates the service; env vars are applied before the production deploy.
 if ! railway status --json 2>/dev/null | /usr/bin/grep -q '"services"'; then
   echo "Initial deploy (creates service)..."
-  railway up -y --detach
+  railway up -y --detach -s "${SERVICE_NAME}"
 fi
 
 sync_vars
 
 echo "Deploying from Dockerfile with production env..."
-railway up -y --detach
+railway up -y --detach -s "${SERVICE_NAME}"
 
 echo ""
 echo "Next steps:"
