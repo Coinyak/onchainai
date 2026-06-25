@@ -49,6 +49,8 @@ dotenvy = "0.15"
 # Authentication
 supabase-auth = "0.10"
 jsonwebtoken = "9"
+sha2 = "0.10"
+getrandom = "0.2"
 ethers-core = "2"
 solana-sdk = "2"
 

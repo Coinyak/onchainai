@@ -5,9 +5,41 @@
 //! These functions are auto-registered by the Leptos runtime and are
 //! available to both server-rendered and hydrated components.
 
+use crate::auth::guard::require_admin;
+use crate::auth::session::{session_from_parts, SessionUser};
+use crate::config::Config;
 use crate::models::{Category, SiteSettings, Tool};
 use crate::server::queries::TOOLS_APPROVED_WHERE;
+use axum::http::request::Parts;
 use leptos::prelude::*;
+
+fn request_context() -> Result<(Parts, sqlx::PgPool, String), ServerFnError> {
+    let parts = use_context::<Parts>()
+        .ok_or_else(|| ServerFnError::new("request context not available"))?;
+    let pool = use_context::<sqlx::PgPool>()
+        .ok_or_else(|| ServerFnError::new("database pool not available"))?;
+    let config = use_context::<Config>()
+        .ok_or_else(|| ServerFnError::new("configuration not available"))?;
+    Ok((parts, pool, config.jwt_secret))
+}
+
+/// Current signed-in user, if any (from session cookie).
+#[server(GetCurrentUser, "/api")]
+pub async fn get_current_user() -> Result<Option<SessionUser>, ServerFnError> {
+    let (parts, pool, jwt_secret) = request_context()?;
+    session_from_parts(&parts, &pool, &jwt_secret)
+        .await
+        .map_err(ServerFnError::new)
+}
+
+/// Admin gate — returns the admin session or a generic "not found" error.
+#[server(CheckAdminAccess, "/api")]
+pub async fn check_admin_access() -> Result<SessionUser, ServerFnError> {
+    let (parts, pool, jwt_secret) = request_context()?;
+    require_admin(&parts, &pool, &jwt_secret)
+        .await
+        .map_err(ServerFnError::new)
+}
 
 /// Row shape for category listings with live approved-tool counts.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, sqlx::FromRow)]
@@ -328,8 +360,8 @@ pub(crate) const LIST_PENDING_TOOLS_SQL: &str =
 /// List tools awaiting admin review (`approval_status = 'pending'`).
 #[server(ListPendingTools, "/api")]
 pub async fn list_pending_tools(limit: i64) -> Result<Vec<Tool>, ServerFnError> {
-    let pool = use_context::<sqlx::PgPool>()
-        .ok_or_else(|| ServerFnError::new("database pool not available"))?;
+    let (parts, pool, jwt_secret) = request_context()?;
+    require_admin(&parts, &pool, &jwt_secret).await?;
 
     let tools = sqlx::query_as::<_, Tool>(LIST_PENDING_TOOLS_SQL)
     .bind(limit)
@@ -365,8 +397,8 @@ pub async fn set_tool_approval(
         return Err(ServerFnError::new(msg.to_string()));
     }
 
-    let pool = use_context::<sqlx::PgPool>()
-        .ok_or_else(|| ServerFnError::new("database pool not available"))?;
+    let (parts, pool, jwt_secret) = request_context()?;
+    require_admin(&parts, &pool, &jwt_secret).await?;
 
     let rejection_reason = if status == "rejected" {
         reason

@@ -1,0 +1,47 @@
+//! Sign-in modal — GitHub OAuth entry point.
+
+use leptos::prelude::*;
+
+#[component]
+pub fn LoginModal(show: RwSignal<bool>) -> impl IntoView {
+    view! {
+        {move || {
+            if !show.get() {
+                return None;
+            }
+            Some(view! {
+                <div
+                    class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40"
+                    on:click=move |_| show.set(false)
+                >
+                    <div
+                        class="w-full max-w-sm rounded-xl bg-white border border-[#E5E5E5] shadow-lg p-6"
+                        role="dialog"
+                        aria-labelledby="login-title"
+                        on:click=|ev| ev.stop_propagation()
+                    >
+                        <h2 id="login-title" class="text-[18px] font-semibold mb-2">
+                            "Sign in"
+                        </h2>
+                        <p class="text-[14px] text-[#6B6B6B] mb-6">
+                            "Sign in to comment, bookmark tools, and access admin features."
+                        </p>
+                        <a
+                            href="/auth/github"
+                            class="flex items-center justify-center w-full px-4 py-2.5 rounded-lg bg-[#1A1A1A] text-white text-[14px] font-medium hover:opacity-90 no-underline"
+                        >
+                            "Continue with GitHub"
+                        </a>
+                        <button
+                            type="button"
+                            class="mt-3 w-full text-[14px] text-[#6B6B6B] hover:text-[#1A1A1A]"
+                            on:click=move |_| show.set(false)
+                        >
+                            "Cancel"
+                        </button>
+                    </div>
+                </div>
+            })
+        }}
+    }
+}

@@ -3,6 +3,7 @@
 //! Defines the top-level router, the HTML shell, and placeholder page
 //! components for all routes required by the website-core milestone.
 
+use crate::pages::admin::admin_page_shell;
 use crate::pages::{AdminToolsPage, CategoryPage, HomePage, ToolDetailPage, ToolsListPage};
 use leptos::prelude::*;
 use leptos_meta::{provide_meta_context, Link, Meta, MetaTags, Stylesheet, Title};
@@ -82,7 +83,7 @@ fn AboutPage() -> impl IntoView {
 
 #[component]
 fn AdminHomePage() -> impl IntoView {
-    view! {
+    admin_page_shell(|| view! {
         <div class="px-6 py-8 max-w-[960px] mx-auto">
             <h2 class="text-[20px] font-semibold mb-4">"Admin"</h2>
             <p class="text-[#6B6B6B] text-[14px] mb-6">
@@ -100,7 +101,7 @@ fn AdminHomePage() -> impl IntoView {
                 </a>
             </nav>
         </div>
-    }
+    })
 }
 
 #[component]

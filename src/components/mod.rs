@@ -3,6 +3,7 @@
 pub mod bottom_sheet;
 pub mod category_grid;
 pub mod icons;
+pub mod login_modal;
 pub mod preview_panel;
 pub mod promo_cards;
 pub mod search_bar;

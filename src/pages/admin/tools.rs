@@ -2,7 +2,7 @@
 
 use crate::components::top_nav::TopNav;
 use crate::models::Tool;
-use crate::server::functions::{list_pending_tools, set_tool_approval};
+use crate::server::functions::{check_admin_access, list_pending_tools, set_tool_approval};
 use leptos::prelude::*;
 use leptos::task::spawn_local;
 use std::sync::Arc;
@@ -11,6 +11,28 @@ type ApprovalHandler = Arc<dyn Fn(String, &'static str, Option<String>) + Send +
 
 #[component]
 pub fn AdminToolsPage() -> impl IntoView {
+    let gate = Resource::new(|| (), |_| async move { check_admin_access().await });
+
+    view! {
+        <Suspense fallback=|| view! {
+            <p class="px-6 py-12 text-[#6B6B6B] text-[14px]">"Checking access..."</p>
+        }>
+            {move || match gate.get() {
+                Some(Ok(_)) => view! { <AdminToolsContent/> }.into_any(),
+                Some(Err(_)) => view! {
+                    <div class="px-6 py-12 max-w-[720px] mx-auto text-center">
+                        <h1 class="text-[28px] font-bold mb-4">"404"</h1>
+                        <p class="text-[#6B6B6B]">"Page not found."</p>
+                    </div>
+                }.into_any(),
+                None => ().into_any(),
+            }}
+        </Suspense>
+    }
+}
+
+#[component]
+fn AdminToolsContent() -> impl IntoView {
     let refresh = RwSignal::new(0u32);
     let pending = Resource::new(
         move || refresh.get(),
@@ -46,8 +68,8 @@ pub fn AdminToolsPage() -> impl IntoView {
     let run_approval_for_reject = run_approval.clone();
 
     view! {
-        <TopNav/>
-        <div class="px-4 md:px-6 py-8 max-w-[960px] mx-auto">
+            <TopNav/>
+            <div class="px-4 md:px-6 py-8 max-w-[960px] mx-auto">
             <div class="flex items-baseline justify-between gap-4 mb-6">
                 <div>
                     <h1 class="text-[20px] font-semibold tracking-tight">"Tool Management"</h1>
@@ -171,7 +193,7 @@ pub fn AdminToolsPage() -> impl IntoView {
                     }
                 })
             }}
-        </div>
+            </div>
     }
 }
 
