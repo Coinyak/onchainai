@@ -1,4 +1,4 @@
-//! Sign-in modal — GitHub OAuth entry point.
+//! Sign-in modal — GitHub OAuth entry; email/SIWX via shared shell handlers.
 
 use leptos::prelude::*;
 

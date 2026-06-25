@@ -7,6 +7,15 @@
 
 use std::env;
 
+/// Canonical production hostname (no scheme).
+pub const CANONICAL_DOMAIN: &str = "www.onchain-ai.xyz";
+
+/// Canonical site origin for CORS, OAuth, and SIWX URI binding.
+pub const SITE_ORIGIN: &str = "https://www.onchain-ai.xyz";
+
+/// Default MCP install command shown in UI and site settings.
+pub const MCP_ENDPOINT_CMD: &str = "npx mcp-remote www.onchain-ai.xyz/mcp";
+
 /// Application configuration loaded from environment variables.
 #[derive(Debug, Clone)]
 pub struct Config {
@@ -115,6 +124,14 @@ pub async fn setup_db(database_url: &str) -> anyhow::Result<sqlx::PgPool> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn canonical_domain_constants() {
+        assert_eq!(CANONICAL_DOMAIN, "www.onchain-ai.xyz");
+        assert_eq!(SITE_ORIGIN, "https://www.onchain-ai.xyz");
+        assert!(MCP_ENDPOINT_CMD.contains("www.onchain-ai.xyz"));
+        assert!(!MCP_ENDPOINT_CMD.contains("onchainai.xyz"));
+    }
 
     #[test]
     fn missing_required_var_produces_error() {

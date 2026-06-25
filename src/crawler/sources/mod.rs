@@ -21,7 +21,7 @@ use crate::crawler::normalizer::RawTool;
 pub const CRAWLER_USER_AGENT: &str = concat!(
     "OnchainAI-Crawler/",
     env!("CARGO_PKG_VERSION"),
-    " (+https://onchainai.xyz)"
+    " (+https://www.onchain-ai.xyz)"
 );
 
 /// HTTP request timeout for all crawl requests (30s per MVP_DESIGN.md §3).
@@ -72,7 +72,7 @@ mod tests {
     #[test]
     fn user_agent_contains_name_and_version() {
         assert!(CRAWLER_USER_AGENT.starts_with("OnchainAI-Crawler/"));
-        assert!(CRAWLER_USER_AGENT.contains("onchainai.xyz"));
+        assert!(CRAWLER_USER_AGENT.contains("www.onchain-ai.xyz"));
     }
 
     #[test]

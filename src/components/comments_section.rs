@@ -13,6 +13,7 @@ use std::sync::Arc;
 pub fn CommentsSection(slug: String, tool_name: String) -> impl IntoView {
     let refresh = RwSignal::new(0u32);
     let show_login = RwSignal::new(false);
+    let comment_sort = RwSignal::new("new".to_string());
     let slug = Arc::new(slug);
 
     let user = Resource::new(|| (), |_| async move { get_current_user().await });
@@ -39,8 +40,16 @@ pub fn CommentsSection(slug: String, tool_name: String) -> impl IntoView {
     view! {
         <LoginModal show=show_login/>
         <section class="mt-10 border-t border-[#E5E5E5] pt-8">
-            <div class="flex items-center justify-between gap-4 mb-4">
+            <div class="flex items-center justify-between gap-4 mb-4 flex-wrap">
                 <h2 class="text-[20px] font-semibold">"Comments"</h2>
+                <select
+                    class="text-[13px] border border-[#E5E5E5] rounded-md px-2 py-1 bg-white"
+                    prop:value=move || comment_sort.get()
+                    on:change=move |ev| comment_sort.set(event_target_value(&ev))
+                >
+                    <option value="new">"Newest"</option>
+                    <option value="top">"Top"</option>
+                </select>
                 <Suspense fallback=|| ()>
                     {move || bookmarked.get().map(|res| {
                         let active = res.unwrap_or(false);
@@ -85,7 +94,10 @@ pub fn CommentsSection(slug: String, tool_name: String) -> impl IntoView {
                         <p class="text-[#6B6B6B] text-[14px] mt-4">"No comments yet. Be the first."</p>
                     }.into_any(),
                     Some(Ok(rows)) => {
-                        let tops: Vec<_> = rows.iter().filter(|c| c.parent_id.is_none()).cloned().collect();
+                        let mut tops: Vec<_> = rows.iter().filter(|c| c.parent_id.is_none()).cloned().collect();
+                        if comment_sort.get() == "top" {
+                            tops.sort_by(|a, b| b.upvote_count.cmp(&a.upvote_count));
+                        }
                         view! {
                             <ul class="mt-6 space-y-4">
                                 {tops.into_iter().map(|c| {

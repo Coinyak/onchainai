@@ -133,7 +133,7 @@ mod tests {
             site_name: "OnchainAI".into(),
             slogan: "Crypto tools, unified.".into(),
             description: "desc".into(),
-            mcp_endpoint: "npx mcp-remote onchainai.xyz/mcp".into(),
+            mcp_endpoint: "npx mcp-remote www.onchain-ai.xyz/mcp".into(),
             search_keywords: vec!["mcp-server".into()],
             allow_free_registration: true,
             require_tool_approval: true,

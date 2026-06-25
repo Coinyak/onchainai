@@ -481,7 +481,7 @@ async fn fetch_repo_api(
 #[allow(dead_code)]
 pub async fn self_register(pool: &sqlx::PgPool) {
     let repo_url = "https://github.com/love/onchainai";
-    let homepage = "https://onchainai.xyz";
+    let homepage = "https://www.onchain-ai.xyz";
     let result = sqlx::query(
         r#"
         INSERT INTO tools (

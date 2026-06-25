@@ -1,7 +1,11 @@
-//! Stripe-style tool card for list views.
+//! Stripe-style tool card for list views — badges, bookmark, upvote.
 
+use crate::components::copy_button::CopyButton;
+use crate::components::login_modal::LoginModal;
 use crate::models::Tool;
+use crate::server::functions::{get_current_user, is_bookmarked, toggle_bookmark};
 use leptos::prelude::*;
+use leptos::task::spawn_local;
 use leptos_router::components::A;
 
 fn monogram(name: &str) -> String {
@@ -48,7 +52,16 @@ pub fn ToolCard(
         .clone()
         .unwrap_or_else(|| "No description.".into());
 
+    let show_login = RwSignal::new(false);
+    let refresh = RwSignal::new(0u32);
+    let slug_bm = slug.clone();
+    let bookmarked = Resource::new(
+        move || (slug_bm.clone(), refresh.get()),
+        |(s, _)| async move { is_bookmarked(s).await },
+    );
+
     view! {
+        <LoginModal show=show_login/>
         <article class="tool-card">
             <A href=href attr:class="tool-card-link no-underline text-inherit">
                 <div class="tool-card-inner">
@@ -91,13 +104,7 @@ pub fn ToolCard(
                             view! {
                                 <div class="tool-install hidden md:flex">
                                     <code class="install-cmd">{install.clone()}</code>
-                                    <button
-                                        type="button"
-                                        class="copy-btn"
-                                        data-copy=install
-                                    >
-                                        "Copy"
-                                    </button>
+                                    <CopyButton text=install/>
                                 </div>
                             }
                             .into_any()
@@ -107,6 +114,36 @@ pub fn ToolCard(
                     </div>
                 </div>
             </A>
+            <div class="tool-card-actions">
+                <Suspense fallback=|| view! { <span class="card-action-btn">"☆"</span> }>
+                    {move || bookmarked.get().map(|res| {
+                        let active = res.unwrap_or(false);
+                        let slug_toggle = slug.clone();
+                        view! {
+                            <button
+                                type="button"
+                                class="card-action-btn"
+                                aria-label="Toggle bookmark"
+                                on:click=move |ev| {
+                                    ev.stop_propagation();
+                                    let slug_toggle = slug_toggle.clone();
+                                    spawn_local(async move {
+                                        match get_current_user().await {
+                                            Ok(Some(_)) => {
+                                                let _ = toggle_bookmark(slug_toggle).await;
+                                                refresh.update(|n| *n = n.wrapping_add(1));
+                                            }
+                                            _ => show_login.set(true),
+                                        }
+                                    });
+                                }
+                            >
+                                {if active { "★" } else { "☆" }}
+                            </button>
+                        }
+                    })}
+                </Suspense>
+            </div>
         </article>
     }
 }

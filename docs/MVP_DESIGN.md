@@ -150,7 +150,7 @@ CREATE TABLE site_settings (
   site_name TEXT DEFAULT 'OnchainAI',
   slogan TEXT DEFAULT 'Crypto tools, unified.',
   description TEXT DEFAULT 'Discover, install, and share crypto MCP, CLI, SDK, API, x402, RWA, and AI agent tools — all in one place.',
-  mcp_endpoint TEXT DEFAULT 'npx mcp-remote onchainai.xyz/mcp',
+  mcp_endpoint TEXT DEFAULT 'npx mcp-remote www.onchain-ai.xyz/mcp',
   search_keywords TEXT[] DEFAULT ARRAY['mcp-server', 'crypto-mcp', 'web3-mcp', 'blockchain-mcp'],
   allow_free_registration BOOLEAN DEFAULT true,
   require_tool_approval BOOLEAN DEFAULT true,  -- 신규 도구 승인 필요 여부
@@ -441,7 +441,7 @@ pub async fn self_register(pool: &PgPool) {
         .bind("onchainai")
         .bind("Crypto tool directory — discover, install, and share MCP, CLI, SDK, API, x402 tools for humans and agents.")
         .bind("https://github.com/love/onchainai")  // 실제 repo URL
-        .bind("https://onchainai.xyz")
+        .bind("https://www.onchain-ai.xyz")
         .execute(pool).await?;
 }
 ```
@@ -500,7 +500,7 @@ GITHUB_CLIENT_ID=xxx
 GITHUB_CLIENT_SECRET=xxx
 
 # SIWX
-SIWX_DOMAIN=onchainai.xyz
+SIWX_DOMAIN=www.onchain-ai.xyz
 SIWX_SESSION_TTL=86400          # 24h (초)
 ```
 
@@ -607,7 +607,7 @@ docker run -p 3000:3000 onchainai
 ### 엔드포인트
 
 ```
-POST https://onchainai.xyz/mcp     → MCP Streamable HTTP (rmcp)
+POST https://www.onchain-ai.xyz/mcp     → MCP Streamable HTTP (rmcp)
 ```
 
 ### 노출 도구 (MCP tools)
@@ -698,7 +698,7 @@ let app = Router::new()
   "mcpServers": {
     "onchainai": {
       "command": "npx",
-      "args": ["mcp-remote", "https://onchainai.xyz/mcp"]
+      "args": ["mcp-remote", "https://www.onchain-ai.xyz/mcp"]
     }
   }
 }
@@ -1096,7 +1096,7 @@ CMD ["/app/onchainai"]
 # 1. Railway 프로젝트 생성
 # 2. GitHub 저장소 연결 → 자동 빌드
 # 3. 환경변수 설정: DATABASE_URL, PORT=3000
-# 4. 도메인 연결: onchainai.xyz (Railway 자동 HTTPS)
+# 4. 도메인 연결: www.onchain-ai.xyz (Railway 자동 HTTPS)
 ```
 
 > 주의: Vercel 서버리스 불가 (Rust 단일 바이너리 + 상시 크롤 스케줄러).

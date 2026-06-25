@@ -1,0 +1,17 @@
+# www.onchain-ai.xyz → Railway DNS (GoDaddy / Cloudflare 공통)
+# Railway custom domain 설정용 — 값 그대로 복사해서 붙여넣기
+
+레코드 1) CNAME
+  이름(Name):  @
+  값(Value):   8k7un69e.up.railway.app
+
+레코드 2) TXT
+  이름(Name):  _railway-verify
+  값(Value):   railway-verify=bb3c93ae6b6270a82c3accb6b5deaa332c872e3d9dfaf0f14c7b342495163705
+
+# 삭제할 것 (있으면)
+  - A 레코드 → 13.248.x / 76.223.x (주차 페이지)
+  - /lander 포워딩 설정
+
+# GoDaddy 네임서버 (지금 Afternic 주차 중이면 먼저 변경)
+  NS1.AFTERNIC.COM / NS2.AFTERNIC.COM  →  GoDaddy 기본 네임서버 로 변경

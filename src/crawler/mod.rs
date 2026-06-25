@@ -175,7 +175,7 @@ pub(crate) fn default_source_registry_url(source_name: &str) -> &'static str {
             "https://raw.githubusercontent.com/rudazy/web3-mcp-hub/main/registry.json"
         }
         "github" => "https://github.com/topics",
-        _ => "https://onchainai.xyz",
+        _ => "https://www.onchain-ai.xyz",
     }
 }
 

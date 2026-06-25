@@ -82,7 +82,7 @@ Smithery 소개 카드 + Product Hunt 세로 리스트 + AlternativeTo 사이드
 │  │ x402 tools: pay per     │  │ instantly.              │   │
 │  │ registration via x402.  │  │                        │   │
 │  │                        │  │ npx mcp-remote          │   │
-│  │ [Submit →]              │  │  onchainai.xyz/mcp      │   │
+│  │ [Submit →]              │  │  www.onchain-ai.xyz/mcp      │   │
 │  │                        │  │      [Copy]             │   │
 │  └────────────────────────┘  └────────────────────────┘   │
 │                                                                │
@@ -1288,7 +1288,7 @@ ALTER TABLE tools ADD COLUMN logo_monogram TEXT; -- 로고 없을 때 첫 글자
 │  Slogan:       [Crypto tools, unified.               ]          │
 │  Description:  [Discover, install, and share...     ]          │
 │                                                                │
-│  MCP Endpoint: [npx mcp-remote onchainai.xyz/mcp   ]          │
+│  MCP Endpoint: [npx mcp-remote www.onchain-ai.xyz/mcp   ]          │
 │                                                                │
 │  Search Keywords (for crawler hints):                          │
 │  [mcp-server, crypto-mcp, web3-mcp, blockchain-mcp, ...]      │

@@ -322,7 +322,7 @@ async fn mcp_install_guide(
             Some(
                 json!({
                     "mcpServers": {
-                        "onchainai": { "command": "npx", "args": ["mcp-remote", "onchainai.xyz/mcp"] }
+                        "onchain-ai": { "command": "npx", "args": ["mcp-remote", "www.onchain-ai.xyz/mcp"] }
                     }
                 })
                 .to_string(),

@@ -1516,7 +1516,7 @@ mod tests {
             "OnchainAI",
             "Crypto tools, unified.",
             "Discover tools.",
-            "npx mcp-remote onchainai.xyz/mcp",
+            "npx mcp-remote www.onchain-ai.xyz/mcp",
             &["mcp-server".into()],
         )
         .is_ok());

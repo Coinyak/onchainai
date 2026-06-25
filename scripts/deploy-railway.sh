@@ -31,7 +31,7 @@ if [[ -f .env ]]; then
 fi
 
 # Production overrides (never commit these values).
-export SIWX_DOMAIN="${SIWX_DOMAIN_PROD:-onchainai.xyz}"
+export SIWX_DOMAIN="${SIWX_DOMAIN_PROD:-www.onchain-ai.xyz}"
 export PORT="${PORT:-3000}"
 export RUST_LOG="${RUST_LOG:-info}"
 
@@ -105,8 +105,8 @@ railway up -y --detach -s "${SERVICE_NAME}"
 
 echo ""
 echo "Next steps:"
-echo "  1. Add custom domain: railway domain add onchainai.xyz"
-echo "  2. GitHub OAuth App callback: https://onchainai.xyz/auth/callback"
+echo "  1. Add custom domain: railway domain add www.onchain-ai.xyz"
+echo "  2. GitHub OAuth App callback: https://www.onchain-ai.xyz/auth/callback"
 echo "  3. Supabase prod URLs: ONCHAINAI_ENV=prod SUPABASE_ACCESS_TOKEN=sbp_... ./scripts/configure-supabase-auth.sh"
-echo "  4. Smoke test: curl -sI https://onchainai.xyz/"
-echo "  5. Admin crawl: https://onchainai.xyz/admin/crawler"
+echo "  4. Smoke test: curl -sI https://www.onchain-ai.xyz/"
+echo "  5. Admin crawl: https://www.onchain-ai.xyz/admin/crawler"

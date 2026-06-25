@@ -1,4 +1,4 @@
-//! Desktop preview panel — 400px right slide-in for tool quick view.
+//! Desktop preview panel — 400px right slide-in; ESC + backdrop click to close.
 
 use crate::components::tool_detail_content::ToolDetailContent;
 use crate::models::Tool;
@@ -11,9 +11,23 @@ pub fn PreviewPanel(
     close_href: String,
     full_page_href: String,
 ) -> impl IntoView {
+    let close = close_href.clone();
     view! {
-        <div class="preview-backdrop" aria-hidden="true"></div>
-        <aside class="preview-panel" role="dialog" aria-label="Tool preview">
+        <A href=close_href.clone() attr:class="preview-backdrop" attr:aria-label="Close preview">
+            <span class="sr-only">"Close"</span>
+        </A>
+        <aside
+            class="preview-panel"
+            role="dialog"
+            aria-label="Tool preview"
+            tabindex="-1"
+            on:keydown=move |ev| {
+                if ev.key() == "Escape" {
+                    let win = window();
+                    let _ = win.location().set_href(&close);
+                }
+            }
+        >
             <div class="preview-panel-header">
                 <A href=close_href attr:class="preview-close" attr:aria-label="Close preview">
                     "×"

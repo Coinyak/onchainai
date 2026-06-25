@@ -1,6 +1,9 @@
-//! Tool detail page — full tool info, max-width 720px.
+//! Tool detail page — full tool info via ToolDetailContent + comments.
 
 use crate::components::comments_section::CommentsSection;
+use crate::components::error_state::ErrorState;
+use crate::components::skeleton::ToolCardSkeleton;
+use crate::components::tool_detail_content::ToolDetailContent;
 use crate::components::top_nav::TopNav;
 use crate::models::Tool;
 use crate::server::functions::get_tool_by_slug;
@@ -19,88 +22,32 @@ async fn load_tool(slug: String) -> Result<Tool, ServerFnError> {
 pub fn ToolDetailPage() -> impl IntoView {
     let params = use_params_map();
     let slug = Memo::new(move |_| params.with(|p| p.get("slug").unwrap_or_default()));
+    let retry = RwSignal::new(0u32);
 
-    let tool = Resource::new_blocking(
-        move || slug.get(),
-        |s| async move { load_tool(s).await },
+    let tool = Resource::new(
+        move || (slug.get(), retry.get()),
+        |(s, _)| async move { load_tool(s).await },
     );
 
     view! {
         <TopNav/>
         <div class="detail-page max-w-[720px] mx-auto px-4 py-8">
-            {move || {
-                tool.get().map(|res| match res {
-                    Ok(t) => {
-                        let install = t.install_command.clone().unwrap_or_default();
-                        let desc = t
-                            .description
-                            .clone()
-                            .unwrap_or_else(|| "No description.".into());
-                        view! {
-                            <a href="/tools" class="back-link">"← Back to tools"</a>
-                            <header class="detail-header">
-                                <h1 class="detail-title">{t.name.clone()}</h1>
-                                <div class="tool-badges">
-                                    <span class="badge badge-neutral">{t.tool_type.to_uppercase()}</span>
-                                    <span class="badge badge-neutral">{t.status.clone()}</span>
-                                </div>
-                            </header>
-                            <p class="detail-desc">{desc}</p>
-                            <div class="detail-meta">
-                                <span>{"★ "}{t.stars}</span>
-                                {if !t.chains.is_empty() {
-                                    view! {
-                                        <span class="tool-chains">
-                                            {t.chains
-                                                .iter()
-                                                .map(|c: &String| view! { <span class="chain-pill">{c.clone()}</span> })
-                                                .collect_view()}
-                                        </span>
-                                    }
-                                    .into_any()
-                                } else {
-                                    ().into_any()
-                                }}
-                            </div>
-                            {if !install.is_empty() {
-                                view! {
-                                    <section class="install-section">
-                                        <h2 class="text-[20px] font-semibold mb-2">"Install"</h2>
-                                        <div class="tool-install">
-                                            <code class="install-cmd">{install.clone()}</code>
-                                            <button type="button" class="copy-btn" data-copy=install>
-                                                "Copy"
-                                            </button>
-                                        </div>
-                                    </section>
-                                }
-                                .into_any()
-                            } else {
-                                ().into_any()
-                            }}
-                            {if let Some(url) = t.repo_url.clone() {
-                                view! {
-                                    <p class="mt-4">
-                                        <a href=url target="_blank" rel="noopener" class="external-link">
-                                            "GitHub"
-                                        </a>
-                                    </p>
-                                }
-                                .into_any()
-                            } else {
-                                ().into_any()
-                            }}
-                            <CommentsSection slug=t.slug.clone() tool_name=t.name.clone()/>
-                        }
-                        .into_any()
-                    }
-                    Err(_) => view! {
-                        <h1 class="text-[28px] font-bold">"404"</h1>
-                        <p class="text-[#6B6B6B]">"Tool not found."</p>
-                    }
-                    .into_any(),
-                })
-            }}
+            <Suspense fallback=|| view! { <ToolCardSkeleton/> }>
+                {move || match tool.get() {
+                    Some(Ok(t)) => view! {
+                        <a href="/tools" class="back-link">"← Back to tools"</a>
+                        <ToolDetailContent tool=t.clone() compact=false/>
+                        <CommentsSection slug=t.slug.clone() tool_name=t.name.clone()/>
+                    }.into_any(),
+                    Some(Err(e)) => view! {
+                        <ErrorState
+                            message=format!("Tool not found: {e}")
+                            on_retry=move || retry.update(|n| *n = n.wrapping_add(1))
+                        />
+                    }.into_any(),
+                    None => view! { <ToolCardSkeleton/> }.into_any(),
+                }}
+            </Suspense>
         </div>
     }
 }

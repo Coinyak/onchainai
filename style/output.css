@@ -373,3 +373,67 @@ body {
   margin: 8px auto 0;
 }
 .bottom-sheet-body { padding: 16px; overflow-y: auto; flex: 1; }
+.bottom-sheet-full { height: 92vh; }
+
+/* Skeleton loaders */
+.skeleton-card { pointer-events: none; }
+.skeleton-block {
+  background: linear-gradient(90deg, #F0F0F0 25%, #E8E8E8 50%, #F0F0F0 75%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.2s ease-in-out infinite;
+}
+.skeleton-line {
+  height: 12px; border-radius: 4px; margin-bottom: 8px;
+  background: linear-gradient(90deg, #F0F0F0 25%, #E8E8E8 50%, #F0F0F0 75%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.2s ease-in-out infinite;
+}
+.skeleton-title { width: 55%; height: 16px; }
+.skeleton-desc { width: 90%; }
+.skeleton-meta { width: 40%; }
+@keyframes skeleton-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* Empty / error states */
+.empty-state-panel, .error-state-panel {
+  padding: 32px 16px; text-align: center; border: 1px dashed #E5E5E5;
+  border-radius: 8px; margin: 16px 0;
+}
+.empty-state-message, .error-state-message { font-size: 14px; color: #6B6B6B; margin: 0 0 16px; }
+.error-state-message { color: #C0392B; }
+.error-retry-btn {
+  height: 36px; padding: 0 16px; border-radius: 8px; border: 1px solid #E5E5E5;
+  background: #FFFFFF; font-size: 14px; cursor: pointer;
+}
+.error-retry-btn:hover { background: #FAFAFA; }
+
+/* Sidebar collapse */
+.sidebar-toggle {
+  width: 100%; display: flex; justify-content: space-between; align-items: center;
+  background: transparent; border: 0; padding: 0; cursor: pointer; text-align: left;
+}
+.sidebar-chevron { font-size: 12px; color: #999999; }
+.sidebar-panel.collapsed { display: none; }
+.sidebar-panel.open { display: block; }
+
+/* Tool card actions */
+.tool-card { position: relative; }
+.tool-card-actions {
+  position: absolute; top: 12px; right: 12px; z-index: 2;
+}
+.card-action-btn {
+  background: #FFFFFF; border: 1px solid #E5E5E5; border-radius: 6px;
+  width: 32px; height: 32px; font-size: 16px; cursor: pointer;
+}
+.card-action-btn:hover { background: #FAFAFA; }
+
+.home-tools-section { max-width: 1200px; margin: 0 auto; padding: 0 16px 48px; }
+.tools-main-full { width: 100%; }
+.chains-wrap { flex-wrap: wrap; }
+.detail-meta-wrap { flex-wrap: wrap; }
+.links-section { margin-top: 16px; }
+.badge-verified { background: #E8F5E9; color: #2E7D32; }
+.badge-official { background: #E3F2FD; color: #1565C0; }
+.badge-x402 { background: #FFF3E6; color: #E76F00; }

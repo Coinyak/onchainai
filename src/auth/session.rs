@@ -168,7 +168,7 @@ pub async fn ensure_siwx_profile(
     let nickname = siwx_nickname(wallet_address);
     let id = create_supabase_user_for_siwx(config, wallet_address, chain_id, &nickname)
         .await
-        .map_err(|e| sqlx::Error::Protocol(e.into()))?;
+        .map_err(sqlx::Error::Protocol)?;
 
     sqlx::query(
         r#"
@@ -250,7 +250,7 @@ pub async fn ensure_github_profile(
 
     let id = create_supabase_user_for_github(config, github_id, login, avatar_url)
         .await
-        .map_err(|e| sqlx::Error::Protocol(e.into()))?;
+        .map_err(sqlx::Error::Protocol)?;
 
     sqlx::query(
         r#"

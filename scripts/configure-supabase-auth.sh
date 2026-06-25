@@ -24,8 +24,8 @@ fi
 PROJECT_REF="puvxrdsgexjxvgfiepua"
 
 if [[ "${ONCHAINAI_ENV:-dev}" == "prod" ]]; then
-  export SITE_URL="${SITE_URL:-https://onchainai.xyz}"
-  export REDIRECT_URLS="${REDIRECT_URLS:-https://onchainai.xyz/auth/callback,http://localhost:3000/auth/callback}"
+  export SITE_URL="${SITE_URL:-https://www.onchain-ai.xyz}"
+  export REDIRECT_URLS="${REDIRECT_URLS:-https://www.onchain-ai.xyz/auth/callback,http://localhost:3000/auth/callback}"
 else
   export SITE_URL="${SITE_URL:-http://localhost:3000}"
   export REDIRECT_URLS="${REDIRECT_URLS:-http://localhost:3000/auth/callback}"

@@ -284,15 +284,15 @@ mod tests {
         let issued = Utc::now();
         let exp = issued + Duration::seconds(300);
         let msg = build_siwx_message(
-            "onchainai.xyz",
+            "www.onchain-ai.xyz",
             "0x1234567890abcdef1234567890abcdef12345678",
             "1",
             "abc123",
-            "https://onchainai.xyz/auth/siwx",
+            "https://www.onchain-ai.xyz/auth/siwx",
             issued,
             exp,
         );
-        assert!(msg.contains("onchainai.xyz wants you to sign in"));
+        assert!(msg.contains("www.onchain-ai.xyz wants you to sign in"));
         assert!(msg.contains("Nonce: abc123"));
         assert!(msg.contains("Chain ID: 1"));
     }
@@ -302,11 +302,11 @@ mod tests {
         let issued = Utc::now();
         let exp = issued + Duration::seconds(300);
         let msg = build_siwx_message(
-            "onchainai.xyz",
+            "www.onchain-ai.xyz",
             "So11111111111111111111111111111111111111112",
             "solana",
             "n1",
-            "https://onchainai.xyz/auth/siwx",
+            "https://www.onchain-ai.xyz/auth/siwx",
             issued,
             exp,
         );
