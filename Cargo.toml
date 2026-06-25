@@ -12,11 +12,11 @@ path = "src/main.rs"
 
 [dependencies]
 # Web framework (SSR)
-leptos = { version = "0.7", features = ["ssr"] }
-leptos_axum = "0.7"
+leptos = { version = "0.8", features = ["ssr"] }
+leptos_axum = "0.8"
 axum = "0.8"
 tower = "0.5"
-tower-http = { version = "0.6", features = ["fs", "cors", "trace"] }
+tower-http = { version = "0.6", features = ["fs", "cors", "trace", "set-header", "limit", "compression-gzip"] }
 
 # MCP protocol
 rmcp = { version = "0.1", features = ["server", "transport-sse"] }
@@ -55,6 +55,11 @@ solana-sdk = "2"
 # Security
 validator = { version = "0.18", features = ["derive"] }
 governor = "0.6"
+
+# Web frontend meta/router (SSR only for the server binary)
+leptos_meta = { version = "0.8" }
+leptos_router = { version = "0.8" }
+tower_governor = { version = "0.8.0", features = ["tracing"] }
 
 [dev-dependencies]
 wiremock = "0.6"

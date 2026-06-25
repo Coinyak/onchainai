@@ -2,22 +2,161 @@
 //!
 //! Single Rust binary: Leptos SSR + Axum + rmcp + sqlx + tokio-cron-scheduler.
 
+mod app;
 mod config;
 mod crawler;
 #[allow(dead_code)]
 mod models;
+mod pages;
 mod server;
+
+use axum::Router;
+use leptos::config::get_configuration;
+use leptos_axum::{file_and_error_handler_with_context, generate_route_list, LeptosRoutes};
+use std::net::SocketAddr;
+use tower::ServiceBuilder;
+use tower_governor::{governor::GovernorConfigBuilder, GovernorLayer};
+use tower_http::{
+    compression::CompressionLayer,
+    cors::{AllowOrigin, CorsLayer},
+    limit::RequestBodyLimitLayer,
+    set_header::SetResponseHeaderLayer,
+    trace::TraceLayer,
+};
 
 pub use config::Config;
 
+/// Shared application state.
+#[derive(Clone)]
+struct AppState {
+    /// Postgres connection pool.
+    pub pool: sqlx::PgPool,
+    /// Leptos SSR options.
+    pub leptos_options: leptos::config::LeptosOptions,
+}
+
+impl axum::extract::FromRef<AppState> for leptos::config::LeptosOptions {
+    fn from_ref(state: &AppState) -> Self {
+        state.leptos_options.clone()
+    }
+}
+
 /// Build the Axum application router.
 ///
-/// Holds a [`PgPool`] in app state for server functions and the MCP handler.
-/// The crawler scheduler is spawned separately in [`main`].
+/// Wires Leptos SSR routes, static file serving, MCP endpoint, security
+/// headers, CORS, rate limiting, and compression. The router is returned
+/// as a `Router` so it can be served with `axum::serve`.
 fn build_app(pool: sqlx::PgPool) -> axum::Router {
-    axum::Router::new()
-        .route("/", axum::routing::get(|| async { "OnchainAI" }))
-        .with_state(pool)
+    let conf = get_configuration(None).expect("leptos configuration");
+    let leptos_options = conf.leptos_options;
+    let routes = generate_route_list(app::App);
+
+    let state = AppState {
+        pool,
+        leptos_options: leptos_options.clone(),
+    };
+
+    let leptos_options_for_handler = leptos_options.clone();
+    let state_for_context = state.clone();
+    let state_for_fallback = state.clone();
+
+    let cors = CorsLayer::new()
+        .allow_origin(AllowOrigin::predicate(|origin, _request_head| {
+            let allowed = ["https://onchainai.xyz", "http://localhost:3000"];
+            if let Ok(origin_str) = origin.to_str() {
+                allowed.contains(&origin_str)
+            } else {
+                false
+            }
+        }))
+        .allow_methods([
+            axum::http::Method::GET,
+            axum::http::Method::POST,
+            axum::http::Method::PUT,
+            axum::http::Method::DELETE,
+        ])
+        .allow_headers([
+            axum::http::header::AUTHORIZATION,
+            axum::http::header::CONTENT_TYPE,
+            axum::http::header::ACCEPT,
+        ])
+        .allow_credentials(true);
+
+    let governor_conf = GovernorConfigBuilder::default()
+        .per_second(1)
+        .burst_size(30)
+        .finish()
+        .expect("governor config");
+    let rate_limit = GovernorLayer::new(governor_conf);
+
+    let security_headers = ServiceBuilder::new()
+        .layer(SetResponseHeaderLayer::if_not_present(
+            axum::http::header::X_FRAME_OPTIONS,
+            axum::http::HeaderValue::from_static("DENY"),
+        ))
+        .layer(SetResponseHeaderLayer::if_not_present(
+            axum::http::header::X_CONTENT_TYPE_OPTIONS,
+            axum::http::HeaderValue::from_static("nosniff"),
+        ))
+        .layer(SetResponseHeaderLayer::if_not_present(
+            axum::http::header::HeaderName::from_static("strict-transport-security"),
+            axum::http::HeaderValue::from_static("max-age=31536000; includeSubDomains"),
+        ))
+        .layer(SetResponseHeaderLayer::if_not_present(
+            axum::http::header::REFERRER_POLICY,
+            axum::http::HeaderValue::from_static("strict-origin-when-cross-origin"),
+        ))
+        .layer(SetResponseHeaderLayer::if_not_present(
+            axum::http::header::HeaderName::from_static("permissions-policy"),
+            axum::http::HeaderValue::from_static(
+                "accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()",
+            ),
+        ))
+        .layer(SetResponseHeaderLayer::if_not_present(
+            axum::http::header::CONTENT_SECURITY_POLICY,
+            axum::http::HeaderValue::from_static(
+                "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self';",
+            ),
+        ))
+        .layer(SetResponseHeaderLayer::if_not_present(
+            axum::http::header::HeaderName::from_static("x-xss-protection"),
+            axum::http::HeaderValue::from_static("0"),
+        ));
+
+    let static_route = leptos_axum::site_pkg_dir_service_route_path(&leptos_options);
+
+    Router::new()
+        // Static assets generated by the build (CSS, JS, WASM).
+        .route_service(
+            &static_route,
+            leptos_axum::site_pkg_dir_service(&leptos_options),
+        )
+        // MCP endpoint placeholder (full implementation in MCP milestone).
+        .route("/mcp", axum::routing::post(|| async { "MCP endpoint" }))
+        // Leptos SSR routes.
+        .leptos_routes_with_context(
+            &state,
+            routes,
+            move || provide_context(state_for_context.pool.clone()),
+            move || app::shell(leptos_options_for_handler.clone()),
+        )
+        // 404 + static file fallback.
+        .fallback(file_and_error_handler_with_context::<AppState, _>(
+            move || provide_context(state_for_fallback.pool.clone()),
+            app::shell,
+        ))
+        .with_state(state.clone())
+        .layer(security_headers)
+        .layer(cors)
+        .layer(CompressionLayer::new())
+        .layer(RequestBodyLimitLayer::new(1024 * 1024))
+        .layer(rate_limit)
+        .layer(TraceLayer::new_for_http())
+}
+
+/// Provide a typed value as a Leptos context for server functions.
+fn provide_context<T: 'static + Clone + Send + Sync>(value: T) {
+    leptos::prelude::provide_context(value);
 }
 
 /// Apply embedded SQL migrations.
@@ -71,7 +210,11 @@ async fn main() -> anyhow::Result<()> {
     let addr = format!("0.0.0.0:{}", cfg.port);
     tracing::info!("binding Axum server on {addr}");
     let listener = tokio::net::TcpListener::bind(&addr).await?;
-    axum::serve(listener, app).await?;
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .await?;
 
     Ok(())
 }
