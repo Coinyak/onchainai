@@ -1,0 +1,59 @@
+[package]
+name = "onchainai"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.85"
+description = "Crypto tool directory — auto-discover, normalize, and expose fragmented crypto tools for humans and agents."
+license = "MIT"
+
+[[bin]]
+name = "onchainai"
+path = "src/main.rs"
+
+[dependencies]
+# Web framework (SSR)
+leptos = { version = "0.7", features = ["ssr"] }
+leptos_axum = "0.7"
+axum = "0.8"
+tower = "0.5"
+tower-http = { version = "0.6", features = ["fs", "cors", "trace"] }
+
+# MCP protocol
+rmcp = { version = "0.1", features = ["server", "transport-sse"] }
+
+# Database
+sqlx = { version = "0.8", features = ["postgres", "uuid", "chrono", "json", "macros", "runtime-tokio", "migrate"] }
+
+# Crawling
+reqwest = { version = "0.12", features = ["json"] }
+scraper = "0.22"
+tokio = { version = "1", features = ["full"] }
+tokio-cron-scheduler = "0.14"
+async-trait = "0.1"
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Utilities
+uuid = { version = "1", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+slug = "0.1"
+anyhow = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+dotenvy = "0.15"
+
+# Authentication
+supabase-auth = "0.10"
+jsonwebtoken = "9"
+ethers-core = "2"
+solana-sdk = "2"
+
+# Security
+validator = { version = "0.18", features = ["derive"] }
+governor = "0.6"
+
+[dev-dependencies]
+wiremock = "0.6"
+tokio = { version = "1", features = ["full", "test-util"] }
