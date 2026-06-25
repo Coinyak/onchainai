@@ -1,7 +1,7 @@
 # OnchainAI — multi-stage Docker build.
-# Builder: rust:1.85-slim, runtime: debian:bookworm-slim.
+# Builder: rust:1.88-slim (Leptos 0.8 requires rustc 1.88+), runtime: debian:bookworm-slim.
 
-FROM rust:1.85-slim AS builder
+FROM rust:1.88-slim AS builder
 WORKDIR /app
 
 # Install build dependencies needed by some crates (e.g. openssl, pkg-config).

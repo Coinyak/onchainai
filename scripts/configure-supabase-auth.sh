@@ -24,11 +24,11 @@ fi
 PROJECT_REF="puvxrdsgexjxvgfiepua"
 
 if [[ "${ONCHAINAI_ENV:-dev}" == "prod" ]]; then
-  SITE_URL="${SITE_URL:-https://onchainai.xyz}"
-  REDIRECT_URLS="${REDIRECT_URLS:-https://onchainai.xyz/auth/callback,http://localhost:3000/auth/callback}"
+  export SITE_URL="${SITE_URL:-https://onchainai.xyz}"
+  export REDIRECT_URLS="${REDIRECT_URLS:-https://onchainai.xyz/auth/callback,http://localhost:3000/auth/callback}"
 else
-  SITE_URL="${SITE_URL:-http://localhost:3000}"
-  REDIRECT_URLS="${REDIRECT_URLS:-http://localhost:3000/auth/callback}"
+  export SITE_URL="${SITE_URL:-http://localhost:3000}"
+  export REDIRECT_URLS="${REDIRECT_URLS:-http://localhost:3000/auth/callback}"
 fi
 
 BODY=$(/usr/bin/python3 -c "
@@ -41,8 +41,6 @@ print(json.dumps({
     'uri_allow_list': os.environ['REDIRECT_URLS'],
 }))
 ")
-
-export SITE_URL REDIRECT_URLS
 
 echo "Updating Supabase Auth config for project ${PROJECT_REF} (${ONCHAINAI_ENV:-dev})..."
 echo "  site_url=${SITE_URL}"
