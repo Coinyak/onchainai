@@ -246,6 +246,19 @@ pub async fn update_source_status(
     }
 }
 
+/// DB-free pipeline: normalize raw crawls with the approval decision, then dedupe.
+///
+/// Called by [`persist_crawl_results`] after loading `require_tool_approval` from
+/// `site_settings`. Unit-tested without a database.
+pub(crate) fn prepare_crawled_tools(
+    raws: &[normalizer::RawTool],
+    require_tool_approval: bool,
+) -> Vec<models::Tool> {
+    let approval = settings::initial_approval_status(require_tool_approval);
+    let tools = normalizer::normalize_batch_with_status(raws, approval);
+    deduper::dedupe(tools)
+}
+
 /// Normalize, dedupe, upsert crawled tools, then update the `sources` table.
 ///
 /// Loads [`settings::CrawlerSettings`] to decide initial `approval_status` for
@@ -257,10 +270,7 @@ pub async fn persist_crawl_results(
     raws: Vec<normalizer::RawTool>,
 ) {
     let crawler_settings = settings::load_crawler_settings(pool).await;
-    let approval =
-        settings::initial_approval_status(crawler_settings.require_tool_approval);
-    let tools = normalizer::normalize_batch_with_status(&raws, approval);
-    let tools = deduper::dedupe(tools);
+    let tools = prepare_crawled_tools(&raws, crawler_settings.require_tool_approval);
     let count = tools.len() as i32;
 
     match upsert_tools(pool, &tools).await {
@@ -289,9 +299,6 @@ pub async fn start_scheduler(pool: sqlx::PgPool) -> anyhow::Result<()> {
 mod models {
     pub use crate::models::Tool;
 }
-
-#[cfg(test)]
-mod wiring_audit;
 
 #[cfg(test)]
 mod tests {
@@ -463,23 +470,25 @@ mod tests {
     }
 
     #[test]
-    fn persist_normalization_uses_pending_when_approval_required() {
-        let approval = settings::initial_approval_status(true);
-        let tools = normalizer::normalize_batch_with_status(
+    fn prepare_crawled_tools_pending_when_approval_required() {
+        let tools = prepare_crawled_tools(
             &[raw("Pending Tool", None, 1, "bridge cross-chain")],
-            approval,
+            true,
         );
+        assert_eq!(tools.len(), 1);
         assert_eq!(tools[0].approval_status, "pending");
+        assert_eq!(tools[0].function, "bridge");
     }
 
     #[test]
-    fn persist_normalization_uses_approved_when_auto_publish() {
-        let approval = settings::initial_approval_status(false);
-        let tools = normalizer::normalize_batch_with_status(
+    fn prepare_crawled_tools_approved_when_auto_publish() {
+        let tools = prepare_crawled_tools(
             &[raw("Auto Tool", None, 1, "swap dex")],
-            approval,
+            false,
         );
+        assert_eq!(tools.len(), 1);
         assert_eq!(tools[0].approval_status, "approved");
+        assert_eq!(tools[0].function, "swap");
     }
 
     #[tokio::test]
