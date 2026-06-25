@@ -1,5 +1,6 @@
 //! Authentication — Supabase OAuth (GitHub), JWT session cookies, admin guards.
 
+pub mod email;
 pub mod guard;
 pub mod pkce;
 pub mod routes;

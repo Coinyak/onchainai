@@ -20,6 +20,10 @@ use supabase_auth::models::AuthClient;
 pub struct OAuthCallbackQuery {
     pub code: Option<String>,
     pub error: Option<String>,
+    pub token_hash: Option<String>,
+    #[serde(rename = "type")]
+    #[allow(dead_code)]
+    pub otp_type: Option<String>,
 }
 
 fn auth_client(config: &Config) -> AuthClient {
@@ -118,6 +122,15 @@ pub async fn oauth_callback(
 ) -> Result<Response, StatusCode> {
     if query.error.is_some() {
         return Ok(Redirect::to("/?auth=error").into_response());
+    }
+
+    if let Some(token_hash) = query.token_hash.filter(|t| !t.is_empty()) {
+        return crate::auth::email::complete_magic_link(
+            &state.pool,
+            &state.config,
+            &token_hash,
+        )
+        .await;
     }
 
     let code = query.code.ok_or(StatusCode::BAD_REQUEST)?;

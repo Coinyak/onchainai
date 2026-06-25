@@ -5,8 +5,8 @@
 
 use crate::pages::admin::admin_page_shell;
 use crate::pages::{
-    AdminCrawlerPage, AdminSettingsPage, AdminToolsPage, CategoryPage, HomePage, ToolDetailPage,
-    ToolsListPage,
+    AdminCategoriesPage, AdminCommentsPage, AdminCrawlerPage, AdminSettingsPage, AdminToolsPage,
+    AdminUsersPage, CategoryPage, HomePage, ToolDetailPage, ToolsListPage,
 };
 use leptos::prelude::*;
 use leptos_meta::{provide_meta_context, Link, Meta, MetaTags, Stylesheet, Title};
@@ -42,6 +42,7 @@ pub fn shell(options: LeptosOptions) -> impl IntoView {
                 <App/>
                 <script>
                     "document.addEventListener('click',function(e){var b=e.target.closest('[data-copy]');if(!b)return;var t=b.getAttribute('data-copy');if(!t||!navigator.clipboard)return;navigator.clipboard.writeText(t).then(function(){var o=b.textContent;b.textContent='Copied';setTimeout(function(){b.textContent=o||'Copy'},2000)});});"
+                    "document.addEventListener('submit',function(e){var form=e.target.closest('#email-login-form');if(!form)return;e.preventDefault();var input=document.getElementById('email-login-input');var msg=document.getElementById('email-login-msg');if(!input||!input.value)return;if(msg){msg.classList.remove('hidden');msg.textContent='Sending magic link...';}fetch('/auth/email',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:input.value})}).then(function(r){if(!r.ok)throw new Error('Failed');if(msg){msg.textContent='Check your email for the sign-in link.';}}).catch(function(){if(msg){msg.textContent='Could not send magic link. Try again.';}});});"
                     "document.addEventListener('click',function(e){var btn=e.target.closest('#siwx-connect-btn');if(!btn)return;e.preventDefault();var err=document.getElementById('siwx-error');if(err){err.classList.add('hidden');err.textContent='';}var eth=window.ethereum;if(!eth||!eth.request){if(err){err.textContent='No EVM wallet found. Install MetaMask or similar.';err.classList.remove('hidden');}return;}eth.request({method:'eth_requestAccounts'}).then(function(accts){if(!accts||!accts[0])throw new Error('No account');var address=accts[0];return eth.request({method:'eth_chainId'}).then(function(chainHex){var chainId=parseInt(chainHex,16).toString();return fetch('/auth/siwx/challenge',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify({wallet_address:address,chain_id:chainId})}).then(function(r){if(!r.ok)throw new Error('Challenge failed');return r.json();}).then(function(ch){return eth.request({method:'personal_sign',params:[ch.message,address]}).then(function(sig){return fetch('/auth/siwx/verify',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify({nonce:ch.nonce,signature:sig})});});});});}).then(function(r){if(!r.ok)throw new Error('Verify failed');window.location.reload();}).catch(function(ex){if(err){err.textContent=ex&&ex.message?ex.message:'Wallet sign-in failed';err.classList.remove('hidden');}});});"
                 </script>
             </body>
@@ -71,6 +72,9 @@ pub fn App() -> impl IntoView {
                     <Route path=(StaticSegment("admin"), StaticSegment("tools")) view=AdminToolsPage/>
                     <Route path=(StaticSegment("admin"), StaticSegment("settings")) view=AdminSettingsPage/>
                     <Route path=(StaticSegment("admin"), StaticSegment("crawler")) view=AdminCrawlerPage/>
+                    <Route path=(StaticSegment("admin"), StaticSegment("categories")) view=AdminCategoriesPage/>
+                    <Route path=(StaticSegment("admin"), StaticSegment("users")) view=AdminUsersPage/>
+                    <Route path=(StaticSegment("admin"), StaticSegment("comments")) view=AdminCommentsPage/>
                 </FlatRoutes>
             </main>
         </Router>
@@ -121,6 +125,33 @@ fn AdminHomePage() -> impl IntoView {
                     "Crawler Control"
                     <span class="block text-[12px] text-[#6B6B6B] font-normal mt-0.5">
                         "Source status and manual runs"
+                    </span>
+                </a>
+                <a
+                    href="/admin/categories"
+                    class="rounded-lg border border-[#E5E5E5] px-4 py-3 text-[14px] font-medium hover:bg-[#FAFAFA]"
+                >
+                    "Categories"
+                    <span class="block text-[12px] text-[#6B6B6B] font-normal mt-0.5">
+                        "Add, edit, or remove function categories"
+                    </span>
+                </a>
+                <a
+                    href="/admin/users"
+                    class="rounded-lg border border-[#E5E5E5] px-4 py-3 text-[14px] font-medium hover:bg-[#FAFAFA]"
+                >
+                    "Users"
+                    <span class="block text-[12px] text-[#6B6B6B] font-normal mt-0.5">
+                        "Ban, admin roles, account deletion"
+                    </span>
+                </a>
+                <a
+                    href="/admin/comments"
+                    class="rounded-lg border border-[#E5E5E5] px-4 py-3 text-[14px] font-medium hover:bg-[#FAFAFA]"
+                >
+                    "Comments"
+                    <span class="block text-[12px] text-[#6B6B6B] font-normal mt-0.5">
+                        "Moderate spam and abusive content"
                     </span>
                 </a>
             </nav>

@@ -1,12 +1,18 @@
 //! Admin pages — tool approval and site management.
 
+pub mod categories;
+pub mod comments;
 pub mod crawler;
 pub mod settings;
 pub mod tools;
+pub mod users;
 
+pub use categories::AdminCategoriesPage;
+pub use comments::AdminCommentsPage;
 pub use crawler::AdminCrawlerPage;
 pub use settings::AdminSettingsPage;
 pub use tools::AdminToolsPage;
+pub use users::AdminUsersPage;
 
 use crate::server::functions::check_admin_access;
 use leptos::prelude::*;

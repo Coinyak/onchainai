@@ -155,6 +155,7 @@ fn build_app(pool: sqlx::PgPool, config: Config) -> axum::Router {
         .route("/mcp", axum::routing::post(server::mcp::handle_mcp))
         // Supabase OAuth (GitHub) + logout.
         .route("/auth/github", axum::routing::get(auth::routes::github_login))
+        .route("/auth/email", axum::routing::post(auth::email::send_magic_link))
         .route("/auth/callback", axum::routing::get(auth::routes::oauth_callback))
         .route("/auth/logout", axum::routing::post(auth::routes::logout))
         .route(

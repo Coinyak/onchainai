@@ -32,6 +32,22 @@ pub fn LoginModal(show: RwSignal<bool>) -> impl IntoView {
                         >
                             "Continue with GitHub"
                         </a>
+                        <form id="email-login-form" class="mt-3 flex gap-2">
+                            <input
+                                id="email-login-input"
+                                type="email"
+                                autocomplete="email"
+                                placeholder="you@example.com"
+                                class="flex-1 rounded-lg border border-[#E5E5E5] px-3 py-2.5 text-[14px]"
+                            />
+                            <button
+                                type="submit"
+                                class="px-3 py-2.5 rounded-lg border border-[#E5E5E5] text-[14px] font-medium hover:bg-[#FAFAFA]"
+                            >
+                                "Email"
+                            </button>
+                        </form>
+                        <p id="email-login-msg" class="mt-2 text-[13px] text-[#6B6B6B] hidden"></p>
                         <button
                             type="button"
                             id="siwx-connect-btn"

@@ -6,7 +6,10 @@ pub mod home;
 pub mod tool_detail;
 pub mod tools_list;
 
-pub use admin::{AdminCrawlerPage, AdminSettingsPage, AdminToolsPage};
+pub use admin::{
+    AdminCategoriesPage, AdminCommentsPage, AdminCrawlerPage, AdminSettingsPage,
+    AdminToolsPage, AdminUsersPage,
+};
 pub use category::CategoryPage;
 pub use home::HomePage;
 pub use tool_detail::ToolDetailPage;
