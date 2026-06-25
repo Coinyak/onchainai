@@ -59,6 +59,18 @@ fn link_class(active: bool) -> &'static str {
     if active { "sidebar-link active" } else { "sidebar-link" }
 }
 
+/// Function-filter `<A href>` — same logic as the Sidebar function-section `.map` closure.
+pub fn sidebar_function_link(
+    base_path: &str,
+    query_base: &str,
+    cat_id: &str,
+    fn_active: &[String],
+) -> (String, bool) {
+    let href = toggle_multi(base_path, query_base, "function", cat_id, fn_active);
+    let is_active = fn_active.iter().any(|v| v == cat_id);
+    (href, is_active)
+}
+
 #[component]
 fn CollapsibleSection(
     section_id: &'static str,
@@ -173,8 +185,8 @@ pub fn Sidebar(
                             </A>
                         </li>
                         {categories.into_iter().map(|(cat, count)| {
-                            let href = toggle_multi(&base_for_fn, &query_for_fn, "function", &cat.id, &fn_active);
-                            let is_active = fn_active.iter().any(|v| v == &cat.id);
+                            let (href, is_active) =
+                                sidebar_function_link(&base_for_fn, &query_for_fn, &cat.id, &fn_active);
                             view! {
                                 <li>
                                     <A href=href attr:class=link_class(is_active)>
@@ -253,5 +265,40 @@ pub fn Sidebar(
                 </CollapsibleSection>
             </div>
         </aside>
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::components::tools_browser::{build_query_base, BrowserBase};
+
+    #[test]
+    fn sidebar_function_link_produces_multi_select_href() {
+        let query_base = build_query_base(
+            BrowserBase::Tools,
+            Some("bridge".into()),
+            None,
+            None,
+            None,
+            None,
+            None,
+            "new".into(),
+            None,
+            None,
+        );
+        let fn_active = parse_multi(Some("bridge"));
+        let (_, bridge_active) =
+            sidebar_function_link("/tools", &query_base, "bridge", &fn_active);
+        assert!(bridge_active);
+
+        let (href, swap_active) = sidebar_function_link("/tools", &query_base, "swap", &fn_active);
+        assert!(!swap_active);
+        assert!(
+            href.contains("function=bridge,swap") || href.contains("function=swap,bridge"),
+            "Sidebar <A href> must encode comma-separated function param, got: {href}"
+        );
+        assert_eq!(href.matches("sort=").count(), 1, "sort must not duplicate: {href}");
+        assert!(href.contains("sort=new"));
     }
 }

@@ -431,28 +431,4 @@ mod tests {
         assert!(to_hot.contains("type=mcp"));
     }
 
-    #[test]
-    fn sidebar_toggle_link_produces_multi_function_url() {
-        use crate::filter_query::toggle_multi;
-
-        let query_base = build_query_base(
-            BrowserBase::Tools,
-            Some("bridge".into()),
-            None,
-            None,
-            None,
-            None,
-            None,
-            "new".into(),
-            None,
-            None,
-        );
-        let href = toggle_multi("/tools", &query_base, "function", "swap", &["bridge".into()]);
-        assert!(
-            href.contains("function=bridge,swap") || href.contains("function=swap,bridge"),
-            "expected comma-separated function param, got: {href}"
-        );
-        assert_eq!(href.matches("sort=").count(), 1, "sort must not duplicate: {href}");
-        assert!(href.contains("sort=new"));
-    }
 }
