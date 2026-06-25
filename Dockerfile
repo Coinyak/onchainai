@@ -1,5 +1,4 @@
-# OnchainAI — multi-stage Docker build (SSR binary + WASM hydration bundle).
-# Leptos 0.8 requires rustc 1.88+ and cargo-leptos for /pkg/*.js + *.wasm.
+# OnchainAI — multi-stage Docker build (SSR server + optional WASM hydration bundle).
 
 FROM rust:1.88-slim AS builder
 WORKDIR /app
@@ -7,19 +6,24 @@ WORKDIR /app
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         pkg-config libssl-dev curl perl \
-    && rm -rf /var/lib/apt/lists/* \
-    && rustup target add wasm32-unknown-unknown \
-    && curl -fsSL https://github.com/cargo-bins/cargo-binstall/releases/latest/download/cargo-binstall-x86_64-unknown-linux-gnu.tgz \
-        | tar -xz -C /usr/local/cargo/bin \
-    && cargo binstall cargo-leptos -y
+    && rm -rf /var/lib/apt/lists/*
 
 COPY Cargo.toml Cargo.lock* ./
 COPY src/ ./src/
 COPY migrations/ ./migrations/
 COPY style/ ./style/
 
-# SSR server binary + WASM/JS client bundle → target/site/pkg/
-RUN cargo leptos build --release
+# SSR binary (required)
+RUN cargo build --release
+
+# WASM/JS client bundle (optional — app skips hydration when pkg/onchainai.js is absent)
+RUN mkdir -p target/site/pkg \
+    && (rustup target add wasm32-unknown-unknown \
+        && curl -fsSL https://github.com/cargo-bins/cargo-binstall/releases/latest/download/cargo-binstall-x86_64-unknown-linux-gnu.tgz \
+            | tar -xz -C /usr/local/cargo/bin \
+        && cargo binstall cargo-leptos -y \
+        && cargo leptos build --release) \
+    || echo "WASM bundle build skipped; SSR-only mode"
 
 # --- runtime stage ---
 FROM debian:bookworm-slim
