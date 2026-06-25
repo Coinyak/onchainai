@@ -1,7 +1,9 @@
-//! Configuration — environment variable loading.
+//! Configuration — environment variable loading and DB pool setup.
 //!
 //! All required env vars are loaded at startup via [`Config::from_env`].
 //! Missing required vars produce clear [`anyhow`] errors with the var name.
+//! The Postgres connection pool is built via [`setup_db`] using
+//! [`PgPoolOptions`](sqlx::postgres::PgPoolOptions).
 
 use std::env;
 
@@ -98,6 +100,18 @@ fn required(key: &str) -> anyhow::Result<String> {
         })
 }
 
+/// Initialize the Postgres connection pool from `database_url`.
+///
+/// Uses [`PgPoolOptions`](sqlx::postgres::PgPoolOptions) with a modest
+/// connection limit. Returns an error (not a panic) on a bad URL.
+pub async fn setup_db(database_url: &str) -> anyhow::Result<sqlx::PgPool> {
+    sqlx::postgres::PgPoolOptions::new()
+        .max_connections(10)
+        .connect(database_url)
+        .await
+        .map_err(|e| anyhow::anyhow!("failed to connect to Postgres: {e}"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -129,5 +143,32 @@ mod tests {
         let res = required("ONCHAINAI_TEST_PRESENT_VAR");
         assert_eq!(res.unwrap(), "hello");
         unsafe { env::remove_var("ONCHAINAI_TEST_PRESENT_VAR") }
+    }
+
+    #[tokio::test]
+    async fn setup_db_rejects_invalid_url() {
+        // An invalid URL must produce an error, not a panic.
+        let res = setup_db("not-a-valid-postgres-url").await;
+        assert!(
+            res.is_err(),
+            "setup_db should return Err for an invalid URL"
+        );
+        let msg = format!("{}", res.unwrap_err());
+        assert!(
+            msg.contains("Postgres"),
+            "error should mention Postgres: {msg}"
+        );
+    }
+
+    #[tokio::test]
+    async fn setup_db_rejects_unreachable_host() {
+        // A syntactically valid URL pointing at nothing should fail quickly.
+        // Use a short acquire timeout so the test does not hang.
+        let res = sqlx::postgres::PgPoolOptions::new()
+            .max_connections(1)
+            .acquire_timeout(std::time::Duration::from_millis(200))
+            .connect("postgresql://nobody@127.0.0.1:1/none")
+            .await;
+        assert!(res.is_err(), "connecting to a dead port should fail");
     }
 }

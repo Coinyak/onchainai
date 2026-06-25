@@ -4,6 +4,11 @@
 
 mod config;
 mod crawler;
+// Models are the foundation for later milestones (crawler upserts, server
+// functions, MCP responses). They are not yet consumed in this binary, so
+// dead-code warnings are suppressed until wiring lands.
+#[allow(dead_code)]
+mod models;
 mod server;
 
 pub use config::Config;
@@ -16,18 +21,6 @@ fn build_app(pool: sqlx::PgPool) -> axum::Router {
     axum::Router::new()
         .route("/", axum::routing::get(|| async { "OnchainAI" }))
         .with_state(pool)
-}
-
-/// Initialize the Postgres connection pool.
-///
-/// Uses [`PgPoolOptions`](sqlx::postgres::PgPoolOptions) with a small connection
-/// limit. Returns an error (not a panic) on a bad URL.
-async fn setup_db(database_url: &str) -> anyhow::Result<sqlx::PgPool> {
-    sqlx::postgres::PgPoolOptions::new()
-        .max_connections(10)
-        .connect(database_url)
-        .await
-        .map_err(|e| anyhow::anyhow!("failed to connect to Postgres: {e}"))
 }
 
 /// Apply embedded SQL migrations.
@@ -62,7 +55,7 @@ async fn main() -> anyhow::Result<()> {
     );
 
     // Initialize DB pool + run migrations.
-    let pool = setup_db(&cfg.database_url).await?;
+    let pool = config::setup_db(&cfg.database_url).await?;
     tracing::info!("database pool initialized");
     run_migrations(&pool).await?;
     tracing::info!("migrations applied");
