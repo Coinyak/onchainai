@@ -319,15 +319,17 @@ pub async fn list_tools(
     Ok(tools)
 }
 
+/// SQL for admin pending-tool review (AC5).
+pub(crate) const LIST_PENDING_TOOLS_SQL: &str =
+    "SELECT * FROM tools WHERE approval_status = 'pending' ORDER BY created_at DESC LIMIT $1";
+
 /// List tools awaiting admin review (`approval_status = 'pending'`).
 #[server(ListPendingTools, "/api")]
 pub async fn list_pending_tools(limit: i64) -> Result<Vec<Tool>, ServerFnError> {
     let pool = use_context::<sqlx::PgPool>()
         .ok_or_else(|| ServerFnError::new("database pool not available"))?;
 
-    let tools = sqlx::query_as::<_, Tool>(
-        "SELECT * FROM tools WHERE approval_status = 'pending' ORDER BY created_at DESC LIMIT $1",
-    )
+    let tools = sqlx::query_as::<_, Tool>(LIST_PENDING_TOOLS_SQL)
     .bind(limit)
     .fetch_all(&pool)
     .await
@@ -431,5 +433,11 @@ mod tests {
     #[test]
     fn set_tool_approval_validation_rejects_invalid_status() {
         assert!(validate_set_tool_approval_input("published", None).is_err());
+    }
+
+    #[test]
+    fn list_pending_tools_sql_filters_pending_only() {
+        assert!(LIST_PENDING_TOOLS_SQL.contains("approval_status = 'pending'"));
+        assert!(!LIST_PENDING_TOOLS_SQL.contains("approved"));
     }
 }
