@@ -62,7 +62,7 @@ pub fn OnboardingProfilePage() -> impl IntoView {
                                 </button>
                                 <button
                                     type="submit"
-                                    class="h-10 px-4 rounded-lg bg-[#E76F00] text-white text-[14px] font-medium hover:opacity-90"
+                                    class="h-10 px-4 rounded-lg bg-[#E76F00] text-white text-[14px] font-medium hover:bg-[#D96400]"
                                 >
                                     "Save & Continue"
                                 </button>

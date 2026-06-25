@@ -1,4 +1,4 @@
-//! Copy-to-clipboard button — Leptos on:click (hydrate / browser).
+//! Copy-to-clipboard button — icon-only clipboard SVG, "Copied" feedback.
 
 use leptos::prelude::*;
 use leptos::task::spawn_local;
@@ -6,15 +6,15 @@ use leptos::task::spawn_local;
 #[component]
 pub fn CopyButton(
     text: String,
-    #[prop(optional)] label: Option<&'static str>,
+    #[prop(optional)] _label: Option<&'static str>,
 ) -> impl IntoView {
     let copied = RwSignal::new(false);
-    let label = label.unwrap_or("Copy");
 
     view! {
         <button
             type="button"
-            class="copy-btn"
+            class=move || if copied.get() { "copy-btn copied" } else { "copy-btn" }
+            aria-label="Copy to clipboard"
             on:click=move |_| {
                 let t = text.clone();
                 spawn_local(async move {
@@ -22,7 +22,27 @@ pub fn CopyButton(
                 });
             }
         >
-            {move || if copied.get() { "Copied" } else { label }}
+            {move || if copied.get() {
+                "Copied".into_any()
+            } else {
+                view! {
+                    <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="14"
+                        height="14"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        aria-hidden="true"
+                    >
+                        <rect width="14" height="14" x="8" y="8" rx="2" ry="2"/>
+                        <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>
+                    </svg>
+                }.into_any()
+            }}
         </button>
     }
 }

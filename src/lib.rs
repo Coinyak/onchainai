@@ -227,12 +227,17 @@ pub async fn run_server() -> anyhow::Result<()> {
     tracing::info!("migrations applied");
 
     let crawler_pool = pool.clone();
-    tokio::spawn(async move {
-        if let Err(e) = crawler::start_scheduler(crawler_pool).await {
-            tracing::error!("crawler scheduler exited with error: {e}");
-        }
-    });
-    tracing::info!("crawler scheduler spawned in background (tokio::spawn)");
+    let skip_crawler = std::env::var("SKIP_CRAWLER").is_ok();
+    if skip_crawler {
+        tracing::info!("crawler scheduler skipped (SKIP_CRAWLER set)");
+    } else {
+        tokio::spawn(async move {
+            if let Err(e) = crawler::start_scheduler(crawler_pool).await {
+                tracing::error!("crawler scheduler exited with error: {e}");
+            }
+        });
+        tracing::info!("crawler scheduler spawned in background (tokio::spawn)");
+    }
 
     let port = cfg.port;
     let app = build_app(pool, cfg);

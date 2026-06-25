@@ -7,26 +7,26 @@ use leptos::prelude::*;
 pub fn PromoCards(mcp_endpoint: String) -> impl IntoView {
     view! {
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div class="promo-card border border-[#E5E5E5] rounded-lg p-5 bg-[#FAFAFA]">
+            <div class="promo-card border border-[#E5E5E5] rounded-lg p-6 bg-white">
                 <h3 class="text-[16px] font-semibold mb-2">"Submit a Tool"</h3>
                 <p class="text-[14px] text-[#6B6B6B] mb-4 leading-relaxed">
-                    "List your crypto MCP, CLI, or SDK so humans and agents can discover it."
+                    "List your MCP, CLI, SDK, or API. Free, with verification badges. x402 tools: pay per registration via x402."
                 </p>
                 <a
                     href="/about#submit"
-                    class="inline-flex items-center justify-center h-10 px-4 rounded-lg bg-[#E76F00] text-white text-[14px] font-medium no-underline hover:opacity-90"
+                    class="inline-flex items-center justify-center h-10 px-4 rounded-lg bg-[#E76F00] text-white text-[14px] font-medium no-underline hover:bg-[#D96400]"
                 >
                     "Submit →"
                 </a>
             </div>
-            <div class="promo-card border border-[#E5E5E5] rounded-lg p-5 bg-[#FAFAFA]">
+            <div class="promo-card border border-[#E5E5E5] rounded-lg p-6 bg-white">
                 <h3 class="text-[16px] font-semibold mb-2">"Connect via MCP"</h3>
                 <p class="text-[14px] text-[#6B6B6B] mb-3 leading-relaxed">
-                    "Let agents search this directory from your IDE."
+                    "Connect your agent to OnchainAI MCP and search tools instantly."
                 </p>
                 <div class="flex items-center gap-2">
-                    <code class="font-mono text-[13px] bg-white border border-[#E5E5E5] rounded-md px-3 py-2 flex-1 overflow-x-auto">
-                        {mcp_endpoint.clone()}
+                    <code class="font-mono text-[13px] bg-[#F5F5F0] border border-[#E5E5E5] rounded-md px-3 py-2 flex-1 overflow-x-auto">
+                        <span class="text-[#999999]">"$ "</span>{mcp_endpoint.clone()}
                     </code>
                     <CopyButton text=mcp_endpoint.clone()/>
                 </div>

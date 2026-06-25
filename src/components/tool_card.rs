@@ -3,7 +3,7 @@
 use crate::components::copy_button::CopyButton;
 use crate::components::login_modal::LoginModal;
 use crate::models::Tool;
-use crate::server::functions::{get_current_user, is_bookmarked, toggle_bookmark};
+use crate::server::functions::{get_current_user, get_tool_comment_count, is_bookmarked, toggle_bookmark};
 use leptos::prelude::*;
 use leptos::task::spawn_local;
 use leptos_router::components::A;
@@ -35,6 +35,7 @@ fn type_badge_class(tool_type: &str) -> &'static str {
 pub fn ToolCard(
     tool: Tool,
     #[prop(optional)] preview_href: Option<String>,
+    #[prop(optional)] is_selected: bool,
 ) -> impl IntoView {
     let slug = tool.slug.clone();
     let detail_href = format!("/tools/{slug}");
@@ -51,6 +52,22 @@ pub fn ToolCard(
         .description
         .clone()
         .unwrap_or_else(|| "No description.".into());
+    let team = tool.official_team.clone().unwrap_or_else(|| tool.source.clone());
+    let time_ago = tool
+        .last_commit_at
+        .map(|t| {
+            let now = chrono::Utc::now();
+            let diff = now.signed_duration_since(t);
+            if diff.num_days() > 0 {
+                format!("{}d ago", diff.num_days())
+            } else if diff.num_hours() > 0 {
+                format!("{}h ago", diff.num_hours())
+            } else {
+                "today".to_string()
+            }
+        })
+        .unwrap_or_else(|| "—".into());
+    let license = tool.license.clone().unwrap_or_default();
 
     let show_login = RwSignal::new(false);
     let refresh = RwSignal::new(0u32);
@@ -59,10 +76,15 @@ pub fn ToolCard(
         move || (slug_bm.clone(), refresh.get()),
         |(s, _)| async move { is_bookmarked(s).await },
     );
+    let slug_comments = slug.clone();
+    let comment_count = Resource::new(
+        move || slug_comments.clone(),
+        |s| async move { get_tool_comment_count(s).await.unwrap_or(0) },
+    );
 
     view! {
         <LoginModal show=show_login/>
-        <article class="tool-card">
+        <article class=if is_selected { "tool-card is-selected" } else { "tool-card" }>
             <A href=href attr:class="tool-card-link no-underline text-inherit">
                 <div class="tool-card-inner">
                     <div class="tool-logo" aria-hidden="true">
@@ -85,6 +107,19 @@ pub fn ToolCard(
                             </div>
                         </div>
                         <p class="tool-desc">{description}</p>
+                        <div class="tool-source-line">
+                            <span class="tool-team">{team.clone()}</span>
+                            <span class="tool-meta-sep">"·"</span>
+                            <span class="tool-time">{time_ago.clone()}</span>
+                            {if !license.is_empty() {
+                                view! {
+                                    <span class="tool-meta-sep">"·"</span>
+                                    <span class="tool-license">{license.clone()}</span>
+                                }.into_any()
+                            } else {
+                                ().into_any()
+                            }}
+                        </div>
                         <div class="tool-meta">
                             <span class="tool-chains">
                                 {chain_preview
@@ -98,12 +133,21 @@ pub fn ToolCard(
                                     ().into_any()
                                 }}
                             </span>
+                            <span class="tool-meta-sep">"·"</span>
                             <span class="tool-stars">{"★ "}{stars}</span>
+                            <span class="tool-meta-sep">"·"</span>
+                            <Suspense fallback=|| view! { <span class="tool-comments">"comments —"</span> }>
+                                {move || comment_count.get().map(|n| view! {
+                                    <span class="tool-comments">"comments "{n}</span>
+                                })}
+                            </Suspense>
                         </div>
                         {if !install.is_empty() {
                             view! {
                                 <div class="tool-install hidden md:flex">
-                                    <code class="install-cmd">{install.clone()}</code>
+                                    <code class="install-cmd">
+                                        <span class="install-prefix">"$ "</span>{install.clone()}
+                                    </code>
                                     <CopyButton text=install/>
                                 </div>
                             }

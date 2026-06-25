@@ -53,7 +53,7 @@ pub fn TopNav() -> impl IntoView {
                 <nav class="flex items-center gap-3 md:gap-5 text-[14px]">
                     <A
                         href="/about#submit"
-                        attr:class="inline-flex items-center justify-center h-9 px-4 rounded-lg bg-[#E76F00] text-white text-[14px] font-medium no-underline hover:opacity-90"
+                        attr:class="inline-flex items-center justify-center h-9 px-4 rounded-lg bg-[#E76F00] text-white text-[14px] font-medium no-underline hover:bg-[#D96400]"
                     >
                         "Submit"
                     </A>

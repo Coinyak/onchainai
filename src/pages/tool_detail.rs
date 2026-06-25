@@ -8,7 +8,7 @@ use crate::components::top_nav::TopNav;
 use crate::models::Tool;
 use crate::server::functions::get_tool_by_slug;
 use leptos::prelude::*;
-use leptos_router::hooks::use_params_map;
+use leptos_router::hooks::{use_params_map, use_query_map};
 
 async fn load_tool(slug: String) -> Result<Tool, ServerFnError> {
     if slug.is_empty() {
@@ -21,8 +21,26 @@ async fn load_tool(slug: String) -> Result<Tool, ServerFnError> {
 #[component]
 pub fn ToolDetailPage() -> impl IntoView {
     let params = use_params_map();
+    let query = use_query_map();
     let slug = Memo::new(move |_| params.with(|p| p.get("slug").unwrap_or_default()));
     let retry = RwSignal::new(0u32);
+
+    // Build back link preserving filter query (spec: ← All Tools keeps ?function=bridge&sort=hot)
+    let back_href = Memo::new(move |_| {
+        query.with(|qm| {
+            let mut parts: Vec<String> = Vec::new();
+            for (k, v) in qm.into_iter() {
+                if k != "selected" {
+                    parts.push(format!("{}={}", urlencoding::encode(k), urlencoding::encode(v)));
+                }
+            }
+            if parts.is_empty() {
+                "/tools".to_string()
+            } else {
+                format!("/tools?{}", parts.join("&"))
+            }
+        })
+    });
 
     let tool = Resource::new(
         move || (slug.get(), retry.get()),
@@ -34,11 +52,14 @@ pub fn ToolDetailPage() -> impl IntoView {
         <div class="detail-page max-w-[720px] mx-auto px-4 py-8">
             <Suspense fallback=|| view! { <ToolCardSkeleton/> }>
                 {move || match tool.get() {
-                    Some(Ok(t)) => view! {
-                        <a href="/tools" class="back-link">"← Back to tools"</a>
-                        <ToolDetailContent tool=t.clone() compact=false/>
-                        <CommentsSection slug=slug tool_name=t.name.clone()/>
-                    }.into_any(),
+                    Some(Ok(t)) => {
+                        let bh = back_href.get();
+                        view! {
+                            <a href=bh class="back-link">"← All Tools"</a>
+                            <ToolDetailContent tool=t.clone() compact=false/>
+                            <CommentsSection slug=slug tool_name=t.name.clone()/>
+                        }.into_any()
+                    }
                     Some(Err(e)) => view! {
                         <ErrorState
                             message=format!("Tool not found: {e}")

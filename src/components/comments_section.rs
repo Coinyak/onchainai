@@ -165,7 +165,7 @@ fn CommentForm(
             <div class="mt-3 flex justify-end">
                 <button
                     type="button"
-                    class="px-4 py-2 rounded-lg bg-[#1A1A1A] text-white text-[14px] font-medium hover:opacity-90 disabled:opacity-50"
+                    class="px-4 py-2 rounded-lg bg-[#1A1A1A] text-white text-[14px] font-medium hover:bg-[#1A1A1A] disabled:opacity-50"
                     disabled=move || busy.get()
                     on:click=move |_| {
                         let slug = slug.get();
@@ -267,17 +267,42 @@ fn CommentBody(
         .clone()
         .unwrap_or_else(|| "User".into());
     let id = comment.id;
+    let auth_badge = match comment.author_auth_method.as_deref().unwrap_or("") {
+        "github" => "[GH]",
+        "email" => "[Mail]",
+        "siwx" => "[0x]",
+        _ => "",
+    };
+    let time_ago = {
+        let now = chrono::Utc::now();
+        let diff = now.signed_duration_since(comment.created_at);
+        if diff.num_days() > 0 {
+            format!("{}d ago", diff.num_days())
+        } else if diff.num_hours() > 0 {
+            format!("{}h ago", diff.num_hours())
+        } else if diff.num_minutes() > 0 {
+            format!("{}m ago", diff.num_minutes())
+        } else {
+            "just now".to_string()
+        }
+    };
 
     view! {
         <div class="flex items-start justify-between gap-3">
             <div>
                 <div class="text-[14px] font-medium">
-                    {author}
-                    {if comment.author_is_admin {
-                        view! { <span class="ml-2 text-[11px] px-1.5 py-0.5 rounded bg-[#FFF3E6] text-[#E76F00]">"Admin"</span> }.into_any()
+                    {if !auth_badge.is_empty() {
+                        view! { <span class="text-[11px] text-[#999999] mr-1">{auth_badge}</span> }.into_any()
                     } else {
                         ().into_any()
                     }}
+                    {author.clone()}
+                    {if comment.author_is_admin {
+                        view! { <span class="ml-2 text-[11px] px-1.5 py-0.5 rounded badge badge-official">"Admin"</span> }.into_any()
+                    } else {
+                        ().into_any()
+                    }}
+                    <span class="text-[13px] text-[#999999] ml-2 font-normal">{time_ago}</span>
                 </div>
                 <p class="text-[14px] text-[#1A1A1A] mt-1 whitespace-pre-wrap">{comment.content.clone()}</p>
             </div>

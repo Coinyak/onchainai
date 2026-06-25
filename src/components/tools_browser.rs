@@ -292,6 +292,7 @@ pub fn ToolsBrowser(
                                 active_status=status.get()
                                 active_chain=chain.get()
                                 chain_options=data.chains.clone()
+                                default_function_open=base == BrowserBase::Tools
                             />
                             <div class="tools-main">
                                 <div class="tools-toolbar sticky-toolbar">
@@ -301,9 +302,9 @@ pub fn ToolsBrowser(
                                         ().into_any()
                                     }}
                                     <div class="toolbar-sort">
-                                        <a href=move || sort_hot.get() class="sort-link">"HOT"</a>
-                                        <a href=move || sort_new.get() class="sort-link">"New"</a>
-                                        <a href=move || sort_comments.get() class="sort-link">"Comments"</a>
+                                        <a href=move || sort_hot.get() class=move || if sort.get() == "hot" { "sort-link active" } else { "sort-link" }>"HOT ↓"</a>
+                                        <a href=move || sort_new.get() class=move || if sort.get() == "new" { "sort-link active" } else { "sort-link" }>"New"</a>
+                                        <a href=move || sort_comments.get() class=move || if sort.get() == "comments" { "sort-link active" } else { "sort-link" }>"Comments"</a>
                                     </div>
                                     <span class="tool-count">{data.total}" tools"</span>
                                 </div>
@@ -315,7 +316,8 @@ pub fn ToolsBrowser(
                                             {data.tools.clone().into_iter().map(|t| {
                                                 let slug = t.slug.clone();
                                                 let preview = with_selected(base, &qb, &slug);
-                                                view! { <ToolCard tool=t preview_href=preview/> }
+                                                let sel = selected.get().map(|s| s == slug).unwrap_or(false);
+                                                view! { <ToolCard tool=t preview_href=preview is_selected=sel/> }
                                             }).collect_view()}
                                         </div>
                                     }.into_any()

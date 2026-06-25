@@ -53,13 +53,13 @@ pub fn LoginForm(
     };
 
     view! {
-        <h1 class=heading_class>"Sign in"</h1>
+        <h1 class=heading_class>"Sign in to OnchainAI"</h1>
         <p class=desc_class>
             "Sign in to comment, bookmark tools, and access admin features."
         </p>
         <a
             href="/auth/github"
-            class="flex items-center justify-center w-full px-4 py-2.5 rounded-lg bg-[#1A1A1A] text-white text-[14px] font-medium hover:opacity-90 no-underline"
+            class="flex items-center justify-center w-full px-4 py-2.5 rounded-lg bg-[#1A1A1A] text-white text-[14px] font-medium hover:bg-[#1A1A1A] no-underline"
         >
             "Continue with GitHub"
         </a>
@@ -142,5 +142,8 @@ pub fn LoginForm(
                 "Cancel"
             </button>
         })}
+        <p class="mt-6 text-center text-[13px] text-[#999999]">
+            "By signing in, you agree to our Terms & Privacy."
+        </p>
     }
 }

@@ -13,7 +13,7 @@ pub fn EmptyState(
             <p class="empty-state-message">{message}</p>
             <A
                 href="/about#submit"
-                attr:class="inline-flex items-center justify-center h-9 px-4 rounded-lg bg-[#E76F00] text-white text-[14px] font-medium no-underline hover:opacity-90"
+                attr:class="inline-flex items-center justify-center h-9 px-4 rounded-lg bg-[#E76F00] text-white text-[14px] font-medium no-underline hover:bg-[#D96400]"
             >
                 "Submit a tool"
             </A>

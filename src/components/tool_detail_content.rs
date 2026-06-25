@@ -138,7 +138,9 @@ pub fn ToolDetailContent(
                             };
                             view! {
                                 <div class="tool-install">
-                                    <code class="install-cmd">{text.clone()}</code>
+                                    <code class="install-cmd">
+                                        <span class="install-prefix">"$ "</span>{text.clone()}
+                                    </code>
                                     <CopyButton text=text/>
                                 </div>
                             }
@@ -184,16 +186,16 @@ pub fn ToolDetailContent(
             <section class="trust-section">
                 <h3 class="install-heading">"Trust"</h3>
                 <ul class="trust-list">
-                    <li>"Source: "{tool.source.clone()}</li>
+                    <li>"✓ Source: "{tool.source.clone()}</li>
                     {if let Some(team) = tool.official_team.clone() {
-                        view! { <li>"Team: "{team}</li> }.into_any()
+                        view! { <li>"✓ Official team: "{team}</li> }.into_any()
                     } else {
                         ().into_any()
                     }}
-                    <li>"Stars: "{tool.stars}</li>
-                    <li>"Last commit: "{last_commit}</li>
+                    <li>"✓ Stars: "{tool.stars}</li>
+                    <li>"✓ Last commit: "{last_commit}</li>
                     {if tool.status == "verified" || tool.status == "official" {
-                        view! { <li>"Badge verified by OnchainAI"</li> }.into_any()
+                        view! { <li>"✓ Badge verified by OnchainAI"</li> }.into_any()
                     } else {
                         ().into_any()
                     }}

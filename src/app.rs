@@ -112,7 +112,7 @@ fn AboutPage() -> impl IntoView {
                     href="https://github.com/hoyeon4315-cpu/onchainai/issues/new"
                     target="_blank"
                     rel="noopener noreferrer"
-                    class="inline-flex items-center justify-center h-10 px-4 rounded-lg bg-[#E76F00] text-white text-[14px] font-medium no-underline hover:opacity-90"
+                    class="inline-flex items-center justify-center h-10 px-4 rounded-lg bg-[#E76F00] text-white text-[14px] font-medium no-underline hover:bg-[#D96400]"
                 >
                     "Open GitHub issue →"
                 </a>

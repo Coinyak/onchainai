@@ -671,6 +671,7 @@ pub struct CommentView {
     pub content: String,
     pub created_at: chrono::DateTime<chrono::Utc>,
     pub author_nickname: Option<String>,
+    pub author_auth_method: Option<String>,
     pub author_is_admin: bool,
     pub upvote_count: i64,
     pub viewer_upvoted: bool,
@@ -713,6 +714,7 @@ pub async fn get_tool_comments(slug: String, sort: String) -> Result<Vec<Comment
         SELECT
             c.id, c.tool_id, c.parent_id, c.user_id, c.content, c.created_at,
             p.nickname AS author_nickname,
+            p.auth_method AS author_auth_method,
             p.is_admin AS author_is_admin,
             COUNT(u.id) AS upvote_count,
             BOOL_OR(u.user_id = $2) AS viewer_upvoted
@@ -720,7 +722,7 @@ pub async fn get_tool_comments(slug: String, sort: String) -> Result<Vec<Comment
         JOIN profiles p ON p.id = c.user_id
         LEFT JOIN upvotes u ON u.comment_id = c.id
         WHERE c.tool_id = $1
-        GROUP BY c.id, p.nickname, p.is_admin
+        GROUP BY c.id, p.nickname, p.auth_method, p.is_admin
         ORDER BY {order}
         "#
     );
@@ -744,6 +746,7 @@ struct CommentRow {
     content: String,
     created_at: chrono::DateTime<chrono::Utc>,
     author_nickname: Option<String>,
+    author_auth_method: Option<String>,
     author_is_admin: bool,
     upvote_count: Option<i64>,
     viewer_upvoted: Option<bool>,
@@ -759,6 +762,7 @@ impl CommentRow {
             content: self.content,
             created_at: self.created_at,
             author_nickname: self.author_nickname,
+            author_auth_method: self.author_auth_method,
             author_is_admin: self.author_is_admin,
             upvote_count: self.upvote_count.unwrap_or(0),
             viewer_upvoted: self.viewer_upvoted.unwrap_or(false),
