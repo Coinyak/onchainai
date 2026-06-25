@@ -28,6 +28,7 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /app/target/release/onchainai /app/onchainai
+COPY --from=builder /app/Cargo.toml /app/Cargo.toml
 COPY --from=builder /app/migrations /app/migrations
 COPY --from=builder /app/style /app/style
 
