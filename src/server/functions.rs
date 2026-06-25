@@ -3,7 +3,7 @@
 //! These functions are auto-registered by the Leptos runtime and are
 //! available to both server-rendered and hydrated components.
 
-use crate::models::{Category, Tool};
+use crate::models::{Category, SiteSettings, Tool};
 use crate::server::queries::TOOLS_APPROVED_WHERE;
 use leptos::prelude::*;
 
@@ -31,6 +31,20 @@ impl CategoryWithCount {
             self.count,
         )
     }
+}
+
+/// Returns the public site settings singleton (slogan, description, MCP endpoint).
+#[server(GetSiteSettings, "/api")]
+pub async fn get_site_settings() -> Result<SiteSettings, ServerFnError> {
+    let pool = use_context::<sqlx::PgPool>()
+        .ok_or_else(|| ServerFnError::new("database pool not available"))?;
+
+    let settings = sqlx::query_as::<_, SiteSettings>("SELECT * FROM site_settings WHERE id = 1")
+        .fetch_one(&pool)
+        .await
+        .map_err(|e| ServerFnError::new(format!("failed to load site settings: {e}")))?;
+
+    Ok(settings)
 }
 
 /// Returns the most recently added **approved** tools.
@@ -121,6 +135,102 @@ pub async fn search_tools(
         .fetch_all(&pool)
         .await
         .map_err(|e| ServerFnError::new(format!("search failed: {e}")))?;
+
+    Ok(tools)
+}
+
+/// Fetch a single **approved** tool by slug (404-style error if missing or not approved).
+#[server(GetToolBySlug, "/api")]
+pub async fn get_tool_by_slug(slug: String) -> Result<Tool, ServerFnError> {
+    let pool = use_context::<sqlx::PgPool>()
+        .ok_or_else(|| ServerFnError::new("database pool not available"))?;
+
+    let sql = format!("SELECT * FROM tools WHERE slug = $1 AND {TOOLS_APPROVED_WHERE}");
+    let tool = sqlx::query_as::<_, Tool>(&sql)
+        .bind(&slug)
+        .fetch_optional(&pool)
+        .await
+        .map_err(|e| ServerFnError::new(format!("failed to load tool: {e}")))?;
+
+    tool.ok_or_else(|| ServerFnError::new(format!("tool not found: {slug}")))
+}
+
+/// Count approved tools (optionally filtered by function).
+#[server(CountTools, "/api")]
+pub async fn count_tools(function: Option<String>) -> Result<i64, ServerFnError> {
+    let pool = use_context::<sqlx::PgPool>()
+        .ok_or_else(|| ServerFnError::new("database pool not available"))?;
+
+    let count: (i64,) = if let Some(f) = function {
+        let sql = format!("SELECT COUNT(*) FROM tools WHERE {TOOLS_APPROVED_WHERE} AND function = $1");
+        sqlx::query_as(&sql)
+            .bind(f)
+            .fetch_one(&pool)
+            .await
+    } else {
+        let sql = format!("SELECT COUNT(*) FROM tools WHERE {TOOLS_APPROVED_WHERE}");
+        sqlx::query_as(&sql).fetch_one(&pool).await
+    }
+    .map_err(|e| ServerFnError::new(format!("count failed: {e}")))?;
+
+    Ok(count.0)
+}
+
+/// List approved tools with sort, pagination, and optional filters.
+#[server(ListTools, "/api")]
+pub async fn list_tools(
+    sort: String,
+    offset: i64,
+    limit: i64,
+    function: Option<String>,
+    chain: Option<String>,
+    query: Option<String>,
+) -> Result<Vec<Tool>, ServerFnError> {
+    let pool = use_context::<sqlx::PgPool>()
+        .ok_or_else(|| ServerFnError::new("database pool not available"))?;
+
+    let order = match sort.as_str() {
+        "new" => "created_at DESC",
+        "comments" => "stars DESC, created_at DESC", // comments milestone wires real sort
+        _ => "stars DESC, created_at DESC",
+    };
+
+    let has_query = query.as_ref().is_some_and(|q| !q.trim().is_empty());
+    let mut sql = format!("SELECT * FROM tools WHERE {TOOLS_APPROVED_WHERE}");
+    let mut idx = 1i32;
+
+    if has_query {
+        sql.push_str(&format!(
+            " AND to_tsvector('english', coalesce(name, '') || ' ' || coalesce(description, '')) @@ plainto_tsquery('english', ${idx})"
+        ));
+        idx += 1;
+    }
+    if function.is_some() {
+        sql.push_str(&format!(" AND function = ${idx}"));
+        idx += 1;
+    }
+    if chain.is_some() {
+        sql.push_str(&format!(" AND ${idx} = ANY(chains)"));
+        idx += 1;
+    }
+    sql.push_str(&format!(" ORDER BY {order} OFFSET ${idx} LIMIT ${}", idx + 1));
+
+    let mut q = sqlx::query_as::<_, Tool>(&sql);
+    if let Some(text) = query.as_ref().filter(|q| !q.trim().is_empty()) {
+        q = q.bind(text);
+    }
+    if let Some(f) = &function {
+        q = q.bind(f);
+    }
+    if let Some(c) = &chain {
+        q = q.bind(c);
+    }
+    q = q.bind(offset).bind(limit);
+
+    let tools = q
+        .fetch_all(&pool)
+        .await
+        .map_err(|e| ServerFnError::new(format!("list tools failed: {e}")))?;
 
     Ok(tools)
 }

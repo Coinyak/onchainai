@@ -3,6 +3,7 @@
 //! Single Rust binary: Leptos SSR + Axum + rmcp + sqlx + tokio-cron-scheduler.
 
 mod app;
+mod components;
 mod config;
 mod crawler;
 #[allow(dead_code)]
@@ -28,7 +29,7 @@ pub use config::Config;
 
 /// Shared application state.
 #[derive(Clone)]
-struct AppState {
+pub struct AppState {
     /// Postgres connection pool.
     pub pool: sqlx::PgPool,
     /// Leptos SSR options.
@@ -131,8 +132,8 @@ fn build_app(pool: sqlx::PgPool) -> axum::Router {
             &static_route,
             leptos_axum::site_pkg_dir_service(&leptos_options),
         )
-        // MCP endpoint placeholder (full implementation in MCP milestone).
-        .route("/mcp", axum::routing::post(|| async { "MCP endpoint" }))
+        // MCP JSON-RPC endpoint (4 tools, approved-only data).
+        .route("/mcp", axum::routing::post(server::mcp::handle_mcp))
         // Leptos SSR routes.
         .leptos_routes_with_context(
             &state,

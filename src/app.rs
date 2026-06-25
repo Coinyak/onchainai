@@ -3,6 +3,7 @@
 //! Defines the top-level router, the HTML shell, and placeholder page
 //! components for all routes required by the website-core milestone.
 
+use crate::pages::{CategoryPage, HomePage, ToolDetailPage, ToolsListPage};
 use leptos::prelude::*;
 use leptos_meta::{provide_meta_context, Link, Meta, MetaTags, Stylesheet, Title};
 use leptos_router::{
@@ -35,6 +36,9 @@ pub fn shell(options: LeptosOptions) -> impl IntoView {
             </head>
             <body class="bg-white text-[#1A1A1A] antialiased">
                 <App/>
+                <script>
+                    "document.addEventListener('click',function(e){var b=e.target.closest('[data-copy]');if(!b)return;var t=b.getAttribute('data-copy');if(!t||!navigator.clipboard)return;navigator.clipboard.writeText(t).then(function(){var o=b.textContent;b.textContent='Copied';setTimeout(function(){b.textContent=o||'Copy'},2000)});});"
+                </script>
             </body>
         </html>
     }
@@ -62,48 +66,6 @@ pub fn App() -> impl IntoView {
                 </FlatRoutes>
             </main>
         </Router>
-    }
-}
-
-#[component]
-fn HomePage() -> impl IntoView {
-    view! {
-        <div class="px-6 py-12 max-w-[960px] mx-auto">
-            <h1 class="text-[28px] font-bold tracking-tight leading-tight mb-4">"Crypto tools, unified."</h1>
-            <p class="text-[#6B6B6B] text-base leading-relaxed mb-8">
-                "Discover, install, and share crypto MCP, CLI, SDK, API, x402, RWA, and AI agent tools — all in one place."
-            </p>
-        </div>
-    }
-}
-
-#[component]
-fn ToolsListPage() -> impl IntoView {
-    view! {
-        <div class="px-6 py-8 max-w-[960px] mx-auto">
-            <h2 class="text-[20px] font-semibold mb-4">"Tools"</h2>
-            <p class="text-[#6B6B6B]">"List of crypto tools will appear here."</p>
-        </div>
-    }
-}
-
-#[component]
-fn ToolDetailPage() -> impl IntoView {
-    view! {
-        <div class="px-6 py-8 max-w-[720px] mx-auto">
-            <h2 class="text-[20px] font-semibold mb-4">"Tool Detail"</h2>
-            <p class="text-[#6B6B6B]">"Detailed tool information will appear here."</p>
-        </div>
-    }
-}
-
-#[component]
-fn CategoryPage() -> impl IntoView {
-    view! {
-        <div class="px-6 py-8 max-w-[960px] mx-auto">
-            <h2 class="text-[20px] font-semibold mb-4">"Category"</h2>
-            <p class="text-[#6B6B6B]">"Tools filtered by category will appear here."</p>
-        </div>
     }
 }
 
