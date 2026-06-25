@@ -388,6 +388,111 @@ fn sanitize_nickname(raw: &str) -> Option<String> {
     }
 }
 
+/// Post-auth redirect — onboarding gate for new profiles.
+pub async fn post_auth_redirect_path(pool: &PgPool, user_id: Uuid) -> String {
+    let done = sqlx::query_scalar::<_, bool>(
+        r#"
+        SELECT onboarding_completed_at IS NOT NULL
+        FROM profiles
+        WHERE id = $1
+        "#,
+    )
+    .bind(user_id)
+    .fetch_optional(pool)
+    .await
+    .ok()
+    .flatten()
+    .unwrap_or(false);
+
+    if done {
+        "/".into()
+    } else {
+        "/onboarding/profile".into()
+    }
+}
+
+fn validate_nickname(raw: &str) -> Option<String> {
+    let sanitized: String = raw
+        .chars()
+        .filter(|c| c.is_alphanumeric() || *c == '_' || *c == '-')
+        .take(20)
+        .collect();
+    if (2..=20).contains(&sanitized.len()) {
+        Some(sanitized)
+    } else {
+        None
+    }
+}
+
+pub fn auto_nickname() -> String {
+    let mut bytes = [0u8; 2];
+    getrandom(&mut bytes).expect("OS random unavailable");
+    format!("user-{:04x}", u16::from_be_bytes(bytes))
+}
+
+/// Complete first-login onboarding (nickname optional when `skip`).
+pub async fn complete_onboarding(
+    pool: &PgPool,
+    user_id: Uuid,
+    nickname: Option<&str>,
+    bio: Option<&str>,
+    skip: bool,
+) -> Result<(), AuthSessionError> {
+    let nick = if skip {
+        nickname
+            .and_then(validate_nickname)
+            .unwrap_or_else(auto_nickname)
+    } else {
+        nickname
+            .and_then(validate_nickname)
+            .ok_or(AuthSessionError::InvalidToken)?
+    };
+
+    if let Some(bio) = bio {
+        let trimmed = bio.trim();
+        if trimmed.len() > 200 {
+            return Err(AuthSessionError::InvalidToken);
+        }
+    }
+
+    let taken = sqlx::query_scalar::<_, bool>(
+        r#"
+        SELECT EXISTS(
+            SELECT 1 FROM profiles
+            WHERE nickname = $1 AND id <> $2
+        )
+        "#,
+    )
+    .bind(&nick)
+    .bind(user_id)
+    .fetch_one(pool)
+    .await
+    .map_err(|e| AuthSessionError::Database(e.to_string()))?;
+
+    if taken {
+        return Err(AuthSessionError::InvalidToken);
+    }
+
+    sqlx::query(
+        r#"
+        UPDATE profiles
+        SET nickname = $2,
+            bio = COALESCE($3, bio),
+            onboarding_completed_at = now(),
+            updated_at = now()
+        WHERE id = $1
+        "#,
+    )
+    .bind(user_id)
+    .bind(&nick)
+    .bind(bio.map(str::trim).filter(|s| !s.is_empty()))
+    .execute(pool)
+    .await
+    .map_err(|e| AuthSessionError::Database(e.to_string()))?;
+
+    Ok(())
+}
+
 /// Upsert a profile row after OAuth sign-in (first-user-admin trigger applies on insert).
 pub async fn ensure_profile(
     pool: &PgPool,

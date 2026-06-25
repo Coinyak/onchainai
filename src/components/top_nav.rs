@@ -1,9 +1,11 @@
-//! Sticky top navigation with auth-aware links (SSR-blocking — no empty auth slot).
+//! Sticky top navigation — UI spec: Logo + Submit + GitHub (+ admin session).
 
 use crate::auth::session::SessionUser;
 use crate::server::functions::get_current_user;
 use leptos::prelude::*;
 use leptos_router::components::A;
+
+const GITHUB_REPO: &str = "https://github.com/hoyeon4315-cpu/onchainai";
 
 #[component]
 fn AuthNav(user_res: Result<Option<SessionUser>, leptos::server_fn::ServerFnError>) -> impl IntoView {
@@ -36,12 +38,7 @@ fn AuthNav(user_res: Result<Option<SessionUser>, leptos::server_fn::ServerFnErro
             </form>
         }
         .into_any(),
-        Ok(None) | Err(_) => view! {
-            <A href="/login" attr:class="text-[#1A1A1A] font-medium no-underline hover:underline">
-                "Sign in"
-            </A>
-        }
-        .into_any(),
+        Ok(None) | Err(_) => ().into_any(),
     }
 }
 
@@ -53,13 +50,21 @@ pub fn TopNav() -> impl IntoView {
                 <A href="/" attr:class="text-[16px] font-semibold tracking-tight text-[#1A1A1A] no-underline">
                     "OnchainAI"
                 </A>
-                <nav class="flex items-center gap-4 md:gap-6 text-[14px]">
-                    <A href="/tools" attr:class="text-[#6B6B6B] hover:text-[#1A1A1A] no-underline">
-                        "Tools"
+                <nav class="flex items-center gap-3 md:gap-5 text-[14px]">
+                    <A
+                        href="/about#submit"
+                        attr:class="inline-flex items-center justify-center h-9 px-4 rounded-lg bg-[#E76F00] text-white text-[14px] font-medium no-underline hover:opacity-90"
+                    >
+                        "Submit"
                     </A>
-                    <A href="/about" attr:class="text-[#6B6B6B] hover:text-[#1A1A1A] no-underline">
-                        "About"
-                    </A>
+                    <a
+                        href=GITHUB_REPO
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        class="text-[#6B6B6B] hover:text-[#1A1A1A] no-underline"
+                    >
+                        "GitHub"
+                    </a>
                     <Await future=async move { get_current_user().await } let:user_res blocking=true>
                         <AuthNav user_res=user_res.clone()/>
                     </Await>

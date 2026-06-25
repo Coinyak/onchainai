@@ -1,8 +1,8 @@
 //! Axum auth routes — direct GitHub OAuth, email magic links, and logout.
 
 use crate::auth::session::{
-    cookie_value, ensure_github_profile, issue_access_token, ACCESS_TOKEN_COOKIE,
-    GITHUB_STATE_COOKIE,
+    cookie_value, ensure_github_profile, issue_access_token, post_auth_redirect_path,
+    ACCESS_TOKEN_COOKIE, GITHUB_STATE_COOKIE,
 };
 use crate::config::Config;
 use crate::AppState;
@@ -214,7 +214,9 @@ pub async fn oauth_callback(
             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?,
     );
 
-    Ok((headers, Redirect::to("/")).into_response())
+    let redirect_to = post_auth_redirect_path(&state.pool, user_id).await;
+
+    Ok((headers, Redirect::to(&redirect_to)).into_response())
 }
 
 /// `POST /auth/logout` — clear session cookie.

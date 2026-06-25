@@ -1,7 +1,7 @@
 //! SIWX (CAIP-122) wallet authentication — challenge + verify.
 
 use crate::auth::session::{
-    ensure_siwx_profile, issue_access_token, ACCESS_TOKEN_COOKIE,
+    ensure_siwx_profile, issue_access_token, post_auth_redirect_path, ACCESS_TOKEN_COOKIE,
 };
 use crate::config::Config;
 use crate::AppState;
@@ -44,6 +44,7 @@ pub struct VerifyRequest {
 #[derive(Debug, Serialize)]
 pub struct VerifyResponse {
     pub ok: bool,
+    pub redirect: String,
 }
 
 fn siwx_uri(config: &Config) -> String {
@@ -259,7 +260,8 @@ pub async fn verify(
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?,
     );
 
-    Ok((headers, Json(VerifyResponse { ok: true })).into_response())
+    let redirect = post_auth_redirect_path(&state.pool, user_id).await;
+    Ok((headers, Json(VerifyResponse { ok: true, redirect })).into_response())
 }
 
 #[derive(Debug, sqlx::FromRow)]

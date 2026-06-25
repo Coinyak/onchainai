@@ -1,0 +1,58 @@
+- generic [ref=e1]:
+  - generic [ref=e3]:
+    - generic [ref=e4]:
+      - generic [ref=e6]:
+        - generic [ref=e7]: 로드 중
+        - progressbar [ref=e8]
+      - main [ref=e15]:
+        - generic [ref=e16]:
+          - generic [ref=e18]:
+            - generic [ref=e19]:
+              - img [ref=e21]
+              - generic [ref=e26]: Google 계정으로 로그인
+            - img "GitHub" [ref=e27]
+          - generic [ref=e28]:
+            - heading "로그인" [level=1] [ref=e29]
+            - generic [ref=e31]:
+              - button "GitHub" [ref=e32] [cursor=pointer]
+              - text: (으)로 이동
+        - generic [ref=e35]:
+          - generic [ref=e40]:
+            - generic [ref=e45]:
+              - textbox "이메일 또는 휴대전화" [active] [ref=e46]: hoyeon4315
+              - generic: 이메일 또는 휴대전화
+            - button "이메일을 잊으셨나요?" [ref=e50] [cursor=pointer]
+          - generic [ref=e53]:
+            - text: 앱을 사용하기 전에 GitHub의
+            - link "개인정보처리방침" [ref=e54] [cursor=pointer]:
+              - /url: https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement
+            - text: 및
+            - link "서비스 약관" [ref=e55] [cursor=pointer]:
+              - /url: https://docs.github.com/en/site-policy/github-terms/github-terms-of-service
+            - text: 을 검토하세요.
+        - generic [ref=e57]:
+          - button "다음" [ref=e61]:
+            - generic [ref=e64]: 다음
+          - button "계정 만들기" [ref=e69]:
+            - generic [ref=e72]: 계정 만들기
+    - contentinfo [ref=e76]:
+      - combobox "언어 변경 한국어" [ref=e80] [cursor=pointer]:
+        - generic:
+          - generic: 한국어
+        - generic:
+          - img
+      - list [ref=e82]:
+        - listitem [ref=e83]:
+          - link "Google 계정 고객센터 열기(외부, 새 창에서 열림)" [ref=e84] [cursor=pointer]:
+            - /url: https://support.google.com/accounts?hl=ko&p=account_iph
+            - text: 도움말
+        - listitem [ref=e85]:
+          - link "개인정보처리방침(외부, 새 창에서 열림)" [ref=e86] [cursor=pointer]:
+            - /url: https://accounts.google.com/TOS?loc=KR&hl=ko&privacy=true
+            - text: 개인정보처리방침
+        - listitem [ref=e87]:
+          - link "Google 서비스 약관(외부, 새 창에서 열림)" [ref=e88] [cursor=pointer]:
+            - /url: https://accounts.google.com/TOS?loc=KR&hl=ko
+            - text: 약관
+  - iframe [ref=e89]:
+    

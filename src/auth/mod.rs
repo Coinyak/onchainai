@@ -2,6 +2,7 @@
 
 pub mod email;
 pub mod guard;
+pub mod onboarding;
 pub mod pkce;
 pub mod routes;
 pub mod session;

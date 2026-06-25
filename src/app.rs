@@ -7,7 +7,8 @@ use crate::components::top_nav::TopNav;
 use crate::pages::admin::admin_page_shell;
 use crate::pages::{
     AdminCategoriesPage, AdminCommentsPage, AdminCrawlerPage, AdminSettingsPage, AdminToolsPage,
-    AdminUsersPage, CategoryPage, HomePage, LoginPage, ToolDetailPage, ToolsListPage,
+    AdminUsersPage, CategoryPage, HomePage, LoginPage, OnboardingProfilePage, ToolDetailPage,
+    ToolsListPage,
 };
 use leptos::prelude::*;
 use leptos_meta::{provide_meta_context, Link, Meta, MetaTags, Stylesheet, Title};
@@ -44,7 +45,7 @@ pub fn shell(options: LeptosOptions) -> impl IntoView {
                 <script>
                     "document.addEventListener('click',function(e){var b=e.target.closest('[data-copy]');if(!b)return;var t=b.getAttribute('data-copy');if(!t||!navigator.clipboard)return;navigator.clipboard.writeText(t).then(function(){var o=b.textContent;b.textContent='Copied';setTimeout(function(){b.textContent=o||'Copy'},2000)});});"
                     "document.addEventListener('submit',function(e){var form=e.target.closest('#email-login-form');if(!form)return;e.preventDefault();var input=document.getElementById('email-login-input');var msg=document.getElementById('email-login-msg');if(!input||!input.value)return;if(msg){msg.classList.remove('hidden');msg.textContent='Sending magic link...';}fetch('/auth/email',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:input.value})}).then(function(r){if(!r.ok)throw new Error('Failed');if(msg){msg.textContent='Check your email for the sign-in link.';}}).catch(function(){if(msg){msg.textContent='Could not send magic link. Try again.';}});});"
-                    "document.addEventListener('click',function(e){var btn=e.target.closest('#siwx-connect-btn');if(!btn)return;e.preventDefault();var err=document.getElementById('siwx-error');if(err){err.classList.add('hidden');err.textContent='';}var eth=window.ethereum;if(!eth||!eth.request){if(err){err.textContent='No EVM wallet found. Install MetaMask or similar.';err.classList.remove('hidden');}return;}eth.request({method:'eth_requestAccounts'}).then(function(accts){if(!accts||!accts[0])throw new Error('No account');var address=accts[0];return eth.request({method:'eth_chainId'}).then(function(chainHex){var chainId=parseInt(chainHex,16).toString();return fetch('/auth/siwx/challenge',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify({wallet_address:address,chain_id:chainId})}).then(function(r){if(!r.ok)throw new Error('Challenge failed');return r.json();}).then(function(ch){return eth.request({method:'personal_sign',params:[ch.message,address]}).then(function(sig){return fetch('/auth/siwx/verify',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify({nonce:ch.nonce,signature:sig})});});});});}).then(function(r){if(!r.ok)throw new Error('Verify failed');window.location.reload();}).catch(function(ex){if(err){err.textContent=ex&&ex.message?ex.message:'Wallet sign-in failed';err.classList.remove('hidden');}});});"
+                    "document.addEventListener('click',function(e){var btn=e.target.closest('#siwx-connect-btn');if(!btn)return;e.preventDefault();var err=document.getElementById('siwx-error');if(err){err.classList.add('hidden');err.textContent='';}var eth=window.ethereum;if(!eth||!eth.request){if(err){err.textContent='No EVM wallet found. Install MetaMask or similar.';err.classList.remove('hidden');}return;}eth.request({method:'eth_requestAccounts'}).then(function(accts){if(!accts||!accts[0])throw new Error('No account');var address=accts[0];return eth.request({method:'eth_chainId'}).then(function(chainHex){var chainId=parseInt(chainHex,16).toString();return fetch('/auth/siwx/challenge',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify({wallet_address:address,chain_id:chainId})}).then(function(r){if(!r.ok)throw new Error('Challenge failed');return r.json();}).then(function(ch){return eth.request({method:'personal_sign',params:[ch.message,address]}).then(function(sig){return fetch('/auth/siwx/verify',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify({nonce:ch.nonce,signature:sig})});});});});}).then(function(r){if(!r.ok)throw new Error('Verify failed');return r.json();}).then(function(data){window.location.href=(data&&data.redirect)?data.redirect:'/';}).catch(function(ex){if(err){err.textContent=ex&&ex.message?ex.message:'Wallet sign-in failed';err.classList.remove('hidden');}});});"
                 </script>
             </body>
         </html>
@@ -70,6 +71,7 @@ pub fn App() -> impl IntoView {
                     <Route path=(StaticSegment("categories"), ParamSegment("id")) view=CategoryPage/>
                     <Route path=StaticSegment("about") view=AboutPage/>
                     <Route path=StaticSegment("login") view=LoginPage/>
+                    <Route path=(StaticSegment("onboarding"), StaticSegment("profile")) view=OnboardingProfilePage/>
                     <Route path=StaticSegment("admin") view=AdminHomePage/>
                     <Route path=(StaticSegment("admin"), StaticSegment("tools")) view=AdminToolsPage/>
                     <Route path=(StaticSegment("admin"), StaticSegment("settings")) view=AdminSettingsPage/>
@@ -89,7 +91,23 @@ fn AboutPage() -> impl IntoView {
         <TopNav/>
         <div class="px-6 py-8 max-w-[720px] mx-auto">
             <h2 class="text-[20px] font-semibold mb-4">"About OnchainAI"</h2>
-            <p class="text-[#6B6B6B]">"OnchainAI is a crypto tool directory for humans and agents."</p>
+            <p class="text-[#6B6B6B] mb-8 leading-relaxed">
+                "OnchainAI is a crypto tool directory for humans and agents. We crawl public registries and GitHub to surface MCP, CLI, SDK, and API tools in one searchable hub."
+            </p>
+            <section id="submit" class="scroll-mt-20 border-t border-[#E5E5E5] pt-8">
+                <h2 class="text-[20px] font-semibold mb-3">"Submit a tool"</h2>
+                <p class="text-[#6B6B6B] text-[14px] leading-relaxed mb-4">
+                    "MVP does not include self-service registration yet. To list a tool, open a GitHub issue with the repo URL, install command, and supported chains."
+                </p>
+                <a
+                    href="https://github.com/hoyeon4315-cpu/onchainai/issues/new"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="inline-flex items-center justify-center h-10 px-4 rounded-lg bg-[#E76F00] text-white text-[14px] font-medium no-underline hover:opacity-90"
+                >
+                    "Open GitHub issue →"
+                </a>
+            </section>
         </div>
     }
 }

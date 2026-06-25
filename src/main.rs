@@ -167,6 +167,11 @@ fn build_app(pool: sqlx::PgPool, config: Config) -> axum::Router {
         .route("/auth/callback", axum::routing::get(auth::routes::oauth_callback))
         .route("/auth/logout", axum::routing::post(auth::routes::logout))
         .route(
+            "/onboarding/complete",
+            axum::routing::post(auth::onboarding::complete),
+        )
+        .route("/onboarding/skip", axum::routing::post(auth::onboarding::skip))
+        .route(
             "/auth/siwx/challenge",
             axum::routing::post(auth::siwx::challenge),
         )

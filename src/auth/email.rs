@@ -1,6 +1,8 @@
 //! Email magic-link authentication via Supabase Auth.
 
-use crate::auth::session::{ensure_profile, ACCESS_TOKEN_COOKIE, PKCE_VERIFIER_COOKIE};
+use crate::auth::session::{
+    ensure_profile, post_auth_redirect_path, ACCESS_TOKEN_COOKIE, PKCE_VERIFIER_COOKIE,
+};
 use crate::config::Config;
 use crate::AppState;
 use axum::{
@@ -120,7 +122,9 @@ pub async fn complete_magic_link(
             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?,
     );
 
-    Ok((headers, axum::response::Redirect::to("/")).into_response())
+    let redirect_to = post_auth_redirect_path(pool, session.user.id).await;
+
+    Ok((headers, axum::response::Redirect::to(&redirect_to)).into_response())
 }
 
 #[cfg(test)]

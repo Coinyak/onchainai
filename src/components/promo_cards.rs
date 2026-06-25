@@ -12,10 +12,10 @@ pub fn PromoCards(mcp_endpoint: String) -> impl IntoView {
                     "List your crypto MCP, CLI, or SDK so humans and agents can discover it."
                 </p>
                 <a
-                    href="/about"
+                    href="/about#submit"
                     class="inline-flex items-center justify-center h-10 px-4 rounded-lg bg-[#E76F00] text-white text-[14px] font-medium no-underline hover:opacity-90"
                 >
-                    "Learn how"
+                    "Submit →"
                 </a>
             </div>
             <div class="promo-card border border-[#E5E5E5] rounded-lg p-5 bg-[#FAFAFA]">
