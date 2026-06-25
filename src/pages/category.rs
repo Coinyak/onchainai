@@ -1,7 +1,7 @@
 //! Category page — tools filtered by category id.
 
 use crate::components::{tool_card::ToolCard, top_nav::TopNav};
-use crate::server::functions::{get_categories, list_tools};
+use crate::server::functions::{get_categories, list_tools, ToolFilters};
 use leptos::prelude::*;
 use leptos_router::hooks::use_params_map;
 
@@ -18,7 +18,17 @@ pub fn CategoryPage() -> impl IntoView {
             if id.is_empty() {
                 Err(ServerFnError::new("missing category"))
             } else {
-                list_tools("hot".into(), 0, 50, Some(id), None, None).await
+                list_tools(
+                    "hot".into(),
+                    0,
+                    50,
+                    ToolFilters {
+                        function: Some(id),
+                        ..Default::default()
+                    },
+                    None,
+                )
+                .await
             }
         },
     );

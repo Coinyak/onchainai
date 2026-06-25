@@ -28,9 +28,13 @@ fn type_badge_class(tool_type: &str) -> &'static str {
 }
 
 #[component]
-pub fn ToolCard(tool: Tool) -> impl IntoView {
+pub fn ToolCard(
+    tool: Tool,
+    #[prop(optional)] preview_href: Option<String>,
+) -> impl IntoView {
     let slug = tool.slug.clone();
-    let href = format!("/tools/{slug}");
+    let detail_href = format!("/tools/{slug}");
+    let href = preview_href.unwrap_or(detail_href);
     let mono = monogram(&tool.name);
     let status = tool.status.clone();
     let tool_type = tool.tool_type.clone();

@@ -155,35 +155,114 @@ pub async fn get_tool_by_slug(slug: String) -> Result<Tool, ServerFnError> {
     tool.ok_or_else(|| ServerFnError::new(format!("tool not found: {slug}")))
 }
 
-/// Count approved tools (optionally filtered by function).
+/// Optional axis filters for tool list/count queries (AND across set fields).
+#[derive(Debug, Clone, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct ToolFilters {
+    pub function: Option<String>,
+    pub asset_class: Option<String>,
+    pub actor: Option<String>,
+    pub tool_type: Option<String>,
+    pub status: Option<String>,
+    pub chain: Option<String>,
+}
+
+fn append_tool_filters(sql: &mut String, filters: &ToolFilters, idx: &mut i32) {
+    if filters.function.is_some() {
+        sql.push_str(&format!(" AND function = ${idx}"));
+        *idx += 1;
+    }
+    if filters.asset_class.is_some() {
+        sql.push_str(&format!(" AND asset_class = ${idx}"));
+        *idx += 1;
+    }
+    if filters.actor.is_some() {
+        sql.push_str(&format!(" AND actor = ${idx}"));
+        *idx += 1;
+    }
+    if filters.tool_type.is_some() {
+        sql.push_str(&format!(" AND type = ${idx}"));
+        *idx += 1;
+    }
+    if filters.status.is_some() {
+        sql.push_str(&format!(" AND status = ${idx}"));
+        *idx += 1;
+    }
+    if filters.chain.is_some() {
+        sql.push_str(&format!(" AND ${idx} = ANY(chains)"));
+        *idx += 1;
+    }
+}
+
+/// Count approved tools with optional multi-axis filters.
 #[server(CountTools, "/api")]
-pub async fn count_tools(function: Option<String>) -> Result<i64, ServerFnError> {
+pub async fn count_tools(filters: ToolFilters) -> Result<i64, ServerFnError> {
     let pool = use_context::<sqlx::PgPool>()
         .ok_or_else(|| ServerFnError::new("database pool not available"))?;
 
-    let count: (i64,) = if let Some(f) = function {
-        let sql = format!("SELECT COUNT(*) FROM tools WHERE {TOOLS_APPROVED_WHERE} AND function = $1");
-        sqlx::query_as(&sql)
-            .bind(f)
-            .fetch_one(&pool)
-            .await
-    } else {
-        let sql = format!("SELECT COUNT(*) FROM tools WHERE {TOOLS_APPROVED_WHERE}");
-        sqlx::query_as(&sql).fetch_one(&pool).await
+    let mut sql = format!("SELECT COUNT(*) FROM tools WHERE {TOOLS_APPROVED_WHERE}");
+    let mut idx = 1i32;
+    append_tool_filters(&mut sql, &filters, &mut idx);
+
+    let mut q = sqlx::query_as::<_, (i64,)>(&sql);
+    if let Some(f) = &filters.function {
+        q = q.bind(f);
     }
-    .map_err(|e| ServerFnError::new(format!("count failed: {e}")))?;
+    if let Some(v) = &filters.asset_class {
+        q = q.bind(v);
+    }
+    if let Some(v) = &filters.actor {
+        q = q.bind(v);
+    }
+    if let Some(v) = &filters.tool_type {
+        q = q.bind(v);
+    }
+    if let Some(v) = &filters.status {
+        q = q.bind(v);
+    }
+    if let Some(v) = &filters.chain {
+        q = q.bind(v);
+    }
+
+    let count = q
+        .fetch_one(&pool)
+        .await
+        .map_err(|e| ServerFnError::new(format!("count failed: {e}")))?;
 
     Ok(count.0)
 }
 
-/// List approved tools with sort, pagination, and optional filters.
+/// Top chains by approved-tool count for sidebar filters.
+#[server(GetChainCounts, "/api")]
+pub async fn get_chain_counts(limit: i64) -> Result<Vec<(String, i64)>, ServerFnError> {
+    let pool = use_context::<sqlx::PgPool>()
+        .ok_or_else(|| ServerFnError::new("database pool not available"))?;
+
+    let sql = format!(
+        r#"
+        SELECT chain, COUNT(*) AS count
+        FROM tools, UNNEST(chains) AS chain
+        WHERE {TOOLS_APPROVED_WHERE}
+        GROUP BY chain
+        ORDER BY count DESC, chain ASC
+        LIMIT $1
+        "#
+    );
+    let rows = sqlx::query_as::<_, (String, i64)>(&sql)
+        .bind(limit)
+        .fetch_all(&pool)
+        .await
+        .map_err(|e| ServerFnError::new(format!("chain counts failed: {e}")))?;
+
+    Ok(rows)
+}
+
+/// List approved tools with sort, pagination, FTS query, and optional filters.
 #[server(ListTools, "/api")]
 pub async fn list_tools(
     sort: String,
     offset: i64,
     limit: i64,
-    function: Option<String>,
-    chain: Option<String>,
+    filters: ToolFilters,
     query: Option<String>,
 ) -> Result<Vec<Tool>, ServerFnError> {
     let pool = use_context::<sqlx::PgPool>()
@@ -205,25 +284,30 @@ pub async fn list_tools(
         ));
         idx += 1;
     }
-    if function.is_some() {
-        sql.push_str(&format!(" AND function = ${idx}"));
-        idx += 1;
-    }
-    if chain.is_some() {
-        sql.push_str(&format!(" AND ${idx} = ANY(chains)"));
-        idx += 1;
-    }
+    append_tool_filters(&mut sql, &filters, &mut idx);
     sql.push_str(&format!(" ORDER BY {order} OFFSET ${idx} LIMIT ${}", idx + 1));
 
     let mut q = sqlx::query_as::<_, Tool>(&sql);
     if let Some(text) = query.as_ref().filter(|q| !q.trim().is_empty()) {
         q = q.bind(text);
     }
-    if let Some(f) = &function {
+    if let Some(f) = &filters.function {
         q = q.bind(f);
     }
-    if let Some(c) = &chain {
-        q = q.bind(c);
+    if let Some(v) = &filters.asset_class {
+        q = q.bind(v);
+    }
+    if let Some(v) = &filters.actor {
+        q = q.bind(v);
+    }
+    if let Some(v) = &filters.tool_type {
+        q = q.bind(v);
+    }
+    if let Some(v) = &filters.status {
+        q = q.bind(v);
+    }
+    if let Some(v) = &filters.chain {
+        q = q.bind(v);
     }
     q = q.bind(offset).bind(limit);
 

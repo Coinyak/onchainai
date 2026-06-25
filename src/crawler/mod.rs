@@ -164,8 +164,35 @@ pub async fn upsert_tools(pool: &sqlx::PgPool, tools: &[models::Tool]) -> anyhow
     Ok(())
 }
 
+/// Registry URL written to `sources.url` for each built-in crawler name.
+pub(crate) fn default_source_registry_url(source_name: &str) -> &'static str {
+    match source_name {
+        "npm" => "https://registry.npmjs.org/",
+        "cryptoskill" => "https://cryptoskill.org/skills.json",
+        "web3-mcp-hub" => {
+            "https://raw.githubusercontent.com/rudazy/web3-mcp-hub/main/registry.json"
+        }
+        "github" => "https://github.com/topics",
+        _ => "https://onchainai.xyz",
+    }
+}
+
+/// Per-source crawl result before merge/dedupe.
+type SourceCrawlOutcome = (String, &'static str, Result<Vec<normalizer::RawTool>, String>);
+
+/// Count raw crawl rows per `RawTool.source` (for diagnostics / status reporting).
+pub(crate) fn count_raws_per_source(
+    raws: &[normalizer::RawTool],
+) -> std::collections::HashMap<String, usize> {
+    let mut counts = std::collections::HashMap::new();
+    for raw in raws {
+        *counts.entry(raw.source.clone()).or_insert(0) += 1;
+    }
+    counts
+}
+
 /// Run the default production pipeline: all four source crawlers in parallel,
-/// normalize, dedupe, upsert to DB, and update `sources` status.
+/// normalize, dedupe, upsert to DB, and update `sources` status per source.
 ///
 /// Errors from individual sources are logged and do not abort the run; the
 /// `sources` table is updated for both successes and failures.
@@ -186,22 +213,52 @@ pub async fn run_all_sources(pool: &sqlx::PgPool) {
 
     let crawler_settings = settings::load_crawler_settings(pool).await;
 
+    let mut crawl_outcomes: Vec<SourceCrawlOutcome> = Vec::new();
     let mut all_raws: Vec<normalizer::RawTool> = Vec::new();
+
     for crawler in &crawlers {
-        if let Ok(raws) = crawler.crawl().await {
-            all_raws.extend(raws);
+        let name = crawler.source_name().to_string();
+        let url = default_source_registry_url(crawler.source_name());
+        match crawler.crawl().await {
+            Ok(raws) => {
+                all_raws.extend(raws.clone());
+                crawl_outcomes.push((name, url, Ok(raws)));
+            }
+            Err(e) => {
+                crawl_outcomes.push((name, url, Err(e.to_string())));
+            }
         }
     }
-    let tools = prepare_crawled_tools(&all_raws, crawler_settings.require_tool_approval);
 
-    if let Err(e) = upsert_tools(pool, &tools).await {
-        tracing::error!(error = %e, "failed to upsert crawled tools");
+    let tools = prepare_crawled_tools(&all_raws, crawler_settings.require_tool_approval);
+    let raw_counts = count_raws_per_source(&all_raws);
+    tracing::debug!(?raw_counts, "raw tool counts by source field");
+    let upsert_err = upsert_tools(pool, &tools)
+        .await
+        .err()
+        .map(|e| e.to_string());
+
+    for (name, url, outcome) in crawl_outcomes {
+        match outcome {
+            Ok(raws) => {
+                let count = raws.len() as i32;
+                if let Some(ref err) = upsert_err {
+                    update_source_status(pool, &name, url, "error", 0, Some(err)).await;
+                } else {
+                    update_source_status(pool, &name, url, "success", count, None).await;
+                }
+            }
+            Err(msg) => {
+                update_source_status(pool, &name, url, "error", 0, Some(&msg)).await;
+            }
+        }
+    }
+
+    if let Some(err) = upsert_err {
+        tracing::error!(error = %err, "failed to upsert crawled tools");
     } else {
         tracing::info!(count = tools.len(), "crawled tools upserted");
     }
-
-    // Per-source status updates are written by the individual `run_once` helpers
-    // (github/npm/cryptoskill/web3mcp) so exact source-level counts are preserved.
 }
 
 /// Update the `sources` table after a crawl finishes.
@@ -485,6 +542,31 @@ mod tests {
         assert_eq!(tools.len(), 1);
         assert_eq!(tools[0].approval_status, "approved");
         assert_eq!(tools[0].function, "swap");
+    }
+
+    #[test]
+    fn count_raws_per_source_groups_by_source_field() {
+        let mut a = raw("One", None, 1, "bridge");
+        a.source = "npm".into();
+        let mut b = raw("Two", None, 2, "swap");
+        b.source = "npm".into();
+        let mut c = raw("Three", None, 3, "bridge");
+        c.source = "github".into();
+        let counts = count_raws_per_source(&[a, b, c]);
+        assert_eq!(counts.get("npm"), Some(&2));
+        assert_eq!(counts.get("github"), Some(&1));
+    }
+
+    #[test]
+    fn default_source_registry_url_matches_run_once_urls() {
+        assert_eq!(
+            default_source_registry_url("npm"),
+            "https://registry.npmjs.org/"
+        );
+        assert_eq!(
+            default_source_registry_url("github"),
+            "https://github.com/topics"
+        );
     }
 
     #[test]
