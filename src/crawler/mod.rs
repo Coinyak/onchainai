@@ -185,18 +185,14 @@ pub async fn run_all_sources(pool: &sqlx::PgPool) {
     ];
 
     let crawler_settings = settings::load_crawler_settings(pool).await;
-    let approval =
-        settings::initial_approval_status(crawler_settings.require_tool_approval);
 
-    // Run pipeline in memory first (re-normalize with live approval setting).
     let mut all_raws: Vec<normalizer::RawTool> = Vec::new();
     for crawler in &crawlers {
         if let Ok(raws) = crawler.crawl().await {
             all_raws.extend(raws);
         }
     }
-    let tools = normalizer::normalize_batch_with_status(&all_raws, approval);
-    let tools = deduper::dedupe(tools);
+    let tools = prepare_crawled_tools(&all_raws, crawler_settings.require_tool_approval);
 
     if let Err(e) = upsert_tools(pool, &tools).await {
         tracing::error!(error = %e, "failed to upsert crawled tools");
@@ -489,6 +485,18 @@ mod tests {
         assert_eq!(tools.len(), 1);
         assert_eq!(tools[0].approval_status, "approved");
         assert_eq!(tools[0].function, "swap");
+    }
+
+    #[test]
+    fn prepare_crawled_tools_dedupes_duplicate_repo_urls() {
+        let raws = [
+            raw("Low Stars", Some("https://github.com/dup/dup"), 1, "swap dex"),
+            raw("High Stars", Some("https://github.com/dup/dup"), 999, "swap dex"),
+        ];
+        let tools = prepare_crawled_tools(&raws, false);
+        assert_eq!(tools.len(), 1);
+        assert_eq!(tools[0].stars, 999);
+        assert_eq!(tools[0].approval_status, "approved");
     }
 
     #[tokio::test]
