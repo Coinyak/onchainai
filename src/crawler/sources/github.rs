@@ -562,12 +562,11 @@ mod tests {
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     fn search_response_json(_topic: &str) -> String {
-        format!(
-            r#"{{
+        r#"{
                 "total_count": 2,
                 "incomplete_results": false,
                 "items": [
-                    {{
+                    {
                         "id": 1,
                         "name": "web3-mcp",
                         "full_name": "strangelove-ventures/web3-mcp",
@@ -578,8 +577,8 @@ mod tests {
                         "topics": ["mcp-server", "web3-mcp", "solana", "ethereum"],
                         "language": "TypeScript",
                         "clone_url": "https://github.com/strangelove-ventures/web3-mcp.git"
-                    }},
-                    {{
+                    },
+                    {
                         "id": 2,
                         "name": "crypto-mcp",
                         "full_name": "example/crypto-mcp",
@@ -590,10 +589,10 @@ mod tests {
                         "topics": ["crypto-mcp"],
                         "language": "Rust",
                         "clone_url": "https://github.com/example/crypto-mcp.git"
-                    }}
+                    }
                 ]
-            }}"#,
-        )
+            }"#
+        .to_string()
     }
 
     #[tokio::test]

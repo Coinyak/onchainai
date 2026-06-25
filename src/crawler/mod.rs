@@ -291,6 +291,9 @@ mod models {
 }
 
 #[cfg(test)]
+mod wiring_audit;
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use crate::crawler::normalizer::RawTool;

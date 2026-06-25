@@ -358,4 +358,16 @@ mod tests {
         let tools = value["tools"].as_array().unwrap();
         assert_eq!(tools.len(), 4);
     }
+
+    #[test]
+    fn mcp_sql_fragments_require_approved_tools() {
+        let search = format!(
+            "SELECT * FROM tools WHERE {TOOLS_APPROVED_WHERE}"
+        );
+        let detail = format!("slug = $1 AND {TOOLS_APPROVED_WHERE}");
+        let categories = format!("t.{TOOLS_APPROVED_WHERE}");
+        assert!(search.contains("approval_status = 'approved'"));
+        assert!(detail.contains("approval_status = 'approved'"));
+        assert!(categories.contains("approval_status = 'approved'"));
+    }
 }

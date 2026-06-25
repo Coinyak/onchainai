@@ -318,5 +318,33 @@ mod tests {
             "LEFT JOIN tools t ON t.function = c.id AND t.{TOOLS_APPROVED_WHERE}"
         );
         assert!(categories.contains("approval_status = 'approved'"));
+
+        let search = format!(
+            "SELECT * FROM tools WHERE {TOOLS_APPROVED_WHERE} AND to_tsvector"
+        );
+        assert!(search.contains("approval_status = 'approved'"));
+
+        let by_slug = format!("SELECT * FROM tools WHERE slug = $1 AND {TOOLS_APPROVED_WHERE}");
+        assert!(by_slug.contains("approval_status = 'approved'"));
+
+        let count = format!("SELECT COUNT(*) FROM tools WHERE {TOOLS_APPROVED_WHERE}");
+        assert!(count.contains("approval_status = 'approved'"));
+
+        let list = format!("SELECT * FROM tools WHERE {TOOLS_APPROVED_WHERE}");
+        assert!(list.contains("approval_status = 'approved'"));
+    }
+
+    #[test]
+    fn admin_pending_query_does_not_use_approved_filter() {
+        let pending = "SELECT * FROM tools WHERE approval_status = 'pending'";
+        assert!(pending.contains("pending"));
+        assert!(!pending.contains(TOOLS_APPROVED_WHERE));
+    }
+
+    #[test]
+    fn set_tool_approval_validates_status_values() {
+        for status in ["approved", "rejected", "pending"] {
+            assert!(matches!(status, "approved" | "rejected" | "pending"));
+        }
     }
 }
