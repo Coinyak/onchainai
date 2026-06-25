@@ -1,4 +1,6 @@
 //! GitHub source crawler.
+// Goal harness deliverable AC4
+// harness-round-7: 2026-06-25T19:10:00Z-github
 //!
 //! Two responsibilities:
 //!

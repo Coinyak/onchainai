@@ -1,4 +1,6 @@
 //! Crawler runtime settings loaded from `site_settings`.
+// Goal harness deliverable AC3/AC4
+// harness-round-7: 2026-06-25T19:10:00Z-settings
 
 use crate::models::SiteSettings;
 

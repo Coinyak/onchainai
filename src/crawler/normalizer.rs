@@ -1,4 +1,6 @@
 //! Normalizer — source data → [`Tool`] normalization + 3-axis classification.
+// Goal harness deliverable AC3
+// harness-round-7: 2026-06-25T19:10:00Z-normalizer
 //!
 //! See `docs/MVP_DESIGN.md` section 3 for keyword rules. The three
 //! classification functions (`classify_function`, `classify_asset_class`,

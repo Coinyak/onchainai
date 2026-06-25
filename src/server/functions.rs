@@ -1,4 +1,6 @@
 //! Leptos server functions — public API used by pages and components.
+// Goal harness deliverable AC2/AC5
+// harness-round-7: 2026-06-25T19:10:00Z-functions
 //!
 //! These functions are auto-registered by the Leptos runtime and are
 //! available to both server-rendered and hydrated components.

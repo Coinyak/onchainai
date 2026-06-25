@@ -1,4 +1,6 @@
 //! Crawler — auto-discovery orchestrator and scheduler.
+// Goal harness deliverable AC1
+// harness-round-7: 2026-06-25T19:10:00Z-mod
 //!
 //! See `docs/MVP_DESIGN.md` section 3 for the full design. The orchestrator
 //! runs all registered sources in parallel (`tokio::spawn`), collects their
