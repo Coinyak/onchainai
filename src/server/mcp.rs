@@ -359,4 +359,25 @@ mod tests {
         assert_eq!(tools.len(), 4);
     }
 
+    #[test]
+    fn mcp_queries_include_approved_filter() {
+        let search = format!(
+            r#"
+        SELECT * FROM tools
+        WHERE {TOOLS_APPROVED_WHERE}
+          AND to_tsvector('english', coalesce(name, '') || ' ' || coalesce(description, ''))
+              @@ plainto_tsquery('english', $1)
+        "#
+        );
+        assert!(search.contains("approval_status = 'approved'"));
+
+        let detail = format!("SELECT * FROM tools WHERE slug = $1 AND {TOOLS_APPROVED_WHERE}");
+        assert!(detail.contains("approval_status = 'approved'"));
+
+        let categories = format!(
+            "LEFT JOIN tools t ON t.function = c.id AND t.{TOOLS_APPROVED_WHERE}"
+        );
+        assert!(categories.contains("approval_status = 'approved'"));
+    }
+
 }
