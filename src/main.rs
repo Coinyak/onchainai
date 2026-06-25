@@ -3,6 +3,11 @@
 //! Single Rust binary: Leptos SSR + Axum + rmcp + sqlx + tokio-cron-scheduler.
 
 mod config;
+// Crawler core (trait, normalizer, deduper, orchestrator) is implemented but
+// not yet wired into the runtime — source implementations and DB upserts
+// land in the crawler-sources / scheduler milestones. Suppress dead-code
+// warnings until the pipeline is connected to the scheduler + main.
+#[allow(dead_code)]
 mod crawler;
 // Models are the foundation for later milestones (crawler upserts, server
 // functions, MCP responses). They are not yet consumed in this binary, so
