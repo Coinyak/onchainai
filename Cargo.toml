@@ -27,6 +27,8 @@ sqlx = { version = "0.8", features = ["postgres", "uuid", "chrono", "json", "mac
 # Crawling
 reqwest = { version = "0.12", features = ["json"] }
 scraper = "0.22"
+base64 = "0.22"
+urlencoding = "2"
 tokio = { version = "1", features = ["full"] }
 tokio-cron-scheduler = "0.14"
 async-trait = "0.1"
