@@ -1,5 +1,6 @@
 //! Tool detail page — full tool info, max-width 720px.
 
+use crate::components::comments_section::CommentsSection;
 use crate::components::top_nav::TopNav;
 use crate::server::functions::get_tool_by_slug;
 use leptos::prelude::*;
@@ -87,6 +88,7 @@ pub fn ToolDetailPage() -> impl IntoView {
                                 } else {
                                     ().into_any()
                                 }}
+                                <CommentsSection slug=t.slug.clone() tool_name=t.name.clone()/>
                             }
                             .into_any()
                         }

@@ -1,8 +1,9 @@
 //! Session cookies and JWT verification for Supabase access tokens.
 
-use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
+use chrono::Utc;
+use jsonwebtoken::{decode, encode, Algorithm, DecodingKey, EncodingKey, Header, Validation};
 use leptos::server_fn::ServerFnError;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 use uuid::Uuid;
 
@@ -108,6 +109,81 @@ pub async fn session_from_parts(
     let user_id = user_id_from_jwt(token, jwt_secret)?;
     let user = load_session_user(pool, user_id).await?;
     Ok(Some(user))
+}
+
+/// HS256 access token for SIWX and other server-issued sessions.
+#[derive(Debug, Serialize)]
+struct AccessClaims {
+    sub: String,
+    exp: i64,
+    iat: i64,
+}
+
+/// Mint a Supabase-compatible HS256 JWT (`sub` = profile id).
+pub fn issue_access_token(
+    user_id: Uuid,
+    jwt_secret: &str,
+    ttl_secs: i64,
+) -> Result<String, AuthSessionError> {
+    let now = Utc::now().timestamp();
+    let claims = AccessClaims {
+        sub: user_id.to_string(),
+        exp: now + ttl_secs,
+        iat: now,
+    };
+    encode(
+        &Header::new(Algorithm::HS256),
+        &claims,
+        &EncodingKey::from_secret(jwt_secret.as_bytes()),
+    )
+    .map_err(|_| AuthSessionError::InvalidToken)
+}
+
+/// Upsert a SIWX profile keyed by wallet address (reuses existing row when present).
+pub async fn ensure_siwx_profile(
+    pool: &PgPool,
+    wallet_address: &str,
+    chain_id: &str,
+) -> Result<Uuid, sqlx::Error> {
+    let existing = sqlx::query_scalar::<_, Uuid>(
+        r#"
+        SELECT id FROM profiles
+        WHERE wallet_address = $1 AND auth_method = 'siwx'
+        LIMIT 1
+        "#,
+    )
+    .bind(wallet_address)
+    .fetch_optional(pool)
+    .await?;
+
+    if let Some(id) = existing {
+        return Ok(id);
+    }
+
+    let id = Uuid::new_v4();
+    let nickname = siwx_nickname(wallet_address);
+    sqlx::query(
+        r#"
+        INSERT INTO profiles (id, nickname, auth_method, wallet_address, chain_id)
+        VALUES ($1, $2, 'siwx', $3, $4)
+        "#,
+    )
+    .bind(id)
+    .bind(&nickname)
+    .bind(wallet_address)
+    .bind(chain_id)
+    .execute(pool)
+    .await?;
+
+    Ok(id)
+}
+
+fn siwx_nickname(wallet: &str) -> String {
+    let w = wallet.trim();
+    if w.len() <= 12 {
+        return w.to_string();
+    }
+    format!("{}…{}", &w[..6], &w[w.len().saturating_sub(4)..])
 }
 
 /// Upsert a profile row after OAuth sign-in (first-user-admin trigger applies on insert).

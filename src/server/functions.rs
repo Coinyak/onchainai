@@ -5,10 +5,12 @@
 //! These functions are auto-registered by the Leptos runtime and are
 //! available to both server-rendered and hydrated components.
 
-use crate::auth::guard::require_admin;
+use crate::auth::guard::{require_admin, require_user};
 use crate::auth::session::{session_from_parts, SessionUser};
 use crate::config::Config;
-use crate::models::{Category, SiteSettings, Tool};
+use crate::crawler::{self, default_source_registry_url};
+use crate::models::{Category, Comment, SiteSettings, Source, Tool};
+use uuid::Uuid;
 use crate::server::queries::TOOLS_APPROVED_WHERE;
 use axum::http::request::Parts;
 use leptos::prelude::*;
@@ -545,6 +547,393 @@ pub async fn set_tool_approval(
     Ok(())
 }
 
+/// Known crawler sources for the admin dashboard (merged with DB rows).
+pub(crate) const CRAWLER_SOURCE_DEFS: &[(&str, &str)] = &[
+    ("cryptoskill", "Every 6h"),
+    ("github", "Hourly (+30m offset)"),
+    ("npm", "Hourly"),
+    ("web3-mcp-hub", "Every 12h"),
+];
+
+/// Admin crawler row — source status plus schedule hint.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct CrawlerSourceView {
+    pub name: String,
+    pub url: String,
+    pub schedule: String,
+    pub last_crawled_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub crawl_status: String,
+    pub items_found: i32,
+    pub error_message: Option<String>,
+}
+
+/// List crawler source status (admin).
+#[server(ListCrawlerSources, "/api")]
+pub async fn list_crawler_sources() -> Result<Vec<CrawlerSourceView>, ServerFnError> {
+    let (parts, pool, jwt_secret) = request_context()?;
+    require_admin(&parts, &pool, &jwt_secret).await?;
+
+    let rows = sqlx::query_as::<_, Source>("SELECT * FROM sources ORDER BY name ASC")
+        .fetch_all(&pool)
+        .await
+        .map_err(|e| ServerFnError::new(format!("failed to list sources: {e}")))?;
+
+    let mut by_name: std::collections::HashMap<String, Source> =
+        rows.into_iter().map(|r| (r.name.clone(), r)).collect();
+
+    let mut views = Vec::with_capacity(CRAWLER_SOURCE_DEFS.len() + 1);
+    for (name, schedule) in CRAWLER_SOURCE_DEFS {
+        let url = default_source_registry_url(name).to_string();
+        if let Some(row) = by_name.remove(*name) {
+            views.push(CrawlerSourceView {
+                name: row.name,
+                url: row.url,
+                schedule: (*schedule).into(),
+                last_crawled_at: row.last_crawled_at,
+                crawl_status: row.crawl_status,
+                items_found: row.items_found,
+                error_message: row.error_message,
+            });
+        } else {
+            views.push(CrawlerSourceView {
+                name: (*name).into(),
+                url,
+                schedule: (*schedule).into(),
+                last_crawled_at: None,
+                crawl_status: "pending".into(),
+                items_found: 0,
+                error_message: None,
+            });
+        }
+    }
+
+    for (_, row) in by_name {
+        views.push(CrawlerSourceView {
+            name: row.name,
+            url: row.url,
+            schedule: "—".into(),
+            last_crawled_at: row.last_crawled_at,
+            crawl_status: row.crawl_status,
+            items_found: row.items_found,
+            error_message: row.error_message,
+        });
+    }
+
+    Ok(views)
+}
+
+/// Validate manual crawler trigger input.
+pub(crate) fn validate_trigger_crawler_source(source: &str) -> Result<(), &'static str> {
+    match source {
+        "npm" | "cryptoskill" | "web3-mcp-hub" | "github" | "sync_stars" => Ok(()),
+        _ => Err("unknown crawler source"),
+    }
+}
+
+/// Manually trigger a crawler job in the background (admin).
+#[server(TriggerCrawlerSource, "/api")]
+pub async fn trigger_crawler_source(source: String) -> Result<(), ServerFnError> {
+    if let Err(msg) = validate_trigger_crawler_source(&source) {
+        return Err(ServerFnError::new(msg.to_string()));
+    }
+
+    let (parts, pool, jwt_secret) = request_context()?;
+    require_admin(&parts, &pool, &jwt_secret).await?;
+
+    let pool_bg = pool.clone();
+    let source_bg = source.clone();
+    tokio::spawn(async move {
+        crawler::trigger_source(&pool_bg, &source_bg).await;
+    });
+
+    Ok(())
+}
+
+/// Comment with author display fields and upvote count.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct CommentView {
+    pub id: Uuid,
+    pub tool_id: Uuid,
+    pub parent_id: Option<Uuid>,
+    pub user_id: Uuid,
+    pub content: String,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub author_nickname: Option<String>,
+    pub author_is_admin: bool,
+    pub upvote_count: i64,
+    pub viewer_upvoted: bool,
+}
+
+/// Validate comment body before insert.
+pub(crate) fn validate_comment_content(content: &str) -> Result<(), &'static str> {
+    let trimmed = content.trim();
+    if trimmed.is_empty() || trimmed.len() > 2000 {
+        return Err("comment must be 1–2000 characters");
+    }
+    Ok(())
+}
+
+/// List top-level comments (with replies) for an approved tool.
+#[server(GetToolComments, "/api")]
+pub async fn get_tool_comments(slug: String) -> Result<Vec<CommentView>, ServerFnError> {
+    let (parts, pool, jwt_secret) = request_context()?;
+    let viewer = session_from_parts(&parts, &pool, &jwt_secret)
+        .await
+        .ok()
+        .flatten();
+
+    let tool_id = sqlx::query_scalar::<_, Uuid>(
+        &format!("SELECT id FROM tools WHERE slug = $1 AND {TOOLS_APPROVED_WHERE}"),
+    )
+    .bind(&slug)
+    .fetch_optional(&pool)
+    .await
+    .map_err(|e| ServerFnError::new(format!("failed to resolve tool: {e}")))?
+    .ok_or_else(|| ServerFnError::new(format!("tool not found: {slug}")))?;
+
+    let rows = sqlx::query_as::<_, CommentRow>(
+        r#"
+        SELECT
+            c.id, c.tool_id, c.parent_id, c.user_id, c.content, c.created_at,
+            p.nickname AS author_nickname,
+            p.is_admin AS author_is_admin,
+            COUNT(u.id) AS upvote_count,
+            BOOL_OR(u.user_id = $2) AS viewer_upvoted
+        FROM comments c
+        JOIN profiles p ON p.id = c.user_id
+        LEFT JOIN upvotes u ON u.comment_id = c.id
+        WHERE c.tool_id = $1
+        GROUP BY c.id, p.nickname, p.is_admin
+        ORDER BY c.created_at ASC
+        "#,
+    )
+    .bind(tool_id)
+    .bind(viewer.as_ref().map(|v| v.id))
+    .fetch_all(&pool)
+    .await
+    .map_err(|e| ServerFnError::new(format!("failed to load comments: {e}")))?;
+
+    Ok(rows.into_iter().map(CommentRow::into_view).collect())
+}
+
+#[derive(Debug, sqlx::FromRow)]
+struct CommentRow {
+    id: Uuid,
+    tool_id: Uuid,
+    parent_id: Option<Uuid>,
+    user_id: Uuid,
+    content: String,
+    created_at: chrono::DateTime<chrono::Utc>,
+    author_nickname: Option<String>,
+    author_is_admin: bool,
+    upvote_count: Option<i64>,
+    viewer_upvoted: Option<bool>,
+}
+
+impl CommentRow {
+    fn into_view(self) -> CommentView {
+        CommentView {
+            id: self.id,
+            tool_id: self.tool_id,
+            parent_id: self.parent_id,
+            user_id: self.user_id,
+            content: self.content,
+            created_at: self.created_at,
+            author_nickname: self.author_nickname,
+            author_is_admin: self.author_is_admin,
+            upvote_count: self.upvote_count.unwrap_or(0),
+            viewer_upvoted: self.viewer_upvoted.unwrap_or(false),
+        }
+    }
+}
+
+/// Count approved-tool comments (for list sort / badges).
+#[server(GetToolCommentCount, "/api")]
+pub async fn get_tool_comment_count(slug: String) -> Result<i64, ServerFnError> {
+    let pool = use_context::<sqlx::PgPool>()
+        .ok_or_else(|| ServerFnError::new("database pool not available"))?;
+
+    let count = sqlx::query_scalar::<_, i64>(
+        r#"
+        SELECT COUNT(*)::bigint
+        FROM comments c
+        JOIN tools t ON t.id = c.tool_id
+        WHERE t.slug = $1 AND t.approval_status = 'approved'
+        "#,
+    )
+    .bind(slug)
+    .fetch_one(&pool)
+    .await
+    .map_err(|e| ServerFnError::new(format!("comment count failed: {e}")))?;
+
+    Ok(count)
+}
+
+/// Post a comment or reply (authenticated).
+#[server(CreateComment, "/api")]
+pub async fn create_comment(
+    slug: String,
+    content: String,
+    parent_id: Option<Uuid>,
+) -> Result<Comment, ServerFnError> {
+    if let Err(msg) = validate_comment_content(&content) {
+        return Err(ServerFnError::new(msg.to_string()));
+    }
+
+    let (parts, pool, jwt_secret) = request_context()?;
+    let user = require_user(&parts, &pool, &jwt_secret).await?;
+
+    let tool_id = sqlx::query_scalar::<_, Uuid>(
+        &format!("SELECT id FROM tools WHERE slug = $1 AND {TOOLS_APPROVED_WHERE}"),
+    )
+    .bind(&slug)
+    .fetch_optional(&pool)
+    .await
+    .map_err(|e| ServerFnError::new(format!("failed to resolve tool: {e}")))?
+    .ok_or_else(|| ServerFnError::new(format!("tool not found: {slug}")))?;
+
+    if let Some(parent) = parent_id {
+        let parent_row = sqlx::query_as::<_, (Option<Uuid>,)>(
+            "SELECT parent_id FROM comments WHERE id = $1 AND tool_id = $2",
+        )
+        .bind(parent)
+        .bind(tool_id)
+        .fetch_optional(&pool)
+        .await
+        .map_err(|e| ServerFnError::new(format!("parent lookup failed: {e}")))?;
+
+        match parent_row {
+            Some((None,)) => {}
+            Some((Some(_),)) => {
+                return Err(ServerFnError::new("only one level of replies is allowed"));
+            }
+            None => return Err(ServerFnError::new("parent comment not found")),
+        }
+    }
+
+    let comment = sqlx::query_as::<_, Comment>(
+        r#"
+        INSERT INTO comments (tool_id, parent_id, user_id, content)
+        VALUES ($1, $2, $3, $4)
+        RETURNING *
+        "#,
+    )
+    .bind(tool_id)
+    .bind(parent_id)
+    .bind(user.id)
+    .bind(content.trim())
+    .fetch_one(&pool)
+    .await
+    .map_err(|e| ServerFnError::new(format!("failed to create comment: {e}")))?;
+
+    Ok(comment)
+}
+
+/// Toggle upvote on a comment (authenticated).
+#[server(ToggleUpvote, "/api")]
+pub async fn toggle_upvote(comment_id: Uuid) -> Result<bool, ServerFnError> {
+    let (parts, pool, jwt_secret) = request_context()?;
+    let user = require_user(&parts, &pool, &jwt_secret).await?;
+
+    let exists = sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) FROM upvotes WHERE comment_id = $1 AND user_id = $2",
+    )
+    .bind(comment_id)
+    .bind(user.id)
+    .fetch_one(&pool)
+    .await
+    .map_err(|e| ServerFnError::new(format!("upvote lookup failed: {e}")))?;
+
+    if exists > 0 {
+        sqlx::query("DELETE FROM upvotes WHERE comment_id = $1 AND user_id = $2")
+            .bind(comment_id)
+            .bind(user.id)
+            .execute(&pool)
+            .await
+            .map_err(|e| ServerFnError::new(format!("failed to remove upvote: {e}")))?;
+        Ok(false)
+    } else {
+        sqlx::query("INSERT INTO upvotes (comment_id, user_id) VALUES ($1, $2)")
+            .bind(comment_id)
+            .bind(user.id)
+            .execute(&pool)
+            .await
+            .map_err(|e| ServerFnError::new(format!("failed to add upvote: {e}")))?;
+        Ok(true)
+    }
+}
+
+/// Whether the current user bookmarked a tool (false when signed out).
+#[server(IsBookmarked, "/api")]
+pub async fn is_bookmarked(slug: String) -> Result<bool, ServerFnError> {
+    let (parts, pool, jwt_secret) = request_context()?;
+    let Some(user) = session_from_parts(&parts, &pool, &jwt_secret)
+        .await
+        .map_err(ServerFnError::new)?
+    else {
+        return Ok(false);
+    };
+
+    let bookmarked = sqlx::query_scalar::<_, i64>(
+        r#"
+        SELECT COUNT(*)::bigint
+        FROM bookmarks b
+        JOIN tools t ON t.id = b.tool_id
+        WHERE t.slug = $1 AND b.user_id = $2 AND t.approval_status = 'approved'
+        "#,
+    )
+    .bind(slug)
+    .bind(user.id)
+    .fetch_one(&pool)
+    .await
+    .map_err(|e| ServerFnError::new(format!("bookmark lookup failed: {e}")))?;
+
+    Ok(bookmarked > 0)
+}
+
+/// Toggle bookmark on a tool (authenticated).
+#[server(ToggleBookmark, "/api")]
+pub async fn toggle_bookmark(slug: String) -> Result<bool, ServerFnError> {
+    let (parts, pool, jwt_secret) = request_context()?;
+    let user = require_user(&parts, &pool, &jwt_secret).await?;
+
+    let tool_id = sqlx::query_scalar::<_, Uuid>(
+        &format!("SELECT id FROM tools WHERE slug = $1 AND {TOOLS_APPROVED_WHERE}"),
+    )
+    .bind(&slug)
+    .fetch_optional(&pool)
+    .await
+    .map_err(|e| ServerFnError::new(format!("failed to resolve tool: {e}")))?
+    .ok_or_else(|| ServerFnError::new(format!("tool not found: {slug}")))?;
+
+    let exists = sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) FROM bookmarks WHERE tool_id = $1 AND user_id = $2",
+    )
+    .bind(tool_id)
+    .bind(user.id)
+    .fetch_one(&pool)
+    .await
+    .map_err(|e| ServerFnError::new(format!("bookmark lookup failed: {e}")))?;
+
+    if exists > 0 {
+        sqlx::query("DELETE FROM bookmarks WHERE tool_id = $1 AND user_id = $2")
+            .bind(tool_id)
+            .bind(user.id)
+            .execute(&pool)
+            .await
+            .map_err(|e| ServerFnError::new(format!("failed to remove bookmark: {e}")))?;
+        Ok(false)
+    } else {
+        sqlx::query("INSERT INTO bookmarks (tool_id, user_id) VALUES ($1, $2)")
+            .bind(tool_id)
+            .bind(user.id)
+            .execute(&pool)
+            .await
+            .map_err(|e| ServerFnError::new(format!("failed to add bookmark: {e}")))?;
+        Ok(true)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -637,5 +1026,23 @@ mod tests {
             &["bad keyword".into()],
         )
         .is_err());
+    }
+
+    #[test]
+    fn validate_trigger_crawler_source_accepts_known_sources() {
+        assert!(validate_trigger_crawler_source("npm").is_ok());
+        assert!(validate_trigger_crawler_source("sync_stars").is_ok());
+    }
+
+    #[test]
+    fn validate_trigger_crawler_source_rejects_unknown() {
+        assert!(validate_trigger_crawler_source("unknown").is_err());
+    }
+
+    #[test]
+    fn validate_comment_content_bounds() {
+        assert!(validate_comment_content("hello").is_ok());
+        assert!(validate_comment_content("").is_err());
+        assert!(validate_comment_content(&"x".repeat(2001)).is_err());
     }
 }

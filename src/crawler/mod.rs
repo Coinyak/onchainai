@@ -340,6 +340,25 @@ pub async fn persist_crawl_results(
     }
 }
 
+/// Manually trigger a single crawler job (admin UI / server function).
+///
+/// Spawns work synchronously in the caller's task; long-running crawls should be
+/// invoked from a background `tokio::spawn` at the call site.
+pub async fn trigger_source(pool: &sqlx::PgPool, source: &str) {
+    use crate::crawler::sources::{
+        cryptoskill, github, npm, web3mcp,
+    };
+
+    match source {
+        "npm" => npm::run_once(pool).await,
+        "cryptoskill" => cryptoskill::run_once(pool).await,
+        "web3-mcp-hub" => web3mcp::run_once(pool).await,
+        "github" => github::run_once(pool).await,
+        "sync_stars" => github::sync_stars(pool).await,
+        other => tracing::warn!(source = other, "unknown crawler source trigger"),
+    }
+}
+
 /// Start the crawler scheduler.
 ///
 /// Registers all cron jobs and blocks until the scheduler stops. Spawned as a

@@ -44,6 +44,18 @@ pub async fn require_admin(
     Ok(user)
 }
 
+/// Require any authenticated session (social mutations, bookmarks, etc.).
+pub async fn require_user(
+    parts: &axum::http::request::Parts,
+    pool: &PgPool,
+    jwt_secret: &str,
+) -> Result<SessionUser, AuthError> {
+    session_from_parts(parts, pool, jwt_secret)
+        .await
+        .map_err(|_| AuthError::Unauthorized)?
+        .ok_or(AuthError::Unauthorized)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

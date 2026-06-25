@@ -157,6 +157,14 @@ fn build_app(pool: sqlx::PgPool, config: Config) -> axum::Router {
         .route("/auth/github", axum::routing::get(auth::routes::github_login))
         .route("/auth/callback", axum::routing::get(auth::routes::oauth_callback))
         .route("/auth/logout", axum::routing::post(auth::routes::logout))
+        .route(
+            "/auth/siwx/challenge",
+            axum::routing::post(auth::siwx::challenge),
+        )
+        .route(
+            "/auth/siwx/verify",
+            axum::routing::post(auth::siwx::verify),
+        )
         // Leptos SSR routes.
         .leptos_routes_with_context(
             &state,

@@ -2,6 +2,7 @@
 
 pub mod bottom_sheet;
 pub mod category_grid;
+pub mod comments_section;
 pub mod icons;
 pub mod login_modal;
 pub mod preview_panel;

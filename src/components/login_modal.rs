@@ -34,6 +34,14 @@ pub fn LoginModal(show: RwSignal<bool>) -> impl IntoView {
                         </a>
                         <button
                             type="button"
+                            id="siwx-connect-btn"
+                            class="flex items-center justify-center w-full mt-3 px-4 py-2.5 rounded-lg border border-[#E5E5E5] text-[14px] font-medium hover:bg-[#FAFAFA]"
+                        >
+                            "Connect Wallet (SIWX)"
+                        </button>
+                        <p id="siwx-error" class="mt-2 text-[13px] text-[#C0392B] hidden"></p>
+                        <button
+                            type="button"
                             class="mt-3 w-full text-[14px] text-[#6B6B6B] hover:text-[#1A1A1A]"
                             on:click=move |_| show.set(false)
                         >

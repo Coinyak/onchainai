@@ -1,8 +1,10 @@
 //! Admin pages — tool approval and site management.
 
+pub mod crawler;
 pub mod settings;
 pub mod tools;
 
+pub use crawler::AdminCrawlerPage;
 pub use settings::AdminSettingsPage;
 pub use tools::AdminToolsPage;
 
