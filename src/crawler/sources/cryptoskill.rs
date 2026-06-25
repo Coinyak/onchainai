@@ -162,7 +162,7 @@ pub async fn run_once(pool: &sqlx::PgPool) {
     match crawl().await {
         Ok(raws) => {
             tracing::info!(source = SOURCE_NAME, count = raws.len(), "crawl completed");
-            crate::crawler::upsert_source_results(
+            crate::crawler::persist_crawl_results(
                 pool,
                 SOURCE_NAME,
                 "https://cryptoskill.org/skills.json",

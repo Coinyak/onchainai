@@ -319,13 +319,17 @@ async fn fetch_readme(
     decode_readme(&readme)
 }
 
-/// Crawl all configured GitHub topics and return raw tools.
-pub async fn crawl_topics_with_token(token: Option<&str>) -> Result<Vec<RawTool>> {
+/// Crawl GitHub topics from `keywords` (empty → [`TOPICS`] fallback via settings helper).
+pub async fn crawl_topics_with_token_and_keywords(
+    token: Option<&str>,
+    keywords: &[String],
+) -> Result<Vec<RawTool>> {
+    let topics = crate::crawler::settings::resolve_keywords(keywords);
     let client = github_client(token)?;
     let mut seen = HashSet::new();
     let mut out = Vec::new();
 
-    for topic in TOPICS {
+    for topic in &topics {
         match search_topic(&client, token, topic).await {
             Ok(items) => {
                 for item in items {
@@ -345,12 +349,22 @@ pub async fn crawl_topics_with_token(token: Option<&str>) -> Result<Vec<RawTool>
     Ok(out)
 }
 
-/// Crawl topics using the configured GitHub API token (if any).
-pub async fn crawl_topics() -> Result<Vec<RawTool>> {
+/// Crawl all default GitHub topics using the configured API token (if any).
+pub async fn crawl_topics_with_token(token: Option<&str>) -> Result<Vec<RawTool>> {
+    crawl_topics_with_token_and_keywords(token, &[]).await
+}
+
+/// Crawl topics using live `site_settings.search_keywords` when provided.
+pub async fn crawl_topics_with_keywords(keywords: &[String]) -> Result<Vec<RawTool>> {
     let token = std::env::var("GITHUB_API_TOKEN")
         .ok()
         .filter(|s| !s.is_empty());
-    crawl_topics_with_token(token.as_deref()).await
+    crawl_topics_with_token_and_keywords(token.as_deref(), keywords).await
+}
+
+/// Crawl topics using the configured GitHub API token (if any) and default keywords.
+pub async fn crawl_topics() -> Result<Vec<RawTool>> {
+    crawl_topics_with_keywords(&[]).await
 }
 
 /// Update stars and last_commit_at for up to 100 existing tools with repo_url.
@@ -499,16 +513,17 @@ pub async fn self_register(pool: &sqlx::PgPool) {
     }
 }
 
-/// Run a full topics crawl.
+/// Run a full topics crawl (keywords from `site_settings.search_keywords`).
 pub async fn run_once(pool: &sqlx::PgPool) {
-    match crawl_topics().await {
+    let crawler_settings = crate::crawler::settings::load_crawler_settings(pool).await;
+    match crawl_topics_with_keywords(&crawler_settings.search_keywords).await {
         Ok(raws) => {
             tracing::info!(
                 source = SOURCE_NAME,
                 count = raws.len(),
                 "topics crawl completed"
             );
-            crate::crawler::upsert_source_results(
+            crate::crawler::persist_crawl_results(
                 pool,
                 SOURCE_NAME,
                 "https://github.com/topics",
@@ -587,6 +602,34 @@ mod tests {
                 ]
             }}"#,
         )
+    }
+
+    #[tokio::test]
+    async fn crawl_topics_with_custom_keywords_queries_live_settings() {
+        let server = MockServer::start().await;
+        let custom = vec!["defi-mcp".to_string()];
+
+        Mock::given(method("GET"))
+            .and(path("/search/repositories"))
+            .and(query_param("q", "topic:defi-mcp"))
+            .respond_with(ResponseTemplate::new(200).set_body_string(search_response_json("defi-mcp")))
+            .mount(&server)
+            .await;
+
+        let client = reqwest::Client::builder()
+            .user_agent(crate::crawler::sources::CRAWLER_USER_AGENT)
+            .timeout(std::time::Duration::from_secs(30))
+            .build()
+            .unwrap();
+
+        let base_url = server.uri();
+        let items = search_topic_at_url(&client, None, "defi-mcp", &base_url)
+            .await
+            .expect("custom keyword search should succeed");
+        assert_eq!(items.len(), 2);
+
+        let topics = crate::crawler::settings::resolve_keywords(&custom);
+        assert_eq!(topics, custom);
     }
 
     #[tokio::test]

@@ -13,6 +13,7 @@
 pub mod deduper;
 pub mod normalizer;
 pub mod scheduler;
+pub mod settings;
 pub mod sources;
 
 // Re-export normalizer helpers so the public module API is easy to consume.
@@ -182,10 +183,20 @@ pub async fn run_all_sources(pool: &sqlx::PgPool) {
         Arc::new(GitHubTopicsCrawler),
     ];
 
-    // Run pipeline in memory first.
-    let tools = run_pipeline(crawlers).await;
+    let crawler_settings = settings::load_crawler_settings(pool).await;
+    let approval =
+        settings::initial_approval_status(crawler_settings.require_tool_approval);
 
-    // Upsert normalized tools. The total count is logged regardless of source origin.
+    // Run pipeline in memory first (re-normalize with live approval setting).
+    let mut all_raws: Vec<normalizer::RawTool> = Vec::new();
+    for crawler in &crawlers {
+        if let Ok(raws) = crawler.crawl().await {
+            all_raws.extend(raws);
+        }
+    }
+    let tools = normalizer::normalize_batch_with_status(&all_raws, approval);
+    let tools = deduper::dedupe(tools);
+
     if let Err(e) = upsert_tools(pool, &tools).await {
         tracing::error!(error = %e, "failed to upsert crawled tools");
     } else {
@@ -234,14 +245,43 @@ pub async fn update_source_status(
     }
 }
 
-/// Convenience helper: update source status from a successful raw result set.
+/// Normalize, dedupe, upsert crawled tools, then update the `sources` table.
+///
+/// Loads [`settings::CrawlerSettings`] to decide initial `approval_status` for
+/// newly discovered tools (`pending` vs `approved`).
+pub async fn persist_crawl_results(
+    pool: &sqlx::PgPool,
+    name: &str,
+    url: &str,
+    raws: Vec<normalizer::RawTool>,
+) {
+    let crawler_settings = settings::load_crawler_settings(pool).await;
+    let approval =
+        settings::initial_approval_status(crawler_settings.require_tool_approval);
+    let tools = normalizer::normalize_batch_with_status(&raws, approval);
+    let tools = deduper::dedupe(tools);
+    let count = tools.len() as i32;
+
+    match upsert_tools(pool, &tools).await {
+        Ok(()) => {
+            tracing::info!(source = name, count, "crawled tools upserted");
+            update_source_status(pool, name, url, "success", count, None).await;
+        }
+        Err(e) => {
+            tracing::error!(source = name, error = %e, "failed to upsert crawled tools");
+            update_source_status(pool, name, url, "error", 0, Some(&e.to_string())).await;
+        }
+    }
+}
+
+/// Convenience helper: persist crawl results (replaces sources-only updates).
 pub async fn upsert_source_results(
     pool: &sqlx::PgPool,
     name: &str,
     url: &str,
     raws: Vec<normalizer::RawTool>,
 ) {
-    update_source_status(pool, name, url, "success", raws.len() as i32, None).await;
+    persist_crawl_results(pool, name, url, raws).await;
 }
 
 /// Start the crawler scheduler.
@@ -426,6 +466,26 @@ mod tests {
         let crawlers: Vec<Arc<dyn SourceCrawler>> = vec![];
         let tools = run_pipeline(crawlers).await;
         assert!(tools.is_empty());
+    }
+
+    #[test]
+    fn persist_normalization_uses_pending_when_approval_required() {
+        let approval = settings::initial_approval_status(true);
+        let tools = normalizer::normalize_batch_with_status(
+            &[raw("Pending Tool", None, 1, "bridge cross-chain")],
+            approval,
+        );
+        assert_eq!(tools[0].approval_status, "pending");
+    }
+
+    #[test]
+    fn persist_normalization_uses_approved_when_auto_publish() {
+        let approval = settings::initial_approval_status(false);
+        let tools = normalizer::normalize_batch_with_status(
+            &[raw("Auto Tool", None, 1, "swap dex")],
+            approval,
+        );
+        assert_eq!(tools[0].approval_status, "approved");
     }
 
     #[tokio::test]

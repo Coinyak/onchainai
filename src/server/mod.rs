@@ -2,3 +2,4 @@
 
 pub mod functions;
 pub mod mcp;
+pub mod queries;

@@ -311,10 +311,15 @@ pub fn unique_slug(name: &str, taken: &std::collections::HashSet<String>) -> Str
 /// Applies 3-axis classification by combining the tool name and description
 /// as the classification text corpus. Generates a unique slug against the
 /// supplied `taken` set (which is **not** mutated here — callers should add
-/// the returned slug to the set before normalizing the next tool). Crawled
-/// tools are marked `approval_status = "approved"` per MVP_DESIGN.md.
+/// the returned slug to the set before normalizing the next tool).
+/// `initial_approval_status` is typically `"approved"` or `"pending"` from
+/// [`crate::crawler::settings::initial_approval_status`].
 #[allow(dead_code)]
-pub fn normalize(raw: &RawTool, taken: &std::collections::HashSet<String>) -> Tool {
+pub fn normalize(
+    raw: &RawTool,
+    taken: &std::collections::HashSet<String>,
+    initial_approval_status: &str,
+) -> Tool {
     let corpus = match &raw.description {
         Some(d) => format!("{} {}", raw.name, d),
         None => raw.name.clone(),
@@ -347,8 +352,7 @@ pub fn normalize(raw: &RawTool, taken: &std::collections::HashSet<String>) -> To
         status: "community".to_string(),
         official_team: None,
         trust_score: 0,
-        // Crawled tools are auto-approved (no admin review).
-        approval_status: "approved".to_string(),
+        approval_status: initial_approval_status.to_string(),
         submitted_by: None,
         rejection_reason: None,
         license: raw.license.clone(),
@@ -369,15 +373,21 @@ pub fn normalize(raw: &RawTool, taken: &std::collections::HashSet<String>) -> To
 /// distinct slugs (`foo-bar`, `foo-bar-2`). Returned in the same order as
 /// input.
 #[allow(dead_code)]
-pub fn normalize_batch(raws: &[RawTool]) -> Vec<Tool> {
+pub fn normalize_batch_with_status(raws: &[RawTool], initial_approval_status: &str) -> Vec<Tool> {
     let mut taken: std::collections::HashSet<String> = std::collections::HashSet::new();
     let mut out = Vec::with_capacity(raws.len());
     for raw in raws {
-        let tool = normalize(raw, &taken);
+        let tool = normalize(raw, &taken, initial_approval_status);
         taken.insert(tool.slug.clone());
         out.push(tool);
     }
     out
+}
+
+/// Normalize a batch with `approval_status = "approved"` (backward-compatible default).
+#[allow(dead_code)]
+pub fn normalize_batch(raws: &[RawTool]) -> Vec<Tool> {
+    normalize_batch_with_status(raws, "approved")
 }
 
 #[cfg(test)]
@@ -712,7 +722,7 @@ mod tests {
     #[test]
     fn normalize_produces_classified_tool() {
         let taken = std::collections::HashSet::new();
-        let tool = normalize(&sample_raw(), &taken);
+        let tool = normalize(&sample_raw(), &taken, "approved");
         assert_eq!(tool.name, "BOB Gateway CLI");
         assert_eq!(tool.slug, "bob-gateway-cli");
         assert!(!tool.slug.is_empty());
@@ -738,9 +748,23 @@ mod tests {
         raw.description = None;
         raw.name = "eliza agent".into();
         let taken = std::collections::HashSet::new();
-        let tool = normalize(&raw, &taken);
+        let tool = normalize(&raw, &taken, "approved");
         assert_eq!(tool.function, "ai-agent");
         assert_eq!(tool.actor, "ai-agent");
+    }
+
+    #[test]
+    fn normalize_respects_pending_initial_approval_status() {
+        let taken = std::collections::HashSet::new();
+        let tool = normalize(&sample_raw(), &taken, "pending");
+        assert_eq!(tool.approval_status, "pending");
+    }
+
+    #[test]
+    fn normalize_batch_with_status_pending() {
+        let raws = vec![sample_raw()];
+        let tools = normalize_batch_with_status(&raws, "pending");
+        assert_eq!(tools[0].approval_status, "pending");
     }
 
     #[test]
