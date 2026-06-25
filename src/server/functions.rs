@@ -336,6 +336,20 @@ pub async fn list_pending_tools(limit: i64) -> Result<Vec<Tool>, ServerFnError> 
     Ok(tools)
 }
 
+/// Validate admin approval inputs without touching the database.
+pub(crate) fn validate_set_tool_approval_input(
+    status: &str,
+    reason: Option<&str>,
+) -> Result<(), &'static str> {
+    if !matches!(status, "approved" | "rejected" | "pending") {
+        return Err("invalid approval status (expected approved|rejected|pending)");
+    }
+    if status == "rejected" && reason.map(str::trim).is_none_or(str::is_empty) {
+        return Err("rejection requires a non-empty reason");
+    }
+    Ok(())
+}
+
 /// Approve or reject a tool by slug (admin growth-mode workflow).
 #[server(SetToolApproval, "/api")]
 pub async fn set_tool_approval(
@@ -343,16 +357,8 @@ pub async fn set_tool_approval(
     status: String,
     reason: Option<String>,
 ) -> Result<(), ServerFnError> {
-    if !matches!(status.as_str(), "approved" | "rejected" | "pending") {
-        return Err(ServerFnError::new(format!(
-            "invalid approval status: {status} (expected approved|rejected|pending)"
-        )));
-    }
-
-    if status == "rejected" && reason.as_ref().is_none_or(|r| r.trim().is_empty()) {
-        return Err(ServerFnError::new(
-            "rejection requires a non-empty reason".to_string(),
-        ));
+    if let Err(msg) = validate_set_tool_approval_input(&status, reason.as_deref()) {
+        return Err(ServerFnError::new(msg.to_string()));
     }
 
     let pool = use_context::<sqlx::PgPool>()
@@ -402,5 +408,28 @@ mod tests {
             "LEFT JOIN tools t ON t.function = c.id AND t.{TOOLS_APPROVED_WHERE}"
         );
         assert!(categories.contains("approval_status = 'approved'"));
+    }
+
+    #[test]
+    fn set_tool_approval_validation_accepts_approved_and_pending() {
+        assert!(validate_set_tool_approval_input("approved", None).is_ok());
+        assert!(validate_set_tool_approval_input("pending", None).is_ok());
+    }
+
+    #[test]
+    fn set_tool_approval_validation_rejects_without_reason() {
+        assert_eq!(
+            validate_set_tool_approval_input("rejected", None),
+            Err("rejection requires a non-empty reason")
+        );
+        assert_eq!(
+            validate_set_tool_approval_input("rejected", Some("   ")),
+            Err("rejection requires a non-empty reason")
+        );
+    }
+
+    #[test]
+    fn set_tool_approval_validation_rejects_invalid_status() {
+        assert!(validate_set_tool_approval_input("published", None).is_err());
     }
 }
