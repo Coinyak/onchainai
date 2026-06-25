@@ -44,31 +44,31 @@ pub fn build_query_base(
 ) -> String {
     let mut parts: Vec<String> = Vec::new();
     if let Some(v) = function {
-        parts.push(format!("function={v}"));
+        parts.push(format!("function={}", urlencoding::encode(&v)));
     }
     if let Some(v) = asset_class {
-        parts.push(format!("asset_class={v}"));
+        parts.push(format!("asset_class={}", urlencoding::encode(&v)));
     }
     if let Some(v) = actor {
-        parts.push(format!("actor={v}"));
+        parts.push(format!("actor={}", urlencoding::encode(&v)));
     }
     if let Some(v) = tool_type {
-        parts.push(format!("type={v}"));
+        parts.push(format!("type={}", urlencoding::encode(&v)));
     }
     if let Some(v) = status {
-        parts.push(format!("status={v}"));
+        parts.push(format!("status={}", urlencoding::encode(&v)));
     }
     if let Some(v) = chain {
-        parts.push(format!("chain={v}"));
+        parts.push(format!("chain={}", urlencoding::encode(&v)));
     }
     if sort != "hot" {
-        parts.push(format!("sort={sort}"));
+        parts.push(format!("sort={}", urlencoding::encode(&sort)));
     }
     if let Some(v) = search_q.filter(|s| !s.is_empty()) {
-        parts.push(format!("q={v}"));
+        parts.push(format!("q={}", urlencoding::encode(v.as_str())));
     }
     if let Some(v) = selected {
-        parts.push(format!("selected={v}"));
+        parts.push(format!("selected={}", urlencoding::encode(&v)));
     }
     if parts.is_empty() {
         base.path().to_string()
@@ -296,7 +296,7 @@ pub fn ToolsBrowser(
                             <div class="tools-main">
                                 <div class="tools-toolbar sticky-toolbar">
                                     {if show_toolbar_search {
-                                        view! { <ToolbarSearch base=base/> }.into_any()
+                                        view! { <ToolbarSearch base=base initial_q=search_q.get().unwrap_or_default()/> }.into_any()
                                     } else {
                                         ().into_any()
                                     }}
@@ -374,7 +374,7 @@ mod tests {
             Some("zapper".into()),
         );
         assert!(q.starts_with("/?"));
-        assert!(q.contains("function=bridge,swap"));
+        assert!(q.contains("function=bridge%2Cswap") || q.contains("function=bridge,swap"));
         assert!(q.contains("type=mcp"));
         assert!(q.contains("selected=zapper"));
     }
@@ -411,7 +411,9 @@ mod tests {
             None,
         );
         assert_eq!(from_new.matches("sort=").count(), 1);
-        assert!(from_new.contains("function=bridge,swap"));
+        assert!(
+            from_new.contains("function=bridge%2Cswap") || from_new.contains("function=bridge,swap")
+        );
         assert!(from_new.contains("sort=new"));
 
         let to_hot = build_sort_href(
@@ -427,7 +429,9 @@ mod tests {
             None,
         );
         assert!(!to_hot.contains("sort="));
-        assert!(to_hot.contains("function=bridge,swap"));
+        assert!(
+            to_hot.contains("function=bridge%2Cswap") || to_hot.contains("function=bridge,swap")
+        );
         assert!(to_hot.contains("type=mcp"));
     }
 

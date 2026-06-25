@@ -2,7 +2,7 @@
 
 use crate::client_storage::{read_sidebar_collapsed, read_sidebar_sections, write_sidebar_collapsed, write_sidebar_sections};
 use crate::components::tools_browser::BrowserBase;
-use crate::filter_query::{parse_multi, toggle_multi};
+use crate::filter_query::{clear_axis, parse_multi, toggle_multi};
 use crate::models::Category;
 use leptos::prelude::*;
 use leptos_router::components::A;
@@ -44,10 +44,10 @@ const STATUSES: &[FilterOption] = &[
 fn default_section_state() -> HashMap<String, bool> {
     [
         ("function", true),
-        ("asset_class", true),
-        ("actor", true),
-        ("type", true),
-        ("status", true),
+        ("asset_class", false),
+        ("actor", false),
+        ("type", false),
+        ("status", false),
         ("chain", true),
     ]
     .into_iter()
@@ -85,7 +85,7 @@ fn CollapsibleSection(
             <button
                 type="button"
                 class="sidebar-title sidebar-toggle"
-                aria-expanded=is_open
+                prop:aria-expanded=move || is_open()
                 on:click=move |_| {
                     open_map.update(|m| {
                         let cur = m.get(section_id).copied().unwrap_or(true);
@@ -148,6 +148,7 @@ pub fn Sidebar(
         }
     };
     let clear_href = base_path.clone();
+    let fn_all_href = clear_axis(&base_path, &query_base, "function");
     let base_for_fn = base_path.clone();
     let query_for_fn = query_base.clone();
     let base_for_ac = base_path.clone();
@@ -168,6 +169,7 @@ pub fn Sidebar(
                     type="button"
                     class="sidebar-rail-toggle"
                     aria-label="Toggle filters sidebar"
+                    prop:aria-expanded=move || !sidebar_collapsed.get()
                     on:click=move |_| sidebar_collapsed.update(|c| *c = !*c)
                 >
                     "☰"
@@ -180,7 +182,7 @@ pub fn Sidebar(
                 <CollapsibleSection section_id="function" title="Function" open_map=open_map sidebar_collapsed=sidebar_collapsed>
                     <ul class="sidebar-list">
                         <li>
-                            <A href=clear_href.clone() attr:class=if fn_active.is_empty() { "sidebar-link active" } else { "sidebar-link" }>
+                            <A href=fn_all_href.clone() attr:class=if fn_active.is_empty() { "sidebar-link active" } else { "sidebar-link" }>
                                 "All"
                             </A>
                         </li>
@@ -274,6 +276,26 @@ mod tests {
     use crate::components::tools_browser::{build_query_base, BrowserBase};
 
     #[test]
+    fn function_all_clears_only_function_param() {
+        let query_base = build_query_base(
+            BrowserBase::Tools,
+            Some("bridge".into()),
+            None,
+            None,
+            None,
+            None,
+            None,
+            "new".into(),
+            Some("test query".into()),
+            None,
+        );
+        let href = clear_axis("/tools", &query_base, "function");
+        assert!(!href.contains("function="));
+        assert!(href.contains("sort=new"));
+        assert!(href.contains("q="));
+    }
+
+    #[test]
     fn sidebar_function_link_produces_multi_select_href() {
         let query_base = build_query_base(
             BrowserBase::Tools,
@@ -295,7 +317,10 @@ mod tests {
         let (href, swap_active) = sidebar_function_link("/tools", &query_base, "swap", &fn_active);
         assert!(!swap_active);
         assert!(
-            href.contains("function=bridge,swap") || href.contains("function=swap,bridge"),
+            href.contains("function=bridge%2Cswap")
+                || href.contains("function=swap%2Cbridge")
+                || href.contains("function=bridge,swap")
+                || href.contains("function=swap,bridge"),
             "Sidebar <A href> must encode comma-separated function param, got: {href}"
         );
         assert_eq!(href.matches("sort=").count(), 1, "sort must not duplicate: {href}");

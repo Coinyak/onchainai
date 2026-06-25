@@ -69,22 +69,35 @@ pub fn SearchBar() -> impl IntoView {
 
 /// Toolbar search — debounced, preserves active filters on same base path.
 #[component]
-pub fn ToolbarSearch(base: BrowserBase) -> impl IntoView {
+pub fn ToolbarSearch(base: BrowserBase, initial_q: String) -> impl IntoView {
     let query = use_query_map();
     let navigate = use_navigate();
-    let input = RwSignal::new(String::new());
-    let pending_input = RwSignal::new(String::new());
-    let debounced = RwSignal::new(String::new());
+    let input = RwSignal::new(initial_q.clone());
+    let debounced = RwSignal::new(initial_q);
     let timer = StoredValue::new(None::<TimeoutHandle>);
+    let syncing_from_url = StoredValue::new(false);
 
+    // Sync from URL (back/forward, filter links) — cancel pending debounce timers.
     Effect::new(move |_| {
         let q = query.with(|qm| qm.get("q").unwrap_or_default().to_string());
+        if input.get_untracked() == q {
+            return;
+        }
+        if let Some(handle) = timer.get_value() {
+            handle.clear();
+        }
+        syncing_from_url.set_value(true);
         input.set(q.clone());
         debounced.set(q);
+        syncing_from_url.set_value(false);
     });
 
+    // Debounce user typing only (not URL-driven sync).
     Effect::new(move |_| {
-        let val = pending_input.get();
+        if syncing_from_url.get_value() {
+            return;
+        }
+        let val = input.get();
         schedule_debounced_set(timer, debounced, val);
     });
 
@@ -123,11 +136,7 @@ pub fn ToolbarSearch(base: BrowserBase) -> impl IntoView {
                 type="search"
                 placeholder="Search tools..."
                 prop:value=move || input.get()
-                on:input=move |ev| {
-                    let val = event_target_value(&ev);
-                    input.set(val.clone());
-                    pending_input.set(val);
-                }
+                on:input=move |ev| input.set(event_target_value(&ev))
             />
         </div>
     }

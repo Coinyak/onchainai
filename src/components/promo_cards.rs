@@ -1,5 +1,6 @@
 //! Registration promo cards on the home page.
 
+use crate::components::copy_button::CopyButton;
 use leptos::prelude::*;
 
 #[component]
@@ -27,13 +28,7 @@ pub fn PromoCards(mcp_endpoint: String) -> impl IntoView {
                     <code class="font-mono text-[13px] bg-white border border-[#E5E5E5] rounded-md px-3 py-2 flex-1 overflow-x-auto">
                         {mcp_endpoint.clone()}
                     </code>
-                    <button
-                        type="button"
-                        class="copy-btn shrink-0 h-10 px-3 rounded-lg border border-[#E5E5E5] bg-white text-[13px] font-medium text-[#1A1A1A] hover:bg-[#FAFAFA]"
-                        data-copy=mcp_endpoint.clone()
-                    >
-                        "Copy"
-                    </button>
+                    <CopyButton text=mcp_endpoint.clone()/>
                 </div>
             </div>
         </div>

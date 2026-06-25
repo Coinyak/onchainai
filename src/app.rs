@@ -25,9 +25,12 @@ use leptos_router::{
 pub fn shell(options: LeptosOptions) -> impl IntoView {
     // Hydration requires /pkg/onchainai.js + onchainai_bg.wasm. When missing (404),
     // injecting HydrationScripts breaks the page — auto-detect bundle on disk.
-    let enable_hydration = std::env::var("LEPTOS_HYDRATION")
-        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
-        .unwrap_or_else(|_| std::path::Path::new("target/site/pkg/onchainai.js").exists());
+    let bundle_exists = std::path::Path::new("target/site/pkg/onchainai.js").exists();
+    let enable_hydration = match std::env::var("LEPTOS_HYDRATION") {
+        Ok(v) if v == "0" || v.eq_ignore_ascii_case("false") => false,
+        Ok(v) if v == "1" || v.eq_ignore_ascii_case("true") => bundle_exists,
+        _ => bundle_exists,
+    };
     let enable_reload = std::env::var("LEPTOS_ENV")
         .map(|v| v == "DEV")
         .unwrap_or(false);

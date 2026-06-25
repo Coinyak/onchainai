@@ -702,10 +702,10 @@ pub async fn get_tool_comments(slug: String, sort: String) -> Result<Vec<Comment
     .map_err(|e| ServerFnError::new(format!("failed to resolve tool: {e}")))?
     .ok_or_else(|| ServerFnError::new(format!("tool not found: {slug}")))?;
 
-    let order = if sort == "top" {
-        "COUNT(u.id) DESC, c.created_at DESC"
-    } else {
-        "c.created_at DESC"
+    let order = match sort.as_str() {
+        "top" => "COUNT(u.id) DESC, c.created_at DESC",
+        "new" => "c.created_at DESC",
+        _ => return Err(ServerFnError::new("sort must be 'new' or 'top'")),
     };
     let sql = format!(
         r#"

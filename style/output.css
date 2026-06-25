@@ -246,7 +246,7 @@ body {
   gap: 24px;
 }
 @media (min-width: 1024px) {
-  .tools-layout { grid-template-columns: 240px 1fr; }
+  .tools-layout { grid-template-columns: auto 1fr; }
 }
 .tools-sidebar {
   border: 1px solid #E5E5E5;

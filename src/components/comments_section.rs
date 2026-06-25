@@ -99,10 +99,11 @@ pub fn CommentsSection(slug: String, tool_name: String) -> impl IntoView {
                         view! {
                             <ul class="mt-6 space-y-4">
                                 {tops.into_iter().map(|c| {
-                                    let replies: Vec<_> = rows.iter()
+                                    let mut replies: Vec<_> = rows.iter()
                                         .filter(|r| r.parent_id == Some(c.id))
                                         .cloned()
                                         .collect();
+                                    replies.sort_by(|a, b| a.created_at.cmp(&b.created_at));
                                     view! {
                                         <CommentItem
                                             slug=slug_for_items.clone()
