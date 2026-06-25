@@ -1,7 +1,9 @@
 //! Admin pages — tool approval and site management.
 
+pub mod settings;
 pub mod tools;
 
+pub use settings::AdminSettingsPage;
 pub use tools::AdminToolsPage;
 
 use crate::server::functions::check_admin_access;

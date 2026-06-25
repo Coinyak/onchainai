@@ -4,7 +4,9 @@
 //! components for all routes required by the website-core milestone.
 
 use crate::pages::admin::admin_page_shell;
-use crate::pages::{AdminToolsPage, CategoryPage, HomePage, ToolDetailPage, ToolsListPage};
+use crate::pages::{
+    AdminSettingsPage, AdminToolsPage, CategoryPage, HomePage, ToolDetailPage, ToolsListPage,
+};
 use leptos::prelude::*;
 use leptos_meta::{provide_meta_context, Link, Meta, MetaTags, Stylesheet, Title};
 use leptos_router::{
@@ -65,6 +67,7 @@ pub fn App() -> impl IntoView {
                     <Route path=StaticSegment("about") view=AboutPage/>
                     <Route path=StaticSegment("admin") view=AdminHomePage/>
                     <Route path=(StaticSegment("admin"), StaticSegment("tools")) view=AdminToolsPage/>
+                    <Route path=(StaticSegment("admin"), StaticSegment("settings")) view=AdminSettingsPage/>
                 </FlatRoutes>
             </main>
         </Router>
@@ -97,6 +100,15 @@ fn AdminHomePage() -> impl IntoView {
                     "Tool Management"
                     <span class="block text-[12px] text-[#6B6B6B] font-normal mt-0.5">
                         "Approve or reject pending tools"
+                    </span>
+                </a>
+                <a
+                    href="/admin/settings"
+                    class="rounded-lg border border-[#E5E5E5] px-4 py-3 text-[14px] font-medium hover:bg-[#FAFAFA]"
+                >
+                    "Site Settings"
+                    <span class="block text-[12px] text-[#6B6B6B] font-normal mt-0.5">
+                        "Slogan, keywords, approval rules"
                     </span>
                 </a>
             </nav>

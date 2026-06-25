@@ -81,6 +81,122 @@ pub async fn get_site_settings() -> Result<SiteSettings, ServerFnError> {
     Ok(settings)
 }
 
+/// Parse comma- or newline-separated crawler keywords.
+pub(crate) fn parse_search_keywords(raw: &str) -> Vec<String> {
+    raw.split([',', '\n'])
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
+        .collect()
+}
+
+/// Validate admin site settings input before persisting.
+pub(crate) fn validate_update_site_settings_input(
+    site_name: &str,
+    slogan: &str,
+    description: &str,
+    mcp_endpoint: &str,
+    search_keywords: &[String],
+) -> Result<(), &'static str> {
+    let name = site_name.trim();
+    if name.is_empty() || name.len() > 100 {
+        return Err("site name must be 1–100 characters");
+    }
+    let slogan = slogan.trim();
+    if slogan.is_empty() || slogan.len() > 200 {
+        return Err("slogan must be 1–200 characters");
+    }
+    let description = description.trim();
+    if description.is_empty() || description.len() > 500 {
+        return Err("description must be 1–500 characters");
+    }
+    let mcp_endpoint = mcp_endpoint.trim();
+    if mcp_endpoint.is_empty() || mcp_endpoint.len() > 200 {
+        return Err("MCP endpoint must be 1–200 characters");
+    }
+    if search_keywords.is_empty() || search_keywords.len() > 50 {
+        return Err("provide 1–50 search keywords");
+    }
+    for kw in search_keywords {
+        let kw = kw.trim();
+        if kw.is_empty() || kw.len() > 64 {
+            return Err("each keyword must be 1–64 characters");
+        }
+        if !kw
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+        {
+            return Err("keywords may only contain letters, numbers, hyphens, and underscores");
+        }
+    }
+    Ok(())
+}
+
+/// Payload for admin site settings updates.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct UpdateSiteSettingsPayload {
+    pub site_name: String,
+    pub slogan: String,
+    pub description: String,
+    pub mcp_endpoint: String,
+    pub search_keywords_raw: String,
+    pub allow_free_registration: bool,
+    pub require_tool_approval: bool,
+    pub allow_x402_registration: bool,
+}
+
+/// Admin-only update of the `site_settings` singleton (id = 1).
+#[server(UpdateSiteSettings, "/api")]
+pub async fn update_site_settings(
+    payload: UpdateSiteSettingsPayload,
+) -> Result<SiteSettings, ServerFnError> {
+    let keywords = parse_search_keywords(&payload.search_keywords_raw);
+    if let Err(msg) = validate_update_site_settings_input(
+        &payload.site_name,
+        &payload.slogan,
+        &payload.description,
+        &payload.mcp_endpoint,
+        &keywords,
+    ) {
+        return Err(ServerFnError::new(msg.to_string()));
+    }
+
+    let (parts, pool, jwt_secret) = request_context()?;
+    require_admin(&parts, &pool, &jwt_secret)
+        .await
+        .map_err(ServerFnError::new)?;
+
+    let settings = sqlx::query_as::<_, SiteSettings>(
+        r#"
+        UPDATE site_settings
+        SET site_name = $1,
+            slogan = $2,
+            description = $3,
+            mcp_endpoint = $4,
+            search_keywords = $5,
+            allow_free_registration = $6,
+            require_tool_approval = $7,
+            allow_x402_registration = $8,
+            updated_at = now()
+        WHERE id = 1
+        RETURNING *
+        "#,
+    )
+    .bind(payload.site_name.trim())
+    .bind(payload.slogan.trim())
+    .bind(payload.description.trim())
+    .bind(payload.mcp_endpoint.trim())
+    .bind(&keywords)
+    .bind(payload.allow_free_registration)
+    .bind(payload.require_tool_approval)
+    .bind(payload.allow_x402_registration)
+    .fetch_one(&pool)
+    .await
+    .map_err(|e| ServerFnError::new(format!("failed to update site settings: {e}")))?;
+
+    Ok(settings)
+}
+
 /// Returns the most recently added **approved** tools.
 ///
 /// HOT order = higher `stars` first, then more recent `created_at`.
@@ -473,5 +589,53 @@ mod tests {
     fn list_pending_tools_sql_filters_pending_only() {
         assert!(LIST_PENDING_TOOLS_SQL.contains("approval_status = 'pending'"));
         assert!(!LIST_PENDING_TOOLS_SQL.contains("approved"));
+    }
+
+    #[test]
+    fn parse_search_keywords_splits_commas_and_newlines() {
+        assert_eq!(
+            parse_search_keywords("mcp-server, crypto-mcp\nweb3-mcp"),
+            vec![
+                "mcp-server".to_string(),
+                "crypto-mcp".to_string(),
+                "web3-mcp".to_string()
+            ]
+        );
+    }
+
+    #[test]
+    fn validate_site_settings_accepts_defaults() {
+        assert!(validate_update_site_settings_input(
+            "OnchainAI",
+            "Crypto tools, unified.",
+            "Discover tools.",
+            "npx mcp-remote onchainai.xyz/mcp",
+            &["mcp-server".into()],
+        )
+        .is_ok());
+    }
+
+    #[test]
+    fn validate_site_settings_rejects_empty_keywords() {
+        assert!(validate_update_site_settings_input(
+            "OnchainAI",
+            "Slogan",
+            "Description here.",
+            "npx mcp-remote",
+            &[],
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn validate_site_settings_rejects_invalid_keyword_chars() {
+        assert!(validate_update_site_settings_input(
+            "OnchainAI",
+            "Slogan",
+            "Description here.",
+            "npx mcp-remote",
+            &["bad keyword".into()],
+        )
+        .is_err());
     }
 }
