@@ -58,7 +58,7 @@ pub fn SearchBar() -> impl IntoView {
             <input
                 type="search"
                 placeholder="Search: asset tracking, trading, DeFi, chain name..."
-                class="search-input w-full h-12 px-4 text-[14px] rounded-lg border border-[#E5E5E5] bg-white text-[#1A1A1A] outline-none focus:border-[#E76F00] focus:ring-2 focus:ring-[#E76F00]/20"
+                class="search-input w-full h-12 px-4 text-[14px] rounded-lg border border-[#E5E5E5] bg-white text-[#1A1A1A] outline-none focus:border-[#E76F00]"
                 autocomplete="off"
                 prop:value=move || input.get()
                 on:input=move |ev| input.set(event_target_value(&ev))

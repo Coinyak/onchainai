@@ -165,7 +165,7 @@ fn CommentForm(
             <div class="mt-3 flex justify-end">
                 <button
                     type="button"
-                    class="px-4 py-2 rounded-lg bg-[#1A1A1A] text-white text-[14px] font-medium hover:bg-[#1A1A1A] disabled:opacity-50"
+                    class="px-4 py-2 rounded-lg bg-[#1A1A1A] text-white text-[14px] font-medium hover:opacity-90 disabled:opacity-50"
                     disabled=move || busy.get()
                     on:click=move |_| {
                         let slug = slug.get();

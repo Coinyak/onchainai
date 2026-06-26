@@ -59,7 +59,7 @@ pub fn LoginForm(
         </p>
         <a
             href="/auth/github"
-            class="flex items-center justify-center w-full px-4 py-2.5 rounded-lg bg-[#1A1A1A] text-white text-[14px] font-medium hover:bg-[#1A1A1A] no-underline"
+            class="flex items-center justify-center w-full px-4 py-2.5 rounded-lg bg-[#1A1A1A] text-white text-[14px] font-medium hover:opacity-90 no-underline"
         >
             "Continue with GitHub"
         </a>
