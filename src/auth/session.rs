@@ -54,6 +54,18 @@ impl From<AuthSessionError> for ServerFnError {
     }
 }
 
+/// Maps session resolution for optional reads (`get_current_user`, `is_bookmarked`, …).
+/// Invalid, expired, or missing sessions become `Ok(None)` instead of API errors.
+pub fn optional_session_result(
+    result: Result<Option<SessionUser>, AuthSessionError>,
+) -> Result<Option<SessionUser>, ServerFnError> {
+    match result {
+        Ok(user) => Ok(user),
+        Err(AuthSessionError::Database(msg)) => Err(ServerFnError::new(msg)),
+        Err(_) => Ok(None),
+    }
+}
+
 #[cfg(feature = "ssr")]
 #[path = "session_ssr.rs"]
 mod session_ssr;
@@ -70,5 +82,18 @@ mod tests {
         let header = "foo=bar; onchainai_access_token=abc123; baz=qux";
         assert_eq!(cookie_value(header, ACCESS_TOKEN_COOKIE), Some("abc123"));
         assert_eq!(cookie_value(header, "missing"), None);
+    }
+
+    #[test]
+    fn optional_session_result_treats_invalid_token_as_anonymous() {
+        let out = optional_session_result(Err(AuthSessionError::InvalidToken)).expect("no error");
+        assert!(out.is_none());
+    }
+
+    #[test]
+    fn optional_session_result_propagates_database_errors() {
+        let err = optional_session_result(Err(AuthSessionError::Database("down".into())))
+            .expect_err("db error");
+        assert!(err.to_string().contains("down"));
     }
 }

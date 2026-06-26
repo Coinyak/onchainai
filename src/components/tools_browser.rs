@@ -636,17 +636,7 @@ pub fn ToolsBrowser(
                                 </div>
                             }.into_any()
                         }
-                        (None, None) => view! {
-                            <aside class="tools-sidebar site-sidebar-chrome">
-                                <SidebarBrand/>
-                                <p class="sidebar-empty">"Loading filters…"</p>
-                            </aside>
-                            <div class="tools-main">
-                                {children.as_ref().map(|content| view! { <div class="tools-prepend">{content()}</div> })}
-                                <ToolListSkeleton count=6/>
-                            </div>
-                        }.into_any(),
-                        (Some(Ok(_)), None) => view! {
+                        _ => view! {
                             <aside class="tools-sidebar site-sidebar-chrome">
                                 <SidebarBrand/>
                                 <p class="sidebar-empty">"Loading filters…"</p>
