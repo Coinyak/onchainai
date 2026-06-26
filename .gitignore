@@ -10,7 +10,8 @@ style/node_modules/
 
 # Rust
 *.rs.bk
-Cargo.lock
+# Cargo.lock is committed: this is a binary/app, so pinned deps give
+# reproducible builds (an unpinned rebuild pulled mio into the wasm bundle).
 
 # Docker
 *.tar
