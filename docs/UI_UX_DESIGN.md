@@ -1367,13 +1367,13 @@ Trade-off: simpler SSR/hydration correctness vs. extra DB rows on deep pages. Ac
 
 | 우선순위 | 항목 | 문서 위치 | 현재 상태 |
 |----------|------|-----------|-----------|
-| **운영** | Featured carousel **콘텐츠** | §2, carousel 스펙 | UI/코드 완료. **active 카드 0개** → 홈에 미표시. `/admin/featured`에서 시드 필요 |
+| **운영** | Featured carousel **콘텐츠** | §2, carousel 스펙 | UI/코드 완료. **active 카드 0개** → 홈에 미표시. 로컬: `seeds/dev_seed_featured.sql` (Phase A 후). 운영: `/admin/featured` 또는 동일 패턴 시드 |
 | **UX** | 북마크 **초기 표시** (★/☆) | §10 | hydration 안전을 위해 **클릭 전 ☆ 고정**; 로그인 후 toggle 시에만 ★ 반영 |
 | **UX** | 모바일 **풀스크린 검색 오버레이** | §9 | 미구현. 홈 `SearchBar` / `/tools` `ToolbarSearch`만 |
 | **UX** | 모바일 **풀스크린 필터 패널** | §9, §5.8 | <1024px 기본 접힘 + ☰ 펼침. 전체 화면 필터 오버레이는 미완 |
 | **UX** | 바텀 시트 **dvh 키보드 처리** | §5.10, §9 | 드래그 확장/닫기는 구현. 가상 키보드 dvh 보정은 추가 여지 |
 | **수익** | x402 **등록 결제** | §2, §10 | 타입·설정 플래그만; 결제 플로우 미연동 |
-| **비주얼** | 도구 **공식 로고** (`logo_url`) | §8 | **모노그램** placeholder; DB `logo_url` 미사용 |
+| **비주얼** | 도구 **공식 로고** (`logo_url`) | §8 | **부분 구현** — `ToolCard`/`tool_detail_content` 모노그램 fallback 동작; `logo_url` DB 컬럼·`<img>` 렌더·크롤러 수집 루프 미연동 |
 | **비주얼** | 카테고리 그리드 | §2 (구버전) | **의도적 제거** — 사이드바 Function으로 대체 |
 | **비주얼** | 상단 sticky TopNav | §2 (구버전) | **의도적 제거** — 사이드바 브랜드로 대체 |
 | **Admin UX** | 문서 와이어프레임 수준 인라인 편집·배지 일괄 | §11.4+ | 기본 CRUD는 있으나 문서 수준 폴리시 미달 가능 |
@@ -1414,7 +1414,7 @@ Failed smoke **blocks deploy** (see `post-deploy-verify.sh`, `deploy-railway.sh`
 
 ### 12.5 다음 작업 제안 (디자인 완성도)
 
-1. `/admin/featured`에 carousel 카드 1–3개 시드 → 홈 시각 검증
+1. 로컬: `dev_seed_featured.sql` 또는 `/admin/featured`에 carousel 카드 1–3개 시드 → 홈 시각 검증
 2. 모바일 검색·필터 풀스크린 오버레이 (§9)
 3. 로그인 사용자 북마크 상태 배치 fetch (N+1·rate limit 없이 batch API)
 4. x402 등록 결제 (MVP+)

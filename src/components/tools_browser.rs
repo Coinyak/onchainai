@@ -147,6 +147,26 @@ fn parse_page_param(raw: Option<String>) -> u32 {
         .unwrap_or(1)
 }
 
+/// Parse `page` from a raw query string (`?page=2&sort=hot` or `page=2`).
+pub fn parse_page_from_query_string(query: &str) -> Option<u32> {
+    let trimmed = query.trim_start_matches('?');
+    trimmed.split('&').find_map(|pair| {
+        let (key, value) = pair.split_once('=')?;
+        if key == "page" {
+            value.parse::<u32>().ok().filter(|page| *page > 0)
+        } else {
+            None
+        }
+    })
+}
+
+#[cfg(feature = "hydrate")]
+fn page_from_browser_url() -> Option<u32> {
+    let window = web_sys::window()?;
+    let search = window.location().search().ok()?;
+    parse_page_from_query_string(&search)
+}
+
 pub fn visible_limit_for_page(page: u32) -> i64 {
     let page = page.max(1);
     let limit = page.saturating_mul(TOOL_PAGE_SIZE).min(MAX_VISIBLE_TOOLS);
@@ -348,8 +368,16 @@ pub fn ToolsBrowser(
     });
     let search_q = Memo::new(move |_| query.with(|q| q.get("q").map(|s| s.to_string())));
     let selected = Memo::new(move |_| query.with(|q| q.get("selected").map(|s| s.to_string())));
-    let page_number =
-        Memo::new(move |_| parse_page_param(query.with(|q| q.get("page").map(|s| s.to_string()))));
+    let page_number = Memo::new(move |_| {
+        let from_router = query.with(|q| q.get("page").map(|s| s.to_string()));
+        #[cfg(feature = "hydrate")]
+        if from_router.is_none() {
+            if let Some(page) = page_from_browser_url() {
+                return page;
+            }
+        }
+        parse_page_param(from_router)
+    });
 
     let query_base = Memo::new(move |_| {
         build_query_base(
@@ -410,6 +438,15 @@ pub fn ToolsBrowser(
         },
     );
 
+    // Keep the last successful payload visible while the resource refetches so full-page
+    // `?page=N` navigation does not flash an empty/partial list during hydration.
+    let cached_browser_data = RwSignal::<Option<BrowserData>>::new(None);
+    Effect::new(move || {
+        if let Some(Ok(data)) = page.get() {
+            cached_browser_data.set(Some(data));
+        }
+    });
+
     let sort_hot = Memo::new(move |_| {
         build_sort_href(
             &base.get_value(),
@@ -464,8 +501,27 @@ pub fn ToolsBrowser(
                     <ToolListSkeleton count=6/>
                 </div>
             }>
-                {move || match page.get() {
-                        Some(Ok(data)) => {
+                {move || {
+                    let resolved = match page.get() {
+                        Some(Ok(data)) => Some(data),
+                        Some(Err(_)) => None,
+                        None => cached_browser_data.get(),
+                    };
+                    match (page.get(), resolved) {
+                        (Some(Err(e)), _) => view! {
+                            <aside class="tools-sidebar site-sidebar-chrome">
+                                <SidebarBrand/>
+                                <p class="sidebar-empty">"Loading filters…"</p>
+                            </aside>
+                            <div class="tools-main">
+                                {children.as_ref().map(|content| view! { <div class="tools-prepend">{content()}</div> })}
+                                <ErrorState
+                                    message=e.to_string()
+                                    on_retry=move || retry_tick.update(|n| *n = n.wrapping_add(1))
+                                />
+                            </div>
+                        }.into_any(),
+                        (_, Some(data)) => {
                             let qb = query_base.get();
                             let filter_qb = filter_query_base.get();
                             let browser_base = base.get_value();
@@ -580,20 +636,7 @@ pub fn ToolsBrowser(
                                 </div>
                             }.into_any()
                         }
-                        Some(Err(e)) => view! {
-                            <aside class="tools-sidebar site-sidebar-chrome">
-                                <SidebarBrand/>
-                                <p class="sidebar-empty">"Loading filters…"</p>
-                            </aside>
-                            <div class="tools-main">
-                                {children.as_ref().map(|content| view! { <div class="tools-prepend">{content()}</div> })}
-                                <ErrorState
-                                    message=e.to_string()
-                                    on_retry=move || retry_tick.update(|n| *n = n.wrapping_add(1))
-                                />
-                            </div>
-                        }.into_any(),
-                        None => view! {
+                        (None, None) => view! {
                             <aside class="tools-sidebar site-sidebar-chrome">
                                 <SidebarBrand/>
                                 <p class="sidebar-empty">"Loading filters…"</p>
@@ -603,6 +646,17 @@ pub fn ToolsBrowser(
                                 <ToolListSkeleton count=6/>
                             </div>
                         }.into_any(),
+                        (Some(Ok(_)), None) => view! {
+                            <aside class="tools-sidebar site-sidebar-chrome">
+                                <SidebarBrand/>
+                                <p class="sidebar-empty">"Loading filters…"</p>
+                            </aside>
+                            <div class="tools-main">
+                                {children.as_ref().map(|content| view! { <div class="tools-prepend">{content()}</div> })}
+                                <ToolListSkeleton count=6/>
+                            </div>
+                        }.into_any(),
+                    }
                 }}
             </Suspense>
         </div>
@@ -740,8 +794,23 @@ mod tests {
     fn visible_limit_for_page_is_bounded() {
         assert_eq!(visible_limit_for_page(0), 50);
         assert_eq!(visible_limit_for_page(1), 50);
+        assert_eq!(visible_limit_for_page(2), 100);
         assert_eq!(visible_limit_for_page(3), 150);
         assert_eq!(visible_limit_for_page(99), 500);
+    }
+
+    #[test]
+    fn parse_page_from_query_string_reads_page_param() {
+        assert_eq!(parse_page_from_query_string("?page=2&sort=hot"), Some(2));
+        assert_eq!(parse_page_from_query_string("page=3"), Some(3));
+        assert_eq!(parse_page_from_query_string("?sort=hot"), None);
+        assert_eq!(parse_page_from_query_string("?page=0"), None);
+    }
+
+    #[test]
+    fn load_more_page_two_requests_cumulative_limit() {
+        assert_eq!(visible_limit_for_page(2), 100);
+        assert!(should_show_load_more(100, 500, 2));
     }
 
     #[test]
@@ -834,6 +903,28 @@ mod tests {
     #[test]
     fn should_show_load_more_hides_when_page_cannot_grow() {
         assert!(!should_show_load_more(480, 1000, 10));
+    }
+
+    #[test]
+    fn should_show_load_more_shows_from_empty_first_page() {
+        assert!(should_show_load_more(0, 100, 1));
+    }
+
+    #[test]
+    fn should_show_load_more_hides_when_total_non_positive() {
+        assert!(!should_show_load_more(0, 0, 1));
+        assert!(!should_show_load_more(0, -5, 1));
+    }
+
+    #[test]
+    fn should_show_load_more_treats_page_zero_like_first_page() {
+        assert!(should_show_load_more(50, 200, 0));
+        assert!(!should_show_load_more(50, 50, 0));
+    }
+
+    #[test]
+    fn should_show_load_more_shows_one_below_cap_with_room_to_grow() {
+        assert!(should_show_load_more(499, 1000, 9));
     }
 
     #[test]

@@ -325,3 +325,52 @@ $ node scripts/browser-smoke.mjs http://localhost:3000
 
 - Apply `BUILD_DEPLOY_RULES.md` on next Railway deploy; run `post-deploy-verify.sh` against production.
 - Tablet sidebar default collapsed threshold moving from 768px → **1024px** (`client_storage.rs`) — doc updated in `UI_UX_DESIGN.md` §12.
+
+## 2026-06-27 Browser QA — production click-through + smoke hardening
+
+### Findings (`scripts/click-test.mjs` against `https://www.onchain-ai.xyz`)
+
+| Step | Result | Detail |
+|------|--------|--------|
+| Home / tools load | PASS | No deserialization errors in body |
+| Sidebar brand + filter click | PASS | `?function=bridge` navigation OK |
+| Tool cards | PASS | 50 cards on `/tools` |
+| Tool logos | PASS (partial) | 50 monograms, 0 `<img>` logos (`logo_url` not wired) |
+| Chain strip click | PASS | Filter navigation OK |
+| **Load more click** | **FAIL** | Card count **50 → 6** after click (cumulative refetch + cap/validation bug) |
+| Tool preview | PASS | `?selected=` opens preview |
+| Mobile `/tools` | PASS | No deserialization errors |
+| Console | **FAIL** | Multiple **HTTP 500** on same-origin `/api` during load-more |
+
+Root cause: load-more requested `limit > 500` (page × 50 uncapped server-side) and/or stale offset semantics; server rejected with 500 instead of a bounded response. Sort links also kept `selected=` open, closing preview unexpectedly on reorder.
+
+### Fixes applied
+
+| Item | Change |
+|------|--------|
+| **Load more cap** | `MAX_LIST_TOOLS_LIMIT = 500`; `should_show_load_more()` hides control when next page cannot grow (`480/1000 @ page 10` edge) |
+| **Server-fn validation** | `validate_tool_list_request()` rejects out-of-range `limit`/`offset`/filter sizes (no silent clamp → 500) |
+| **Cumulative pagination** | `visible_limit_for_page(page)`; `offset = 0` on every fetch |
+| **Sort UX** | `build_sort_href` omits `selected` (preview closes on sort change) |
+| **Tablet sidebar** | Default collapsed threshold **768px → 1024px** (`sidebar_default_collapsed_for_width`) |
+| **RLS alignment** | Migration `015_public_tool_where_containment.sql` — `= ANY(crypto_relevance_reasons)` matches `PUBLIC_TOOL_WHERE` |
+| **`browser-smoke.mjs`** | Added load-more markup, mobile sidebar collapsed, chain-more visibility, served CSS non-empty checks |
+| **`smoke-test.sh`** | Asserts load-more markup on large `/tools` listing |
+| **Featured seed** | `seeds/dev_seed_featured.sql` — 3 active cards after Phase A dev seed |
+| **Disk hygiene** | `docs/DISK_MAINTENANCE.md` + `scripts/disk-audit.sh` monthly audit wrapper |
+
+### Verification
+
+```text
+$ cargo test --features ssr should_show_load_more public_tool_where
+$ ./scripts/smoke-test.sh http://localhost:3000
+$ node scripts/browser-smoke.mjs http://localhost:3000
+$ node scripts/click-test.mjs http://localhost:3000   # optional prod regression
+$ ./scripts/disk-audit.sh
+```
+
+### Remaining
+
+- Re-run `click-test.mjs` against production after next deploy (load-more 50→N monotonic, no 500s).
+- Wire `logo_url` collection + `<img>` render (monogram fallback stays).
+- Seed production featured cards via `/admin/featured` or operator SQL.

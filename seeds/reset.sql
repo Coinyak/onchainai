@@ -31,6 +31,10 @@ DELETE FROM upvotes u USING comments c, tools t
 DELETE FROM comments c USING tools t
   WHERE c.tool_id = t.id AND t.source = 'manual';
 
+-- Featured carousel cards tied to manual seed tools.
+DELETE FROM featured_cards fc USING tools t
+  WHERE fc.tool_id = t.id AND t.source = 'manual';
+
 -- Phase A seed tools (everything we inserted is source = 'manual').
 DELETE FROM tools WHERE source = 'manual';
 

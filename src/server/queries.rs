@@ -35,4 +35,12 @@ mod tests {
         assert!(PUBLIC_TOOL_WHERE
             .contains("'migration-backfill: crypto keyword in name or description' = ANY(crypto_relevance_reasons)"));
     }
+
+    /// Migration 015 broadened RLS from exact array equality (011) to `= ANY` containment.
+    #[test]
+    fn public_tool_where_matches_migration_015_rls_containment() {
+        assert!(PUBLIC_TOOL_WHERE.contains("= ANY(crypto_relevance_reasons)"));
+        assert!(!PUBLIC_TOOL_WHERE.contains("crypto_relevance_reasons = ARRAY["));
+        assert!(!PUBLIC_TOOL_WHERE.contains("]::TEXT[]"));
+    }
 }
