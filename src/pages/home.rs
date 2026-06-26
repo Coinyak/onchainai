@@ -37,10 +37,10 @@ pub fn HomePage() -> impl IntoView {
         <Await future=load_home_header() let:data blocking=true>
             <div class="home-page max-w-[1200px] mx-auto px-4 md:px-6 py-8 md:py-12">
                 <section class="hero mb-8">
-                    <h1 class="text-[28px] md:text-[28px] font-bold tracking-tight leading-tight mb-3">
+                    <h1 class="text-[28px] md:text-[36px] font-bold tracking-tight leading-tight mb-3">
                         {data.0.slogan.clone()}
                     </h1>
-                    <p class="text-[#6B6B6B] text-[14px] md:text-[14px] leading-relaxed mb-6 max-w-[640px]">
+                    <p class="text-[#6B6B6B] text-[14px] md:text-[16px] leading-relaxed mb-6 max-w-[720px]">
                         {data.0.description.clone()}
                     </p>
                     <SearchBar/>

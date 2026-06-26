@@ -271,8 +271,11 @@ body {
   padding: 0 16px 32px;
   gap: 24px;
 }
+.tools-main { min-width: 0; order: 1; }
 @media (min-width: 1024px) {
   .tools-layout { grid-template-columns: 240px 1fr; max-width: 1200px; margin: 0 auto; }
+  .tools-sidebar { order: 1; }
+  .tools-main { order: 2; }
 }
 .tools-sidebar {
   background: #FFFFFF;
@@ -382,6 +385,28 @@ body {
 .external-link:hover { color: #E76F00; text-decoration: underline; }
 
 @media (max-width: 767px) {
+  .tools-layout {
+    padding: 0 12px 24px;
+    gap: 12px;
+  }
+  .tools-sidebar {
+    order: 2;
+    position: static;
+    top: auto;
+    width: 100%;
+    max-height: none;
+    overflow: visible;
+    border-right: 0;
+    border-top: 1px solid #E5E5E5;
+    padding: 12px 4px 0;
+  }
+  .sidebar-header { margin-bottom: 8px; }
+  .sidebar-section { margin-bottom: 12px; padding-bottom: 8px; }
+  .sticky-toolbar { top: 48px; }
+  .tools-toolbar { gap: 8px; padding: 10px 0; margin-bottom: 12px; }
+  .toolbar-sort { width: 100%; order: 2; overflow-x: auto; white-space: nowrap; }
+  .tool-count { width: 100%; margin-left: 0; order: 3; }
+  .sort-link { padding: 6px 8px; }
   .tool-card-inner { padding: 16px; }
   .tool-logo { width: 40px; height: 40px; }
   .tool-desc { -webkit-line-clamp: 2; }
@@ -611,6 +636,12 @@ body {
 @media (max-width: 767px) {
   html { font-size: 16px; }
   body { line-height: 1.65; }
+  .tool-card-actions {
+    position: static;
+    margin: 0 16px 12px;
+    display: flex;
+    justify-content: flex-end;
+  }
   .tool-desc, .tool-meta, .detail-desc { font-size: 16px; line-height: 1.65; }
   .tool-name { font-size: 16px; }
   .detail-title { font-size: 26px; }

@@ -48,14 +48,14 @@ fn AuthNav(
 pub fn TopNav() -> impl IntoView {
     view! {
         <header class="sticky top-0 z-50 bg-white border-b border-[#E5E5E5]">
-            <div class="max-w-[1200px] mx-auto px-4 md:px-6 h-14 flex items-center justify-between">
+            <div class="max-w-[1200px] mx-auto px-4 md:px-6 h-12 md:h-14 flex items-center justify-between">
                 <A href="/" attr:class="text-[16px] font-semibold tracking-tight text-[#1A1A1A] no-underline">
                     "OnchainAI"
                 </A>
-                <nav class="flex items-center gap-3 md:gap-5 text-[14px]">
+                <nav class="flex items-center gap-2 md:gap-5 text-[14px]">
                     <A
                         href="/about#submit"
-                        attr:class="inline-flex items-center justify-center h-9 px-4 rounded-lg bg-[#E76F00] text-white text-[14px] font-medium no-underline hover:bg-[#D96400]"
+                        attr:class="inline-flex items-center justify-center h-8 md:h-9 px-3 md:px-4 rounded-lg bg-[#E76F00] text-white text-[13px] md:text-[14px] font-medium no-underline hover:bg-[#D96400]"
                     >
                         "Submit"
                     </A>
@@ -63,7 +63,7 @@ pub fn TopNav() -> impl IntoView {
                         href=GITHUB_REPO
                         target="_blank"
                         rel="noopener noreferrer"
-                        class="text-[#6B6B6B] hover:text-[#1A1A1A] no-underline"
+                        class="hidden sm:inline text-[#6B6B6B] hover:text-[#1A1A1A] no-underline"
                     >
                         "GitHub"
                     </a>
