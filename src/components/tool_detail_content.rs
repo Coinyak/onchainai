@@ -1,5 +1,6 @@
 //! Shared tool detail body — install tabs, trust, chains, links.
 
+use crate::chains::chain_tags_for_tool;
 use crate::components::copy_button::CopyButton;
 use crate::install_safety::{
     blocks_structured_config, claude_mcp_config, cursor_install_note, install_warning_text,
@@ -141,12 +142,28 @@ pub fn ToolDetailContent(
             <div class="detail-meta detail-meta-wrap">
                 <span>{"★ "}{tool.stars}</span>
                 {if !tool.chains.is_empty() {
+                    let (chain_tags, extra_chains) = chain_tags_for_tool(&tool.chains, 12);
                     view! {
                         <span class="tool-chains chains-wrap">
-                            {tool.chains
-                                .iter()
-                                .map(|c| view! { <span class="chain-pill">{c.clone()}</span> })
-                                .collect_view()}
+                            {chain_tags.into_iter().map(|tag| {
+                                if let Some(meta) = tag.meta {
+                                    view! {
+                                        <img
+                                            class="chain-logo chain-logo-tag"
+                                            src=meta.logo
+                                            alt=meta.label
+                                            title=meta.label
+                                        />
+                                    }.into_any()
+                                } else {
+                                    view! { <span class="chain-pill">{tag.raw}</span> }.into_any()
+                                }
+                            }).collect_view()}
+                            {if extra_chains > 0 {
+                                view! { <span class="chain-pill chain-more">{"+"}{extra_chains}</span> }.into_any()
+                            } else {
+                                ().into_any()
+                            }}
                         </span>
                     }
                     .into_any()

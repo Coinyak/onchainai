@@ -8,6 +8,7 @@
 
 pub mod category;
 pub mod comment;
+pub mod featured;
 pub mod submission;
 pub mod tool;
 pub mod user;
@@ -18,6 +19,8 @@ pub mod user;
 pub use category::Category;
 #[allow(unused_imports)]
 pub use comment::{Bookmark, Comment, Upvote};
+#[allow(unused_imports)]
+pub use featured::FeaturedCard;
 #[allow(unused_imports)]
 pub use submission::{
     ToolClaimRequest, ToolReport, ToolSubmission, ToolSubmissionPayload, CLAIM_STATES,

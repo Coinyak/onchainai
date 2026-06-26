@@ -121,7 +121,7 @@ gloo-net = { version = "0.6", optional = true }
 gloo-timers = { version = "0.3", features = ["futures"], optional = true }
 js-sys = { version = "0.3", optional = true }
 wasm-bindgen-futures = { version = "0.4", optional = true }
-web-sys = { version = "0.3", features = ["RequestCredentials", "Window", "Navigator", "Clipboard", "Storage", "Location"], optional = true }
+web-sys = { version = "0.3", features = ["RequestCredentials", "Window", "Navigator", "Clipboard", "Storage", "Location", "File", "FileList", "FileReader", "HtmlInputElement", "Event"], optional = true }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }

@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" role="img" aria-label="Avalanche">
+  <rect width="48" height="48" rx="8" fill="#fff"/>
+  <path fill="#E84142" d="M24 10l14 24H10z"/>
+  <path fill="#fff" d="M24 18l6 10h-12z"/>
+</svg>

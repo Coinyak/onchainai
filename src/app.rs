@@ -6,8 +6,8 @@
 use crate::components::top_nav::TopNav;
 use crate::pages::{
     AdminCategoriesPage, AdminCommentsPage, AdminCrawlerPage, AdminDashboardPage,
-    AdminSettingsPage, AdminToolsPage, AdminUsersPage, CategoryPage, HomePage, LoginPage,
-    OnboardingProfilePage, SubmitPage, ToolDetailPage, ToolsListPage,
+    AdminFeaturedPage, AdminSettingsPage, AdminToolsPage, AdminUsersPage, CategoryPage, HomePage,
+    LoginPage, OnboardingProfilePage, SubmitPage, ToolDetailPage, ToolsListPage,
 };
 use leptos::prelude::*;
 use leptos_meta::{provide_meta_context, Link, Meta, MetaTags, Stylesheet, Title};
@@ -83,6 +83,7 @@ pub fn App() -> impl IntoView {
                     <Route path=(StaticSegment("onboarding"), StaticSegment("profile")) view=OnboardingProfilePage/>
                     <Route path=StaticSegment("admin") view=AdminDashboardPage/>
                     <Route path=(StaticSegment("admin"), StaticSegment("tools")) view=AdminToolsPage/>
+                    <Route path=(StaticSegment("admin"), StaticSegment("featured")) view=AdminFeaturedPage/>
                     <Route path=(StaticSegment("admin"), StaticSegment("settings")) view=AdminSettingsPage/>
                     <Route path=(StaticSegment("admin"), StaticSegment("crawler")) view=AdminCrawlerPage/>
                     <Route path=(StaticSegment("admin"), StaticSegment("categories")) view=AdminCategoriesPage/>

@@ -11,7 +11,7 @@ pub mod tools_list;
 
 pub use admin::{
     AdminCategoriesPage, AdminCommentsPage, AdminCrawlerPage, AdminDashboardPage,
-    AdminSettingsPage, AdminToolsPage, AdminUsersPage,
+    AdminFeaturedPage, AdminSettingsPage, AdminToolsPage, AdminUsersPage,
 };
 pub use category::CategoryPage;
 pub use home::HomePage;

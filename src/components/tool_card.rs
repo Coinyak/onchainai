@@ -1,5 +1,6 @@
 //! Stripe-style tool card for list views — badges, bookmark, upvote.
 
+use crate::chains::chain_tags_for_tool;
 use crate::components::copy_button::CopyButton;
 use crate::components::login_modal::LoginModal;
 use crate::models::Tool;
@@ -45,8 +46,7 @@ pub fn ToolCard(
     let status = tool.status.clone();
     let tool_type = tool.tool_type.clone();
     let chains = tool.chains.clone();
-    let chain_preview: Vec<_> = chains.iter().take(5).cloned().collect();
-    let extra_chains = chains.len().saturating_sub(5);
+    let (chain_preview, extra_chains) = chain_tags_for_tool(&chains, 5);
     let install = tool.install_command.clone().unwrap_or_default();
     let stars = tool.stars;
     let description = tool
@@ -120,10 +120,20 @@ pub fn ToolCard(
                         </div>
                         <div class="tool-meta">
                             <span class="tool-chains">
-                                {chain_preview
-                                    .into_iter()
-                                    .map(|c| view! { <span class="chain-pill">{c}</span> })
-                                    .collect_view()}
+                                {chain_preview.into_iter().map(|tag| {
+                                    if let Some(meta) = tag.meta {
+                                        view! {
+                                            <img
+                                                class="chain-logo chain-logo-tag"
+                                                src=meta.logo
+                                                alt=meta.label
+                                                title=meta.label
+                                            />
+                                        }.into_any()
+                                    } else {
+                                        view! { <span class="chain-pill">{tag.raw}</span> }.into_any()
+                                    }
+                                }).collect_view()}
                                 {if extra_chains > 0 {
                                     view! { <span class="chain-pill chain-more">{"+"}{extra_chains}</span> }
                                         .into_any()

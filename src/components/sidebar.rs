@@ -94,7 +94,6 @@ fn default_section_state(function_open: bool) -> HashMap<String, bool> {
         ("actor", false),
         ("type", false),
         ("status", false),
-        ("chain", true),
     ]
     .into_iter()
     .map(|(k, v)| (k.to_string(), v))
@@ -172,8 +171,6 @@ pub fn Sidebar(
     active_actor: Option<String>,
     active_type: Option<String>,
     active_status: Option<String>,
-    active_chain: Option<String>,
-    chain_options: Vec<(String, i64)>,
     #[prop(default = true)] default_function_open: bool,
 ) -> impl IntoView {
     let base_path = base.path().to_string();
@@ -182,7 +179,6 @@ pub fn Sidebar(
     let actor_active = parse_multi(active_actor.as_deref());
     let type_active = parse_multi(active_type.as_deref());
     let status_active = parse_multi(active_status.as_deref());
-    let chain_active = parse_multi(active_chain.as_deref());
 
     let sidebar_collapsed = RwSignal::new(read_sidebar_collapsed());
     let open_map = RwSignal::new(read_sidebar_sections(default_section_state(
@@ -212,8 +208,6 @@ pub fn Sidebar(
     let query_for_type = query_base.clone();
     let base_for_status = base_path.clone();
     let query_for_status = query_base.clone();
-    let base_for_chain = base_path.clone();
-    let query_for_chain = query_base.clone();
 
     view! {
         <aside class=aside_class>
@@ -238,7 +232,6 @@ pub fn Sidebar(
                     ("actor", "Hu", "Actor"),
                     ("type", "Ty", "Type"),
                     ("status", "St", "Status"),
-                    ("chain", "Ch", "Chain"),
                 ].into_iter().map(|(id, short, label)| {
                     let section_id = id.to_string();
                     view! {
@@ -330,31 +323,6 @@ pub fn Sidebar(
                             }
                         }).collect_view()}
                     </ul>
-                </CollapsibleSection>
-
-                <CollapsibleSection section_id="chain" title="Chain" open_map=open_map sidebar_collapsed=sidebar_collapsed>
-                    {if chain_options.is_empty() {
-                        view! {
-                            <p class="sidebar-empty">"No chains yet"</p>
-                        }.into_any()
-                    } else {
-                        view! {
-                            <ul class="sidebar-list">
-                                {chain_options.into_iter().take(9).map(|(chain, count)| {
-                                    let href = toggle_multi(&base_for_chain, &query_for_chain, "chain", &chain, &chain_active);
-                                    let is_active = chain_active.iter().any(|v| v == &chain);
-                                    view! {
-                                        <li>
-                                            <A href=href attr:class=link_class(is_active)>
-                                                <span class="sidebar-title-text">{chain.clone()}</span>
-                                                <span class="sidebar-count">{count}</span>
-                                            </A>
-                                        </li>
-                                    }
-                                }).collect_view()}
-                            </ul>
-                        }.into_any()
-                    }}
                 </CollapsibleSection>
             </div>
         </aside>

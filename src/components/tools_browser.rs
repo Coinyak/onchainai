@@ -2,9 +2,9 @@
 //! Used by Home (`/`) and ToolsList (`/tools`) per UI_UX_DESIGN §2.
 
 use crate::components::{
-    bottom_sheet::BottomSheet, empty_state::EmptyState, error_state::ErrorState,
-    preview_panel::PreviewPanel, search_bar::ToolbarSearch, sidebar::Sidebar,
-    skeleton::ToolListSkeleton, tool_card::ToolCard,
+    bottom_sheet::BottomSheet, chain_strip::ChainStrip, empty_state::EmptyState,
+    error_state::ErrorState, preview_panel::PreviewPanel, search_bar::ToolbarSearch,
+    sidebar::Sidebar, skeleton::ToolListSkeleton, tool_card::ToolCard,
 };
 use crate::filter_query::{build_tool_filters, describe_active_filters, ActiveFiltersSummary};
 use crate::models::{Category, Tool};
@@ -324,11 +324,15 @@ pub fn ToolsBrowser(
                                 active_actor=actor.get()
                                 active_type=tool_type.get()
                                 active_status=status.get()
-                                active_chain=chain.get()
-                                chain_options=data.chains.clone()
                                 default_function_open=base == BrowserBase::Tools
                             />
                             <div class="tools-main">
+                                <ChainStrip
+                                    base=base
+                                    query_base=qb.clone()
+                                    active_chain=chain.get()
+                                    chain_counts=data.chains.clone()
+                                />
                                 <div class="tools-toolbar sticky-toolbar">
                                     {if show_toolbar_search {
                                         view! { <ToolbarSearch base=base initial_q=search_q.get().unwrap_or_default()/> }.into_any()

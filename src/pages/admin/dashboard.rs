@@ -134,6 +134,12 @@ fn DashboardContent(data: AdminDashboardStats) -> impl IntoView {
                 "Crawler control"
             </a>
             <a
+                href="/admin/featured"
+                class="rounded-lg border border-[#E5E5E5] px-4 py-3 text-[14px] font-medium hover:bg-[#FAFAFA]"
+            >
+                "Featured carousel"
+            </a>
+            <a
                 href="/admin/settings"
                 class="rounded-lg border border-[#E5E5E5] px-4 py-3 text-[14px] font-medium hover:bg-[#FAFAFA]"
             >

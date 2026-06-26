@@ -239,6 +239,143 @@ body {
   border: 1px solid #D1D1D1; background: #FAFAFA;
 }
 .chain-more { border-style: dashed; }
+.chain-logo {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.chain-logo-tag {
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  border: 1px solid #E5E5E5;
+  background: #FFFFFF;
+  padding: 2px;
+  flex-shrink: 0;
+}
+.chain-strip {
+  padding: 12px 16px 0;
+  border-bottom: 1px solid #E5E5E5;
+  background: #FFFFFF;
+}
+.chain-strip-scroll {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 12px;
+  scrollbar-width: thin;
+}
+.chain-tile {
+  flex: 0 0 auto;
+  width: 48px;
+  height: 48px;
+  border-radius: 10px;
+  border: 2px solid #E5E5E5;
+  background: #FFFFFF;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  color: inherit;
+  cursor: pointer;
+  padding: 6px;
+}
+.chain-tile-all {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.chain-tile-more {
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1;
+}
+.chain-tile.active {
+  border-color: #E76F00;
+  box-shadow: 0 0 0 1px #E76F00 inset;
+}
+.chain-tile:focus-visible {
+  outline: 2px solid #E76F00;
+  outline-offset: 2px;
+}
+.featured-carousel {
+  position: relative;
+  margin-bottom: 2.5rem;
+  border-radius: 16px;
+  overflow: hidden;
+  border: 1px solid #E5E5E5;
+  background: #111111;
+}
+.featured-carousel-track {
+  position: relative;
+  min-height: 220px;
+}
+.featured-carousel-card {
+  display: none;
+  position: relative;
+  text-decoration: none;
+  color: #FFFFFF;
+}
+.featured-carousel-card.active {
+  display: block;
+}
+.featured-carousel-image {
+  width: 100%;
+  height: 220px;
+  object-fit: cover;
+  display: block;
+}
+.featured-carousel-overlay {
+  position: absolute;
+  inset: auto 0 0 0;
+  padding: 20px 24px;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0) 0%, rgba(0, 0, 0, 0.72) 100%);
+}
+.featured-carousel-headline {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+.featured-carousel-subtitle {
+  margin: 6px 0 0;
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.88);
+}
+.featured-carousel-dots {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 10px;
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  pointer-events: none;
+}
+.carousel-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  border: 0;
+  background: rgba(255, 255, 255, 0.45);
+  cursor: pointer;
+  pointer-events: auto;
+  padding: 0;
+}
+.carousel-dot.active {
+  background: #E76F00;
+  transform: scale(1.15);
+}
+.carousel-dot:focus-visible {
+  outline: 2px solid #FFFFFF;
+  outline-offset: 2px;
+}
+@media (min-width: 768px) {
+  .featured-carousel-track { min-height: 280px; }
+  .featured-carousel-image { height: 280px; }
+  .featured-carousel-headline { font-size: 28px; }
+}
 .tool-install { margin-top: 12px; display: flex; gap: 8px; align-items: center; }
 .install-cmd {
   font-family: "JetBrains Mono", monospace; font-size: 13px;

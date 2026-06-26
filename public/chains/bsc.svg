@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" role="img" aria-label="BNB Chain">
+  <rect width="48" height="48" rx="8" fill="#fff"/>
+  <path fill="#F0B90B" d="M24 10l9 5.2v10.4L24 31l-9-5.4V15.2z"/>
+  <path fill="#fff" d="M24 16l4 2.3v4.6L24 25l-4-2.1v-4.6z"/>
+  <rect x="22.5" y="22.5" width="3" height="3" fill="#fff"/>
+</svg>

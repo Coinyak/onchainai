@@ -4,6 +4,7 @@
 
 pub mod app;
 pub mod auth;
+pub mod chains;
 pub mod client_storage;
 pub mod components;
 pub mod config;
@@ -45,7 +46,7 @@ pub fn build_app(pool: sqlx::PgPool, config: Config) -> axum::Router {
         compression::CompressionLayer,
         cors::{AllowOrigin, CorsLayer},
         limit::RequestBodyLimitLayer,
-        services::ServeFile,
+        services::{ServeDir, ServeFile},
         set_header::SetResponseHeaderLayer,
         trace::TraceLayer,
     };
@@ -203,6 +204,15 @@ pub fn build_app(pool: sqlx::PgPool, config: Config) -> axum::Router {
 
     let app_routes = Router::new()
         .route_service("/pkg/onchainai.css", ServeFile::new("style/output.css"))
+        .nest_service(
+            "/chains",
+            ServiceBuilder::new()
+                .layer(SetResponseHeaderLayer::if_not_present(
+                    axum::http::header::CACHE_CONTROL,
+                    axum::http::HeaderValue::from_static("public, max-age=31536000, immutable"),
+                ))
+                .service(ServeDir::new("public/chains").append_index_html_on_directories(false)),
+        )
         .route_service(
             &static_route,
             leptos_axum::site_pkg_dir_service(&leptos_options),
@@ -232,7 +242,7 @@ pub fn build_app(pool: sqlx::PgPool, config: Config) -> axum::Router {
         .layer(security_headers)
         .layer(cors)
         .layer(CompressionLayer::new())
-        .layer(RequestBodyLimitLayer::new(1024 * 1024))
+        .layer(RequestBodyLimitLayer::new(8 * 1024 * 1024))
         .layer(TraceLayer::new_for_http())
 }
 
