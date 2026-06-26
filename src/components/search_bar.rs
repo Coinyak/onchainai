@@ -122,7 +122,8 @@ pub fn ToolbarSearch(base: BrowserBase, initial_q: String) -> impl IntoView {
                     .map(|s| s.to_string())
                     .unwrap_or_else(|| "hot".into()),
                 Some(q.clone()).filter(|s| !s.is_empty()),
-                qm.get("selected").map(|s| s.to_string()),
+                None,
+                1,
             )
         });
         let current_q = query.with_untracked(|qm| qm.get("q").unwrap_or_default().to_string());

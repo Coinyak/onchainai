@@ -1,7 +1,6 @@
 //! Empty state with filter summary, clear filters, and submit CTA — UI_UX_DESIGN §6.
 
 use leptos::prelude::*;
-use leptos_router::components::A;
 
 #[component]
 pub fn EmptyState(
@@ -35,17 +34,17 @@ pub fn EmptyState(
             <div class="empty-state-actions">
                 {if show_clear {
                     view! {
-                        <A href=clear_href.clone() attr:class="empty-state-clear-btn">"Clear filters"</A>
+                        <a href=clear_href.clone() class="empty-state-clear-btn">"Clear filters"</a>
                     }.into_any()
                 } else {
                     ().into_any()
                 }}
-                <A
+                <a
                     href="/submit"
-                    attr:class="empty-state-submit-btn"
+                    class="empty-state-submit-btn"
                 >
                     "Suggest a tool →"
-                </A>
+                </a>
             </div>
         </div>
     }

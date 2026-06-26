@@ -2,7 +2,6 @@
 
 use crate::components::top_nav::SidebarBrand;
 use leptos::prelude::*;
-use leptos_router::components::A;
 use leptos_router::hooks::use_location;
 
 struct AdminNavItem {
@@ -82,15 +81,15 @@ pub fn AdminShell(children: Children) -> impl IntoView {
                             let label = item.label;
                             view! {
                                 <li>
-                                    <A
+                                    <a
                                         href=href
-                                        attr:class=move || {
+                                        class=move || {
                                             let path = location.pathname.get();
                                             nav_link_class(is_admin_nav_active(&path, href))
                                         }
                                     >
                                         <span class="sidebar-title-text">{label}</span>
-                                    </A>
+                                    </a>
                                 </li>
                             }
                         }).collect_view()}

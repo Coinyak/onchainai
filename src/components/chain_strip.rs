@@ -4,7 +4,6 @@ use crate::chains::{chain_filter_active, strip_chains, ChainMeta, STRIP_PRIMARY_
 use crate::components::tools_browser::BrowserBase;
 use crate::filter_query::{clear_axis, parse_multi, toggle_multi};
 use leptos::prelude::*;
-use leptos_router::components::A;
 
 #[component]
 pub fn ChainStrip(
@@ -29,15 +28,15 @@ pub fn ChainStrip(
     view! {
         <div class="chain-strip" role="group" aria-label="Filter by chain">
             <div class="chain-strip-scroll">
-                <A
+                <a
                     href=all_href
-                    attr:class=if all_active { "chain-tile chain-tile-all active" } else { "chain-tile chain-tile-all" }
-                    attr:aria-label="All chains"
-                    attr:title="All chains"
-                    attr:aria-pressed=if all_active { "true" } else { "false" }
+                    class=if all_active { "chain-tile chain-tile-all active" } else { "chain-tile chain-tile-all" }
+                    aria-label="All chains"
+                    title="All chains"
+                    aria-pressed=if all_active { "true" } else { "false" }
                 >
                     "All"
-                </A>
+                </a>
 
                 {primary.into_iter().map(|entry| {
                     chain_tile(&base_path, &query_base, &chain_active, entry)
@@ -83,14 +82,14 @@ fn chain_tile(
     };
 
     view! {
-        <A
+        <a
             href=href
-            attr:class=class
-            attr:aria-label=label.clone()
-            attr:title=label
-            attr:aria-pressed=if is_active { "true" } else { "false" }
+            class=class
+            aria-label=label.clone()
+            title=label
+            aria-pressed=if is_active { "true" } else { "false" }
         >
             <img class="chain-logo" src=logo alt=entry.label/>
-        </A>
+        </a>
     }
 }

@@ -2,7 +2,6 @@
 
 use crate::server::functions::FeaturedCardView;
 use leptos::prelude::*;
-use leptos_router::components::A;
 
 #[cfg(feature = "hydrate")]
 use gloo_timers::callback::Interval;
@@ -56,14 +55,14 @@ pub fn FeaturedCarousel(cards: Vec<FeaturedCardView>) -> impl IntoView {
                     let subtitle = card.subtitle.clone().unwrap_or_default();
                     let image_url = card.image_url.clone();
                     view! {
-                        <A
+                        <a
                             href=href
-                            attr:class=move || if current.get() == idx {
+                            class=move || if current.get() == idx {
                                 "featured-carousel-card active"
                             } else {
                                 "featured-carousel-card"
                             }
-                            attr:aria-hidden=move || if current.get() == idx { "false" } else { "true" }
+                            aria-hidden=move || if current.get() == idx { "false" } else { "true" }
                         >
                             <img class="featured-carousel-image" src=image_url alt=title.clone()/>
                             <div class="featured-carousel-overlay">
@@ -76,7 +75,7 @@ pub fn FeaturedCarousel(cards: Vec<FeaturedCardView>) -> impl IntoView {
                                     ().into_any()
                                 }}
                             </div>
-                        </A>
+                        </a>
                     }
                 }).collect_view()}
             </div>

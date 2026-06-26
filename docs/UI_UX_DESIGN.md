@@ -3,6 +3,7 @@
 > 관련 문서: [[INDEX]] | [[MVP_DESIGN]] | [[SECURITY]] | [[../DESIGN]] | [[../AGENTS.md]]
 >
 > 작성: 2026-06-25. 사용자 요구사항 + 디렉토리 사이트 레퍼런스 분석 기반.
+> **갱신: 2026-06-27** — 사이트 전역 왼쪽 사이드바 레이아웃, chain strip, featured carousel, 카테고리 그리드 제거, Load more, 모바일 사이드바 기본 접힘, SSR 링크 안정화, 공개 relevance quality gate, Base relevance 보강 반영. 미구현 목록은 §12.
 
 ---
 
@@ -38,151 +39,64 @@
 
 ## 2. 페이지 구조
 
-### 글로벌 네비게이션 (모든 페이지 상단)
+### 글로벌 레이아웃 — 왼쪽 사이드바 (모든 public 페이지)
+
+> **2026-06-26 변경**: 상단 sticky `TopNav` 제거. 브랜드·액션은 **왼쪽 사이드바 최상단**에 고정.
 
 ```
-┌────────────────────────────────────────────────────────────────┐
-│  OnchainAI                                      [Submit]  [GitHub] │
-└────────────────────────────────────────────────────────────────┘
-```
-
-> 상단 네비게이션은 로고 + Submit + GitHub 링크만.
-> **sticky**: 스크롤 시 상단에 고정 (`position: sticky; top: 0; z-index: 100`).
-> 배경: #FFFFFF + 하단 1px #E5E5E5 보더 (구분선).
-> 탭/필터는 아래 소개 섹션 이후 왼쪽 사이드바로 이동 (3축 필터 구조).
-
-### 홈페이지 (`/`)
-
-상단 네비게이션 → 소개+검색+커뮤니티 등록 유도 카드 → 왼쪽 사이드바 필터 + 리스트.
-Smithery 소개 카드 + Product Hunt 세로 리스트 + AlternativeTo 사이드바 필터 결합.
-
-```
-┌────────────────────────────────────────────────────────────────┐
-│  OnchainAI                                      [Submit] [GitHub] │  ← 네비게이션
-└────────────────────────────────────────────────────────────────┘
-
-┌────────────────────────────────────────────────────────────────┐
-│                                                                │  ← 소개 + 검색 + 등록 유도
-│  OnchainAI — Crypto tools, unified.                            │
-│                                                                │
-│  Discover, install, and share crypto MCP, CLI, SDK, API,       │
-│  x402, RWA, and AI agent tools — all in one place.             │
-│  Search as a human, or let your agent search via MCP.          │
-│                                                                │
-│  ┌──────────────────────────────────────────────────────────┐  │
-│  │  Search: asset tracking, trading, DeFi, chain name...     │  │
-│  └──────────────────────────────────────────────────────────┘  │
-│                                                                │
-│  ┌────────────────────────┐  ┌────────────────────────┐   │
-│  │ Submit a Tool           │  │ Connect via MCP         │   │
-│  │                        │  │                        │   │
-│  │ List your MCP, CLI,     │  │ Connect your agent to   │   │
-│  │ SDK, or API. Free,      │  │ OnchainAI MCP and       │   │
-│  │ with verification badge.│  │ search 1,342 tools      │   │
-│  │ x402 tools: pay per     │  │ instantly.              │   │
-│  │ registration via x402.  │  │                        │   │
-│  │                        │  │ npx mcp-remote          │   │
-│  │ [Submit →]              │  │  www.onchain-ai.xyz/mcp      │   │
-│  │                        │  │      [Copy]             │   │
-│  └────────────────────────┘  └────────────────────────┘   │
-│                                                                │
-│  Categories                                                   │
-│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐          │
-│  │ ◇ Bridge │ │ ◇ Swap   │ │ ◇ Wallet │ │ ◇ Payments│         │
-│  │ 32       │ │ 84       │ │ 49       │ │ 91       │          │
-│  └──────────┘ └──────────┘ └──────────┘ └──────────┘          │
-│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐          │
-│  │ ◇ Lending│ │ ◇ Staking│ │ ◇ Trading│ │ ◇ NFT    │          │
-│  │ 45       │ │ 38       │ │ 188      │ │ 49       │          │
-│  └──────────┘ └──────────┘ └──────────┘ └──────────┘          │
-│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐          │
-│  │ ◇ Data   │ │ ◇ Dev    │ │ ◇ Identity│ │ ◇ Govern │         │
-│  │ 136      │ │ 60       │ │ 37       │ │ 22       │          │
-│  └──────────┘ └──────────┘ └──────────┘ └──────────┘          │
-│  ┌──────────┐ ┌──────────┐                                   │
-│  │ ◇ Social │ │ ◇ AI     │                                   │
-│  │ 15       │ │ Agent 98 │                                   │
-│  └──────────┘ └──────────┘                                   │
-│                                                                │
-└────────────────────────────────────────────────────────────────┘
-
-─── 스크롤 시 왼쪽 사이드바 필터 + 리스트 ─────────────────────
-
 ┌──────────────┬─────────────────────────────────────────────────┐
-│ Sidebar       │  Sort: [HOT ↓] [New] [Comments]    1,342 tools   │
-│              │  ─────────────────────────────────────────────── │
-│ (sticky,     │                                                 │
-│  independent │  ┌────┐  Zapper MCP      [Verified] [MCP] [x402]│
-│  scroll)     │  │logo│  60+ chain portfolio data                 │
-│ ▸ Function    │  │ img│  Zapper · 3d ago · proprietary           │
-│   Bridge     │  └────┘  ETH BASE OP ARB +56  ★ 340  comments 12│
-│   Lending    │         $ npx mcp-remote https://mcp.zapper.xyz  │
-│   Staking    │           [Copy]                                 │
-│   Trading    │  ─────────────────────────────────────────────── │
-│   NFT        │  ┌────┐  Coinbase AgentKit [Verified][SDK][x402]│
-│   Data       │  │logo│  Agent wallet + onchain actions          │
-│   Dev Tools  │  │ img│  Coinbase · 5d ago · Apache-2.0        │
-│   Identity   │  └────┘  ETH BASE SOL        ★ 1,200 comments 24│
-│   Governance │         $ npm i @coinbase/agentkit  [Copy]      │
-│   Social     │  ─────────────────────────────────────────────── │
-│   AI Agent   │  ┌────┐  BOB Gateway CLI  [Verified] [CLI]      │
-│              │  │logo│  Bitcoin ↔ EVM bridge CLI                │
-│ ▸ Asset Class │  │ img│  BOB Collective · 1d ago · MIT         │
-│   Crypto     │  └────┘  BTC ETH BASE BNB +8  ★ 125  comments 3 │
-│   RWA        │         $ npm i -g @gobob/gateway-cli  [Copy]   │
-│   Derivatives│  ─────────────────────────────────────────────── │
-│   Stablecoins│  ┌────┐  tiny.place       [Community] [Platform]│
-│              │  │logo│  AI agent social economy                  │
-│ ▸ Actor       │  │ img│  tiny.place · 2w ago                   │
-│   Human      │  └────┘  BASE                  ★ 42   comments 5 │
-│   AI Agent   │         https://tiny.place       [Visit]        │
-│              │  ─────────────────────────────────────────────── │
-│ ▸ Type        │  ...more (Product Hunt style, HOT order)        │
-│   MCP        │                                                 │
-│   CLI        │  [Load more ▼]                                  │
-│   SDK        │                                                 │
-│   API        │                                                 │
-│   Skill      │                                                 │
-│   x402       │                                                 │
-│              │                                                 │
-│ ▸ Status      │                                                 │
-│   Verified   │                                                 │
-│   Official   │                                                 │
-│   Community  │                                                 │
-│              │                                                 │
-│ ▸ Chain       │                                                 │
-│   Ethereum   │                                                 │
-│   Bitcoin    │                                                 │
-│   Solana     │                                                 │
-│   Base       │                                                 │
-│   Arbitrum   │                                                 │
-│   Optimism   │                                                 │
-│   Polygon    │                                                 │
-│   BNB        │                                                 │
-│   Avalanche  │                                                 │
-│   ...more    │                                                 │
+│ OnchainAI    │  (메인 콘텐츠)                                   │
+│ [Submit]     │                                                 │
+│ [GitHub]     │                                                 │
+│ [Admin?]     │                                                 │
+│ [Sign out?]  │                                                 │
+│ ──────────── │                                                 │
+│ (필터 또는   │                                                 │
+│  admin nav)  │                                                 │
 └──────────────┴─────────────────────────────────────────────────┘
 ```
 
-**홈페이지 구조**:
-1. **상단 네비게이션** — 로고, Submit, GitHub 링크
-2. **소개 + 검색 섹션** — 슬로건, 사이트 설명, 검색바
-3. **등록 유도 카드** (2개):
-   - **좌: "Submit a Tool"** — "Register your MCP, CLI, SDK, API. Free, verified badges. x402 tools pay registration via x402." + [Submit →]
-     > 수익 모델: 일반 등록 무료, x402 툴 등록은 x402로 등록료 결제 (예: $5/등록 또는 $10/검증배지).
-   - **우: "OnchainAI MCP"** — "Connect your agent to search 1,342 tools." + MCP 엔드포인트 주소 + 복사 버튼
-   - **데스크톱**: 2개 나란히 (가로 배치)
-   - **모바일**: 세로 스택 (1개씩 위아래, 카드 전체 너비)
-4. **카테고리 그리드** — 14개 기능 카테고리 (이모지 대신 단색 SVG 아이콘)
-   - **데스크톱**: 5열 그리드, 16px gap. 14개 = 5+5+4, 마지막 줄 4개는 **좌측 정렬** (flex-start)
-   - **태블릿**: 4열 그리드. 14개 = 4+4+4+2, 마지막 줄 2개 좌측 정렬
-   - **모바일**: 2열 그리드. 14개 = 2×7, 여백 균등
-5. **왼쪽 사이드바 + 리스트** — 3축 필터(기능/자산유형/주체) + 타입/상태/체인 필터, HOT 정렬
+- **Public 브라우저 페이지** (`/`, `/tools`, `/categories/*`): `SidebarBrand` + 필터 사이드바 (`Sidebar`).
+- **정적/상세 페이지** (`/tools/:slug`, `/submit`, `/login` 등): `SiteShell` — 브랜드만 있는 좁은 사이드바 + `site-main`.
+- **Admin** (`/admin/*`): `AdminShell` — `SidebarBrand` + Admin 네비 (Dashboard, Tools, Comments, Users, Categories, Crawler, Featured, Settings).
+- 구현: `SidebarBrand` (`top_nav.rs`), `SiteShell`, `AdminShell`, `ToolsBrowser` grid (`site-layout`).
 
-> 커뮤니티 등록 카드는 소개 섹션에서 눈에 띄게 배치 → 콜드스타트 해소 유도
-> 카테고리 그리드 클릭 → 사이드바 해당 기능 필터 + 리스트로 스크롤
-> 사이드바 각 섹션(▸) 클릭 시 펼침/접침
-> HOT = stars + 최근 커밋 가중치로 인기순 정렬 (상단 정렬 드롭다운)
+### 홈페이지 (`/`)
+
+`ToolsBrowser` 단일 레이아웃: **왼쪽 사이드바(브랜드+필터)** + **메인(hero → carousel → promo → chain strip → 리스트)**.
+Smithery 소개 카드 + Product Hunt 세로 리스트 + AlternativeTo 사이드바 필터 결합.
+
+```
+┌──────────────┬─────────────────────────────────────────────────┐
+│ OnchainAI    │  Crypto tools, unified.                         │
+│ [Submit]     │  (description)                                  │
+│ [GitHub]     │  [ Search bar                                   ]│
+│ [auth]       │  ┌ Featured carousel (admin, optional) ───────┐ │
+│ ──────────── │  └────────────────────────────────────────────┘ │
+│ ▸ Function   │  [Submit a Tool]  [Connect via MCP + Copy]      │
+│   Bridge…    │  ─ chain strip: [All][BTC][ETH][SOL]…[+N] ─    │
+│ ▸ Asset…     │  Sort: [HOT ↓] [New] [Comments]    N tools     │
+│ ▸ Actor…     │  ┌────┐  Zapper MCP      [Verified] [MCP]     │
+│ ▸ Type…      │  │mono│  … chain logo tags on card …           │
+│ ▸ Status…    │  └────┘  ★ stars  comments N                   │
+│ (no Chain    │  …                                              │
+│  section —   │                                                 │
+│  use strip)  │                                                 │
+└──────────────┴─────────────────────────────────────────────────┘
+```
+
+**홈페이지 구조** (메인 컬럼, 위→아래):
+1. **사이드바 브랜드** — `SidebarBrand`: 로고, Submit, GitHub, 세션(Admin/Sign out)
+2. **소개 + 검색** — 슬로건, 설명, `SearchBar`
+3. **Featured carousel** (선택) — `/admin/featured`에 active 카드가 있을 때만 표시. hero 아래, promo 위.
+4. **등록 유도 카드** (2개) — `PromoCards`: Submit / MCP 복사
+5. **Chain strip** — `ChainStrip`: 로고 타일, `?chain=` 다중 선택. 사이드바 Chain 섹션 **대체** (§5.7).
+6. **도구 리스트** — 정렬바 + HOT 리스트 (`ToolsBrowser`)
+
+> **카테고리 그리드 ("Browse by function") 제거됨 (2026-06-26)** — 기능 분류는 사이드바 Function 섹션·`/categories/:id`·`/tools?function=`로 대체. `CategoryGrid` 컴포넌트는 코드에만 잔존.
+> 기능 필터: 사이드바 Function 또는 `/categories/:id` URL
+> 사이드바 각 섹션(▸) 클릭 시 펼침/접침, localStorage에 접힘 상태 저장 (hydration 후 적용)
+> HOT = stars + 최근 커밋 가중치 (정렬 드롭다운)
 
 ---
 
@@ -192,16 +106,18 @@ Smithery 소개 카드 + Product Hunt 세로 리스트 + AlternativeTo 사이드
 
 **`/tools` = 홈페이지의 소개 섹션만 뺀 버전**. 같은 사이드바 + 리스트 구조.
 
-| | 홈 (`/`) | 리스트 (`/tools`) |
-|---|---|---|
-| 소개 섹션 | 있음 (슬로건, 검색, 등록 카드, 카테고리 그리드) | 없음 |
-| 검색바 | 소개 섹션 내 (풀 너비) | 정렬바 옆 (검색 아이콘 → 인라인 검색 입력) |
-| 사이드바 필터 | 있음 | 있음 (동일) |
-| 도구 리스트 | 있음 (HOT 순) | 있음 (정렬 선택 가능) |
-| 정렬 드롭다운 | 리스트 상단 고정 | 리스트 상단 고정 (동일 위치) |
+| | 홈 (`/`) | 리스트 (`/tools`) | 카테고리 (`/categories/:id`) |
+|---|---|---|---|
+| 사이드바 브랜드 | 있음 | 있음 | 있음 |
+| 소개 섹션 | 있음 (슬로건, 검색, carousel, promo) | 없음 | 없음 |
+| Featured carousel | 있음 (카드 있을 때) | 없음 | 없음 |
+| Chain strip | 있음 | 있음 | 있음 |
+| 검색바 | 소개 섹션 내 (풀 너비) | 정렬바 옆 `ToolbarSearch` | 없음 |
+| 사이드바 필터 | 있음 | 있음 (Function 기본 펼침) | 있음 (해당 category 고정) |
+| 도구 리스트 | 있음 (HOT 순) | 있음 (정렬 선택) | 있음 (function=route) |
 
-> 홈에서 카테고리 그리드 클릭 → `/tools?function=bridge`로 이동
-> 홈에서 스크롤 다운 → 사이드바 + 리스트가 자연스럽게 이어짐 (별도 페이지 전환 아님)
+> 기능 분류 진입: 사이드바 Function 링크 또는 `/categories/:id` (그리드 제거 후)
+> 홈은 한 페이지에서 hero + 리스트가 이어짐 (`ToolsBrowser` children 슬롯)
 
 ```
 ┌────────────────────────────────────────────────────────────────┐
@@ -555,34 +471,27 @@ Email 유저:    [Mail] bob
 - 댓글 작성자 표시: 인증 방식별 뱃지 + 닉네임 (5.6절 참조)
 - MVP: Supabase comments 테이블 + Leptos server function
 
-### 5.7 왼쪽 사이드바 필터 (3축 + 타입/상태/체인)
+### 5.7 왼쪽 사이드바 필터 (3축 + 타입/상태) + Chain strip
 
-상단 탭 대신 왼쪽 세로 사이드바로 모든 필터를 그룹화.
+상단 탭 대신 왼쪽 세로 사이드바로 필터를 그룹화. **체인 필터는 사이드바가 아닌 `ChainStrip`** (§2, `docs/superpowers/specs/2026-06-26-chain-selector-and-featured-carousel-design.md`).
 
 ```
-▸ 기능        — Bridge, Swap, Wallet, Payments, Lending, Staking,
-                Trading, NFT, Data, Dev Tools, Identity, Governance,
-                Social, AI Agent
-▸ 자산 유형    — Crypto, RWA, Derivatives, Stablecoins
-▸ 주체        — Human, AI Agent
-▸ 타입        — MCP, CLI, SDK, API, Skill, x402
-▸ 상태        — Verified, Official, Community
-▸ 체인        — Ethereum, Bitcoin, Solana, Base, Arbitrum, Optimism,
-                Polygon, BNB, Avalanche, ... (더보기 펼침)
-                ※ 체인 목록은 DB의 tools.chains에서 동적 집계
-                  (등록된 툴이 있는 체인만 표시, 툴 수 옆에 표기)
-                ※ 상위 9개는 툴 수 많은 순 고정, 나머지는 "더보기" 클릭 시 전체 펼침
+[SidebarBrand — OnchainAI, Submit, GitHub, auth]
+▸ Function    — Bridge, Swap, … (DB categories + count)
+▸ Asset Class — Crypto, RWA, Derivatives, Stablecoins
+▸ Actor       — Human, AI Agent
+▸ Type        — MCP, CLI, SDK, API, Skill, x402
+▸ Status      — Verified, Official, Community
 ```
 
 - 각 섹션(▸) 클릭 시 하위 항목 펼침/접침
-- 기본적으로 기능 + 체인 섹션은 펼침, 나머지는 접힘
-- 항목 클릭 = 필터 토글 (다중 선택 가능, AND 조건)
-- 활성 필터: #1A1A1A 텍스트 + 체크 표시
-- 상단 정렬 드롭다운: HOT / 최신 / 코멘트순
-- URL 쿼리로 필터 상태 동기화: `?function=bridge,swap&chain=ethereum&sort=hot`
-- **사이드바 고정**: `position: sticky; top: 56px` (네비 높이 56px 아래부터), `height: calc(100vh - 56px)`, `overflow-y: auto` (사이드바만 독립 스크롤)
-- **정렬바 고정**: 리스트 상단 정렬 드롭다운도 `position: sticky; top: 56px` (스크롤해도 정렬/카운트 보임)
-- **z-index**: 네비(100) > 정렬바(90) > 사이드바(80) > 미리보기 패널(70)
+- `/tools`: Function 섹션 기본 펼침; 홈/카테고리: 기본 접힘
+- 항목 클릭 = 필터 토글 (다중 선택, AND)
+- **Chain strip** (리스트 상단): 공식 로고 타일, `?chain=` 다중 선택, `+` 타일로 나머지 체인 펼침
+- URL: `?function=bridge,swap&chain=ethereum,solana&sort=hot`
+- **사이드바**: `site-layout` 전체 높이 (`100vh`), 브랜드 상단 고정 + 필터 영역 스크롤
+- **정렬바**: `sticky-toolbar` — 리스트 상단 sticky
+- localStorage: 접힘/섹션 상태는 **hydration 이후** 적용 (SSR DOM 일치)
 
 ### 5.8 사이드바 접기/펼치기 (VS Code 스타일)
 
@@ -782,8 +691,9 @@ Email 유저:    [Mail] bob
   x402        →  #1A1A1A 테두리, #1A1A1A 배경, #FFFFFF 텍스트 (대비만)
   Community   →  #D1D1D1 테두리, 투명 배경
 
-카테고리 아이콘: 전부 #4B4B4B (단색 회색, 색상 구분 없음)
-카테고리 그리드 카드: #FFFFFF 배경, #E5E5E5 테두리, 호버 시 #F5F5F0
+카테고리 아이콘: 전부 #4B4B4B (단색 회색) — ~~그리드~~ 제거됨, 사이드바 Function 링크에만 적용 가능
+Chain strip 타일: 48px, active 2px `#E76F00` border, `/chains/*.svg` on white tile
+Featured carousel: full-bleed image, overlay headline/subtitle, dot indicators `#E76F00`
 
 사이드바:
   활성 필터:  #1A1A1A 텍스트 + 주황 4px 점 표시
@@ -1045,25 +955,27 @@ ALTER TABLE tools ADD COLUMN logo_monogram TEXT; -- 로고 없을 때 첫 글자
 ## 9. 반응형
 
 ```
-데스크톱 (≥1024px):  왼쪽 사이드바(240px) + 리스트, 카테고리 5열 그리드
-                      검색바: 소개 섹션 내
-                      미리보기: 오른쪽 패널 400px (5.9절)
-태블릿 (768-1023px):  왼쪽 사이드바 접힘(햄버거 토글), 카테고리 4열
-                      검색바: 소개 섹션 내
-                      미리보기: 바텀 시트 (5.10절, 태블릿은 화면 좁아 패널 대신 시트)
-모바일 (<768px):     사이드바 풀스크린 필터 패널, 카테고리 2열, 정렬 드롭다운
-                      검색바: 상단 네비에 검색 아이콘 → 풀스크린 검색 오버레이
-                      소개 섹션 간소화 (슬로건 + 검색만, 카드는 세로 스택)
-                      미리보기: 바텀 시트 (5.10절, 60% 높이 → 드래그 시 풀스크린)
+데스크톱 (≥1024px):  site-layout — 사이드바(브랜드+필터) + 메인
+                      chain strip + 미리보기 패널 400px (5.9절)
+태블릿 (768-1023px):  사이드바 접힘(☰), chain strip 가로 스크롤
+                      미리보기: 바텀 시트 (5.10절)
+모바일 (<768px):     hydration 후 사이드바 기본 접힘 + rail 아이콘, chain `+N` pill
+                      hero 검색은 인라인 SearchBar (풀스크린 검색 오버레이는 §12 미구현)
+                      미리보기: 바텀 시트 (5.10절)
 ```
 
-### 모바일 검색 흐름
+### 모바일 검색 흐름 (목표 — §12 미구현)
 
 ```
-상단 네비:
-  OnchainAI              [🔍] [≡]
+목표 UX (미구현):
+  사이드바 브랜드 옆 또는 hero 내 [🔍] → 풀스크린 검색 오버레이
 
-검색 아이콘 클릭 → 풀스크린 검색 오버레이:
+현재 구현:
+  홈 — hero `SearchBar` (인라인)
+  /tools — `ToolbarSearch` (정렬바 옆)
+  필터 — 저장 상태가 없으면 모바일에서 접힌 상태로 시작, ☰ 탭으로 펼침
+
+검색 아이콘 클릭 → 풀스크린 검색 오버레이 (목표):
   ┌────────────────────────────────┐
   │  [✕]                           │
   │                                │
@@ -1084,7 +996,7 @@ ALTER TABLE tools ADD COLUMN logo_monogram TEXT; -- 로고 없을 때 첫 글자
 모바일은 화면이 좁아 한 번에 하나의 레이어만 표시. 모든 오버레이는 풀스크린.
 
 ```
-1. 진입:        홈 (슬로건 + 검색 + 등록 카드 + 카테고리 그리드 + HOT 리스트)
+1. 진입:        홈 (슬로건 + 검색 + promo + chain strip + HOT 리스트)
                 ↓
 2. 검색:        [🔍] 탭 → 풀스크린 검색 오버레이 → 결과 리스트
                 ↓
@@ -1119,12 +1031,15 @@ ALTER TABLE tools ADD COLUMN logo_monogram TEXT; -- 로고 없을 때 첫 글자
 
 ### 11.2 관리자 패널 구조
 
+**레이아웃 (2026-06-26)**: public과 동일하게 **왼쪽 `AdminShell`** — 상단 `SidebarBrand` + Admin 네비 링크, 메인에 페이지 본문.
+
 ```
 /admin                → 대시보드 (통계 요약)
 /admin/tools          → 도구 관리 (승인/거절/수정/삭제)
 /admin/categories     → 카테고리 관리 (추가/수정/삭제)
 /admin/users          → 유저 관리 (밴/관리자 권한 부여)
 /admin/comments       → 댓글 관리 (삭제)
+/admin/featured       → Featured carousel 카드 (이미지 업로드, tool 연결)
 /admin/settings       → 사이트 설정 (슬로건, 검색 키워드 등)
 /admin/crawler        → 크롤러 상태 (소스별 상태, 수동 실행)
 ```
@@ -1374,10 +1289,12 @@ ALTER TABLE tools ADD COLUMN logo_monogram TEXT; -- 로고 없을 때 첫 글자
 | 인터랙션 | 동작 | 구현 |
 |---|---|---|
 | 검색 | 입력 시 실시간 필터 (디바운스 200ms) | Leptos 시그널 + server function |
-| 사이드바 필터 | 항목 클릭 시 토글(다중선택), 리스트 갱신 | URL 쿼리 + Leptos 시그널 |
+| 사이드바 필터 | 항목 클릭 시 토글(다중선택), 리스트 갱신. 새 필터는 `page`/`selected`를 리셋 | URL 쿼리 + SSR-safe `<a>` |
 | 사이드바 펼침 | 섹션(▸) 클릭 시 하위 항목 펼침/접침 | Leptos `<Show>` 컴포넌트 |
+| 모바일 사이드바 | 저장 상태 없으면 <768px에서 접힘으로 시작, ☰ 탭으로 펼침 | localStorage + hydration 후 viewport check |
 | 정렬 | 상단 드롭다운: HOT / 최신 / 코멘트순 | server function 쿼리 |
 | 상세 펼치기 | 도구 카드 클릭 → 오른쪽 미리보기 패널 밀려나옴 (슬라이드 200ms) | Leptos `<Show>` + CSS transform |
+| Load more | 현재 필터·검색 유지, `page=N+1`, 미리보기 선택은 닫음. 50개씩 추가, 최대 500개 표시 | `ToolsBrowser` + `list_tools_v1(limit)` |
 | 미리보기 패널 닫기 | `✕` 버튼 / 패널 외부 클릭 / ESC | Leptos 시그널 |
 | 미리보기 다른 도구 | 다른 카드 클릭 → 패널 내용만 즉시 교체 | Leptos 시그널 |
 | 모바일 바텀 시트 | 카드 탭 → 아래서 60% 밀려올라옴, 드래그로 풀스크린 | Leptos + 터치 이벤트 |
@@ -1391,6 +1308,67 @@ ALTER TABLE tools ADD COLUMN logo_monogram TEXT; -- 로고 없을 때 첫 글자
 | 로그인 | GitHub OAuth / Email 매직링크 / SIWX 지갑 서명 | Supabase Auth + x402 SIWX extension |
 | 첫 로그인 온보딩 | 닉네임 + bio + avatar 설정 (Skip 가능, 자동 닉네임 부여) | Leptos server function + profiles 테이블 |
 | 프로필 수정 | Settings 페이지에서 닉네임/bio/avatar 변경 | Leptos server function |
-| 카테고리 그리드 | 클릭 시 사이드바 해당 기능 필터 + 스크롤 | URL `/tools?function=bridge` |
+| ~~카테고리 그리드~~ | **제거됨** — Function 사이드바 / `/categories/:id` 사용 | — |
+| Chain strip | 로고 타일 클릭 → `?chain=` 토글. 새 체인 선택은 `page`/`selected`를 리셋 | `chain_strip.rs` + `CHAIN_CATALOG` |
+| Featured carousel | active 카드 있을 때 hero 아래 표시, 3s 로테이션 | `featured_carousel.rs` + `/admin/featured` |
 | 도구 등록 | "등록하기" 클릭 → 등록 폼. 일반 무료, x402 툴은 등록 시 x402 결제 (등록료/검증배지) | x402 결제 연동 (MVP 이후) |
 | OnchainAI MCP 연결 복사 | MCP 엔드포인트 주소 복사 | `navigator.clipboard` |
+
+---
+
+## 12. 구현 현황 (2026-06-27, operator hardening 기준)
+
+문서(§2–§11) 대비 **이미 구현된 것**과 **아직 안 된 것**을 구분한다. 상세 chain/carousel 스펙은 `docs/superpowers/specs/2026-06-26-chain-selector-and-featured-carousel-design.md` 참고.
+
+### 12.1 구현 완료
+
+| 영역 | 내용 |
+|------|------|
+| 레이아웃 | 사이트 전역 왼쪽 사이드바, `SidebarBrand`, `SiteShell`, `AdminShell` |
+| 홈 / tools / categories | `ToolsBrowser` 공유, hero·promo·chain strip·리스트 |
+| Chain strip | `CHAIN_CATALOG`, `/chains/*.svg`, `ChainStrip`, 카드 chain 로고 태그 |
+| Featured carousel | 컴포넌트 + `/admin/featured` CRUD + storage bucket (카드 시드 시 표시) |
+| 필터 | Function / Asset / Actor / Type / Status 사이드바, URL 동기화 |
+| 리스트 | HOT·New·Comments 정렬, `ToolCard`, stars·comments 표시, `page` 기반 Load more, 필터 변경 시 1페이지 리셋 |
+| 미리보기 | 데스크톱 `PreviewPanel`, 모바일 `BottomSheet`, `?selected=` |
+| 인증 | GitHub / Email / SIWX, 로그인 모달, 온보딩 |
+| 소셜 | 댓글·답글(1단)·댓글 업보트·북마크(클릭 시 토글), 인증 뱃지 `[GH]`/`[Mail]`/`[0x]` |
+| Admin | dashboard, tools, categories, users, comments, featured, settings, crawler |
+| SSR 안정성 | Tokio worker stack size 명시, 비동기/Suspense 렌더 링크를 SSR-safe `<a>`로 통일 |
+| MCP / 크롤러 | MCP 서버, 자동 discovery 스케줄러, relevance scanner(Base network 문맥 포함), legacy migration backfill 공개 품질 게이트 |
+
+### 12.1.1 공개 크롤링 품질 게이트
+
+- 공개 목록은 `approval_status='approved'`, `relevance_status='accepted'`, critical install risk 제외, quarantine 제외 조건을 통과해야 한다.
+- 2026-06-27 hardening에서 score 0 + `migration-backfill` 단일 이유로 accepted 된 legacy 행은 공개 목록에서 제외하고 admin review로 되돌렸다.
+- 강한 온체인 단어 경계가 있는 legacy 행만 재승격한다. `mcp`, `api`, `agent`, `chain`, 일반 `bridge`, 일반 `token`만으로는 공개 승격하지 않는다.
+- 회귀 방지: `indexes`→DEX, `define`→DeFi, `cryptographic`→crypto 같은 substring 오탐을 금지한다.
+
+### 12.2 미구현 · 부분 구현 (디자인 대비)
+
+| 우선순위 | 항목 | 문서 위치 | 현재 상태 |
+|----------|------|-----------|-----------|
+| **운영** | Featured carousel **콘텐츠** | §2, carousel 스펙 | UI/코드 완료. **active 카드 0개** → 홈에 미표시. `/admin/featured`에서 시드 필요 |
+| **UX** | 북마크 **초기 표시** (★/☆) | §10 | hydration 안전을 위해 **클릭 전 ☆ 고정**; 로그인 후 toggle 시에만 ★ 반영 |
+| **UX** | 모바일 **풀스크린 검색 오버레이** | §9 | 미구현. 홈 `SearchBar` / `/tools` `ToolbarSearch`만 |
+| **UX** | 모바일 **풀스크린 필터 패널** | §9, §5.8 | 모바일은 기본 접힘 + ☰ 펼침. 전체 화면 필터 오버레이는 미완 |
+| **UX** | 바텀 시트 **dvh 키보드 처리** | §5.10, §9 | 드래그 확장/닫기는 구현. 가상 키보드 dvh 보정은 추가 여지 |
+| **수익** | x402 **등록 결제** | §2, §10 | 타입·설정 플래그만; 결제 플로우 미연동 |
+| **비주얼** | 도구 **공식 로고** (`logo_url`) | §8 | **모노그램** placeholder; DB `logo_url` 미사용 |
+| **비주얼** | 카테고리 그리드 | §2 (구버전) | **의도적 제거** — 사이드바 Function으로 대체 |
+| **비주얼** | 상단 sticky TopNav | §2 (구버전) | **의도적 제거** — 사이드바 브랜드로 대체 |
+| **Admin UX** | 문서 와이어프레임 수준 인라인 편집·배지 일괄 | §11.4+ | 기본 CRUD는 있으나 문서 수준 폴리시 미달 가능 |
+
+### 12.3 의도적 문서·구현 차이
+
+- **카테고리 그리드**: UX 단순화로 제거. 기능 진입은 사이드바 + `/categories/:id`.
+- **사이드바 Chain 섹션**: chain strip으로 대체 (carousel 스펙 A).
+- **TopNav**: 전 페이지 사이드바 브랜드로 통일.
+
+### 12.4 다음 작업 제안 (디자인 완성도)
+
+1. `/admin/featured`에 carousel 카드 1–3개 시드 → 홈 시각 검증
+2. 모바일 검색·필터 풀스크린 오버레이 (§9)
+3. 로그인 사용자 북마크 상태 배치 fetch (N+1·rate limit 없이 batch API)
+4. x402 등록 결제 (MVP+)
+5. 공식 로고 수집/캐싱(`logo_url`) 운영 루프

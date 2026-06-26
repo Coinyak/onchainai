@@ -1,14 +1,16 @@
 //! Filter sidebar — multi-select, section collapse, full 40px rail + localStorage.
 
+#[cfg(feature = "hydrate")]
 use crate::client_storage::{
-    read_sidebar_collapsed, read_sidebar_sections, write_sidebar_collapsed, write_sidebar_sections,
+    read_sidebar_collapsed_with_default, read_sidebar_sections,
+    sidebar_default_collapsed_for_viewport,
 };
+use crate::client_storage::{write_sidebar_collapsed, write_sidebar_sections};
 use crate::components::tools_browser::BrowserBase;
 use crate::components::top_nav::SidebarBrand;
 use crate::filter_query::{clear_axis, parse_multi, toggle_multi};
 use crate::models::Category;
 use leptos::prelude::*;
-use leptos_router::components::A;
 use std::collections::HashMap;
 
 struct FilterOption {
@@ -196,17 +198,22 @@ pub fn Sidebar(
     let default_sections = default_section_state(default_function_open);
     let sidebar_collapsed = RwSignal::new(false);
     let open_map = RwSignal::new(default_sections.clone());
+    let sidebar_storage_loaded = RwSignal::new(false);
 
     #[cfg(feature = "hydrate")]
     {
         Effect::new(move |_| {
-            sidebar_collapsed.set(read_sidebar_collapsed());
+            let default_collapsed = sidebar_default_collapsed_for_viewport();
+            sidebar_collapsed.set(read_sidebar_collapsed_with_default(default_collapsed));
             open_map.set(read_sidebar_sections(default_sections.clone()));
+            sidebar_storage_loaded.set(true);
         });
     }
 
     Effect::new(move |_| {
-        write_sidebar_collapsed(sidebar_collapsed.get());
+        if sidebar_storage_loaded.get() {
+            write_sidebar_collapsed(sidebar_collapsed.get());
+        }
     });
 
     let aside_class = move || {
@@ -249,7 +256,7 @@ pub fn Sidebar(
                     "☰"
                 </button>
                 <span class="sidebar-heading sidebar-title-text">"Filters"</span>
-                <A href=clear_href.clone() attr:class="sidebar-clear sidebar-title-text">"Clear"</A>
+                <a href=clear_href.clone() class="sidebar-clear sidebar-title-text">"Clear"</a>
             </div>
 
             <div class="sidebar-rail-icons">
@@ -285,19 +292,19 @@ pub fn Sidebar(
                 <CollapsibleSection section_id="function" title="Function" open_map=open_map sidebar_collapsed=sidebar_collapsed>
                     <ul class="sidebar-list">
                         <li>
-                            <A href=fn_all_href.clone() attr:class=if fn_active.is_empty() { "sidebar-link active" } else { "sidebar-link" }>
+                            <a href=fn_all_href.clone() class=if fn_active.is_empty() { "sidebar-link active" } else { "sidebar-link" }>
                                 "All"
-                            </A>
+                            </a>
                         </li>
                         {categories.into_iter().map(|(cat, count)| {
                             let (href, is_active) =
                                 sidebar_function_link(&base_for_fn, &query_for_fn, &cat.id, &fn_active);
                             view! {
                                 <li>
-                                    <A href=href attr:class=link_class(is_active)>
+                                    <a href=href class=link_class(is_active)>
                                         <span class="sidebar-title-text">{cat.label}</span>
                                         <span class="sidebar-count">{count}</span>
-                                    </A>
+                                    </a>
                                 </li>
                             }
                         }).collect_view()}
@@ -310,7 +317,7 @@ pub fn Sidebar(
                             let href = toggle_multi(&base_for_ac, &query_for_ac, "asset_class", opt.id, &ac_active);
                             let is_active = ac_active.iter().any(|v| v == opt.id);
                             view! {
-                                <li><A href=href attr:class=link_class(is_active)><span class="sidebar-title-text">{opt.label}</span></A></li>
+                                <li><a href=href class=link_class(is_active)><span class="sidebar-title-text">{opt.label}</span></a></li>
                             }
                         }).collect_view()}
                     </ul>
@@ -322,7 +329,7 @@ pub fn Sidebar(
                             let href = toggle_multi(&base_for_actor, &query_for_actor, "actor", opt.id, &actor_active);
                             let is_active = actor_active.iter().any(|v| v == opt.id);
                             view! {
-                                <li><A href=href attr:class=link_class(is_active)><span class="sidebar-title-text">{opt.label}</span></A></li>
+                                <li><a href=href class=link_class(is_active)><span class="sidebar-title-text">{opt.label}</span></a></li>
                             }
                         }).collect_view()}
                     </ul>
@@ -334,7 +341,7 @@ pub fn Sidebar(
                             let href = toggle_multi(&base_for_type, &query_for_type, "type", opt.id, &type_active);
                             let is_active = type_active.iter().any(|v| v == opt.id);
                             view! {
-                                <li><A href=href attr:class=link_class(is_active)><span class="sidebar-title-text">{opt.label}</span></A></li>
+                                <li><a href=href class=link_class(is_active)><span class="sidebar-title-text">{opt.label}</span></a></li>
                             }
                         }).collect_view()}
                     </ul>
@@ -346,7 +353,7 @@ pub fn Sidebar(
                             let href = toggle_multi(&base_for_status, &query_for_status, "status", opt.id, &status_active);
                             let is_active = status_active.iter().any(|v| v == opt.id);
                             view! {
-                                <li><A href=href attr:class=link_class(is_active)><span class="sidebar-title-text">{opt.label}</span></A></li>
+                                <li><a href=href class=link_class(is_active)><span class="sidebar-title-text">{opt.label}</span></a></li>
                             }
                         }).collect_view()}
                     </ul>
@@ -374,6 +381,7 @@ mod tests {
             "new".into(),
             Some("test query".into()),
             None,
+            1,
         );
         let href = clear_axis("/tools", &query_base, "function");
         assert!(!href.contains("function="));
@@ -394,6 +402,7 @@ mod tests {
             "new".into(),
             None,
             None,
+            1,
         );
         let fn_active = parse_multi(Some("bridge"));
         let tools_base = BrowserBase::Tools;

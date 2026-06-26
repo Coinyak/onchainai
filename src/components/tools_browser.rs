@@ -16,6 +16,9 @@ use leptos::prelude::*;
 use leptos_router::hooks::use_query_map;
 use std::collections::HashMap;
 
+const TOOL_PAGE_SIZE: u32 = 50;
+const MAX_VISIBLE_TOOLS: u32 = 500;
+
 #[derive(Clone, PartialEq, Eq)]
 pub enum BrowserBase {
     Home,
@@ -69,6 +72,7 @@ pub fn build_query_base(
     sort: String,
     search_q: Option<String>,
     selected: Option<String>,
+    page: u32,
 ) -> String {
     let mut parts: Vec<String> = Vec::new();
     if !matches!(base, BrowserBase::Category(_)) {
@@ -100,11 +104,53 @@ pub fn build_query_base(
     if let Some(v) = selected {
         parts.push(format!("selected={}", urlencoding::encode(&v)));
     }
+    if page > 1 {
+        parts.push(format!("page={page}"));
+    }
     if parts.is_empty() {
         base.path()
     } else {
         format!("{}?{}", base.path(), parts.join("&"))
     }
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn build_filter_navigation_base(
+    base: &BrowserBase,
+    function: Option<String>,
+    asset_class: Option<String>,
+    actor: Option<String>,
+    tool_type: Option<String>,
+    status: Option<String>,
+    chain: Option<String>,
+    sort: String,
+    search_q: Option<String>,
+) -> String {
+    build_query_base(
+        base,
+        function,
+        asset_class,
+        actor,
+        tool_type,
+        status,
+        chain,
+        sort,
+        search_q,
+        None,
+        1,
+    )
+}
+
+fn parse_page_param(raw: Option<String>) -> u32 {
+    raw.and_then(|s| s.parse::<u32>().ok())
+        .filter(|page| *page > 0)
+        .unwrap_or(1)
+}
+
+pub fn visible_limit_for_page(page: u32) -> i64 {
+    let page = page.max(1);
+    let limit = page.saturating_mul(TOOL_PAGE_SIZE).min(MAX_VISIBLE_TOOLS);
+    i64::from(limit)
 }
 
 pub fn with_selected(base_path: &BrowserBase, base: &str, slug: &str) -> String {
@@ -143,6 +189,36 @@ pub fn build_sort_href(
         sort.to_string(),
         search_q,
         selected,
+        1,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn build_load_more_href(
+    base: &BrowserBase,
+    function: Option<String>,
+    asset_class: Option<String>,
+    actor: Option<String>,
+    tool_type: Option<String>,
+    status: Option<String>,
+    chain: Option<String>,
+    sort: String,
+    search_q: Option<String>,
+    _selected: Option<String>,
+    page: u32,
+) -> String {
+    build_query_base(
+        base,
+        function,
+        asset_class,
+        actor,
+        tool_type,
+        status,
+        chain,
+        sort,
+        search_q,
+        None,
+        page.saturating_add(1),
     )
 }
 
@@ -186,6 +262,7 @@ async fn load_browser_data(
     filters: ToolFilters,
     search_q: Option<String>,
     selected: Option<String>,
+    page: u32,
 ) -> Result<BrowserData, ServerFnError> {
     // Round 1: these queries are independent, so run them concurrently — one
     // network round-trip to the DB instead of five (the DB is remote; latency,
@@ -203,7 +280,7 @@ async fn load_browser_data(
         list_tools_v1(ToolListRequest {
             sort,
             offset: 0,
-            limit: 50,
+            limit: visible_limit_for_page(page),
             filters,
             query: search_q,
         }),
@@ -253,6 +330,8 @@ pub fn ToolsBrowser(
     });
     let search_q = Memo::new(move |_| query.with(|q| q.get("q").map(|s| s.to_string())));
     let selected = Memo::new(move |_| query.with(|q| q.get("selected").map(|s| s.to_string())));
+    let page_number =
+        Memo::new(move |_| parse_page_param(query.with(|q| q.get("page").map(|s| s.to_string()))));
 
     let query_base = Memo::new(move |_| {
         build_query_base(
@@ -266,6 +345,20 @@ pub fn ToolsBrowser(
             sort.get(),
             search_q.get(),
             selected.get(),
+            page_number.get(),
+        )
+    });
+    let filter_query_base = Memo::new(move |_| {
+        build_filter_navigation_base(
+            &base.get_value(),
+            function.get(),
+            asset_class.get(),
+            actor.get(),
+            tool_type.get(),
+            status.get(),
+            chain.get(),
+            sort.get(),
+            search_q.get(),
         )
     });
 
@@ -287,14 +380,15 @@ pub fn ToolsBrowser(
             filters.get(),
             search_q.get(),
             selected.get(),
+            page_number.get(),
             retry_tick.get(),
         )
     });
 
     let page = Resource::new_blocking(
         move || page_deps.get(),
-        |(sort, filters, search_q, selected, _)| async move {
-            load_browser_data(sort, filters, search_q, selected).await
+        |(sort, filters, search_q, selected, page_number, _)| async move {
+            load_browser_data(sort, filters, search_q, selected, page_number).await
         },
     );
 
@@ -358,12 +452,13 @@ pub fn ToolsBrowser(
                 {move || match page.get() {
                         Some(Ok(data)) => {
                             let qb = query_base.get();
+                            let filter_qb = filter_query_base.get();
                             let browser_base = base.get_value();
                             view! {
                                 <Sidebar
                                     base=browser_base.clone()
                                     categories=data.categories.clone()
-                                    query_base=qb.clone()
+                                    query_base=filter_qb.clone()
                                     active_function=function.get()
                                     active_asset_class=asset_class.get()
                                     active_actor=actor.get()
@@ -375,7 +470,7 @@ pub fn ToolsBrowser(
                                     {children.as_ref().map(|content| view! { <div class="tools-prepend">{content()}</div> })}
                                     <ChainStrip
                                         base=browser_base.clone()
-                                        query_base=qb.clone()
+                                        query_base=filter_qb.clone()
                                         active_chain=chain.get()
                                         chain_counts=data.chains.clone()
                                     />
@@ -426,6 +521,33 @@ pub fn ToolsBrowser(
                                                     view! { <ToolCard tool=t preview_href=preview is_selected=sel comment_count=count/> }
                                                 }).collect_view()}
                                             </div>
+                                            {if (data.tools.len() as i64) < data.total {
+                                                let next_href = build_load_more_href(
+                                                    &browser_base,
+                                                    function.get(),
+                                                    asset_class.get(),
+                                                    actor.get(),
+                                                    tool_type.get(),
+                                                    status.get(),
+                                                    chain.get(),
+                                                    sort.get(),
+                                                    search_q.get(),
+                                                    selected.get(),
+                                                    page_number.get(),
+                                                );
+                                                view! {
+                                                    <div class="load-more-row">
+                                                        <a href=next_href class="load-more-btn">
+                                                            "Load more"
+                                                        </a>
+                                                        <span class="load-more-count">
+                                                            "Showing "{data.tools.len()}" of "{data.total}
+                                                        </span>
+                                                    </div>
+                                                }.into_any()
+                                            } else {
+                                                ().into_any()
+                                            }}
                                         }.into_any()
                                     }}
                                     {data.preview_tool.clone().map(|tool| {
@@ -489,6 +611,7 @@ mod tests {
             "hot".into(),
             None,
             None,
+            1,
         );
         assert_eq!(q, "/categories/bridge?chain=ethereum%2Csolana");
     }
@@ -515,11 +638,95 @@ mod tests {
             "hot".into(),
             None,
             Some("zapper".into()),
+            1,
         );
         assert!(q.starts_with("/?"));
         assert!(q.contains("function=bridge%2Cswap") || q.contains("function=bridge,swap"));
         assert!(q.contains("type=mcp"));
         assert!(q.contains("selected=zapper"));
+    }
+
+    #[test]
+    fn query_base_keeps_page_only_after_first_page() {
+        let first = build_query_base(
+            &BrowserBase::Tools,
+            None,
+            None,
+            None,
+            None,
+            None,
+            Some("base".into()),
+            "hot".into(),
+            Some("wallet".into()),
+            None,
+            1,
+        );
+        assert_eq!(first, "/tools?chain=base&q=wallet");
+
+        let second = build_query_base(
+            &BrowserBase::Tools,
+            None,
+            None,
+            None,
+            None,
+            None,
+            Some("base".into()),
+            "hot".into(),
+            Some("wallet".into()),
+            None,
+            2,
+        );
+        assert_eq!(second, "/tools?chain=base&q=wallet&page=2");
+    }
+
+    #[test]
+    fn load_more_href_increments_page_and_drops_preview_selection() {
+        let href = build_load_more_href(
+            &BrowserBase::Tools,
+            Some("bridge".into()),
+            None,
+            None,
+            Some("mcp".into()),
+            None,
+            Some("base".into()),
+            "comments".into(),
+            Some("agent".into()),
+            Some("selected-tool".into()),
+            2,
+        );
+        assert_eq!(
+            href,
+            "/tools?function=bridge&type=mcp&chain=base&sort=comments&q=agent&page=3"
+        );
+    }
+
+    #[test]
+    fn filter_navigation_base_omits_pagination_and_preview_selection() {
+        let href = build_filter_navigation_base(
+            &BrowserBase::Tools,
+            Some("bridge".into()),
+            None,
+            None,
+            Some("mcp".into()),
+            None,
+            Some("base".into()),
+            "comments".into(),
+            Some("agent".into()),
+        );
+        assert_eq!(
+            href,
+            "/tools?function=bridge&type=mcp&chain=base&sort=comments&q=agent"
+        );
+        assert!(!href.contains("selected="));
+        assert!(!href.contains("page="));
+    }
+
+    #[test]
+    fn visible_limit_for_page_is_bounded() {
+        assert_eq!(visible_limit_for_page(0), 50);
+        assert_eq!(visible_limit_for_page(1), 50);
+        assert_eq!(visible_limit_for_page(3), 150);
+        assert_eq!(visible_limit_for_page(99), 500);
     }
 
     #[test]

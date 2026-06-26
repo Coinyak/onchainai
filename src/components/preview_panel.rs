@@ -3,15 +3,14 @@
 use crate::components::tool_detail_content::ToolDetailContent;
 use crate::models::Tool;
 use leptos::prelude::*;
-use leptos_router::components::A;
 
 #[component]
 pub fn PreviewPanel(tool: Tool, close_href: String, full_page_href: String) -> impl IntoView {
     let close = close_href.clone();
     view! {
-        <A href=close_href.clone() attr:class="preview-backdrop" attr:aria-label="Close preview">
+        <a href=close_href.clone() class="preview-backdrop" aria-label="Close preview">
             <span class="sr-only">"Close"</span>
-        </A>
+        </a>
         <aside
             class="preview-panel"
             role="dialog"
@@ -25,9 +24,9 @@ pub fn PreviewPanel(tool: Tool, close_href: String, full_page_href: String) -> i
             }
         >
             <div class="preview-panel-header">
-                <A href=close_href attr:class="preview-close" attr:aria-label="Close preview">
+                <a href=close_href class="preview-close" aria-label="Close preview">
                     "×"
-                </A>
+                </a>
             </div>
             <div class="preview-panel-body">
                 <ToolDetailContent tool=tool compact=true full_page_href=full_page_href/>

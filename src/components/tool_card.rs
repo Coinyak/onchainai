@@ -7,7 +7,6 @@ use crate::models::Tool;
 use crate::server::functions::{get_current_user, toggle_bookmark};
 use leptos::prelude::*;
 use leptos::task::spawn_local;
-use leptos_router::components::A;
 
 fn monogram(name: &str) -> String {
     name.chars()
@@ -78,7 +77,7 @@ pub fn ToolCard(
     view! {
         <LoginModal show=show_login/>
         <article class=if is_selected { "tool-card is-selected" } else { "tool-card" }>
-            <A href=href attr:class="tool-card-link no-underline text-inherit">
+            <a href=href class="tool-card-link no-underline text-inherit">
                 <div class="tool-card-inner">
                     <div class="tool-logo" aria-hidden="true">
                         {mono}
@@ -156,7 +155,7 @@ pub fn ToolCard(
                         }}
                     </div>
                 </div>
-            </A>
+            </a>
             <div class="tool-card-actions">
                 <button
                     type="button"

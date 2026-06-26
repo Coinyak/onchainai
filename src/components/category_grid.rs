@@ -4,7 +4,6 @@ use crate::components::icons::LucideIcon;
 use crate::components::tools_browser::BrowserBase;
 use crate::models::Category;
 use leptos::prelude::*;
-use leptos_router::components::A;
 
 #[component]
 pub fn CategoryGrid(
@@ -21,16 +20,16 @@ pub fn CategoryGrid(
                     .map(|(cat, count)| {
                         let href = format!("{root}?function={}", cat.id);
                         view! {
-                            <A
+                            <a
                                 href=href
-                                attr:class="category-card no-underline text-[#1A1A1A] hover:border-[#D1D1D1]"
+                                class="category-card no-underline text-[#1A1A1A] hover:border-[#D1D1D1]"
                             >
                                 <span class="category-icon">
                                     <LucideIcon name=cat.icon/>
                                 </span>
                                 <span class="category-label">{cat.label}</span>
                                 <span class="category-count">{count}</span>
-                            </A>
+                            </a>
                         }
                     })
                     .collect_view()}

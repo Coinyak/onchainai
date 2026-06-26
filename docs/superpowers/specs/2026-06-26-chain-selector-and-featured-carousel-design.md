@@ -13,15 +13,31 @@ Two related homepage features, built together.
 Related docs: [UI_UX_DESIGN.md](../../UI_UX_DESIGN.md), [DESIGN.md](../../../DESIGN.md),
 [SECURITY.md](../../SECURITY.md), [MVP_DESIGN.md](../../MVP_DESIGN.md).
 
-## Current state
+## Current state (updated 2026-06-27 — implemented / operator hardening branch)
 
-- Chain filtering exists only in `sidebar.rs` as a text multi-select "Chain"
-  `CollapsibleSection`, driven by `?chain=` (multi) and `get_chain_counts`.
-- `tool_card.rs` renders chains as text `chain-pill` spans (`+N` overflow).
-- No image assets exist (`public/` absent); CSS is served via a single
-  `ServeFile` route in `lib.rs`. No `ServeDir`.
-- DB chain values are messy: real chains plus noise (`all`, `multi-chain`,
-  `63+ networks`) and dead/minor chains.
+- **Chain strip (A)**: shipped — `src/chains.rs`, `public/chains/*.svg`,
+  `ServeDir` at `/chains`, `ChainStrip` in `ToolsBrowser` (home, `/tools`,
+  `/categories/*`). Sidebar **no longer** has a Chain `CollapsibleSection`.
+- **Tool cards**: catalog chains render as logo `<img>` tags; unknown values
+  fall back to text `chain-pill`.
+- **Featured carousel (B)**: shipped — `featured_carousel.rs`, migration
+  `009_featured_cards.sql`, `/admin/featured`, Supabase `featured` bucket.
+  Hidden when zero active cards (operator seed pending).
+- **Layout**: site-wide left sidebar with `SidebarBrand` at top (replaces
+  `TopNav`). Home **category grid removed**; function discovery via sidebar +
+  `/categories/:id`.
+- **List depth**: `ToolsBrowser` supports `?page=` progressive Load more
+  (50 tools per step, capped at 500 visible) while preserving filters/search.
+  Filter and chain changes reset `page` and close preview selection.
+- **Mobile visibility**: when no saved preference exists, the sidebar collapses
+  by default below tablet width after hydration.
+- **SSR hardening**: async/Suspense-rendered navigation controls use normal
+  anchors, and the server binary configures a larger Tokio worker stack for
+  Leptos SSR chunks.
+- **Crawler quality gate**: public visibility now excludes legacy
+  migration-backfill-only rows and recovers only rows with strict onchain word
+  boundary matches. Generic MCP/API/agent terms are not enough.
+- DB chain noise still filtered by `CHAIN_CATALOG` allowlist.
 
 ---
 
@@ -98,7 +114,7 @@ pub const CHAIN_CATALOG: &[ChainMeta] = &[ /* ordered */ ];
 
 ## Feature B — Featured carousel
 
-### B.1 Data (`migrations/006_featured.sql`)
+### B.1 Data (`migrations/009_featured_cards.sql`)
 
 ```sql
 CREATE TABLE featured_cards (
@@ -147,13 +163,35 @@ CREATE TABLE featured_cards (
 - Data via a new public server fn `get_featured_cards()` (active, ordered, joined
   to tool slug/name). Hidden entirely when there are no active cards.
 
+### B.5 Public relevance quality gate
+
+- Public catalog queries and RLS hide approved rows whose only evidence is
+  `migration-backfill: crypto keyword in name or description` with score 0.
+- Recovery migrations use strict word boundaries so generic substrings do not
+  pass: `indexes` is not DEX, `define` is not DeFi, and `cryptographic` is not
+  crypto.
+- Strong recovered examples include explicit Web3/blockchain/chain/protocol
+  terms such as Solana, Uniswap, Base USDC, Lightning, CoinGecko, x402, RWA,
+  EVM, mainnet/testnet, staking, NFT, and DEX as real terms.
+
 ---
 
-## Page layout (home)
+## Page layout (home) — as deployed
 
-`TopNav` → hero + `SearchBar` → **featured carousel (B)** → existing promo cards +
-category grid → `ToolsBrowser` (now topped by the **chain strip (A)**) → list.
-On `/tools` and category pages: `ToolsBrowser` shows the chain strip; no carousel.
+```
+ToolsBrowser (site-layout)
+├── Sidebar: SidebarBrand + filter sections (no Chain section)
+└── Main:
+    ├── (home only) hero: slogan, SearchBar
+    ├── (home only) FeaturedCarousel — if active cards exist
+    ├── (home only) PromoCards
+    ├── ChainStrip
+    └── toolbar + tool list
+```
+
+- `/tools`, `/categories/:id`: same sidebar + main, **no** hero/carousel/promo.
+- **Removed from earlier draft**: `TopNav`, category grid ("Browse by function").
+- See `docs/UI_UX_DESIGN.md` §2, §12 for full layout and gaps.
 
 ## Data flow
 
@@ -184,6 +222,14 @@ On `/tools` and category pages: `ToolsBrowser` shows the chain strip; no carouse
 - Featured: server-fn tests for active/ordered selection and admin-only mutation
   (RLS + `require_admin`); upload handler validation (type/size, admin gate).
 - Carousel SSR renders first card + dots without JS.
+- List pagination helpers cover first-page omission, Load more href generation,
+  filter-navigation page reset, and the 500-row visible cap.
+- Relevance scanner covers Base network wallet-agent phrasing so real Base
+  tools do not stall in manual review solely because the chain was described in
+  text rather than source metadata.
+- Relevance scanner covers false positives from legacy substring matching
+  (`indexes`, `define`, `cryptographic`) so generic developer tools do not
+  enter the public crypto catalog.
 
 ## Out of scope (YAGNI)
 

@@ -37,7 +37,8 @@ const STRONG_SIGNALS: &[(&str, i32, &str)] = &[
     ("polygon", 14, "mentions Polygon"),
     ("arbitrum", 14, "mentions Arbitrum"),
     ("optimism", 14, "mentions Optimism"),
-    ("base chain", 14, "mentions Base"),
+    ("base chain", 18, "mentions Base"),
+    ("base network", 18, "mentions Base"),
     ("avalanche", 14, "mentions Avalanche"),
     ("defi", 16, "DeFi keyword"),
     ("uniswap", 16, "DeFi protocol (Uniswap)"),
@@ -478,5 +479,44 @@ mod tests {
             .reasons
             .iter()
             .any(|r| r.contains("crypto registry")));
+    }
+
+    #[test]
+    fn accepted_base_network_wallet_agent() {
+        let assessment = assess_relevance(&input(
+            "Base Wallet Agent MCP",
+            Some("Onchain wallet operations for Base network agents"),
+            &[],
+            Some("https://github.com/example/base-wallet-agent"),
+            Some("@example/base-wallet-agent"),
+        ));
+        assert_eq!(assessment.status, "accepted");
+        assert!(assessment.reasons.iter().any(|r| r.contains("Base")));
+    }
+
+    #[test]
+    fn rejects_generic_indexing_without_dex_word() {
+        let assessment = assess_relevance(&input(
+            "codebase-memory-mcp",
+            Some("Indexes codebases into a persistent knowledge graph for AI coding agents"),
+            &[],
+            Some("https://github.com/example/codebase-memory-mcp"),
+            None,
+        ));
+        assert_ne!(assessment.status, "accepted");
+        assert!(!assessment.reasons.iter().any(|r| r.contains("DEX")));
+    }
+
+    #[test]
+    fn rejects_cryptographic_identity_without_onchain_signal() {
+        let assessment = assess_relevance(&input(
+            "osaurus",
+            Some("Native macOS harness for AI agents with cryptographic identity"),
+            &[],
+            Some("https://github.com/example/osaurus"),
+            None,
+        ));
+        assert_ne!(assessment.status, "accepted");
+        assert!(!assessment.reasons.iter().any(|r| r == "crypto keyword"));
     }
 }

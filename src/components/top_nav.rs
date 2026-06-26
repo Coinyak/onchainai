@@ -3,7 +3,6 @@
 use crate::auth::session::SessionUser;
 use crate::server::functions::get_current_user;
 use leptos::prelude::*;
-use leptos_router::components::A;
 
 const GITHUB_REPO: &str = "https://github.com/hoyeon4315-cpu/onchainai";
 
@@ -13,9 +12,9 @@ fn AuthNav(
 ) -> impl IntoView {
     match user_res {
         Ok(Some(session)) if session.is_admin => view! {
-            <A href="/admin" attr:class="text-[#E76F00] hover:underline no-underline font-medium">
+            <a href="/admin" class="text-[#E76F00] hover:underline no-underline font-medium">
                 "Admin"
-            </A>
+            </a>
             <span class="text-[#6B6B6B] hidden sm:inline">
                 {session.nickname.clone().unwrap_or_else(|| "admin".into())}
             </span>
@@ -49,19 +48,19 @@ fn AuthNav(
 pub fn SidebarBrand() -> impl IntoView {
     view! {
         <div class="sidebar-brand">
-            <A
+            <a
                 href="/"
-                attr:class="sidebar-brand-logo text-[16px] font-semibold tracking-tight text-[#1A1A1A] no-underline"
+                class="sidebar-brand-logo text-[16px] font-semibold tracking-tight text-[#1A1A1A] no-underline"
             >
                 "OnchainAI"
-            </A>
+            </a>
             <nav class="sidebar-brand-nav">
-                <A
+                <a
                     href="/submit"
-                    attr:class="sidebar-brand-submit inline-flex items-center justify-center h-8 px-3 rounded-lg bg-[#E76F00] text-white text-[13px] font-medium no-underline hover:bg-[#D96400]"
+                    class="sidebar-brand-submit inline-flex items-center justify-center h-8 px-3 rounded-lg bg-[#E76F00] text-white text-[13px] font-medium no-underline hover:bg-[#D96400]"
                 >
                     "Submit"
-                </A>
+                </a>
                 <a
                     href=GITHUB_REPO
                     target="_blank"
@@ -86,16 +85,16 @@ pub fn TopNav() -> impl IntoView {
     view! {
         <header class="sticky top-0 z-50 bg-white border-b border-[#E5E5E5]">
             <div class="max-w-[1200px] mx-auto px-4 md:px-6 h-12 md:h-14 flex items-center justify-between">
-                <A href="/" attr:class="text-[16px] font-semibold tracking-tight text-[#1A1A1A] no-underline">
+                <a href="/" class="text-[16px] font-semibold tracking-tight text-[#1A1A1A] no-underline">
                     "OnchainAI"
-                </A>
+                </a>
                 <nav class="flex items-center gap-2 md:gap-5 text-[14px]">
-                    <A
+                    <a
                         href="/submit"
-                        attr:class="inline-flex items-center justify-center h-8 md:h-9 px-3 md:px-4 rounded-lg bg-[#E76F00] text-white text-[13px] md:text-[14px] font-medium no-underline hover:bg-[#D96400]"
+                        class="inline-flex items-center justify-center h-8 md:h-9 px-3 md:px-4 rounded-lg bg-[#E76F00] text-white text-[13px] md:text-[14px] font-medium no-underline hover:bg-[#D96400]"
                     >
                         "Submit"
-                    </A>
+                    </a>
                     <a
                         href=GITHUB_REPO
                         target="_blank"

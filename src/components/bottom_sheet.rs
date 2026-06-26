@@ -3,7 +3,6 @@
 use crate::components::tool_detail_content::ToolDetailContent;
 use crate::models::Tool;
 use leptos::prelude::*;
-use leptos_router::components::A;
 
 #[component]
 pub fn BottomSheet(tool: Tool, close_href: String, full_page_href: String) -> impl IntoView {
@@ -21,9 +20,9 @@ pub fn BottomSheet(tool: Tool, close_href: String, full_page_href: String) -> im
     };
 
     view! {
-        <A href=close_stored.get_value() attr:class="bottom-sheet-backdrop" attr:aria-label="Close preview">
+        <a href=close_stored.get_value() class="bottom-sheet-backdrop" aria-label="Close preview">
             <span class="sr-only">"Close"</span>
-        </A>
+        </a>
         <div
             class=sheet_class
             role="dialog"

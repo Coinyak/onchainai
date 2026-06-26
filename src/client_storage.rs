@@ -89,6 +89,29 @@ pub fn read_sidebar_collapsed() -> bool {
     read_bool(SIDEBAR_COLLAPSED_KEY, false)
 }
 
+pub fn read_sidebar_collapsed_with_default(default: bool) -> bool {
+    read_bool(SIDEBAR_COLLAPSED_KEY, default)
+}
+
+pub fn sidebar_default_collapsed_for_width(width: f64) -> bool {
+    width < 768.0
+}
+
+#[cfg(target_arch = "wasm32")]
+pub fn sidebar_default_collapsed_for_viewport() -> bool {
+    let win = window();
+    win.inner_width()
+        .ok()
+        .and_then(|width| width.as_f64())
+        .map(sidebar_default_collapsed_for_width)
+        .unwrap_or(false)
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub fn sidebar_default_collapsed_for_viewport() -> bool {
+    false
+}
+
 pub fn write_sidebar_collapsed(collapsed: bool) {
     write_bool(SIDEBAR_COLLAPSED_KEY, collapsed);
 }
@@ -112,5 +135,13 @@ mod tests {
     fn read_bool_defaults_on_ssr() {
         assert!(!read_bool("missing-key", false));
         assert!(read_bool("missing-key", true));
+    }
+
+    #[test]
+    fn mobile_sidebar_defaults_collapsed_below_tablet_width() {
+        assert!(sidebar_default_collapsed_for_width(390.0));
+        assert!(sidebar_default_collapsed_for_width(767.0));
+        assert!(!sidebar_default_collapsed_for_width(768.0));
+        assert!(!sidebar_default_collapsed_for_width(1200.0));
     }
 }
