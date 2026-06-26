@@ -4,7 +4,7 @@
 use crate::components::{
     bottom_sheet::BottomSheet, chain_strip::ChainStrip, empty_state::EmptyState,
     error_state::ErrorState, preview_panel::PreviewPanel, search_bar::ToolbarSearch,
-    sidebar::Sidebar, skeleton::ToolListSkeleton, tool_card::ToolCard,
+    sidebar::Sidebar, skeleton::ToolListSkeleton, tool_card::ToolCard, top_nav::SidebarBrand,
 };
 use crate::filter_query::{build_tool_filters, describe_active_filters, ActiveFiltersSummary};
 use crate::models::{Category, Tool};
@@ -341,9 +341,21 @@ pub fn ToolsBrowser(
         )
     });
 
+    let children_fallback = children.clone();
+
     view! {
         <div class="tools-layout" data-tools-browser="">
-            {move || match page.get() {
+            <Suspense fallback=move || view! {
+                <aside class="tools-sidebar site-sidebar-chrome">
+                    <SidebarBrand/>
+                    <p class="sidebar-empty">"Loading filters…"</p>
+                </aside>
+                <div class="tools-main">
+                    {children_fallback.as_ref().map(|content| view! { <div class="tools-prepend">{content()}</div> })}
+                    <ToolListSkeleton count=6/>
+                </div>
+            }>
+                {move || match page.get() {
                         Some(Ok(data)) => {
                             let qb = query_base.get();
                             let browser_base = base.get_value();
@@ -432,7 +444,10 @@ pub fn ToolsBrowser(
                             }.into_any()
                         }
                         Some(Err(e)) => view! {
-                            <aside class="tools-sidebar"><p class="sidebar-empty">"Loading filters…"</p></aside>
+                            <aside class="tools-sidebar site-sidebar-chrome">
+                                <SidebarBrand/>
+                                <p class="sidebar-empty">"Loading filters…"</p>
+                            </aside>
                             <div class="tools-main">
                                 {children.as_ref().map(|content| view! { <div class="tools-prepend">{content()}</div> })}
                                 <ErrorState
@@ -442,13 +457,17 @@ pub fn ToolsBrowser(
                             </div>
                         }.into_any(),
                         None => view! {
-                            <aside class="tools-sidebar"><p class="sidebar-empty">"Loading filters…"</p></aside>
+                            <aside class="tools-sidebar site-sidebar-chrome">
+                                <SidebarBrand/>
+                                <p class="sidebar-empty">"Loading filters…"</p>
+                            </aside>
                             <div class="tools-main">
                                 {children.as_ref().map(|content| view! { <div class="tools-prepend">{content()}</div> })}
                                 <ToolListSkeleton count=6/>
                             </div>
                         }.into_any(),
-            }}
+                }}
+            </Suspense>
         </div>
     }
 }

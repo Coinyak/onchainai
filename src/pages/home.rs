@@ -64,26 +64,15 @@ pub fn HomePage() -> impl IntoView {
     let header = Resource::new_blocking(|| (), |_| async move { load_home_header().await });
 
     view! {
-        {move || match header.get() {
-            Some(data) => {
-                view! {
-                    <ToolsBrowser base=BrowserBase::Home show_toolbar_search=false>
-                        <HomeHeroContent
-                            slogan=data.settings.slogan.clone()
-                            description=data.settings.description.clone()
-                            mcp_endpoint=data.settings.mcp_endpoint.clone()
-                            featured=data.featured.clone()
-                        />
-                    </ToolsBrowser>
-                }
-                .into_any()
-            }
-            None => view! {
-                <div class="tools-layout" data-tools-browser="">
-                    <aside class="tools-sidebar"><p class="sidebar-empty">"Loading…"</p></aside>
-                    <div class="tools-main"><p class="text-[#6B6B6B] text-[14px] px-4 py-8">"Loading…"</p></div>
-                </div>
-            }.into_any(),
-        }}
+        <ToolsBrowser base=BrowserBase::Home show_toolbar_search=false>
+            {move || header.get().map(|data| view! {
+                <HomeHeroContent
+                    slogan=data.settings.slogan.clone()
+                    description=data.settings.description.clone()
+                    mcp_endpoint=data.settings.mcp_endpoint.clone()
+                    featured=data.featured.clone()
+                />
+            })}
+        </ToolsBrowser>
     }
 }
