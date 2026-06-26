@@ -13,6 +13,7 @@ COPY Cargo.toml Cargo.lock* ./
 COPY src/ ./src/
 COPY migrations/ ./migrations/
 COPY style/ ./style/
+COPY public/ ./public/
 
 RUN rustup target add wasm32-unknown-unknown
 
@@ -26,7 +27,8 @@ RUN cargo leptos build --release 2>&1 | tee /tmp/leptos-build.log
 RUN test -s /app/target/release/onchainai \
     && test -s /app/target/site/pkg/onchainai.js \
     && test -s /app/target/site/pkg/onchainai.wasm \
-    && test -s /app/style/output.css
+    && test -s /app/style/output.css \
+    && test -s /app/public/chains/bitcoin.svg
 
 # --- runtime stage ---
 FROM debian:bookworm-slim
@@ -41,6 +43,7 @@ COPY --from=builder /app/target/site /app/target/site
 COPY --from=builder /app/Cargo.toml /app/Cargo.toml
 COPY --from=builder /app/migrations /app/migrations
 COPY --from=builder /app/style /app/style
+COPY --from=builder /app/public /app/public
 
 ENV PORT=3000
 ENV RUST_LOG=info
