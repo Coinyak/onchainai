@@ -134,16 +134,16 @@ if (!mobileSidebarCollapsed) {
   errors.push("layout:mobile-sidebar-not-collapsed");
 }
 
-// Mobile chain overflow "+N" pill should remain visible when extra chains exist.
+// Chain strip "+N" overflow control (not tool-card .chain-more — hidden on mobile by CSS).
 await page.goto(`${base}/tools`, { waitUntil: "networkidle" });
 const chainMoreVisible = await page.evaluate(() => {
-  const pill = document.querySelector(".chain-more");
+  const pill = document.querySelector(".chain-tile-more");
   if (!pill) return true;
   const style = getComputedStyle(pill);
   return style.display !== "none" && style.visibility !== "hidden";
 });
 if (!chainMoreVisible) {
-  errors.push("computed-style:chain-more-hidden-on-mobile");
+  errors.push("computed-style:chain-strip-more-hidden-on-mobile");
 }
 
 await browser.close();
