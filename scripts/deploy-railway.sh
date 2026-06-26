@@ -64,9 +64,10 @@ echo "Railway user: $(railway whoami)"
 
 SERVICE_NAME="${RAILWAY_SERVICE:-onchainai}"
 
-if [[ ! -f .railway/project.json ]]; then
-  echo "Creating Railway project ${SERVICE_NAME}..."
-  railway init --name "${SERVICE_NAME}"
+if ! railway status >/dev/null 2>&1; then
+  echo "No linked Railway project. Run: railway link -p <project-id> -s ${SERVICE_NAME} -e production" >&2
+  echo "Or create a new project: railway init --name ${SERVICE_NAME}" >&2
+  exit 1
 fi
 
 sync_vars() {

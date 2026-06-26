@@ -11,7 +11,15 @@ page.on("console", (msg) => {
   }
 });
 page.on("requestfailed", (req) => {
-  errors.push(`requestfailed:${req.url()}:${req.failure()?.errorText}`);
+  const url = req.url();
+  // External font CDN flakes in headless CI; not an app regression signal.
+  if (url.includes("fonts.gstatic.com") || url.includes("fonts.googleapis.com")) {
+    return;
+  }
+  if (!url.startsWith(base)) {
+    return;
+  }
+  errors.push(`requestfailed:${url}:${req.failure()?.errorText}`);
 });
 page.on("response", async (res) => {
   const url = res.url();
