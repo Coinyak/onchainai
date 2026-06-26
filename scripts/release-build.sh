@@ -14,5 +14,8 @@ fi
 echo "Building release (cargo leptos build --release)..."
 cargo leptos build --release
 
+# wasm-bindgen JS loads onchainai_bg.wasm; cargo-leptos emits onchainai.wasm.
+ln -sf onchainai.wasm target/site/pkg/onchainai_bg.wasm
+
 echo "Artifacts:"
-ls -la target/release/onchainai target/site/pkg/onchainai.js target/site/pkg/onchainai.wasm style/output.css
+ls -la target/release/onchainai target/site/pkg/onchainai.js target/site/pkg/onchainai.wasm target/site/pkg/onchainai_bg.wasm style/output.css

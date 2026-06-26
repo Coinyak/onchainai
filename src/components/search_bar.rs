@@ -111,8 +111,8 @@ pub fn ToolbarSearch(base: BrowserBase, initial_q: String) -> impl IntoView {
         let q = debounced.get();
         let url = query.with(|qm| {
             build_query_base(
-                base,
-                qm.get("function").map(|s| s.to_string()),
+                &base,
+                base.function_from_query(qm.get("function").map(|s| s.to_string())),
                 qm.get("asset_class").map(|s| s.to_string()),
                 qm.get("actor").map(|s| s.to_string()),
                 qm.get("type").map(|s| s.to_string()),

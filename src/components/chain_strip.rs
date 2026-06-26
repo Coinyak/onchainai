@@ -13,7 +13,7 @@ pub fn ChainStrip(
     active_chain: Option<String>,
     chain_counts: Vec<(String, i64)>,
 ) -> impl IntoView {
-    let base_path = base.path().to_string();
+    let base_path = base.path();
     let chain_active = parse_multi(active_chain.as_deref());
     let all_href = clear_axis(&base_path, &query_base, "chain");
     let all_active = chain_active.is_empty();

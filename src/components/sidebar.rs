@@ -110,13 +110,24 @@ fn link_class(active: bool) -> &'static str {
 
 /// Function-filter `<A href>` — same logic as the Sidebar function-section `.map` closure.
 pub fn sidebar_function_link(
-    base_path: &str,
+    base: &crate::components::tools_browser::BrowserBase,
     query_base: &str,
     cat_id: &str,
     fn_active: &[String],
 ) -> (String, bool) {
-    let href = toggle_multi(base_path, query_base, "function", cat_id, fn_active);
-    let is_active = fn_active.iter().any(|v| v == cat_id);
+    use crate::components::tools_browser::{category_href, BrowserBase};
+    let (href, is_active) = match base {
+        BrowserBase::Category(current) => {
+            let active = current == cat_id || fn_active.iter().any(|v| v == cat_id);
+            (category_href(cat_id, query_base), active)
+        }
+        _ => {
+            let base_path = base.path();
+            let href = toggle_multi(&base_path, query_base, "function", cat_id, fn_active);
+            let is_active = fn_active.iter().any(|v| v == cat_id);
+            (href, is_active)
+        }
+    };
     (href, is_active)
 }
 
@@ -173,7 +184,7 @@ pub fn Sidebar(
     active_status: Option<String>,
     #[prop(default = true)] default_function_open: bool,
 ) -> impl IntoView {
-    let base_path = base.path().to_string();
+    let base_path = base.path();
     let fn_active = parse_multi(active_function.as_deref());
     let ac_active = parse_multi(active_asset_class.as_deref());
     let actor_active = parse_multi(active_actor.as_deref());
@@ -196,9 +207,15 @@ pub fn Sidebar(
             "tools-sidebar"
         }
     };
-    let clear_href = base_path.clone();
-    let fn_all_href = clear_axis(&base_path, &query_base, "function");
-    let base_for_fn = base_path.clone();
+    let clear_href = match &base {
+        BrowserBase::Category(_) => "/tools".to_string(),
+        _ => base_path.clone(),
+    };
+    let fn_all_href = match &base {
+        BrowserBase::Category(_) => "/tools".to_string(),
+        _ => clear_axis(&base_path, &query_base, "function"),
+    };
+    let base_for_fn = base.clone();
     let query_for_fn = query_base.clone();
     let base_for_ac = base_path.clone();
     let query_for_ac = query_base.clone();
@@ -337,7 +354,7 @@ mod tests {
     #[test]
     fn function_all_clears_only_function_param() {
         let query_base = build_query_base(
-            BrowserBase::Tools,
+            &BrowserBase::Tools,
             Some("bridge".into()),
             None,
             None,
@@ -357,7 +374,7 @@ mod tests {
     #[test]
     fn sidebar_function_link_produces_multi_select_href() {
         let query_base = build_query_base(
-            BrowserBase::Tools,
+            &BrowserBase::Tools,
             Some("bridge".into()),
             None,
             None,
@@ -369,10 +386,13 @@ mod tests {
             None,
         );
         let fn_active = parse_multi(Some("bridge"));
-        let (_, bridge_active) = sidebar_function_link("/tools", &query_base, "bridge", &fn_active);
+        let tools_base = BrowserBase::Tools;
+        let (_, bridge_active) =
+            sidebar_function_link(&tools_base, &query_base, "bridge", &fn_active);
         assert!(bridge_active);
 
-        let (href, swap_active) = sidebar_function_link("/tools", &query_base, "swap", &fn_active);
+        let (href, swap_active) =
+            sidebar_function_link(&tools_base, &query_base, "swap", &fn_active);
         assert!(!swap_active);
         assert!(
             href.contains("function=bridge%2Cswap")
@@ -387,5 +407,15 @@ mod tests {
             "sort must not duplicate: {href}"
         );
         assert!(href.contains("sort=new"));
+    }
+
+    #[test]
+    fn sidebar_function_link_on_category_navigates_to_other_category() {
+        let query_base = "/categories/bridge?chain=ethereum&sort=new".to_string();
+        let cat_base = BrowserBase::Category("bridge".into());
+        let fn_active = parse_multi(Some("bridge"));
+        let (href, active) = sidebar_function_link(&cat_base, &query_base, "swap", &fn_active);
+        assert!(!active);
+        assert_eq!(href, "/categories/swap?chain=ethereum&sort=new");
     }
 }

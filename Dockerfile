@@ -24,9 +24,12 @@ RUN cargo install cargo-leptos --version "${CARGO_LEPTOS_VERSION}" --locked
 # Full Leptos build — fail the image build if SSR, WASM, or JS artifacts are invalid.
 RUN cargo leptos build --release 2>&1 | tee /tmp/leptos-build.log
 
+RUN ln -sf onchainai.wasm /app/target/site/pkg/onchainai_bg.wasm
+
 RUN test -s /app/target/release/onchainai \
     && test -s /app/target/site/pkg/onchainai.js \
     && test -s /app/target/site/pkg/onchainai.wasm \
+    && test -e /app/target/site/pkg/onchainai_bg.wasm \
     && test -s /app/style/output.css \
     && test -s /app/public/chains/bitcoin.svg
 

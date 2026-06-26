@@ -16,24 +16,50 @@ use leptos::prelude::*;
 use leptos_router::hooks::use_query_map;
 use std::collections::HashMap;
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub enum BrowserBase {
     Home,
     Tools,
+    Category(String),
 }
 
 impl BrowserBase {
-    pub fn path(self) -> &'static str {
+    pub fn path(&self) -> String {
         match self {
-            BrowserBase::Home => "/",
-            BrowserBase::Tools => "/tools",
+            BrowserBase::Home => "/".into(),
+            BrowserBase::Tools => "/tools".into(),
+            BrowserBase::Category(id) => format!("/categories/{id}"),
         }
+    }
+
+    /// Function filter from route (category pages) or query string elsewhere.
+    pub fn function_from_query(&self, from_query: Option<String>) -> Option<String> {
+        match self {
+            BrowserBase::Category(id) => Some(id.clone()),
+            _ => from_query,
+        }
+    }
+}
+
+/// Category page link preserving non-function query params (chain, sort, q, …).
+pub fn category_href(cat_id: &str, query_base: &str) -> String {
+    let params: Vec<&str> = query_base
+        .split('?')
+        .nth(1)
+        .unwrap_or("")
+        .split('&')
+        .filter(|p| !p.is_empty() && !p.starts_with("function="))
+        .collect();
+    if params.is_empty() {
+        format!("/categories/{cat_id}")
+    } else {
+        format!("/categories/{cat_id}?{}", params.join("&"))
     }
 }
 
 #[allow(clippy::too_many_arguments)]
 pub fn build_query_base(
-    base: BrowserBase,
+    base: &BrowserBase,
     function: Option<String>,
     asset_class: Option<String>,
     actor: Option<String>,
@@ -45,8 +71,10 @@ pub fn build_query_base(
     selected: Option<String>,
 ) -> String {
     let mut parts: Vec<String> = Vec::new();
-    if let Some(v) = function {
-        parts.push(format!("function={}", urlencoding::encode(&v)));
+    if !matches!(base, BrowserBase::Category(_)) {
+        if let Some(v) = function {
+            parts.push(format!("function={}", urlencoding::encode(&v)));
+        }
     }
     if let Some(v) = asset_class {
         parts.push(format!("asset_class={}", urlencoding::encode(&v)));
@@ -73,13 +101,13 @@ pub fn build_query_base(
         parts.push(format!("selected={}", urlencoding::encode(&v)));
     }
     if parts.is_empty() {
-        base.path().to_string()
+        base.path()
     } else {
         format!("{}?{}", base.path(), parts.join("&"))
     }
 }
 
-pub fn with_selected(base_path: BrowserBase, base: &str, slug: &str) -> String {
+pub fn with_selected(base_path: &BrowserBase, base: &str, slug: &str) -> String {
     let root = base_path.path();
     if base == root || base.is_empty() {
         format!("{root}?selected={slug}")
@@ -93,7 +121,7 @@ pub fn with_selected(base_path: BrowserBase, base: &str, slug: &str) -> String {
 /// Sort toolbar link — rebuilds query via `build_query_base` (no duplicate `sort=` params).
 #[allow(clippy::too_many_arguments)]
 pub fn build_sort_href(
-    base: BrowserBase,
+    base: &BrowserBase,
     function: Option<String>,
     asset_class: Option<String>,
     actor: Option<String>,
@@ -118,11 +146,11 @@ pub fn build_sort_href(
     )
 }
 
-pub fn without_selected(base_path: BrowserBase, base: &str) -> String {
+pub fn without_selected(base_path: &BrowserBase, base: &str) -> String {
     let root = base_path.path();
     let trimmed = base.trim_start_matches('?');
-    let query = if base.starts_with(root) {
-        base.strip_prefix(root)
+    let query = if base.starts_with(&root) {
+        base.strip_prefix(&root)
             .unwrap_or("")
             .trim_start_matches('?')
     } else {
@@ -205,8 +233,12 @@ pub fn ToolsBrowser(
     base: BrowserBase,
     #[prop(optional)] show_toolbar_search: bool,
 ) -> impl IntoView {
+    let base = StoredValue::new(base);
     let query = use_query_map();
-    let function = Memo::new(move |_| query.with(|q| q.get("function").map(|s| s.to_string())));
+    let function = Memo::new(move |_| {
+        base.get_value()
+            .function_from_query(query.with(|q| q.get("function").map(|s| s.to_string())))
+    });
     let asset_class =
         Memo::new(move |_| query.with(|q| q.get("asset_class").map(|s| s.to_string())));
     let actor = Memo::new(move |_| query.with(|q| q.get("actor").map(|s| s.to_string())));
@@ -223,7 +255,7 @@ pub fn ToolsBrowser(
 
     let query_base = Memo::new(move |_| {
         build_query_base(
-            base,
+            &base.get_value(),
             function.get(),
             asset_class.get(),
             actor.get(),
@@ -267,7 +299,7 @@ pub fn ToolsBrowser(
 
     let sort_hot = Memo::new(move |_| {
         build_sort_href(
-            base,
+            &base.get_value(),
             function.get(),
             asset_class.get(),
             actor.get(),
@@ -281,7 +313,7 @@ pub fn ToolsBrowser(
     });
     let sort_new = Memo::new(move |_| {
         build_sort_href(
-            base,
+            &base.get_value(),
             function.get(),
             asset_class.get(),
             actor.get(),
@@ -295,7 +327,7 @@ pub fn ToolsBrowser(
     });
     let sort_comments = Memo::new(move |_| {
         build_sort_href(
-            base,
+            &base.get_value(),
             function.get(),
             asset_class.get(),
             actor.get(),
@@ -314,9 +346,10 @@ pub fn ToolsBrowser(
                 {move || match page.get() {
                     Some(Ok(data)) => {
                         let qb = query_base.get();
+                        let browser_base = base.get_value();
                         view! {
                             <Sidebar
-                                base=base
+                                base=browser_base.clone()
                                 categories=data.categories.clone()
                                 query_base=qb.clone()
                                 active_function=function.get()
@@ -324,18 +357,18 @@ pub fn ToolsBrowser(
                                 active_actor=actor.get()
                                 active_type=tool_type.get()
                                 active_status=status.get()
-                                default_function_open=base == BrowserBase::Tools
+                                default_function_open=matches!(browser_base, BrowserBase::Tools)
                             />
                             <div class="tools-main">
                                 <ChainStrip
-                                    base=base
+                                    base=browser_base.clone()
                                     query_base=qb.clone()
                                     active_chain=chain.get()
                                     chain_counts=data.chains.clone()
                                 />
                                 <div class="tools-toolbar sticky-toolbar">
                                     {if show_toolbar_search {
-                                        view! { <ToolbarSearch base=base initial_q=search_q.get().unwrap_or_default()/> }.into_any()
+                                        view! { <ToolbarSearch base=browser_base.clone() initial_q=search_q.get().unwrap_or_default()/> }.into_any()
                                     } else {
                                         ().into_any()
                                     }}
@@ -361,7 +394,7 @@ pub fn ToolsBrowser(
                                         data.categories.iter().map(|(c, _)| (c.id.clone(), c.label.clone())).collect();
                                     let filter_lines = describe_active_filters(&filter_summary, &function_labels);
                                     let clear_href = if filter_summary.has_active_filters() {
-                                        base.path().to_string()
+                                        browser_base.path()
                                     } else {
                                         String::new()
                                     };
@@ -374,7 +407,7 @@ pub fn ToolsBrowser(
                                         <div class="tool-list">
                                             {data.tools.clone().into_iter().map(|t| {
                                                 let slug = t.slug.clone();
-                                                let preview = with_selected(base, &qb, &slug);
+                                                let preview = with_selected(&browser_base, &qb, &slug);
                                                 let sel = selected.get().map(|s| s == slug).unwrap_or(false);
                                                 let count = comment_count_for_slug(&comment_counts, &slug);
                                                 view! { <ToolCard tool=t preview_href=preview is_selected=sel comment_count=count/> }
@@ -385,7 +418,7 @@ pub fn ToolsBrowser(
                             </div>
 
                             {data.preview_tool.clone().map(|tool| {
-                                let close = without_selected(base, &qb);
+                                let close = without_selected(&browser_base, &qb);
                                 let full = format!("/tools/{}", tool.slug);
                                 view! {
                                     <div class="preview-desktop">
@@ -422,9 +455,35 @@ mod tests {
     use super::*;
 
     #[test]
+    fn category_path_omits_function_param_but_keeps_chain() {
+        let q = build_query_base(
+            &BrowserBase::Category("bridge".into()),
+            Some("bridge".into()),
+            None,
+            None,
+            None,
+            None,
+            Some("ethereum,solana".into()),
+            "hot".into(),
+            None,
+            None,
+        );
+        assert_eq!(q, "/categories/bridge?chain=ethereum%2Csolana");
+    }
+
+    #[test]
+    fn category_href_preserves_chain_sort() {
+        let href = category_href(
+            "swap",
+            "/categories/bridge?chain=ethereum&sort=new&function=bridge",
+        );
+        assert_eq!(href, "/categories/swap?chain=ethereum&sort=new");
+    }
+
+    #[test]
     fn home_query_includes_multi_filters_and_selected() {
         let q = build_query_base(
-            BrowserBase::Home,
+            &BrowserBase::Home,
             Some("bridge,swap".into()),
             None,
             None,
@@ -443,9 +502,9 @@ mod tests {
 
     #[test]
     fn tools_path_clear_is_root() {
-        assert_eq!(without_selected(BrowserBase::Tools, "/tools"), "/tools");
+        assert_eq!(without_selected(&BrowserBase::Tools, "/tools"), "/tools");
         assert_eq!(
-            without_selected(BrowserBase::Tools, "/tools?function=swap&selected=foo"),
+            without_selected(&BrowserBase::Tools, "/tools?function=swap&selected=foo"),
             "/tools?function=swap"
         );
     }
@@ -461,7 +520,7 @@ mod tests {
             None,
         );
         let from_new = build_sort_href(
-            BrowserBase::Tools,
+            &BrowserBase::Tools,
             filters.0.clone(),
             filters.1.clone(),
             filters.2.clone(),
@@ -480,7 +539,7 @@ mod tests {
         assert!(from_new.contains("sort=new"));
 
         let to_hot = build_sort_href(
-            BrowserBase::Tools,
+            &BrowserBase::Tools,
             filters.0,
             filters.1,
             filters.2,
