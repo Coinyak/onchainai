@@ -118,6 +118,44 @@ if (!toolsLoadMore) {
   errors.push("layout:tools-missing-load-more");
 }
 
+// Large catalog: click load-more and assert card count strictly increases.
+const toolsCards = await page.evaluate(
+  () => document.querySelectorAll(".tool-card").length,
+);
+if (toolsCards >= 50) {
+  const before = toolsCards;
+  const loadMore = await page.$("a.load-more-btn, .load-more-row a.load-more-btn");
+  if (!loadMore) {
+    errors.push("interaction:tools-missing-load-more-button");
+  } else {
+    await loadMore.click();
+    await page.waitForLoadState("networkidle");
+    let timedOut = false;
+    await page
+      .waitForFunction(
+        (count) => document.querySelectorAll(".tool-card").length > count,
+        before,
+        { timeout: 15000 },
+      )
+      .catch(() => {
+        timedOut = true;
+      });
+    const after = await page.evaluate(
+      () => document.querySelectorAll(".tool-card").length,
+    );
+    if (timedOut || after <= before) {
+      errors.push(`interaction:load-more-not-growing:${before}->${after}`);
+    }
+  }
+}
+
+// Direct ?page=2 navigation should not surface deserialization errors.
+await page.goto(`${base}/tools?page=2`, { waitUntil: "networkidle" });
+const page2Text = await page.textContent("body");
+if (/error deserializing|missing field filters/i.test(page2Text || "")) {
+  errors.push("visible-error:/tools?page=2");
+}
+
 // Mobile sidebar defaults collapsed at 375px when localStorage is cleared.
 await page.setViewportSize({ width: 375, height: 812 });
 await page.goto(`${base}/tools`, { waitUntil: "domcontentloaded" });

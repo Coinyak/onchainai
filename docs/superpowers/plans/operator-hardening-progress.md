@@ -354,7 +354,7 @@ Root cause: load-more requested `limit > 500` (page × 50 uncapped server-side) 
 | **Sort UX** | `build_sort_href` omits `selected` (preview closes on sort change) |
 | **Tablet sidebar** | Default collapsed threshold **768px → 1024px** (`sidebar_default_collapsed_for_width`) |
 | **RLS alignment** | Migration `015_public_tool_where_containment.sql` — `= ANY(crypto_relevance_reasons)` matches `PUBLIC_TOOL_WHERE` |
-| **`browser-smoke.mjs`** | Added load-more markup, mobile sidebar collapsed, chain-more visibility, served CSS non-empty checks |
+| **`browser-smoke.mjs`** | Added load-more markup + click interaction, mobile sidebar collapsed, `.chain-tile-more` visibility (not tool-card `.chain-more`), served CSS non-empty checks |
 | **`smoke-test.sh`** | Asserts load-more markup on large `/tools` listing |
 | **Featured seed** | `seeds/dev_seed_featured.sql` — 3 active cards after Phase A dev seed |
 | **Disk hygiene** | `docs/DISK_MAINTENANCE.md` + `scripts/disk-audit.sh` monthly audit wrapper |
@@ -369,8 +369,12 @@ $ node scripts/click-test.mjs http://localhost:3000   # optional prod regression
 $ ./scripts/disk-audit.sh
 ```
 
+### Auth note (`optional_session_result`)
+
+Banned/invalid sessions return `Ok(None)` on optional reads (`get_current_user`, `is_bookmarked`) for hydration-safe UX. **Mutations remain fail-closed** via `require_user` / `require_admin` (`AuthSessionError::Banned` → 401/403). No privilege escalation; explicit “account suspended” messaging belongs on protected actions only.
+
 ### Remaining
 
 - Re-run `click-test.mjs` against production after next deploy (load-more 50→N monotonic, no 500s).
-- ~~Wire `logo_url` collection + `<img>` render~~ — done (migration 016, `infer_logo_url`, `logo_url_is_http`, `onerror` monogram fallback).
+- ~~Wire `logo_url` collection + `<img>` render~~ — done (migration 016, `infer_logo_url`, `logo_url_is_safe_for_img`, upsert sanitize, `onerror` monogram fallback, `referrerpolicy=no-referrer`).
 - Seed production featured cards via `/admin/featured` or operator SQL.

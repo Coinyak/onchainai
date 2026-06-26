@@ -3,6 +3,7 @@ import { writeFileSync } from "fs";
 
 const base = (process.argv[2] || "https://www.onchain-ai.xyz").replace(/\/$/, "");
 const outDir = "/tmp/onchainai-browser-test";
+const TOOL_PAGE_SIZE = 50;
 const results = [];
 
 function log(step, ok, detail = "") {
@@ -30,7 +31,9 @@ try {
   // Expand sidebar if collapsed, then click visible function filter
   const toggle = await page.$(".sidebar-toggle, .sidebar-rail button, button.sidebar-expand");
   if (toggle) await toggle.click().catch(() => {});
-  const fnLink = await page.$('aside .sidebar-body a[href*="function="], aside.tools-sidebar:not(.tools-sidebar-collapsed) a[href*="function="]');
+  const fnLink = await page.$(
+    'aside .sidebar-body a[href*="function="], aside.tools-sidebar:not(.tools-sidebar-collapsed) a[href*="function="]',
+  );
   if (fnLink && (await fnLink.isVisible())) {
     await fnLink.click();
     await page.waitForLoadState("networkidle");
@@ -44,14 +47,39 @@ try {
   log("tools-load", true);
 
   const toolCards = await page.$$(".tool-card");
-  log("tool-cards-present", toolCards.length > 0, `count=${toolCards.length}`);
+  const cardCount = toolCards.length;
+  log("tool-cards-present", cardCount > 0, `count=${cardCount}`);
 
-  // Monogram vs img logos
   const logoStats = await page.evaluate(() => ({
     monograms: document.querySelectorAll(".tool-logo").length,
     imgs: document.querySelectorAll(".tool-logo img, .tool-card img.tool-logo-img").length,
   }));
-  log("tool-logos-monogram", logoStats.monograms > 0, `monogram=${logoStats.monograms} img=${logoStats.imgs}`);
+  const expectLogos = cardCount >= TOOL_PAGE_SIZE;
+  log(
+    "tool-logos-present",
+    !expectLogos || logoStats.imgs > 0,
+    `monogram=${logoStats.monograms} img=${logoStats.imgs}`,
+  );
+
+  if (logoStats.imgs > 0) {
+    const brokeFallback = await page.evaluate(async () => {
+      const img = document.querySelector(".tool-logo-img");
+      if (!img) return { skipped: true };
+      img.src = "https://invalid.onchainai-test.invalid/nope.png";
+      await new Promise((r) => setTimeout(r, 400));
+      const stillImg = !!document.querySelector(".tool-logo-img");
+      const logo = document.querySelector(".tool-card .tool-logo");
+      const text = logo?.textContent?.trim() ?? "";
+      return { skipped: false, stillImg, textLen: text.length };
+    });
+    if (!brokeFallback.skipped) {
+      log(
+        "tool-logo-fallback",
+        !brokeFallback.stillImg && brokeFallback.textLen > 0,
+        `stillImg=${brokeFallback.stillImg} textLen=${brokeFallback.textLen}`,
+      );
+    }
+  }
 
   // Chain strip click
   const chainLink = await page.$(".chain-strip a:visible, .chain-tile:visible");
@@ -63,23 +91,56 @@ try {
     log("chain-strip-click", false, "no chain link");
   }
 
+  // Direct page=2 navigation
+  await page.goto(`${base}/tools?page=2`, { waitUntil: "networkidle" });
+  const page2Cards = (await page.$$(".tool-card")).length;
+  log(
+    "page-2-load",
+    !/error deserializing/i.test((await page.textContent("body")) || "") &&
+      (page2Cards >= TOOL_PAGE_SIZE || page2Cards > 0),
+    `count=${page2Cards}`,
+  );
+
   // Load more if present
-  const loadMore = await page.$("a.load-more-btn");
+  await page.goto(`${base}/tools`, { waitUntil: "networkidle" });
+  const beforeLoadMore = (await page.$$(".tool-card")).length;
+  const loadMore = await page.$("a.load-more-btn, .load-more-row a.load-more-btn");
   if (loadMore) {
-    const before = (await page.$$(".tool-card")).length;
+    const loadMoreApiErrors = [];
+    const onLoadMoreResponse = (res) => {
+      const url = res.url();
+      if (url.startsWith(base) && (url.includes("/api") || url.includes("/pkg/")) && res.status() >= 400) {
+        loadMoreApiErrors.push(`${res.status()}:${url}`);
+      }
+    };
+    page.on("response", onLoadMoreResponse);
     await loadMore.click();
     await page.waitForLoadState("networkidle");
+    let waitTimedOut = false;
     await page
       .waitForFunction(
         (count) => document.querySelectorAll(".tool-card").length > count,
-        before,
+        beforeLoadMore,
         { timeout: 15000 },
       )
-      .catch(() => {});
+      .catch(() => {
+        waitTimedOut = true;
+      });
+    page.off("response", onLoadMoreResponse);
     const after = (await page.$$(".tool-card")).length;
-    log("load-more-click", after > before, `${before} -> ${after}`);
+    const detail = waitTimedOut
+      ? `waitForFunction timeout ${beforeLoadMore} -> ${after}`
+      : `${beforeLoadMore} -> ${after}`;
+    log("load-more-click", !waitTimedOut && after > beforeLoadMore, detail);
+    log(
+      "load-more-api-errors",
+      loadMoreApiErrors.length === 0,
+      loadMoreApiErrors.slice(0, 3).join(" | ") || "none",
+    );
+  } else if (beforeLoadMore >= TOOL_PAGE_SIZE) {
+    log("load-more-present", false, `cards=${beforeLoadMore} but no button`);
   } else {
-    log("load-more-click", true, "no button (small catalog or capped)");
+    log("load-more-present", true, "small catalog");
   }
 
   // Open first tool preview
@@ -93,7 +154,9 @@ try {
   }
 
   // Tool detail page
-  const detailHref = await page.$eval(".tool-card a.tool-card-link", (a) => a.getAttribute("href")).catch(() => null);
+  const detailHref = await page
+    .$eval(".tool-card a.tool-card-link", (a) => a.getAttribute("href"))
+    .catch(() => null);
   if (detailHref && detailHref.startsWith("/tools/")) {
     await page.goto(`${base}${detailHref}`, { waitUntil: "networkidle" });
     log("tool-detail", (await page.textContent("h1, .tool-detail h1"))?.length > 0, detailHref);
@@ -103,6 +166,14 @@ try {
   await page.setViewportSize({ width: 375, height: 812 });
   await page.goto(`${base}/tools`, { waitUntil: "networkidle" });
   log("mobile-tools", !/error deserializing/i.test((await page.textContent("body")) || ""));
+
+  const chainMoreVisible = await page.evaluate(() => {
+    const pill = document.querySelector(".chain-tile-more");
+    if (!pill) return true;
+    const style = getComputedStyle(pill);
+    return style.display !== "none" && style.visibility !== "hidden";
+  });
+  log("mobile-chain-tile-more", chainMoreVisible, chainMoreVisible ? "visible" : "hidden");
 
   await page.screenshot({ path: `${outDir}-mobile-tools.png`, fullPage: false });
   await page.setViewportSize({ width: 1280, height: 900 });

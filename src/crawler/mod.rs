@@ -90,6 +90,7 @@ pub async fn upsert_tools(pool: &sqlx::PgPool, tools: &[models::Tool]) -> anyhow
     use anyhow::Context;
 
     for tool in tools {
+        let logo_url = crate::models::tool::sanitize_logo_url(tool.logo_url.clone());
         sqlx::query(
             r#"
             INSERT INTO tools (
@@ -183,7 +184,7 @@ pub async fn upsert_tools(pool: &sqlx::PgPool, tools: &[models::Tool]) -> anyhow
         .bind(tool.last_commit_at)
         .bind(&tool.source)
         .bind(&tool.source_url)
-        .bind(&tool.logo_url)
+        .bind(&logo_url)
         .bind(&tool.logo_monogram)
         .bind(tool.created_at)
         .execute(pool)

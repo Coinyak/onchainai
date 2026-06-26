@@ -5,7 +5,7 @@ use crate::components::copy_button::CopyButton;
 use crate::install_safety::{
     blocks_structured_config, claude_mcp_config, cursor_install_note, install_warning_text,
 };
-use crate::models::tool::{display_monogram, logo_url_is_http};
+use crate::models::tool::{display_monogram, tool_logo_img_url};
 use crate::models::Tool;
 use leptos::prelude::*;
 
@@ -81,7 +81,7 @@ pub fn ToolDetailContent(
         .clone()
         .unwrap_or_else(|| "No description.".into());
     let mono = display_monogram(&tool);
-    let logo_img = tool.logo_url.clone().filter(|url| logo_url_is_http(url));
+    let logo_img = tool_logo_img_url(&tool);
     let show_logo_img = RwSignal::new(logo_img.is_some());
     let tool_name = tool.name.clone();
     let status = tool.status.clone();
@@ -116,6 +116,7 @@ pub fn ToolDetailContent(
                                     src=url
                                     alt=tool_name.clone()
                                     loading="lazy"
+                                    referrerpolicy="no-referrer"
                                     on:error=move |_| show_logo_img.set(false)
                                 />
                             }

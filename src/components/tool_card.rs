@@ -3,7 +3,7 @@
 use crate::chains::chain_tags_for_tool;
 use crate::components::copy_button::CopyButton;
 use crate::components::login_modal::LoginModal;
-use crate::models::tool::{display_monogram, logo_url_is_http};
+use crate::models::tool::{display_monogram, tool_logo_img_url};
 use crate::models::Tool;
 use crate::server::functions::{get_current_user, toggle_bookmark};
 use leptos::prelude::*;
@@ -35,7 +35,7 @@ pub fn ToolCard(
     let detail_href = format!("/tools/{slug}");
     let href = preview_href.unwrap_or(detail_href);
     let mono = display_monogram(&tool);
-    let logo_img = tool.logo_url.clone().filter(|url| logo_url_is_http(url));
+    let logo_img = tool_logo_img_url(&tool);
     let show_logo_img = RwSignal::new(logo_img.is_some());
     let tool_name = tool.name.clone();
     let status = tool.status.clone();
@@ -84,6 +84,7 @@ pub fn ToolCard(
                                         src=url
                                         alt=tool_name.clone()
                                         loading="lazy"
+                                        referrerpolicy="no-referrer"
                                         on:error=move |_| show_logo_img.set(false)
                                     />
                                 }

@@ -121,15 +121,19 @@ pub fn default_review_fields() -> ToolReviewDefaults {
 
 /// Parse a positive page number from a raw query value (`"2"`, `"abc"` → `None`).
 pub fn parse_page_value(raw: &str) -> Option<u32> {
-    raw.parse::<u32>().ok().filter(|page| *page > 0)
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    trimmed.parse::<u32>().ok().filter(|page| *page > 0)
 }
 
 /// Whether `logo_url` is safe to render as an external image.
-///
-/// Requires HTTPS for general hosts. Plain HTTP is allowed only for a small
-/// GitHub-related allowlist. Rejects `javascript:`, `data:`, and other schemes.
-pub fn logo_url_is_http(url: &str) -> bool {
+pub fn logo_url_is_safe_for_img(url: &str) -> bool {
     let trimmed = url.trim();
+    if trimmed.contains(['"', '\'', '<', '>', '\r', '\n']) {
+        return false;
+    }
     let lower = trimmed.to_ascii_lowercase();
     if lower.starts_with("javascript:")
         || lower.starts_with("data:")
@@ -140,55 +144,51 @@ pub fn logo_url_is_http(url: &str) -> bool {
         return false;
     }
 
-    let (is_https, host) = if let Some(rest) = trimmed.strip_prefix("https://") {
-        (
-            true,
-            rest.split('/')
-                .next()
-                .unwrap_or("")
-                .split(':')
-                .next()
-                .unwrap_or(""),
-        )
-    } else if let Some(rest) = trimmed.strip_prefix("http://") {
-        (
-            false,
-            rest.split('/')
-                .next()
-                .unwrap_or("")
-                .split(':')
-                .next()
-                .unwrap_or(""),
-        )
-    } else {
-        return false;
+    let parsed = match url::Url::parse(trimmed) {
+        Ok(u) => u,
+        Err(_) => return false,
     };
 
-    let host = host.to_ascii_lowercase();
-    if host.is_empty() {
+    if !parsed.username().is_empty() || parsed.password().is_some() {
         return false;
     }
 
-    if is_https {
+    let scheme = parsed.scheme();
+    if scheme != "http" && scheme != "https" {
+        return false;
+    }
+
+    let host = match parsed.host_str() {
+        Some(h) if !h.is_empty() => h.to_ascii_lowercase(),
+        _ => return false,
+    };
+
+    if scheme == "https" {
         return true;
     }
     logo_url_http_allowlist_host(&host)
 }
 
+/// Back-compat alias for [`logo_url_is_safe_for_img`].
+pub fn logo_url_is_http(url: &str) -> bool {
+    logo_url_is_safe_for_img(url)
+}
+
 fn logo_url_http_allowlist_host(host: &str) -> bool {
-    if matches!(
+    matches!(
         host,
         "github.com" | "avatars.githubusercontent.com" | "raw.githubusercontent.com"
-    ) {
-        return true;
-    }
-    host.ends_with(".githubusercontent.com")
-        || host.ends_with(".cloudfront.net")
-        || host.ends_with(".amazonaws.com")
-        || host == "cdn.jsdelivr.net"
-        || host.ends_with(".jsdelivr.net")
-        || host == "unpkg.com"
-        || host.ends_with(".fastly.net")
+    ) || host.ends_with(".githubusercontent.com")
+}
+
+/// Filter a stored logo URL through [`logo_url_is_safe_for_img`].
+pub fn sanitize_logo_url(url: Option<String>) -> Option<String> {
+    url.filter(|u| logo_url_is_safe_for_img(u))
+}
+
+/// Logo URL to render for a tool, if safe.
+pub fn tool_logo_img_url(tool: &Tool) -> Option<String> {
+    sanitize_logo_url(tool.logo_url.clone())
 }
 
 /// Monogram from tool name: first two alphanumeric chars, uppercased.
@@ -308,29 +308,76 @@ mod tests {
     #[test]
     fn parse_page_value_rejects_invalid_values() {
         assert_eq!(parse_page_value("2"), Some(2));
+        assert_eq!(parse_page_value("01"), Some(1));
         assert_eq!(parse_page_value("abc"), None);
         assert_eq!(parse_page_value("0"), None);
         assert_eq!(parse_page_value("-1"), None);
+        assert_eq!(parse_page_value(""), None);
+        assert_eq!(parse_page_value(" 2"), None);
+        assert_eq!(parse_page_value("4294967296"), None);
     }
 
     #[test]
-    fn logo_url_is_http_requires_https_or_allowlisted_host() {
-        assert!(logo_url_is_http("https://example.com/logo.png"));
-        assert!(logo_url_is_http(
-            "https://cdn.example.cloudfront.net/logo.png"
-        ));
-        assert!(logo_url_is_http(
+    fn logo_url_is_safe_for_img_requires_https_or_github_http() {
+        assert!(logo_url_is_safe_for_img("  https://example.com/logo.png"));
+        assert!(logo_url_is_safe_for_img(
             "https://avatars.githubusercontent.com/bob-collective"
         ));
-        assert!(logo_url_is_http("http://avatars.githubusercontent.com/u/1"));
-        assert!(logo_url_is_http(
+        assert!(logo_url_is_safe_for_img(
+            "http://avatars.githubusercontent.com/u/1"
+        ));
+        assert!(logo_url_is_safe_for_img(
             "http://raw.githubusercontent.com/org/repo/logo.png"
         ));
-        assert!(!logo_url_is_http("http://example.com/logo.png"));
-        assert!(!logo_url_is_http("javascript:alert(1)"));
-        assert!(!logo_url_is_http("data:image/png;base64,abc"));
-        assert!(!logo_url_is_http("//example.com/logo.png"));
-        assert!(!logo_url_is_http("/chains/ethereum.svg"));
+        assert!(logo_url_is_safe_for_img("http://github.com/org/repo"));
+        assert!(!logo_url_is_safe_for_img("http://example.com/logo.png"));
+        assert!(!logo_url_is_safe_for_img(
+            "http://cdn.jsdelivr.net/pkg/logo.png"
+        ));
+        assert!(!logo_url_is_safe_for_img(
+            "http://x.cloudfront.net/logo.png"
+        ));
+        assert!(!logo_url_is_safe_for_img("javascript:alert(1)"));
+        assert!(!logo_url_is_safe_for_img("data:image/png;base64,abc"));
+        assert!(!logo_url_is_safe_for_img("vbscript:msgbox(1)"));
+        assert!(!logo_url_is_safe_for_img("file:///etc/passwd"));
+        assert!(!logo_url_is_safe_for_img("blob:https://example.com/uuid"));
+        assert!(!logo_url_is_safe_for_img("//example.com/logo.png"));
+        assert!(!logo_url_is_safe_for_img("/chains/ethereum.svg"));
+        assert!(!logo_url_is_safe_for_img("https:///logo.png"));
+        assert!(!logo_url_is_safe_for_img(
+            "https://user:pass@evil.example/logo"
+        ));
+        assert!(!logo_url_is_safe_for_img(
+            "https://evil.example@other.example/logo"
+        ));
+        assert!(!logo_url_is_safe_for_img(
+            "https://example.com/logo\"onerror=alert(1)"
+        ));
+    }
+
+    #[test]
+    fn sanitize_logo_url_filters_unsafe_values() {
+        assert_eq!(sanitize_logo_url(Some("javascript:alert(1)".into())), None);
+        assert_eq!(
+            sanitize_logo_url(Some("https://avatars.githubusercontent.com/acme".into())),
+            Some("https://avatars.githubusercontent.com/acme".into())
+        );
+    }
+
+    #[test]
+    fn tool_logo_img_url_gates_render_path() {
+        let mut tool = sample_tool();
+        assert_eq!(tool_logo_img_url(&tool), None);
+
+        tool.logo_url = Some("data:image/png;base64,abc".into());
+        assert_eq!(tool_logo_img_url(&tool), None);
+
+        tool.logo_url = Some("https://avatars.githubusercontent.com/acme".into());
+        assert_eq!(
+            tool_logo_img_url(&tool).as_deref(),
+            Some("https://avatars.githubusercontent.com/acme")
+        );
     }
 
     #[test]

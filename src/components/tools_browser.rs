@@ -19,6 +19,7 @@ use std::collections::HashMap;
 
 const TOOL_PAGE_SIZE: u32 = 50;
 const MAX_VISIBLE_TOOLS: u32 = MAX_LIST_TOOLS_LIMIT as u32;
+pub const MAX_BROWSER_PAGE: u32 = MAX_VISIBLE_TOOLS / TOOL_PAGE_SIZE;
 
 #[derive(Clone, PartialEq, Eq)]
 pub enum BrowserBase {
@@ -142,8 +143,18 @@ pub fn build_filter_navigation_base(
     )
 }
 
+pub fn clamp_browser_page(page: u32) -> u32 {
+    page.max(1).min(MAX_BROWSER_PAGE)
+}
+
 fn parse_page_param(raw: Option<String>) -> u32 {
-    raw.and_then(|s| parse_page_value(&s)).unwrap_or(1)
+    clamp_browser_page(raw.and_then(|s| parse_page_value(&s)).unwrap_or(1))
+}
+
+fn decode_page_query_value(value: &str) -> String {
+    urlencoding::decode(value)
+        .map(|s| s.into_owned())
+        .unwrap_or_else(|_| value.to_string())
 }
 
 /// Parse `page` from a raw query string (`?page=2&sort=hot` or `page=2`).
@@ -152,7 +163,7 @@ pub fn parse_page_from_query_string(query: &str) -> Option<u32> {
     trimmed.split('&').find_map(|pair| {
         let (key, value) = pair.split_once('=')?;
         if key == "page" {
-            parse_page_value(value)
+            parse_page_value(&decode_page_query_value(value)).map(clamp_browser_page)
         } else {
             None
         }
@@ -294,17 +305,41 @@ struct BrowserData {
     preview_tool: Option<Tool>,
 }
 
+/// Cache identity for browser list data (excludes `retry_tick`).
+#[derive(Clone, PartialEq)]
+pub struct BrowserCacheKey {
+    pub sort: String,
+    pub filters: ToolFilters,
+    pub search_q: Option<String>,
+    pub selected: Option<String>,
+    pub page: u32,
+}
+
 #[derive(Clone)]
-struct CachedBrowserPayload {
-    deps: (
-        String,
-        ToolFilters,
-        Option<String>,
-        Option<String>,
-        u32,
-        u32,
-    ),
+struct TaggedBrowserPayload {
+    deps: BrowserCacheKey,
     data: BrowserData,
+}
+
+/// Resolve which browser payload to render while a refetch is in flight.
+fn resolve_browser_data(
+    current: &BrowserCacheKey,
+    fetch_ok: Option<&TaggedBrowserPayload>,
+    fetch_pending: bool,
+    cached: Option<&TaggedBrowserPayload>,
+) -> Option<BrowserData> {
+    if let Some(tagged) = fetch_ok {
+        if tagged.deps == *current {
+            return Some(tagged.data.clone());
+        }
+        return None;
+    }
+    if fetch_pending {
+        return cached
+            .filter(|tagged| tagged.deps == *current)
+            .map(|tagged| tagged.data.clone());
+    }
+    None
 }
 
 async fn load_browser_data(
@@ -385,7 +420,7 @@ pub fn ToolsBrowser(
         #[cfg(feature = "hydrate")]
         if from_router.is_none() {
             if let Some(page) = page_from_browser_url() {
-                return page;
+                return clamp_browser_page(page);
             }
         }
         parse_page_param(from_router)
@@ -432,21 +467,33 @@ pub fn ToolsBrowser(
     });
 
     let retry_tick = RwSignal::new(0u32);
-    let page_deps = Memo::new(move |_| {
-        (
-            sort.get(),
-            filters.get(),
-            search_q.get(),
-            selected.get(),
-            page_number.get(),
-            retry_tick.get(),
-        )
+    let page_cache_key = Memo::new(move |_| BrowserCacheKey {
+        sort: sort.get(),
+        filters: filters.get(),
+        search_q: search_q.get(),
+        selected: selected.get(),
+        page: page_number.get(),
     });
+    let page_fetch_deps = Memo::new(move |_| (page_cache_key.get(), retry_tick.get()));
 
-    let page = Resource::new_blocking(
-        move || page_deps.get(),
-        |(sort, filters, search_q, selected, page_number, _)| async move {
-            load_browser_data(sort, filters, search_q, selected, page_number).await
+    let last_ok_fetch = RwSignal::<Option<TaggedBrowserPayload>>::new(None);
+
+    let page: Resource<Result<BrowserData, ServerFnError>> = Resource::new_blocking(
+        move || page_fetch_deps.get(),
+        move |(cache_key, _retry_tick)| async move {
+            let data = load_browser_data(
+                cache_key.sort.clone(),
+                cache_key.filters.clone(),
+                cache_key.search_q.clone(),
+                cache_key.selected.clone(),
+                cache_key.page,
+            )
+            .await?;
+            last_ok_fetch.set(Some(TaggedBrowserPayload {
+                deps: cache_key,
+                data: data.clone(),
+            }));
+            Ok(data)
         },
     );
 
@@ -454,13 +501,10 @@ pub fn ToolsBrowser(
     // `?page=N` navigation does not flash an empty/partial list during hydration.
     // Only reuse cache when deps still match — back-nav with changed sort/filters/page
     // must not show a stale list from the previous query.
-    let cached_browser_data = RwSignal::<Option<CachedBrowserPayload>>::new(None);
+    let cached_browser_data = RwSignal::<Option<TaggedBrowserPayload>>::new(None);
     Effect::new(move || {
-        if let Some(Ok(data)) = page.get() {
-            cached_browser_data.set(Some(CachedBrowserPayload {
-                deps: page_deps.get(),
-                data,
-            }));
+        if let Some(tagged) = last_ok_fetch.get() {
+            cached_browser_data.set(Some(tagged));
         }
     });
 
@@ -519,15 +563,19 @@ pub fn ToolsBrowser(
                 </div>
             }>
                 {move || {
-                    let resolved = match page.get() {
-                        Some(Ok(data)) => Some(data),
-                        Some(Err(_)) => None,
-                        None => cached_browser_data
-                            .get()
-                            .filter(|cached| cached.deps == page_deps.get())
-                            .map(|cached| cached.data),
-                    };
-                    match (page.get(), resolved) {
+                    let cache_key = page_cache_key.get();
+                    let page_state = page.get();
+                    let fetch_ok = last_ok_fetch
+                        .get()
+                        .filter(|tagged| tagged.deps == cache_key);
+                    let fetch_pending = matches!(page_state, None);
+                    let resolved = resolve_browser_data(
+                        &cache_key,
+                        fetch_ok.as_ref(),
+                        fetch_pending,
+                        cached_browser_data.get().as_ref(),
+                    );
+                    match (page_state, resolved) {
                         (Some(Err(e)), _) => view! {
                             <aside class="tools-sidebar site-sidebar-chrome">
                                 <SidebarBrand/>
@@ -602,17 +650,32 @@ pub fn ToolsBrowser(
                                         }.into_any()
                                     } else {
                                         let comment_counts = data.comment_counts.clone();
+                                        let tools = data.tools.clone();
+                                        let tools_len = tools.len();
+                                        let browser_base_list = browser_base.clone();
+                                        let qb_list = qb.clone();
                                         view! {
                                             <div class="tool-list">
-                                                {data.tools.clone().into_iter().map(|t| {
-                                                    let slug = t.slug.clone();
-                                                    let preview = with_selected(&browser_base, &qb, &slug);
-                                                    let sel = selected.get().map(|s| s == slug).unwrap_or(false);
-                                                    let count = comment_count_for_slug(&comment_counts, &slug);
-                                                    view! { <ToolCard tool=t preview_href=preview is_selected=sel comment_count=count/> }
-                                                }).collect_view()}
+                                                <For
+                                                    each=move || tools.clone()
+                                                    key=|tool| tool.slug.clone()
+                                                    children=move |t| {
+                                                        let slug = t.slug.clone();
+                                                        let preview = with_selected(&browser_base_list, &qb_list, &slug);
+                                                        let sel = selected.get().map(|s| s == slug).unwrap_or(false);
+                                                        let count = comment_count_for_slug(&comment_counts, &slug);
+                                                        view! {
+                                                            <ToolCard
+                                                                tool=t
+                                                                preview_href=preview
+                                                                is_selected=sel
+                                                                comment_count=count
+                                                            />
+                                                        }
+                                                    }
+                                                />
                                             </div>
-                                            {if should_show_load_more(data.tools.len(), data.total, page_number.get()) {
+                                            {if should_show_load_more(tools_len, data.total, page_number.get()) {
                                                 let next_href = build_load_more_href(
                                                     &browser_base,
                                                     function.get(),
@@ -632,7 +695,7 @@ pub fn ToolsBrowser(
                                                             "Load more"
                                                         </a>
                                                         <span class="load-more-count">
-                                                            "Showing "{data.tools.len()}" of "{data.total}
+                                                            "Showing "{tools_len}" of "{data.total}
                                                         </span>
                                                     </div>
                                                 }.into_any()
@@ -813,10 +876,15 @@ mod tests {
     fn parse_page_from_query_string_reads_page_param() {
         assert_eq!(parse_page_from_query_string("?page=2&sort=hot"), Some(2));
         assert_eq!(parse_page_from_query_string("page=3"), Some(3));
+        assert_eq!(parse_page_from_query_string("?page=%32"), Some(2));
         assert_eq!(parse_page_from_query_string("?sort=hot"), None);
         assert_eq!(parse_page_from_query_string("?page=0"), None);
         assert_eq!(parse_page_from_query_string("?page=abc"), None);
         assert_eq!(parse_page_from_query_string("?page=-1"), None);
+        assert_eq!(
+            parse_page_from_query_string("?page=999"),
+            Some(MAX_BROWSER_PAGE)
+        );
     }
 
     #[test]
@@ -824,7 +892,80 @@ mod tests {
         assert_eq!(parse_page_param(Some("2".into())), 2);
         assert_eq!(parse_page_param(Some("abc".into())), 1);
         assert_eq!(parse_page_param(Some("0".into())), 1);
+        assert_eq!(parse_page_param(Some("-1".into())), 1);
         assert_eq!(parse_page_param(None), 1);
+        assert_eq!(parse_page_param(Some("99".into())), MAX_BROWSER_PAGE);
+    }
+
+    #[test]
+    fn clamp_browser_page_bounds_visible_window() {
+        assert_eq!(clamp_browser_page(0), 1);
+        assert_eq!(clamp_browser_page(1), 1);
+        assert_eq!(clamp_browser_page(10), 10);
+        assert_eq!(clamp_browser_page(11), MAX_BROWSER_PAGE);
+    }
+
+    fn sample_cache_key(page: u32) -> BrowserCacheKey {
+        BrowserCacheKey {
+            sort: "hot".into(),
+            filters: ToolFilters::default(),
+            search_q: None,
+            selected: None,
+            page,
+        }
+    }
+
+    fn sample_browser_data(total: i64) -> BrowserData {
+        BrowserData {
+            categories: vec![],
+            chains: vec![],
+            total,
+            tools: vec![],
+            comment_counts: HashMap::new(),
+            preview_tool: None,
+        }
+    }
+
+    #[test]
+    fn resolve_browser_data_uses_matching_fetch_payload() {
+        let current = sample_cache_key(1);
+        let tagged = TaggedBrowserPayload {
+            deps: current.clone(),
+            data: sample_browser_data(50),
+        };
+        let resolved = resolve_browser_data(&current, Some(&tagged), false, None);
+        assert_eq!(resolved.map(|d| d.total), Some(50));
+    }
+
+    #[test]
+    fn resolve_browser_data_rejects_stale_fetch_when_deps_differ() {
+        let current = sample_cache_key(1);
+        let tagged = TaggedBrowserPayload {
+            deps: sample_cache_key(2),
+            data: sample_browser_data(100),
+        };
+        assert!(resolve_browser_data(&current, Some(&tagged), false, None).is_none());
+    }
+
+    #[test]
+    fn resolve_browser_data_reuses_cache_while_pending() {
+        let current = sample_cache_key(1);
+        let cached = TaggedBrowserPayload {
+            deps: current.clone(),
+            data: sample_browser_data(50),
+        };
+        let resolved = resolve_browser_data(&current, None, true, Some(&cached));
+        assert_eq!(resolved.map(|d| d.total), Some(50));
+    }
+
+    #[test]
+    fn resolve_browser_data_skips_cache_when_deps_mismatch_during_pending() {
+        let current = sample_cache_key(1);
+        let cached = TaggedBrowserPayload {
+            deps: sample_cache_key(2),
+            data: sample_browser_data(100),
+        };
+        assert!(resolve_browser_data(&current, None, true, Some(&cached)).is_none());
     }
 
     #[test]

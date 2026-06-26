@@ -274,6 +274,17 @@ pub fn classify_actor(text: &str) -> &'static str {
     }
 }
 
+/// GitHub username/org segment (alphanumeric + hyphen, 1–39 chars).
+pub fn is_valid_github_owner(owner: &str) -> bool {
+    if owner.is_empty() || owner.len() > 39 {
+        return false;
+    }
+    if owner.starts_with('-') || owner.ends_with('-') {
+        return false;
+    }
+    owner.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
+}
+
 /// Parse `owner/repo` from a GitHub repository URL.
 fn parse_github_owner_repo(url: &str) -> Option<(String, String)> {
     let url = url.trim().trim_end_matches('/');
@@ -291,10 +302,16 @@ fn parse_github_owner_repo(url: &str) -> Option<(String, String)> {
 }
 
 /// Infer a remote logo URL from repo/homepage metadata (GitHub owner avatar).
+///
+/// v1: GitHub `repo_url` only — homepage favicon inference is intentionally omitted.
 pub fn infer_logo_url(repo_url: Option<&str>, _homepage: Option<&str>) -> Option<String> {
     if let Some(url) = repo_url {
         if let Some((owner, _repo)) = parse_github_owner_repo(url) {
-            return Some(format!("https://avatars.githubusercontent.com/{owner}"));
+            if is_valid_github_owner(&owner) {
+                return crate::models::tool::sanitize_logo_url(Some(format!(
+                    "https://avatars.githubusercontent.com/{owner}"
+                )));
+            }
         }
     }
     None
@@ -794,11 +811,28 @@ mod tests {
             infer_logo_url(Some("https://github.com/bob-collective/bob.git"), None),
             Some("https://avatars.githubusercontent.com/bob-collective".into())
         );
+        assert_eq!(
+            infer_logo_url(Some("http://github.com/org/repo"), None),
+            Some("https://avatars.githubusercontent.com/org".into())
+        );
         assert_eq!(infer_logo_url(None, Some("https://gobob.xyz")), None);
         assert_eq!(
             infer_logo_url(Some("https://gitlab.com/foo/bar"), None),
             None
         );
+        assert_eq!(
+            infer_logo_url(Some("https://github.com/acme%2Fsecret/repo"), None),
+            None
+        );
+    }
+
+    #[test]
+    fn is_valid_github_owner_rejects_malformed_segments() {
+        assert!(is_valid_github_owner("bob-collective"));
+        assert!(!is_valid_github_owner(""));
+        assert!(!is_valid_github_owner("-bad"));
+        assert!(!is_valid_github_owner("bad-"));
+        assert!(!is_valid_github_owner("acme/repo"));
     }
 
     #[test]

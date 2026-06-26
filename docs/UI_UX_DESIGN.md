@@ -1337,6 +1337,7 @@ ALTER TABLE tools ADD COLUMN logo_monogram TEXT; -- 로고 없을 때 첫 글자
 | SSR 안정성 | `main.rs`: Tokio worker **16MB** stack (`TOKIO_WORKER_STACK_SIZE`). 비동기/Suspense 링크는 SSR-safe `<a>` |
 | 사이드바 (반응형) | localStorage 선호 없을 때 **<1024px 기본 접힘** (hydration 후) |
 | MCP / 크롤러 | MCP 서버, 자동 discovery 스케줄러, relevance scanner(Base network 문맥 포함), legacy migration backfill 공개 품질 게이트 |
+| 도구 로고 (`logo_url`) | migration `016_tool_logo_url.sql` DB 컬럼, `ToolCard`/`tool_detail_content` `<img>` + `onerror` 모노그램 fallback, `referrerpolicy=no-referrer`, 크롤러 `infer_logo_url` (GitHub owner avatar HTTPS), `logo_url_is_safe_for_img` + upsert 시 `sanitize_logo_url` |
 
 ### 12.1.1 Pagination (operator note)
 
@@ -1353,6 +1354,8 @@ ALTER TABLE tools ADD COLUMN logo_monogram TEXT; -- 로고 없을 때 첫 글자
 - Load more href bumps `page` and **drops `selected`** (preview closes).
 - Filter / chain / search changes reset `page` to 1.
 - **Sort change** also omits `selected` from sort toolbar links (`build_sort_href` passes `None` for preview slug).
+- Invalid `page` (`abc`, `0`) → 1; URL-encoded `page=%32` → 2; `page` clamped to **10** (`MAX_BROWSER_PAGE = 500 ÷ 50`).
+- **Browser cache:** single-slot `TaggedBrowserPayload` keyed by `BrowserCacheKey` (sort/filters/q/selected/page — `retry_tick` 제외). `resolve_browser_data`는 fetch `Ok`도 deps 일치 시에만 렌더. Back-nav에서 이전 deps와 불일치하면 skeleton (LRU 미구현 — 의도적 trade-off).
 
 Trade-off: simpler SSR/hydration correctness vs. extra DB rows on deep pages. Acceptable while public catalog stays bounded.
 
@@ -1373,7 +1376,7 @@ Trade-off: simpler SSR/hydration correctness vs. extra DB rows on deep pages. Ac
 | **UX** | 모바일 **풀스크린 필터 패널** | §9, §5.8 | <1024px 기본 접힘 + ☰ 펼침. 전체 화면 필터 오버레이는 미완 |
 | **UX** | 바텀 시트 **dvh 키보드 처리** | §5.10, §9 | 드래그 확장/닫기는 구현. 가상 키보드 dvh 보정은 추가 여지 |
 | **수익** | x402 **등록 결제** | §2, §10 | 타입·설정 플래그만; 결제 플로우 미연동 |
-| **비주얼** | 도구 **공식 로고** (`logo_url`) | §8 | **구현** — migration `016_tool_logo_url.sql` DB 컬럼, `ToolCard`/`tool_detail_content` `<img>` + 모노그램 fallback (`onerror`), 크롤러 `infer_logo_url` (GitHub owner avatar), `logo_url_is_http` HTTPS/allowlist 검증 |
+| **비주얼** | Homepage **favicon** 로고 추론 | §8 | v1 미구현 — `infer_logo_url`은 GitHub `repo_url`만; homepage-only 도구는 모노그램 |
 | **비주얼** | 카테고리 그리드 | §2 (구버전) | **의도적 제거** — 사이드바 Function으로 대체 |
 | **비주얼** | 상단 sticky TopNav | §2 (구버전) | **의도적 제거** — 사이드바 브랜드로 대체 |
 | **Admin UX** | 문서 와이어프레임 수준 인라인 편집·배지 일괄 | §11.4+ | 기본 CRUD는 있으나 문서 수준 폴리시 미달 가능 |
@@ -1409,8 +1412,19 @@ Run after release build (`./scripts/release-build.sh`) against the **release** b
 | Home H1 | `font-size` differs between 1280px and 375px viewports |
 | `GET /pkg/onchainai.css` | Non-empty served bundle |
 | Mobile `/tools` | `.chain-tile-more` pill not hidden when chain strip overflows |
+| Large `/tools` catalog | Click load-more → `.tool-card` count strictly increases; `GET /tools?page=2` no deserialization errors |
 
-Failed smoke **blocks deploy** (see `post-deploy-verify.sh`, `deploy-railway.sh`).
+**`scripts/click-test.mjs`** (Playwright, optional prod regression):
+
+| Check | Expect |
+|-------|--------|
+| Load more | `after > before`; logs `waitForFunction timeout` on slow refetch; no same-origin `/api` HTTP ≥400 during click |
+| Load more absent | FAIL when card count = 50 and button missing |
+| Logos | When catalog ≥50 cards, at least one `.tool-logo-img`; broken `src` → monogram fallback |
+| Pagination | `GET /tools?page=2` loads without deserialization errors |
+| Mobile | `.chain-tile-more` visible when chain strip overflows |
+
+Failed smoke **blocks deploy** (see `post-deploy-verify.sh`, `deploy-railway.sh`). Run `click-test.mjs` post-deploy against production for load-more regression.
 
 ### 12.5 다음 작업 제안 (디자인 완성도)
 
