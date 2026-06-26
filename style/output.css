@@ -536,6 +536,19 @@ body {
 .sidebar-count { font-size: 12px; color: #999999; }
 .sidebar-empty { font-size: 13px; color: #999999; padding: 8px 4px; margin: 0; }
 
+/* Admin operator sidebar nav */
+.admin-nav { margin-top: 0; }
+.admin-nav-heading {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #6B6B6B;
+  margin: 0 0 12px;
+  padding: 0 4px;
+}
+.admin-nav-list { margin: 0; }
+
 .tools-toolbar {
   display: flex; flex-wrap: wrap; gap: 12px; align-items: center;
   padding: 12px 0; border-bottom: 1px solid #E5E5E5; margin-bottom: 16px;

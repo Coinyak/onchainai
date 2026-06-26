@@ -107,19 +107,54 @@ sync_vars
 echo "Deploying from Dockerfile with production env..."
 railway up -y --detach -s "${SERVICE_NAME}"
 
+DEPLOY_WAIT_ATTEMPTS="${DEPLOY_WAIT_ATTEMPTS:-90}"
+DEPLOY_WAIT_INTERVAL="${DEPLOY_WAIT_INTERVAL:-10}"
+DEPLOY_SMOKE_ATTEMPTS="${DEPLOY_SMOKE_ATTEMPTS:-60}"
+DEPLOY_SMOKE_INTERVAL="${DEPLOY_SMOKE_INTERVAL:-10}"
+
+latest_deployment_status() {
+  railway deployment list --json -s "${SERVICE_NAME}" --limit 1 2>/dev/null \
+    | /usr/bin/python3 -c "import json,sys; d=json.load(sys.stdin); print(d[0]['status'] if d else '')" 2>/dev/null \
+    || true
+}
+
+echo "Waiting for Railway deployment to succeed (up to ${DEPLOY_WAIT_ATTEMPTS} checks)..."
+for attempt in $(seq 1 "${DEPLOY_WAIT_ATTEMPTS}"); do
+  deploy_status="$(latest_deployment_status)"
+  case "${deploy_status}" in
+    SUCCESS)
+      echo "Railway deployment succeeded."
+      break
+      ;;
+    FAILED|CRASHED|REMOVED)
+      echo "Railway deployment failed (status=${deploy_status})." >&2
+      echo "Inspect: railway deployment list && railway logs" >&2
+      exit 1
+      ;;
+    *)
+      if [[ "${attempt}" -eq "${DEPLOY_WAIT_ATTEMPTS}" ]]; then
+        echo "Timed out waiting for Railway deployment (last status=${deploy_status:-unknown})." >&2
+        exit 1
+      fi
+      echo "Deployment status: ${deploy_status:-unknown} (${attempt}/${DEPLOY_WAIT_ATTEMPTS}); retrying in ${DEPLOY_WAIT_INTERVAL}s..."
+      sleep "${DEPLOY_WAIT_INTERVAL}"
+      ;;
+  esac
+done
+
 echo "Waiting for production deployment to become reachable..."
 PROD_URL="https://www.onchain-ai.xyz"
-for attempt in $(seq 1 30); do
+for attempt in $(seq 1 "${DEPLOY_SMOKE_ATTEMPTS}"); do
   if ./scripts/smoke-test.sh "${PROD_URL}"; then
     echo "Production smoke passed."
     break
   fi
-  if [[ "${attempt}" -eq 30 ]]; then
-    echo "Production smoke failed after 30 attempts." >&2
+  if [[ "${attempt}" -eq "${DEPLOY_SMOKE_ATTEMPTS}" ]]; then
+    echo "Production smoke failed after ${DEPLOY_SMOKE_ATTEMPTS} attempts." >&2
     exit 1
   fi
-  echo "Smoke attempt ${attempt}/30 failed; retrying in 10s..."
-  sleep 10
+  echo "Smoke attempt ${attempt}/${DEPLOY_SMOKE_ATTEMPTS} failed; retrying in ${DEPLOY_SMOKE_INTERVAL}s..."
+  sleep "${DEPLOY_SMOKE_INTERVAL}"
 done
 
 echo ""

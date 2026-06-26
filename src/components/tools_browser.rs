@@ -232,7 +232,7 @@ async fn load_browser_data(
 pub fn ToolsBrowser(
     base: BrowserBase,
     #[prop(optional)] show_toolbar_search: bool,
-    #[prop(optional)] children: Option<Children>,
+    #[prop(optional)] children: Option<ChildrenFn>,
 ) -> impl IntoView {
     let base = StoredValue::new(base);
     let query = use_query_map();
@@ -291,7 +291,7 @@ pub fn ToolsBrowser(
         )
     });
 
-    let page = Resource::new(
+    let page = Resource::new_blocking(
         move || page_deps.get(),
         |(sort, filters, search_q, selected, _)| async move {
             load_browser_data(sort, filters, search_q, selected).await
@@ -341,121 +341,125 @@ pub fn ToolsBrowser(
         )
     });
 
+    let children_fallback = children.clone();
+    let children_body = children;
+
     view! {
         <div class="tools-layout" data-tools-browser="">
-            <Suspense fallback=|| view! { <aside class="tools-sidebar"><p class="sidebar-empty">"Loading filters…"</p></aside> }>
+            <Suspense fallback=move || view! {
+                <aside class="tools-sidebar"><p class="sidebar-empty">"Loading filters…"</p></aside>
+                <div class="tools-main">
+                    {children_fallback.as_ref().map(|content| view! { <div class="tools-prepend">{content()}</div> })}
+                    <ToolListSkeleton count=6/>
+                </div>
+            }>
                 {move || match page.get() {
-                    Some(Ok(data)) => {
-                        let qb = query_base.get();
-                        let browser_base = base.get_value();
-                        view! {
-                            <Sidebar
-                                base=browser_base.clone()
-                                categories=data.categories.clone()
-                                query_base=qb.clone()
-                                active_function=function.get()
-                                active_asset_class=asset_class.get()
-                                active_actor=actor.get()
-                                active_type=tool_type.get()
-                                active_status=status.get()
-                                default_function_open=matches!(browser_base, BrowserBase::Tools)
-                            />
-                        }.into_any()
-                    }
-                    _ => view! {
-                        <aside class="tools-sidebar"><p class="sidebar-empty">"Loading filters…"</p></aside>
-                    }.into_any(),
+                        Some(Ok(data)) => {
+                            let qb = query_base.get();
+                            let browser_base = base.get_value();
+                            view! {
+                                <Sidebar
+                                    base=browser_base.clone()
+                                    categories=data.categories.clone()
+                                    query_base=qb.clone()
+                                    active_function=function.get()
+                                    active_asset_class=asset_class.get()
+                                    active_actor=actor.get()
+                                    active_type=tool_type.get()
+                                    active_status=status.get()
+                                    default_function_open=matches!(browser_base, BrowserBase::Tools)
+                                />
+                                <div class="tools-main">
+                                    {children_body.as_ref().map(|content| view! { <div class="tools-prepend">{content()}</div> })}
+                                    <ChainStrip
+                                        base=browser_base.clone()
+                                        query_base=qb.clone()
+                                        active_chain=chain.get()
+                                        chain_counts=data.chains.clone()
+                                    />
+                                    <div class="tools-toolbar sticky-toolbar">
+                                        {if show_toolbar_search {
+                                            view! { <ToolbarSearch base=browser_base.clone() initial_q=search_q.get().unwrap_or_default()/> }.into_any()
+                                        } else {
+                                            ().into_any()
+                                        }}
+                                        <div class="toolbar-sort">
+                                            <a href=move || sort_hot.get() class=move || if sort.get() == "hot" { "sort-link active" } else { "sort-link" }>"HOT ↓"</a>
+                                            <a href=move || sort_new.get() class=move || if sort.get() == "new" { "sort-link active" } else { "sort-link" }>"New"</a>
+                                            <a href=move || sort_comments.get() class=move || if sort.get() == "comments" { "sort-link active" } else { "sort-link" }>"Comments"</a>
+                                        </div>
+                                        <span class="tool-count">{data.total}" tools"</span>
+                                    </div>
+                                    {if data.tools.is_empty() {
+                                        let filter_summary = ActiveFiltersSummary::from_query(
+                                            function.get(),
+                                            asset_class.get(),
+                                            actor.get(),
+                                            tool_type.get(),
+                                            status.get(),
+                                            chain.get(),
+                                            search_q.get(),
+                                            Some(sort.get()),
+                                        );
+                                        let function_labels: std::collections::HashMap<String, String> =
+                                            data.categories.iter().map(|(c, _)| (c.id.clone(), c.label.clone())).collect();
+                                        let filter_lines = describe_active_filters(&filter_summary, &function_labels);
+                                        let clear_href = if filter_summary.has_active_filters() {
+                                            browser_base.path()
+                                        } else {
+                                            String::new()
+                                        };
+                                        view! {
+                                            <EmptyState filter_lines=filter_lines clear_href=clear_href/>
+                                        }.into_any()
+                                    } else {
+                                        let comment_counts = data.comment_counts.clone();
+                                        view! {
+                                            <div class="tool-list">
+                                                {data.tools.clone().into_iter().map(|t| {
+                                                    let slug = t.slug.clone();
+                                                    let preview = with_selected(&browser_base, &qb, &slug);
+                                                    let sel = selected.get().map(|s| s == slug).unwrap_or(false);
+                                                    let count = comment_count_for_slug(&comment_counts, &slug);
+                                                    view! { <ToolCard tool=t preview_href=preview is_selected=sel comment_count=count/> }
+                                                }).collect_view()}
+                                            </div>
+                                        }.into_any()
+                                    }}
+                                    {data.preview_tool.clone().map(|tool| {
+                                        let close = without_selected(&browser_base, &qb);
+                                        let full = format!("/tools/{}", tool.slug);
+                                        view! {
+                                            <div class="preview-desktop">
+                                                <PreviewPanel tool=tool.clone() close_href=close.clone() full_page_href=full.clone()/>
+                                            </div>
+                                            <div class="preview-mobile">
+                                                <BottomSheet tool=tool close_href=close full_page_href=full/>
+                                            </div>
+                                        }
+                                    })}
+                                </div>
+                            }.into_any()
+                        }
+                        Some(Err(e)) => view! {
+                            <aside class="tools-sidebar"><p class="sidebar-empty">"Loading filters…"</p></aside>
+                            <div class="tools-main">
+                                {children_body.as_ref().map(|content| view! { <div class="tools-prepend">{content()}</div> })}
+                                <ErrorState
+                                    message=e.to_string()
+                                    on_retry=move || retry_tick.update(|n| *n = n.wrapping_add(1))
+                                />
+                            </div>
+                        }.into_any(),
+                        None => view! {
+                            <aside class="tools-sidebar"><p class="sidebar-empty">"Loading filters…"</p></aside>
+                            <div class="tools-main">
+                                {children_body.as_ref().map(|content| view! { <div class="tools-prepend">{content()}</div> })}
+                                <ToolListSkeleton count=6/>
+                            </div>
+                        }.into_any(),
                 }}
             </Suspense>
-            <div class="tools-main">
-                {children.map(|content| view! {
-                    <div class="tools-prepend">{content()}</div>
-                })}
-                <Suspense fallback=|| view! { <ToolListSkeleton count=6/> }>
-                    {move || match page.get() {
-                    Some(Ok(data)) => {
-                        let qb = query_base.get();
-                        let browser_base = base.get_value();
-                        view! {
-                                <ChainStrip
-                                    base=browser_base.clone()
-                                    query_base=qb.clone()
-                                    active_chain=chain.get()
-                                    chain_counts=data.chains.clone()
-                                />
-                                <div class="tools-toolbar sticky-toolbar">
-                                    {if show_toolbar_search {
-                                        view! { <ToolbarSearch base=browser_base.clone() initial_q=search_q.get().unwrap_or_default()/> }.into_any()
-                                    } else {
-                                        ().into_any()
-                                    }}
-                                    <div class="toolbar-sort">
-                                        <a href=move || sort_hot.get() class=move || if sort.get() == "hot" { "sort-link active" } else { "sort-link" }>"HOT ↓"</a>
-                                        <a href=move || sort_new.get() class=move || if sort.get() == "new" { "sort-link active" } else { "sort-link" }>"New"</a>
-                                        <a href=move || sort_comments.get() class=move || if sort.get() == "comments" { "sort-link active" } else { "sort-link" }>"Comments"</a>
-                                    </div>
-                                    <span class="tool-count">{data.total}" tools"</span>
-                                </div>
-                                {if data.tools.is_empty() {
-                                    let filter_summary = ActiveFiltersSummary::from_query(
-                                        function.get(),
-                                        asset_class.get(),
-                                        actor.get(),
-                                        tool_type.get(),
-                                        status.get(),
-                                        chain.get(),
-                                        search_q.get(),
-                                        Some(sort.get()),
-                                    );
-                                    let function_labels: std::collections::HashMap<String, String> =
-                                        data.categories.iter().map(|(c, _)| (c.id.clone(), c.label.clone())).collect();
-                                    let filter_lines = describe_active_filters(&filter_summary, &function_labels);
-                                    let clear_href = if filter_summary.has_active_filters() {
-                                        browser_base.path()
-                                    } else {
-                                        String::new()
-                                    };
-                                    view! {
-                                        <EmptyState filter_lines=filter_lines clear_href=clear_href/>
-                                    }.into_any()
-                                } else {
-                                    let comment_counts = data.comment_counts.clone();
-                                    view! {
-                                        <div class="tool-list">
-                                            {data.tools.clone().into_iter().map(|t| {
-                                                let slug = t.slug.clone();
-                                                let preview = with_selected(&browser_base, &qb, &slug);
-                                                let sel = selected.get().map(|s| s == slug).unwrap_or(false);
-                                                let count = comment_count_for_slug(&comment_counts, &slug);
-                                                view! { <ToolCard tool=t preview_href=preview is_selected=sel comment_count=count/> }
-                                            }).collect_view()}
-                                        </div>
-                                    }.into_any()
-                                }}
-                            {data.preview_tool.clone().map(|tool| {
-                                let close = without_selected(&browser_base, &qb);
-                                let full = format!("/tools/{}", tool.slug);
-                                view! {
-                                    <div class="preview-desktop">
-                                        <PreviewPanel tool=tool.clone() close_href=close.clone() full_page_href=full.clone()/>
-                                    </div>
-                                    <div class="preview-mobile">
-                                        <BottomSheet tool=tool close_href=close full_page_href=full/>
-                                    </div>
-                                }
-                            })}
-                        }.into_any()
-                    }
-                    Some(Err(e)) => view! {
-                        <ErrorState
-                            message=e.to_string()
-                            on_retry=move || retry_tick.update(|n| *n = n.wrapping_add(1))
-                        />
-                    }.into_any(),
-                    None => view! { <ToolListSkeleton count=6/> }.into_any(),
-                }}
-                </Suspense>
-            </div>
         </div>
     }
 }

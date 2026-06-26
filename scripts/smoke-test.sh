@@ -31,7 +31,9 @@ check_chain_markup() {
   grep -q '/chains/' "$body" || fail "GET ${path} missing /chains/ logo paths"
 }
 
-check_get "/"
+home_body="$(check_get "/")"
+grep -q 'sidebar-brand' "$home_body" || fail "GET / missing sidebar-brand markup"
+grep -q 'category-grid' "$home_body" && fail "GET / unexpected category-grid markup"
 check_get "/tools"
 check_get "/tools?function=bridge&type=mcp"
 check_chain_markup "/tools"

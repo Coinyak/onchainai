@@ -1,6 +1,5 @@
 //! Admin featured carousel management.
 
-use crate::components::top_nav::TopNav;
 use crate::pages::admin::admin_page_shell;
 use crate::server::functions::{
     create_featured_card, delete_featured_card, list_featured_cards, search_tools_for_picker,
@@ -27,16 +26,12 @@ pub fn AdminFeaturedPage() -> impl IntoView {
 
     admin_page_shell(move || {
         view! {
-            <TopNav/>
             <div class="px-4 md:px-6 py-8 max-w-[1100px] mx-auto">
-                <div class="flex items-baseline justify-between gap-4 mb-6">
-                    <div>
-                        <h1 class="text-[20px] font-semibold tracking-tight">"Featured Carousel"</h1>
-                        <p class="text-[#6B6B6B] text-[14px] mt-1">
-                            "Manage highlight cards shown on the home page below the hero."
-                        </p>
-                    </div>
-                    <a href="/admin" class="text-[14px] text-[#E76F00] hover:underline">"Admin home"</a>
+                <div class="mb-6">
+                    <h1 class="text-[20px] font-semibold tracking-tight">"Featured Carousel"</h1>
+                    <p class="text-[#6B6B6B] text-[14px] mt-1">
+                        "Manage highlight cards shown on the home page below the hero."
+                    </p>
                 </div>
 
                 {move || action_error.get().map(|msg| view! {

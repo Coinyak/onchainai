@@ -1,6 +1,5 @@
 //! Admin site settings — slogan, MCP endpoint, crawler keywords, registration flags.
 
-use crate::components::top_nav::TopNav;
 use crate::models::SiteSettings;
 use crate::pages::admin::admin_page_shell;
 use crate::server::functions::{
@@ -15,16 +14,12 @@ pub fn AdminSettingsPage() -> impl IntoView {
 
     admin_page_shell(move || {
         view! {
-            <TopNav/>
             <div class="px-4 md:px-6 py-8 max-w-[720px] mx-auto">
-                <div class="flex items-baseline justify-between gap-4 mb-6">
-                    <div>
-                        <h1 class="text-[20px] font-semibold tracking-tight">"Site Settings"</h1>
-                        <p class="text-[#6B6B6B] text-[14px] mt-1">
-                            "Update public copy, MCP endpoint, crawler keywords, and registration rules."
-                        </p>
-                    </div>
-                    <a href="/admin" class="text-[14px] text-[#E76F00] hover:underline">"Admin home"</a>
+                <div class="mb-6">
+                    <h1 class="text-[20px] font-semibold tracking-tight">"Site Settings"</h1>
+                    <p class="text-[#6B6B6B] text-[14px] mt-1">
+                        "Update public copy, MCP endpoint, crawler keywords, and registration rules."
+                    </p>
                 </div>
 
                 <Suspense fallback=|| view! {

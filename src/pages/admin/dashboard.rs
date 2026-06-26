@@ -1,6 +1,5 @@
 //! Admin operations dashboard — queue counts, crawler health, quick links.
 
-use crate::components::top_nav::TopNav;
 use crate::pages::admin::admin_page_shell;
 use crate::server::functions::{get_admin_dashboard_stats, AdminDashboardStats, CrawlerSourceView};
 use leptos::prelude::*;
@@ -11,7 +10,6 @@ pub fn AdminDashboardPage() -> impl IntoView {
 
     admin_page_shell(move || {
         view! {
-            <TopNav/>
             <div class="px-4 md:px-6 py-8 max-w-[1100px] mx-auto">
                 <div class="mb-6">
                     <h1 class="text-[20px] font-semibold tracking-tight">"Operator Dashboard"</h1>

@@ -1,5 +1,6 @@
 //! Shared UI components for the website-core milestone.
 
+pub mod admin_shell;
 pub mod bottom_sheet;
 pub mod category_grid;
 pub mod chain_strip;

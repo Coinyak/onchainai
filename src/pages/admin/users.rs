@@ -1,9 +1,8 @@
 //! Admin user management — ban, admin role, delete.
 
-use crate::components::top_nav::TopNav;
+use crate::pages::admin::admin_page_shell;
 use crate::server::functions::{
-    check_admin_access, delete_user, list_admin_users, set_user_admin, set_user_banned,
-    AdminUserView,
+    delete_user, list_admin_users, set_user_admin, set_user_banned, AdminUserView,
 };
 use leptos::prelude::*;
 use leptos::task::spawn_local;
@@ -11,24 +10,7 @@ use uuid::Uuid;
 
 #[component]
 pub fn AdminUsersPage() -> impl IntoView {
-    let gate = Resource::new(|| (), |_| async move { check_admin_access().await });
-
-    view! {
-        <Suspense fallback=|| view! {
-            <p class="px-6 py-12 text-[#6B6B6B] text-[14px]">"Checking access..."</p>
-        }>
-            {move || match gate.get() {
-                Some(Ok(_)) => view! { <AdminUsersContent/> }.into_any(),
-                Some(Err(_)) => view! {
-                    <div class="px-6 py-12 max-w-[720px] mx-auto text-center">
-                        <h1 class="text-[28px] font-bold mb-4">"404"</h1>
-                        <p class="text-[#6B6B6B]">"Page not found."</p>
-                    </div>
-                }.into_any(),
-                None => ().into_any(),
-            }}
-        </Suspense>
-    }
+    admin_page_shell(move || view! { <AdminUsersContent/> })
 }
 
 #[component]
@@ -69,16 +51,12 @@ fn AdminUsersContent() -> impl IntoView {
     };
 
     view! {
-        <TopNav/>
         <div class="px-4 md:px-6 py-8 max-w-[960px] mx-auto">
-            <div class="flex items-baseline justify-between gap-4 mb-6">
-                <div>
-                    <h1 class="text-[20px] font-semibold tracking-tight">"User Management"</h1>
-                    <p class="text-[#6B6B6B] text-[14px] mt-1">
-                        "Ban users, grant admin access, or remove accounts."
-                    </p>
-                </div>
-                <a href="/admin" class="text-[14px] text-[#E76F00] hover:underline">"Admin home"</a>
+            <div class="mb-6">
+                <h1 class="text-[20px] font-semibold tracking-tight">"User Management"</h1>
+                <p class="text-[#6B6B6B] text-[14px] mt-1">
+                    "Ban users, grant admin access, or remove accounts."
+                </p>
             </div>
 
             <input

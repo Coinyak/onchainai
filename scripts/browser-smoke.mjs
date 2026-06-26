@@ -2,12 +2,18 @@ import { chromium } from "playwright";
 
 const base = (process.argv[2] || "http://localhost:3000").replace(/\/$/, "");
 const errors = [];
+const hydrationPanicRe =
+  /hydration|entered unreachable code|panicked at/i;
 const browser = await chromium.launch({ headless: true });
 const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
 
 page.on("console", (msg) => {
+  const text = msg.text();
+  if (hydrationPanicRe.test(text)) {
+    errors.push(`hydration-panic:${text}`);
+  }
   if (["error", "warning"].includes(msg.type())) {
-    errors.push(`console:${msg.type()}:${msg.text()}`);
+    errors.push(`console:${msg.type()}:${text}`);
   }
 });
 page.on("requestfailed", (req) => {
@@ -44,6 +50,19 @@ await page.evaluate(() => {
   localStorage.removeItem("onchain-ai-sidebar-collapsed");
   localStorage.removeItem("onchain-ai-sidebar-sections");
 });
+
+// Home layout: sidebar brand present, legacy category grid removed.
+await page.goto(`${base}/`, { waitUntil: "networkidle" });
+const homeLayout = await page.evaluate(() => ({
+  hasSidebarBrand: !!document.querySelector(".sidebar-brand"),
+  hasCategoryGrid: !!document.querySelector(".category-grid"),
+}));
+if (!homeLayout.hasSidebarBrand) {
+  errors.push("layout:home-missing-sidebar-brand");
+}
+if (homeLayout.hasCategoryGrid) {
+  errors.push("layout:home-unexpected-category-grid");
+}
 
 for (const path of ["/", "/tools", "/tools?function=bridge&type=mcp"]) {
   await page.goto(`${base}${path}`, { waitUntil: "networkidle" });

@@ -1,9 +1,8 @@
 //! Admin tool review — split operator queues with gated review actions.
 
-use crate::components::top_nav::TopNav;
+use crate::pages::admin::admin_page_shell;
 use crate::server::functions::{
-    check_admin_access, list_review_queue, review_tool, ReviewQueueItem, ReviewToolPayload,
-    REVIEW_QUEUES,
+    list_review_queue, review_tool, ReviewQueueItem, ReviewToolPayload, REVIEW_QUEUES,
 };
 use leptos::prelude::*;
 use leptos::task::spawn_local;
@@ -47,24 +46,7 @@ const QUEUE_TABS: &[QueueTab] = &[
 
 #[component]
 pub fn AdminToolsPage() -> impl IntoView {
-    let gate = Resource::new(|| (), |_| async move { check_admin_access().await });
-
-    view! {
-        <Suspense fallback=|| view! {
-            <p class="px-6 py-12 text-[#6B6B6B] text-[14px]">"Checking access..."</p>
-        }>
-            {move || match gate.get() {
-                Some(Ok(_)) => view! { <AdminToolsContent/> }.into_any(),
-                Some(Err(_)) => view! {
-                    <div class="px-6 py-12 max-w-[720px] mx-auto text-center">
-                        <h1 class="text-[28px] font-bold mb-4">"404"</h1>
-                        <p class="text-[#6B6B6B]">"Page not found."</p>
-                    </div>
-                }.into_any(),
-                None => ().into_any(),
-            }}
-        </Suspense>
-    }
+    admin_page_shell(move || view! { <AdminToolsContent/> })
 }
 
 #[component]
@@ -112,16 +94,12 @@ fn AdminToolsContent() -> impl IntoView {
     let run_review_for_modal = run_review.clone();
 
     view! {
-        <TopNav/>
         <div class="px-4 md:px-6 py-8 max-w-[1100px] mx-auto">
-            <div class="flex items-baseline justify-between gap-4 mb-6">
-                <div>
-                    <h1 class="text-[20px] font-semibold tracking-tight">"Review Queues"</h1>
-                    <p class="text-[#6B6B6B] text-[14px] mt-1">
-                        "Split operator queues with relevance, install safety, and audit-backed actions."
-                    </p>
-                </div>
-                <a href="/admin" class="text-[14px] text-[#E76F00] hover:underline">"Dashboard"</a>
+            <div class="mb-6">
+                <h1 class="text-[20px] font-semibold tracking-tight">"Review Queues"</h1>
+                <p class="text-[#6B6B6B] text-[14px] mt-1">
+                    "Split operator queues with relevance, install safety, and audit-backed actions."
+                </p>
             </div>
 
             <div class="flex flex-wrap gap-2 mb-6">

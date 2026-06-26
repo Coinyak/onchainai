@@ -80,7 +80,7 @@ pub fn SidebarBrand() -> impl IntoView {
     }
 }
 
-/// Legacy horizontal header — admin pages only.
+/// Legacy horizontal header — unused; site uses `SidebarBrand` in the left sidebar.
 #[component]
 pub fn TopNav() -> impl IntoView {
     view! {
