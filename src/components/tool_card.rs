@@ -4,7 +4,7 @@ use crate::chains::chain_tags_for_tool;
 use crate::components::copy_button::CopyButton;
 use crate::components::login_modal::LoginModal;
 use crate::models::Tool;
-use crate::server::functions::{get_current_user, is_bookmarked, toggle_bookmark};
+use crate::server::functions::{get_current_user, toggle_bookmark};
 use leptos::prelude::*;
 use leptos::task::spawn_local;
 use leptos_router::components::A;
@@ -74,21 +74,7 @@ pub fn ToolCard(
     let license = tool.license.clone().unwrap_or_default();
 
     let show_login = RwSignal::new(false);
-    let refresh = RwSignal::new(0u32);
     let starred = RwSignal::new(false);
-    #[cfg(feature = "hydrate")]
-    {
-        let slug_fetch = slug.clone();
-        Effect::new(move |_| {
-            let _ = refresh.get();
-            let slug_fetch = slug_fetch.clone();
-            leptos::task::spawn_local(async move {
-                if let Ok(v) = is_bookmarked(slug_fetch).await {
-                    starred.set(v);
-                }
-            });
-        });
-    }
     view! {
         <LoginModal show=show_login/>
         <article class=if is_selected { "tool-card is-selected" } else { "tool-card" }>
@@ -182,8 +168,9 @@ pub fn ToolCard(
                         spawn_local(async move {
                             match get_current_user().await {
                                 Ok(Some(_)) => {
-                                    let _ = toggle_bookmark(slug_toggle).await;
-                                    refresh.update(|n| *n = n.wrapping_add(1));
+                                    if let Ok(now_starred) = toggle_bookmark(slug_toggle).await {
+                                        starred.set(now_starred);
+                                    }
                                 }
                                 _ => show_login.set(true),
                             }
