@@ -295,3 +295,33 @@ Docker CLI not available in this environment; disk (29GB free) would otherwise a
 - **Toolchain PATH** — wasm build requires rustup cargo first (`PATH="$HOME/.cargo/bin:$PATH"`); Homebrew `rustc` alone lacks wasm std
 - **Pre-existing** — debug `cargo run` stack-overflow on `/` (use release binary for smoke)
 - **Rate limits are in-process** — keyed governors reset on restart; multi-instance deploy needs shared store later
+
+## 2026-06-27 Follow-up — bundle mismatch + pagination
+
+### Context
+
+Production showed `error deserializing server function arguments: missing field filters` — classic SSR binary vs stale WASM/JS bundle skew after partial or mismatched deploys.
+
+### Changes
+
+| Item | Purpose |
+|------|---------|
+| **Bundle mismatch debug** | Traced deserialization failures to served `target/site/pkg/*` not matching the SSR binary that registered server functions. Confirmed via smoke on `/tools?function=bridge&type=mcp` and Playwright `/pkg/` response checks. |
+| **`BUILD_DEPLOY_RULES.md`** | Operator doc: one `cargo leptos build --release` produces both SSR + client artifacts; never deploy SSR-only fallback; run `verify-bundle.sh` before Railway push; smoke release binary locally first. |
+| **Pagination limit fix** | `ToolsBrowser` Load more uses **cumulative** `limit = page × 50` with **`offset = 0`** each fetch (`visible_limit_for_page`). Avoids offset-based gaps when sort keys collide. Load more and sort links omit `selected`. |
+| **`scripts/verify-bundle.sh`** | Pre-deploy gate: asserts `target/release/onchainai`, `target/site/pkg/onchainai.js`, `.wasm`, and `style/output.css` exist and are from the same build (mtime/size sanity). Wired into `release-build.sh` / deploy runbook. |
+
+### Verification (intended gate)
+
+```text
+$ ./scripts/release-build.sh
+$ ./scripts/verify-bundle.sh
+$ SKIP_CRAWLER=1 ./target/release/onchainai   # background
+$ ./scripts/smoke-test.sh http://localhost:3000
+$ node scripts/browser-smoke.mjs http://localhost:3000
+```
+
+### Remaining
+
+- Apply `BUILD_DEPLOY_RULES.md` on next Railway deploy; run `post-deploy-verify.sh` against production.
+- Tablet sidebar default collapsed threshold moving from 768px → **1024px** (`client_storage.rs`) — doc updated in `UI_UX_DESIGN.md` §12.

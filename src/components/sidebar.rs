@@ -140,6 +140,7 @@ fn CollapsibleSection(
     title: &'static str,
     open_map: RwSignal<HashMap<String, bool>>,
     sidebar_collapsed: RwSignal<bool>,
+    sidebar_storage_loaded: RwSignal<bool>,
     children: Children,
 ) -> impl IntoView {
     let is_open = move || open_map.get().get(section_id).copied().unwrap_or(true);
@@ -153,7 +154,9 @@ fn CollapsibleSection(
                     open_map.update(|m| {
                         let cur = m.get(section_id).copied().unwrap_or(true);
                         m.insert(section_id.to_string(), !cur);
-                        write_sidebar_sections(m);
+                        if sidebar_storage_loaded.get() {
+                            write_sidebar_sections(m);
+                        }
                     });
                 }
             >
@@ -243,7 +246,10 @@ pub fn Sidebar(
     let query_for_status = query_base.clone();
 
     view! {
-        <aside class=aside_class>
+        <aside
+            class=aside_class
+            attr:data-sidebar-ready=move || sidebar_storage_loaded.get().then_some("")
+        >
             <SidebarBrand/>
             <div class="sidebar-header">
                 <button
@@ -278,7 +284,9 @@ pub fn Sidebar(
                                 sidebar_collapsed.set(false);
                                 open_map.update(|m| {
                                     m.insert(section_id.clone(), true);
-                                    write_sidebar_sections(m);
+                                    if sidebar_storage_loaded.get() {
+                                        write_sidebar_sections(m);
+                                    }
                                 });
                             }
                         >
@@ -289,7 +297,7 @@ pub fn Sidebar(
             </div>
 
             <div class="sidebar-body">
-                <CollapsibleSection section_id="function" title="Function" open_map=open_map sidebar_collapsed=sidebar_collapsed>
+                <CollapsibleSection section_id="function" title="Function" open_map=open_map sidebar_collapsed=sidebar_collapsed sidebar_storage_loaded=sidebar_storage_loaded>
                     <ul class="sidebar-list">
                         <li>
                             <a href=fn_all_href.clone() class=if fn_active.is_empty() { "sidebar-link active" } else { "sidebar-link" }>
@@ -311,7 +319,7 @@ pub fn Sidebar(
                     </ul>
                 </CollapsibleSection>
 
-                <CollapsibleSection section_id="asset_class" title="Asset Class" open_map=open_map sidebar_collapsed=sidebar_collapsed>
+                <CollapsibleSection section_id="asset_class" title="Asset Class" open_map=open_map sidebar_collapsed=sidebar_collapsed sidebar_storage_loaded=sidebar_storage_loaded>
                     <ul class="sidebar-list">
                         {ASSET_CLASSES.iter().map(|opt| {
                             let href = toggle_multi(&base_for_ac, &query_for_ac, "asset_class", opt.id, &ac_active);
@@ -323,7 +331,7 @@ pub fn Sidebar(
                     </ul>
                 </CollapsibleSection>
 
-                <CollapsibleSection section_id="actor" title="Actor" open_map=open_map sidebar_collapsed=sidebar_collapsed>
+                <CollapsibleSection section_id="actor" title="Actor" open_map=open_map sidebar_collapsed=sidebar_collapsed sidebar_storage_loaded=sidebar_storage_loaded>
                     <ul class="sidebar-list">
                         {ACTORS.iter().map(|opt| {
                             let href = toggle_multi(&base_for_actor, &query_for_actor, "actor", opt.id, &actor_active);
@@ -335,7 +343,7 @@ pub fn Sidebar(
                     </ul>
                 </CollapsibleSection>
 
-                <CollapsibleSection section_id="type" title="Type" open_map=open_map sidebar_collapsed=sidebar_collapsed>
+                <CollapsibleSection section_id="type" title="Type" open_map=open_map sidebar_collapsed=sidebar_collapsed sidebar_storage_loaded=sidebar_storage_loaded>
                     <ul class="sidebar-list">
                         {TYPES.iter().map(|opt| {
                             let href = toggle_multi(&base_for_type, &query_for_type, "type", opt.id, &type_active);
@@ -347,7 +355,7 @@ pub fn Sidebar(
                     </ul>
                 </CollapsibleSection>
 
-                <CollapsibleSection section_id="status" title="Status" open_map=open_map sidebar_collapsed=sidebar_collapsed>
+                <CollapsibleSection section_id="status" title="Status" open_map=open_map sidebar_collapsed=sidebar_collapsed sidebar_storage_loaded=sidebar_storage_loaded>
                     <ul class="sidebar-list">
                         {STATUSES.iter().map(|opt| {
                             let href = toggle_multi(&base_for_status, &query_for_status, "status", opt.id, &status_active);

@@ -32,6 +32,25 @@ if [[ -d target ]]; then
   run cargo clean
 fi
 
+# macOS ld writes multi-GB snapshots on linker failures (SymbolString.cpp / large Rust bins).
+# These land in /tmp and are safe to delete; they are not reused by later builds.
+LD_SNAPSHOTS=()
+while IFS= read -r -d '' p; do
+  LD_SNAPSHOTS+=("$p")
+done < <(find /tmp -maxdepth 1 \( -name 'onchainai*.ld-snapshot' -o -name 'libonchainai*.ld-snapshot' \) -print0 2>/dev/null || true)
+if [[ ${#LD_SNAPSHOTS[@]} -gt 0 ]]; then
+  if [[ "$DRY_RUN" == true ]]; then
+    for p in "${LD_SNAPSHOTS[@]}"; do
+      du -sh "$p" 2>/dev/null || echo "[dry-run] $p"
+    done
+  else
+    for p in "${LD_SNAPSHOTS[@]}"; do
+      rm -rf "$p"
+    done
+    echo "removed ${#LD_SNAPSHOTS[@]} linker snapshot dir(s) from /tmp"
+  fi
+fi
+
 if [[ -n "$PLAYWRIGHT_DAYS" && -d .playwright-cli && ! -L .playwright-cli ]]; then
   if [[ "$DRY_RUN" == true ]]; then
     find .playwright-cli -type f -mtime "+${PLAYWRIGHT_DAYS}" -print

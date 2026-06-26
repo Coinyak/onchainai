@@ -24,22 +24,28 @@ Rust single binary: Leptos SSR + Axum + rmcp + sqlx + tokio-cron-scheduler.
 - `docker build -t onchainai .`: Build Docker image
 - `docker run -p 3000:3000 onchainai`: Run container
 - `./scripts/disk-guard.sh`: Check free disk and `target/` size before heavy builds
-- `./scripts/clean-build-artifacts.sh --dry-run`: Preview safe cleanup (`cargo clean`, old Playwright artifacts)
+- `./scripts/clean-build-artifacts.sh --dry-run`: Preview safe cleanup (`cargo clean`, `/tmp` linker snapshots, old Playwright artifacts)
 - `./scripts/smoke-test.sh http://localhost:3000`: Curl smoke (pages + MCP initialize)
 - `node scripts/browser-smoke.mjs http://localhost:3000`: Playwright smoke (requires `playwright` npm package)
 - `./scripts/release-build.sh`: Release build with disk guard + rustup `PATH` for wasm
+- `./scripts/verify-bundle.sh`: Check binary + `target/site/pkg/` + CSS are from one build (mtime spread)
+- `./scripts/restart-dev.sh`: Kill :3000 → release build → verify bundle → restart → smoke test
 - `./scripts/migrate-direct.sh`: Apply migrations (falls back if direct host unavailable; server also migrates on startup)
 - `./scripts/deploy-railway.sh`: Sync Railway env vars, deploy Dockerfile, production smoke
 - `./scripts/post-deploy-verify.sh https://www.onchain-ai.xyz`: Post-deploy curl + optional browser smoke
 
 ## Deploy runbook (operator hardening)
 
+> **Mandatory reading:** [`docs/BUILD_DEPLOY_RULES.md`](docs/BUILD_DEPLOY_RULES.md) — golden rule (one `cargo leptos build --release` for binary + WASM/pkg + CSS), bundle-mismatch symptoms, 2026-06-27 incident, browser cache, macOS linker note.
+
 1. **Disk:** `./scripts/disk-guard.sh` (or `ONCHAINAI_DISK_GUARD_FORCE=1` if tight)
-2. **Local verify:** `cargo test --features ssr`, `./scripts/release-build.sh`, smoke against release binary
-3. **DB:** Migrations run automatically on server startup (`run_migrations` in `lib.rs`). If local `sqlx migrate run` hits Supabase session pool limits, deploy still applies pending migrations on boot. Optional: Supabase SQL editor for `006`/`007`/`008`.
-4. **Railway:** `./scripts/deploy-railway.sh` (requires `railway login`, `.env` secrets). Docker build runs on Railway (local Docker optional).
-5. **Post-deploy:** `./scripts/post-deploy-verify.sh`
-6. **Pool sizing:** `DATABASE_MAX_CONNECTIONS` defaults to `5` for Supabase session pooler headroom. Rate limits are in-process; use a single Railway replica or add shared store before scaling out.
+2. **Local verify:** `cargo test --features ssr` → `./scripts/release-build.sh` → `./scripts/verify-bundle.sh`
+3. **Restart (mandatory after build):** `./scripts/restart-dev.sh` (or kill :3000 and run `./target/release/onchainai`). Never leave an old process serving stale SSR against new `target/site/pkg/`.
+4. **Smoke:** `./scripts/smoke-test.sh http://localhost:3000` (and optional `node scripts/browser-smoke.mjs`)
+5. **DB:** Migrations run automatically on server startup (`run_migrations` in `lib.rs`). If local `sqlx migrate run` hits Supabase session pool limits, deploy still applies pending migrations on boot. Optional: Supabase SQL editor for `006`/`007`/`008`.
+6. **Railway:** `./scripts/deploy-railway.sh` (requires `railway login`, `.env` secrets). Docker build runs on Railway (local Docker optional).
+7. **Post-deploy:** `./scripts/post-deploy-verify.sh` — hard refresh browser if UI looks stale (`docs/BUILD_DEPLOY_RULES.md` §6)
+8. **Pool sizing:** `DATABASE_MAX_CONNECTIONS` defaults to `5` for Supabase session pooler headroom. Rate limits are in-process; use a single Railway replica or add shared store before scaling out.
 
 ## Architecture
 
@@ -64,6 +70,7 @@ Read before working on a feature:
 - `docs/UI_UX_DESIGN.md` — Full UI spec (pages, components, mobile, admin panel)
 - `DESIGN.md` — Design tokens (Stitch spec, colors, typography, components)
 - `docs/SECURITY.md` — Security rules (auth, RLS, headers, rate limiting)
+- `docs/BUILD_DEPLOY_RULES.md` — SSR/WASM bundle coherence, local restart workflow, deploy checklist
 
 ## Code Style
 

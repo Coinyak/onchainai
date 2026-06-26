@@ -27,6 +27,7 @@ fi
 if (( free_gb < MIN_FREE_GB )); then
   echo "ERROR: free disk ${free_gb}GB is below ${MIN_FREE_GB}GB" >&2
   echo "Run: ./scripts/clean-build-artifacts.sh --dry-run" >&2
+  echo "Also check /tmp/onchainai*.ld-snapshot (multi-GB linker failures on macOS)" >&2
   exit 1
 fi
 

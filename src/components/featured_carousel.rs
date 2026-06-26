@@ -60,8 +60,9 @@ pub fn FeaturedCarousel(cards: Vec<FeaturedCardView>) -> impl IntoView {
                             class=move || if current.get() == idx {
                                 "featured-carousel-card active"
                             } else {
-                                "featured-carousel-card"
+                                "featured-carousel-card pointer-events-none"
                             }
+                            prop:tabindex=move || if current.get() == idx { 0 } else { -1 }
                             aria-hidden=move || if current.get() == idx { "false" } else { "true" }
                         >
                             <img class="featured-carousel-image" src=image_url alt=title.clone()/>

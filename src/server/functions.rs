@@ -335,6 +335,61 @@ pub async fn get_tool_by_slug(slug: String) -> Result<Tool, ServerFnError> {
     tool.ok_or_else(|| ServerFnError::new(format!("tool not found: {slug}")))
 }
 
+/// Maximum tools returned by `list_tools` / browser "load more" (matches UI cap).
+pub const MAX_LIST_TOOLS_LIMIT: i64 = 500;
+
+const MAX_TOOL_FILTER_VALUES: usize = 20;
+const MAX_TOOL_FILTER_VALUE_LEN: usize = 64;
+const MAX_TOOL_LIST_QUERY_LEN: usize = 200;
+
+fn validate_tool_filter_values(axis: &str, values: &[String]) -> Result<(), ServerFnError> {
+    if values.len() > MAX_TOOL_FILTER_VALUES {
+        return Err(ServerFnError::new(format!(
+            "filter `{axis}` accepts at most {MAX_TOOL_FILTER_VALUES} values"
+        )));
+    }
+    for value in values {
+        if value.len() > MAX_TOOL_FILTER_VALUE_LEN {
+            return Err(ServerFnError::new(format!(
+                "filter `{axis}` values must be at most {MAX_TOOL_FILTER_VALUE_LEN} characters"
+            )));
+        }
+    }
+    Ok(())
+}
+
+/// Validates multi-axis tool filters for list/count queries.
+pub fn validate_tool_filters(filters: &ToolFilters) -> Result<(), ServerFnError> {
+    validate_tool_filter_values("function", &filters.function)?;
+    validate_tool_filter_values("asset_class", &filters.asset_class)?;
+    validate_tool_filter_values("actor", &filters.actor)?;
+    validate_tool_filter_values("tool_type", &filters.tool_type)?;
+    validate_tool_filter_values("status", &filters.status)?;
+    validate_tool_filter_values("chain", &filters.chain)?;
+    Ok(())
+}
+
+/// Validates browser tool-list request bounds (rejects out-of-range instead of clamping).
+pub fn validate_tool_list_request(req: &ToolListRequest) -> Result<(), ServerFnError> {
+    validate_tool_filters(&req.filters)?;
+    if req.offset < 0 {
+        return Err(ServerFnError::new("offset must be >= 0"));
+    }
+    if !(1..=MAX_LIST_TOOLS_LIMIT).contains(&req.limit) {
+        return Err(ServerFnError::new(format!(
+            "limit must be between 1 and {MAX_LIST_TOOLS_LIMIT}"
+        )));
+    }
+    if let Some(query) = req.query.as_ref() {
+        if query.len() > MAX_TOOL_LIST_QUERY_LEN {
+            return Err(ServerFnError::new(format!(
+                "query must be at most {MAX_TOOL_LIST_QUERY_LEN} characters"
+            )));
+        }
+    }
+    Ok(())
+}
+
 /// Stable request payload for browser tool-list queries (avoids positional arg drift).
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ToolListRequest {
@@ -386,6 +441,7 @@ fn append_tool_filters(sql: &mut String, filters: &ToolFilters, idx: &mut i32) {
 /// Count approved tools with optional multi-axis filters.
 #[server(CountTools, "/api")]
 pub async fn count_tools(filters: ToolFilters) -> Result<i64, ServerFnError> {
+    validate_tool_filters(&filters)?;
     let pool = use_context::<sqlx::PgPool>()
         .ok_or_else(|| ServerFnError::new("database pool not available"))?;
 
@@ -460,7 +516,7 @@ pub async fn list_tools(
         .ok_or_else(|| ServerFnError::new("database pool not available"))?;
 
     let offset = offset.max(0);
-    let limit = limit.clamp(1, 100);
+    let limit = limit.clamp(1, MAX_LIST_TOOLS_LIMIT);
     let order = match sort.as_str() {
         "new" => "created_at DESC",
         "comments" => {
@@ -520,6 +576,7 @@ pub async fn list_tools(
 /// Stable browser-facing tool list — wraps positional `list_tools` with a struct payload.
 #[server(ListToolsV1, "/api")]
 pub async fn list_tools_v1(req: ToolListRequest) -> Result<Vec<Tool>, ServerFnError> {
+    validate_tool_list_request(&req)?;
     list_tools(req.sort, req.offset, req.limit, req.filters, req.query).await
 }
 
@@ -3013,6 +3070,38 @@ mod tests {
         let json = serde_json::to_value(&req).expect("serialize request");
         assert!(json.get("filters").is_some());
         assert_eq!(json["sort"], "hot");
+
+        let round_trip: ToolListRequest =
+            serde_json::from_value(json).expect("deserialize request");
+        assert_eq!(round_trip.sort, "hot");
+        assert_eq!(round_trip.limit, 50);
+        assert_eq!(round_trip.filters.function, vec!["bridge"]);
+        assert_eq!(round_trip.query.as_deref(), Some("mcp"));
+    }
+
+    #[test]
+    fn tool_list_request_limit_500_accepted() {
+        let req = ToolListRequest {
+            sort: "hot".into(),
+            offset: 0,
+            limit: MAX_LIST_TOOLS_LIMIT,
+            filters: ToolFilters::default(),
+            query: None,
+        };
+        assert!(validate_tool_list_request(&req).is_ok());
+    }
+
+    #[test]
+    fn tool_list_request_limit_501_rejected() {
+        let req = ToolListRequest {
+            sort: "hot".into(),
+            offset: 0,
+            limit: MAX_LIST_TOOLS_LIMIT + 1,
+            filters: ToolFilters::default(),
+            query: None,
+        };
+        let err = validate_tool_list_request(&req).expect_err("limit 501 should fail");
+        assert!(err.to_string().contains("limit must be between 1 and 500"));
     }
 
     #[test]

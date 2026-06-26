@@ -3,7 +3,7 @@
 > 관련 문서: [[INDEX]] | [[MVP_DESIGN]] | [[SECURITY]] | [[../DESIGN]] | [[../AGENTS.md]]
 >
 > 작성: 2026-06-25. 사용자 요구사항 + 디렉토리 사이트 레퍼런스 분석 기반.
-> **갱신: 2026-06-27** — 사이트 전역 왼쪽 사이드바 레이아웃, chain strip, featured carousel, 카테고리 그리드 제거, Load more, 모바일 사이드바 기본 접힘, SSR 링크 안정화, 공개 relevance quality gate, Base relevance 보강 반영. 미구현 목록은 §12.
+> **갱신: 2026-06-27** — 사이드바 레이아웃, chain strip, featured carousel, 누적 Load more (`limit = page × 50`, `offset = 0`), 정렬 시 `selected` 닫음, 태블릿(<1024px) 사이드바 기본 접힘, Tokio 16MB SSR stack, smoke/verify-bundle 게이트, 공개 relevance quality gate. 미구현·smoke 기대값은 §12.
 
 ---
 
@@ -514,7 +514,7 @@ Email 유저:    [Mail] bob
 - 아이콘 호버 시 툴팁으로 섹션명 표시
 - 다시 클릭 시 펼침 (240px)
 - 상태 저장: localStorage (사용자별 선호 유지)
-- 모바일: 사이드바 기본 접힘, `☰` 클릭 시 풀스크린 오버레이
+- 모바일·태블릿 (<1024px): 저장 선호 없으면 사이드바 기본 접힘, `☰` 클릭 시 풀스크린 오버레이
 
 ### 5.9 오른쪽 미리보기 패널 (VS Code 에디터 패널 스타일)
 
@@ -957,9 +957,9 @@ ALTER TABLE tools ADD COLUMN logo_monogram TEXT; -- 로고 없을 때 첫 글자
 ```
 데스크톱 (≥1024px):  site-layout — 사이드바(브랜드+필터) + 메인
                       chain strip + 미리보기 패널 400px (5.9절)
-태블릿 (768-1023px):  사이드바 접힘(☰), chain strip 가로 스크롤
-                      미리보기: 바텀 시트 (5.10절)
-모바일 (<768px):     hydration 후 사이드바 기본 접힘 + rail 아이콘, chain `+N` pill
+태블릿 (768-1023px):  hydration 후 사이드바 **기본 접힘** (<1024px, 저장 선호 없을 때), ☰ 펼침
+                      chain strip 가로 스크롤, 미리보기: 바텀 시트 (5.10절)
+모바일 (<768px):     동일 — 기본 접힘 + rail 아이콘, chain `+N` pill
                       hero 검색은 인라인 SearchBar (풀스크린 검색 오버레이는 §12 미구현)
                       미리보기: 바텀 시트 (5.10절)
 ```
@@ -1291,10 +1291,10 @@ ALTER TABLE tools ADD COLUMN logo_monogram TEXT; -- 로고 없을 때 첫 글자
 | 검색 | 입력 시 실시간 필터 (디바운스 200ms) | Leptos 시그널 + server function |
 | 사이드바 필터 | 항목 클릭 시 토글(다중선택), 리스트 갱신. 새 필터는 `page`/`selected`를 리셋 | URL 쿼리 + SSR-safe `<a>` |
 | 사이드바 펼침 | 섹션(▸) 클릭 시 하위 항목 펼침/접침 | Leptos `<Show>` 컴포넌트 |
-| 모바일 사이드바 | 저장 상태 없으면 <768px에서 접힘으로 시작, ☰ 탭으로 펼침 | localStorage + hydration 후 viewport check |
-| 정렬 | 상단 드롭다운: HOT / 최신 / 코멘트순 | server function 쿼리 |
+| 모바일·태블릿 사이드바 | 저장 상태 없으면 **<1024px**에서 접힘으로 시작, ☰ 탭으로 펼침 | localStorage + hydration 후 viewport check |
+| 정렬 | HOT / New / Comments 링크. **정렬 변경 시 `selected` 미리보기 닫음** (`page`→1) | `build_sort_href` (omits `selected`) |
 | 상세 펼치기 | 도구 카드 클릭 → 오른쪽 미리보기 패널 밀려나옴 (슬라이드 200ms) | Leptos `<Show>` + CSS transform |
-| Load more | 현재 필터·검색 유지, `page=N+1`, 미리보기 선택은 닫음. 50개씩 추가, 최대 500개 표시 | `ToolsBrowser` + `list_tools_v1(limit)` |
+| Load more | 필터·검색·정렬 유지, `page=N+1`, **`selected` 닫음**. 누적 `limit = page × 50`, **`offset = 0`** (매 클릭 전체 재조회) | `visible_limit_for_page` + `list_tools_v1` |
 | 미리보기 패널 닫기 | `✕` 버튼 / 패널 외부 클릭 / ESC | Leptos 시그널 |
 | 미리보기 다른 도구 | 다른 카드 클릭 → 패널 내용만 즉시 교체 | Leptos 시그널 |
 | 모바일 바텀 시트 | 카드 탭 → 아래서 60% 밀려올라옴, 드래그로 풀스크린 | Leptos + 터치 이벤트 |
@@ -1329,15 +1329,34 @@ ALTER TABLE tools ADD COLUMN logo_monogram TEXT; -- 로고 없을 때 첫 글자
 | Chain strip | `CHAIN_CATALOG`, `/chains/*.svg`, `ChainStrip`, 카드 chain 로고 태그 |
 | Featured carousel | 컴포넌트 + `/admin/featured` CRUD + storage bucket (카드 시드 시 표시) |
 | 필터 | Function / Asset / Actor / Type / Status 사이드바, URL 동기화 |
-| 리스트 | HOT·New·Comments 정렬, `ToolCard`, stars·comments 표시, `page` 기반 Load more, 필터 변경 시 1페이지 리셋 |
+| 리스트 | HOT·New·Comments 정렬, `ToolCard`, stars·comments. **누적 Load more** (`limit = page × 50`, `offset = 0`). 필터·체인·정렬 변경 시 `page`→1, **정렬 변경 시 `selected` 닫음** |
 | 미리보기 | 데스크톱 `PreviewPanel`, 모바일 `BottomSheet`, `?selected=` |
 | 인증 | GitHub / Email / SIWX, 로그인 모달, 온보딩 |
 | 소셜 | 댓글·답글(1단)·댓글 업보트·북마크(클릭 시 토글), 인증 뱃지 `[GH]`/`[Mail]`/`[0x]` |
 | Admin | dashboard, tools, categories, users, comments, featured, settings, crawler |
-| SSR 안정성 | Tokio worker stack size 명시, 비동기/Suspense 렌더 링크를 SSR-safe `<a>`로 통일 |
+| SSR 안정성 | `main.rs`: Tokio worker **16MB** stack (`TOKIO_WORKER_STACK_SIZE`). 비동기/Suspense 링크는 SSR-safe `<a>` |
+| 사이드바 (반응형) | localStorage 선호 없을 때 **<1024px 기본 접힘** (hydration 후) |
 | MCP / 크롤러 | MCP 서버, 자동 discovery 스케줄러, relevance scanner(Base network 문맥 포함), legacy migration backfill 공개 품질 게이트 |
 
-### 12.1.1 공개 크롤링 품질 게이트
+### 12.1.1 Pagination (operator note)
+
+**Load more** does not use incremental `offset`. Each step refetches the full visible window:
+
+| URL `page` | `limit` passed to `list_tools_v1` | `offset` |
+|------------|-----------------------------------|----------|
+| 1 (default) | 50 | 0 |
+| 2 | 100 | 0 |
+| 3 | 150 | 0 |
+| … | `min(page × 50, 500)` | 0 |
+
+- `visible_limit_for_page(page)` in `tools_browser.rs`; cap `MAX_VISIBLE_TOOLS = 500`.
+- Load more href bumps `page` and **drops `selected`** (preview closes).
+- Filter / chain / search changes reset `page` to 1.
+- **Sort change** also omits `selected` from sort toolbar links (`build_sort_href` passes `None` for preview slug).
+
+Trade-off: simpler SSR/hydration correctness vs. extra DB rows on deep pages. Acceptable while public catalog stays bounded.
+
+### 12.1.2 공개 크롤링 품질 게이트
 
 - 공개 목록은 `approval_status='approved'`, `relevance_status='accepted'`, critical install risk 제외, quarantine 제외 조건을 통과해야 한다.
 - 2026-06-27 hardening에서 score 0 + `migration-backfill` 단일 이유로 accepted 된 legacy 행은 공개 목록에서 제외하고 admin review로 되돌렸다.
@@ -1351,7 +1370,7 @@ ALTER TABLE tools ADD COLUMN logo_monogram TEXT; -- 로고 없을 때 첫 글자
 | **운영** | Featured carousel **콘텐츠** | §2, carousel 스펙 | UI/코드 완료. **active 카드 0개** → 홈에 미표시. `/admin/featured`에서 시드 필요 |
 | **UX** | 북마크 **초기 표시** (★/☆) | §10 | hydration 안전을 위해 **클릭 전 ☆ 고정**; 로그인 후 toggle 시에만 ★ 반영 |
 | **UX** | 모바일 **풀스크린 검색 오버레이** | §9 | 미구현. 홈 `SearchBar` / `/tools` `ToolbarSearch`만 |
-| **UX** | 모바일 **풀스크린 필터 패널** | §9, §5.8 | 모바일은 기본 접힘 + ☰ 펼침. 전체 화면 필터 오버레이는 미완 |
+| **UX** | 모바일 **풀스크린 필터 패널** | §9, §5.8 | <1024px 기본 접힘 + ☰ 펼침. 전체 화면 필터 오버레이는 미완 |
 | **UX** | 바텀 시트 **dvh 키보드 처리** | §5.10, §9 | 드래그 확장/닫기는 구현. 가상 키보드 dvh 보정은 추가 여지 |
 | **수익** | x402 **등록 결제** | §2, §10 | 타입·설정 플래그만; 결제 플로우 미연동 |
 | **비주얼** | 도구 **공식 로고** (`logo_url`) | §8 | **모노그램** placeholder; DB `logo_url` 미사용 |
@@ -1365,7 +1384,35 @@ ALTER TABLE tools ADD COLUMN logo_monogram TEXT; -- 로고 없을 때 첫 글자
 - **사이드바 Chain 섹션**: chain strip으로 대체 (carousel 스펙 A).
 - **TopNav**: 전 페이지 사이드바 브랜드로 통일.
 
-### 12.4 다음 작업 제안 (디자인 완성도)
+### 12.4 Smoke test expectations
+
+Run after release build (`./scripts/release-build.sh`) against the **release** binary. Deploy gate: `./scripts/verify-bundle.sh` then smoke. See `BUILD_DEPLOY_RULES.md`.
+
+**`scripts/smoke-test.sh`** (curl):
+
+| Check | Expect |
+|-------|--------|
+| `GET /` | 200; contains `sidebar-brand`; **no** `category-grid` |
+| `GET /tools`, `GET /tools?function=bridge&type=mcp` | 200; body has no `error deserializing`, `missing field filters`, `panic`, or `not found: /pkg` |
+| `GET /tools`, `/tools?chain=ethereum`, `/categories/bridge` | `chain-strip` markup + `/chains/` logo paths |
+| `GET /chains/bitcoin.svg` | 200 |
+| `POST /mcp` (`initialize`) | 200 JSON-RPC; contains `serverInfo` |
+
+**`scripts/browser-smoke.mjs`** (Playwright, clears sidebar localStorage first):
+
+| Check | Expect |
+|-------|--------|
+| Console | No hydration / panic messages |
+| Same-origin `/api`, `/pkg/*` | No HTTP ≥400; no deserialization errors in bodies |
+| Home layout | `.sidebar-brand` present; `.category-grid` absent |
+| `/`, `/tools`, filtered URL | No visible deserialization errors in body text |
+| Home H1 | `font-size` differs between 1280px and 375px viewports |
+| `GET /pkg/onchainai.css` | Non-empty served bundle |
+| Mobile `/tools` | `.chain-more` pill not hidden when extra chains exist |
+
+Failed smoke **blocks deploy** (see `post-deploy-verify.sh`, `deploy-railway.sh`).
+
+### 12.5 다음 작업 제안 (디자인 완성도)
 
 1. `/admin/featured`에 carousel 카드 1–3개 시드 → 홈 시각 검증
 2. 모바일 검색·필터 풀스크린 오버레이 (§9)

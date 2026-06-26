@@ -7,7 +7,7 @@ pub const PUBLIC_TOOL_WHERE: &str = "\
 approval_status = 'approved' \
 AND relevance_status = 'accepted' \
 AND NOT (crypto_relevance_score = 0 \
-AND crypto_relevance_reasons = ARRAY['migration-backfill: crypto keyword in name or description']::TEXT[]) \
+AND 'migration-backfill: crypto keyword in name or description' = ANY(crypto_relevance_reasons)) \
 AND install_risk_level <> 'critical' \
 AND quarantined_at IS NULL";
 
@@ -33,6 +33,6 @@ mod tests {
     fn public_tool_where_excludes_legacy_backfill_only_rows() {
         assert!(PUBLIC_TOOL_WHERE.contains("AND NOT"));
         assert!(PUBLIC_TOOL_WHERE
-            .contains("crypto_relevance_reasons = ARRAY['migration-backfill: crypto keyword in name or description']::TEXT[]"));
+            .contains("'migration-backfill: crypto keyword in name or description' = ANY(crypto_relevance_reasons)"));
     }
 }

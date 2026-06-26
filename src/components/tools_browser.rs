@@ -10,14 +10,14 @@ use crate::filter_query::{build_tool_filters, describe_active_filters, ActiveFil
 use crate::models::{Category, Tool};
 use crate::server::functions::{
     count_tools, get_categories, get_chain_counts, get_tool_by_slug, get_tool_comment_counts,
-    list_tools_v1, ToolFilters, ToolListRequest,
+    list_tools_v1, ToolFilters, ToolListRequest, MAX_LIST_TOOLS_LIMIT,
 };
 use leptos::prelude::*;
 use leptos_router::hooks::use_query_map;
 use std::collections::HashMap;
 
 const TOOL_PAGE_SIZE: u32 = 50;
-const MAX_VISIBLE_TOOLS: u32 = 500;
+const MAX_VISIBLE_TOOLS: u32 = MAX_LIST_TOOLS_LIMIT as u32;
 
 #[derive(Clone, PartialEq, Eq)]
 pub enum BrowserBase {
@@ -153,6 +153,25 @@ pub fn visible_limit_for_page(page: u32) -> i64 {
     i64::from(limit)
 }
 
+/// Whether the load-more control should appear (respects total, UI cap, and page growth).
+pub fn should_show_load_more(shown: usize, total: i64, page: u32) -> bool {
+    let shown = shown as i64;
+    let total = total.max(0);
+    let max_visible = i64::from(MAX_VISIBLE_TOOLS);
+    if shown >= total {
+        return false;
+    }
+    if shown >= max_visible {
+        return false;
+    }
+    let current_limit = visible_limit_for_page(page);
+    let next_limit = visible_limit_for_page(page.saturating_add(1));
+    if current_limit >= max_visible && next_limit == current_limit {
+        return false;
+    }
+    true
+}
+
 pub fn with_selected(base_path: &BrowserBase, base: &str, slug: &str) -> String {
     let root = base_path.path();
     if base == root || base.is_empty() {
@@ -176,7 +195,6 @@ pub fn build_sort_href(
     chain: Option<String>,
     sort: &str,
     search_q: Option<String>,
-    selected: Option<String>,
 ) -> String {
     build_query_base(
         base,
@@ -188,7 +206,7 @@ pub fn build_sort_href(
         chain,
         sort.to_string(),
         search_q,
-        selected,
+        None,
         1,
     )
 }
@@ -403,7 +421,6 @@ pub fn ToolsBrowser(
             chain.get(),
             "hot",
             search_q.get(),
-            selected.get(),
         )
     });
     let sort_new = Memo::new(move |_| {
@@ -417,7 +434,6 @@ pub fn ToolsBrowser(
             chain.get(),
             "new",
             search_q.get(),
-            selected.get(),
         )
     });
     let sort_comments = Memo::new(move |_| {
@@ -431,7 +447,6 @@ pub fn ToolsBrowser(
             chain.get(),
             "comments",
             search_q.get(),
-            selected.get(),
         )
     });
 
@@ -521,7 +536,7 @@ pub fn ToolsBrowser(
                                                     view! { <ToolCard tool=t preview_href=preview is_selected=sel comment_count=count/> }
                                                 }).collect_view()}
                                             </div>
-                                            {if (data.tools.len() as i64) < data.total {
+                                            {if should_show_load_more(data.tools.len(), data.total, page_number.get()) {
                                                 let next_href = build_load_more_href(
                                                     &browser_base,
                                                     function.get(),
@@ -758,7 +773,6 @@ mod tests {
             filters.5.clone(),
             "new",
             None,
-            None,
         );
         assert_eq!(from_new.matches("sort=").count(), 1);
         assert!(
@@ -777,13 +791,49 @@ mod tests {
             filters.5,
             "hot",
             None,
-            None,
         );
         assert!(!to_hot.contains("sort="));
         assert!(
             to_hot.contains("function=bridge%2Cswap") || to_hot.contains("function=bridge,swap")
         );
         assert!(to_hot.contains("type=mcp"));
+    }
+
+    #[test]
+    fn sort_href_omits_selected_preview() {
+        let href = build_sort_href(
+            &BrowserBase::Tools,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            "new",
+            None,
+        );
+        assert!(!href.contains("selected="));
+    }
+
+    #[test]
+    fn should_show_load_more_hides_when_all_shown() {
+        assert!(!should_show_load_more(50, 50, 1));
+    }
+
+    #[test]
+    fn should_show_load_more_hides_at_visible_cap() {
+        assert!(!should_show_load_more(500, 1000, 10));
+    }
+
+    #[test]
+    fn should_show_load_more_shows_when_more_available() {
+        assert!(should_show_load_more(50, 200, 1));
+        assert!(should_show_load_more(450, 1000, 9));
+    }
+
+    #[test]
+    fn should_show_load_more_hides_when_page_cannot_grow() {
+        assert!(!should_show_load_more(480, 1000, 10));
     }
 
     #[test]

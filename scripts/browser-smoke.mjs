@@ -100,8 +100,41 @@ if (!cssText || cssText.trim().length === 0) {
   errors.push("css-empty:/pkg/onchainai.css");
 }
 
-// Mobile chain overflow "+N" pill should remain visible when extra chains exist.
+// Tools list: large catalog should expose load-more markup.
+await page.setViewportSize({ width: 1280, height: 900 });
+await page.goto(`${base}/tools`, { waitUntil: "networkidle" });
+const toolsLoadMore = await page.evaluate(() => {
+  const cards = document.querySelectorAll(".tool-card").length;
+  const bodyLen = document.body?.innerHTML.length ?? 0;
+  const hasLoadMore =
+    !!document.querySelector(".load-more-btn") ||
+    !!document.querySelector(".load-more-row");
+  if (cards >= 50 || bodyLen > 20000) {
+    return hasLoadMore;
+  }
+  return true;
+});
+if (!toolsLoadMore) {
+  errors.push("layout:tools-missing-load-more");
+}
+
+// Mobile sidebar defaults collapsed at 375px when localStorage is cleared.
 await page.setViewportSize({ width: 375, height: 812 });
+await page.goto(`${base}/tools`, { waitUntil: "domcontentloaded" });
+await page.evaluate(() => {
+  localStorage.removeItem("onchain-ai-sidebar-collapsed");
+  localStorage.removeItem("onchain-ai-sidebar-sections");
+});
+await page.reload({ waitUntil: "networkidle" });
+const mobileSidebarCollapsed = await page.evaluate(() => {
+  const aside = document.querySelector(".tools-sidebar");
+  return aside?.classList.contains("tools-sidebar-collapsed") ?? false;
+});
+if (!mobileSidebarCollapsed) {
+  errors.push("layout:mobile-sidebar-not-collapsed");
+}
+
+// Mobile chain overflow "+N" pill should remain visible when extra chains exist.
 await page.goto(`${base}/tools`, { waitUntil: "networkidle" });
 const chainMoreVisible = await page.evaluate(() => {
   const pill = document.querySelector(".chain-more");

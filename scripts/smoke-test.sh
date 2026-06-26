@@ -34,11 +34,27 @@ check_chain_markup() {
 home_body="$(check_get "/")"
 grep -q 'sidebar-brand' "$home_body" || fail "GET / missing sidebar-brand markup"
 grep -q 'category-grid' "$home_body" && fail "GET / unexpected category-grid markup"
-check_get "/tools"
+
+tools_body="$(check_get "/tools")"
+if echo "$tools_body" | grep -q 'class="tool-list"'; then
+  tool_cards="$(echo "$tools_body" | grep -c 'tool-card' || true)"
+  if [[ "$tool_cards" -ge 50 ]] || [[ ${#tools_body} -gt 20000 ]]; then
+    echo "$tools_body" | grep -qE 'load-more-btn|load-more-row' \
+      || fail "GET /tools missing load-more markup (large listing)"
+  fi
+fi
+
 check_get "/tools?function=bridge&type=mcp"
+check_get "/tools?chain=ethereum&page=2"
 check_chain_markup "/tools"
 check_chain_markup "/tools?chain=ethereum"
 check_chain_markup "/categories/bridge"
+
+# Fresh filter links should not carry pagination from a prior page (SSR heuristic).
+filter_body="$(check_get "/tools?function=bridge&type=mcp")"
+if echo "$filter_body" | grep -oE 'href="[^"]*function=bridge[^"]*"' | grep -q 'page='; then
+  fail "GET /tools?function=bridge&type=mcp filter href contains page="
+fi
 
 svg_code="$(curl -sS -o /dev/null -w "%{http_code}" "${BASE}/chains/bitcoin.svg")" \
   || fail "GET /chains/bitcoin.svg curl failed"

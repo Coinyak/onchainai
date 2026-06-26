@@ -100,6 +100,9 @@ fn corpus(input: &RelevanceInput<'_>) -> String {
     if let Some(d) = input.description {
         parts.push(d.to_lowercase());
     }
+    if let Some(r) = input.repo_url {
+        parts.push(r.to_lowercase());
+    }
     if let Some(p) = input.npm_package {
         parts.push(p.to_lowercase());
     }
@@ -518,5 +521,26 @@ mod tests {
         ));
         assert_ne!(assessment.status, "accepted");
         assert!(!assessment.reasons.iter().any(|r| r == "crypto keyword"));
+    }
+
+    #[test]
+    fn repo_url_in_corpus_affects_keyword_matching() {
+        let without_repo = assess_relevance(&input(
+            "Gateway Tool",
+            Some("A transfer utility for agents"),
+            &[],
+            None,
+            None,
+        ));
+        let with_repo = assess_relevance(&input(
+            "Gateway Tool",
+            Some("A transfer utility for agents"),
+            &[],
+            Some("https://github.com/example/ethereum-bridge"),
+            None,
+        ));
+        assert!(with_repo.score > without_repo.score);
+        assert!(with_repo.reasons.iter().any(|r| r.contains("Ethereum")));
+        assert!(!without_repo.reasons.iter().any(|r| r.contains("Ethereum")));
     }
 }

@@ -94,7 +94,7 @@ pub fn read_sidebar_collapsed_with_default(default: bool) -> bool {
 }
 
 pub fn sidebar_default_collapsed_for_width(width: f64) -> bool {
-    width < 768.0
+    width < 1024.0
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -141,7 +141,8 @@ mod tests {
     fn mobile_sidebar_defaults_collapsed_below_tablet_width() {
         assert!(sidebar_default_collapsed_for_width(390.0));
         assert!(sidebar_default_collapsed_for_width(767.0));
-        assert!(!sidebar_default_collapsed_for_width(768.0));
+        assert!(sidebar_default_collapsed_for_width(1023.0));
+        assert!(!sidebar_default_collapsed_for_width(1024.0));
         assert!(!sidebar_default_collapsed_for_width(1200.0));
     }
 }
