@@ -6,12 +6,18 @@ Rust single binary: Leptos SSR + Axum + rmcp + sqlx + tokio-cron-scheduler.
 
 ## Commands
 
-- `cargo build`: Compile (debug)
-- `cargo build --release`: Production build
-- `cargo run`: Start server (port 3000) + crawler scheduler
-- `cargo test`: Run all tests
-- `cargo test -- --nocapture`: Tests with stdout
-- `cargo clippy -- -W clippy::all`: Lint (must pass before commit)
+> Note: the crate default feature set is empty (so the `ssr` server deps never
+> leak into the wasm build). Plain `cargo` commands that touch server code need
+> `--features ssr`. `cargo leptos` reads `bin-features`/`lib-features` and is
+> unaffected.
+
+- `cargo build --features ssr`: Compile server (debug)
+- `cargo build --release --features ssr`: Production server build
+- `cargo run --features ssr`: Start server (port 3000) + crawler scheduler
+- `cargo leptos build --release`: Full build (SSR binary + WASM client bundle)
+- `cargo test --features ssr`: Run all tests
+- `cargo test --features ssr -- --nocapture`: Tests with stdout
+- `cargo clippy --features ssr -- -W clippy::all`: Lint (must pass before commit)
 - `cargo fmt --check`: Format check
 - `sqlx migrate run`: Apply DB migrations (needs DATABASE_URL)
 - `sqlx prepare`: Generate sqlx query cache (after schema changes)

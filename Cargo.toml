@@ -27,7 +27,11 @@ path = "src/main.rs"
 required-features = ["ssr"]
 
 [features]
-default = ["ssr"]
+# Empty default: cargo-leptos builds the server with `ssr` (bin-features) and the
+# wasm client with `hydrate` (lib-features) explicitly. Keeping `ssr` out of the
+# default prevents it leaking into the wasm/hydrate build (which pulls tokio's net
+# backend -> mio, unsupported on wasm). Local cargo commands need `--features ssr`.
+default = []
 ssr = [
     "dep:leptos_axum",
     "dep:axum",
