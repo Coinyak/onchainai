@@ -605,7 +605,9 @@ mod tests {
         Mock::given(method("GET"))
             .and(path("/search/repositories"))
             .and(query_param("q", "topic:defi-mcp"))
-            .respond_with(ResponseTemplate::new(200).set_body_string(search_response_json("defi-mcp")))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_string(search_response_json("defi-mcp")),
+            )
             .mount(&server)
             .await;
 

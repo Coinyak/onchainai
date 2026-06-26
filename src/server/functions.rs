@@ -24,21 +24,22 @@ use crate::server::queries::TOOLS_APPROVED_WHERE;
 use axum::http::request::Parts;
 
 #[cfg(feature = "ssr")]
-fn request_context() -> Result<(Parts, sqlx::PgPool, String), ServerFnError> {
+fn request_context() -> Result<(Parts, sqlx::PgPool, String, String), ServerFnError> {
     let parts = use_context::<Parts>()
         .ok_or_else(|| ServerFnError::new("request context not available"))?;
     let pool = use_context::<sqlx::PgPool>()
         .ok_or_else(|| ServerFnError::new("database pool not available"))?;
-    let config = use_context::<Config>()
-        .ok_or_else(|| ServerFnError::new("configuration not available"))?;
-    Ok((parts, pool, config.jwt_secret))
+    let config =
+        use_context::<Config>().ok_or_else(|| ServerFnError::new("configuration not available"))?;
+    let issuer = config.jwt_issuer();
+    Ok((parts, pool, config.jwt_secret, issuer))
 }
 
 /// Current signed-in user, if any (from session cookie).
 #[server(GetCurrentUser, "/api")]
 pub async fn get_current_user() -> Result<Option<SessionUser>, ServerFnError> {
-    let (parts, pool, jwt_secret) = request_context()?;
-    session_from_parts(&parts, &pool, &jwt_secret)
+    let (parts, pool, jwt_secret, issuer) = request_context()?;
+    session_from_parts(&parts, &pool, &jwt_secret, &issuer)
         .await
         .map_err(ServerFnError::new)
 }
@@ -46,8 +47,8 @@ pub async fn get_current_user() -> Result<Option<SessionUser>, ServerFnError> {
 /// Admin gate — returns the admin session or a generic "not found" error.
 #[server(CheckAdminAccess, "/api")]
 pub async fn check_admin_access() -> Result<SessionUser, ServerFnError> {
-    let (parts, pool, jwt_secret) = request_context()?;
-    require_admin(&parts, &pool, &jwt_secret)
+    let (parts, pool, jwt_secret, issuer) = request_context()?;
+    require_admin(&parts, &pool, &jwt_secret, &issuer)
         .await
         .map_err(ServerFnError::new)
 }
@@ -173,8 +174,8 @@ pub async fn update_site_settings(
         return Err(ServerFnError::new(msg.to_string()));
     }
 
-    let (parts, pool, jwt_secret) = request_context()?;
-    require_admin(&parts, &pool, &jwt_secret)
+    let (parts, pool, jwt_secret, issuer) = request_context()?;
+    require_admin(&parts, &pool, &jwt_secret, &issuer)
         .await
         .map_err(ServerFnError::new)?;
 
@@ -217,6 +218,7 @@ pub async fn get_recent_tools(limit: i64) -> Result<Vec<Tool>, ServerFnError> {
     let pool = use_context::<sqlx::PgPool>()
         .ok_or_else(|| ServerFnError::new("database pool not available"))?;
 
+    let limit = limit.clamp(1, 100);
     let sql = format!(
         "SELECT * FROM tools WHERE {TOOLS_APPROVED_WHERE} ORDER BY stars DESC, created_at DESC LIMIT $1"
     );
@@ -277,11 +279,13 @@ pub async fn search_tools(
         "#
     );
 
+    let mut idx = 2;
     if function.is_some() {
-        sql.push_str(" AND function = $2");
+        sql.push_str(&format!(" AND function = ${idx}"));
+        idx += 1;
     }
     if chain.is_some() {
-        sql.push_str(" AND $3 = ANY(chains)");
+        sql.push_str(&format!(" AND ${idx} = ANY(chains)"));
     }
     sql.push_str(" ORDER BY stars DESC, created_at DESC LIMIT 50");
 
@@ -399,6 +403,7 @@ pub async fn get_chain_counts(limit: i64) -> Result<Vec<(String, i64)>, ServerFn
     let pool = use_context::<sqlx::PgPool>()
         .ok_or_else(|| ServerFnError::new("database pool not available"))?;
 
+    let limit = limit.clamp(1, 100);
     let sql = format!(
         r#"
         SELECT chain, COUNT(*) AS count
@@ -430,6 +435,8 @@ pub async fn list_tools(
     let pool = use_context::<sqlx::PgPool>()
         .ok_or_else(|| ServerFnError::new("database pool not available"))?;
 
+    let offset = offset.max(0);
+    let limit = limit.clamp(1, 100);
     let order = match sort.as_str() {
         "new" => "created_at DESC",
         "comments" => {
@@ -449,7 +456,10 @@ pub async fn list_tools(
         idx += 1;
     }
     append_tool_filters(&mut sql, &filters, &mut idx);
-    sql.push_str(&format!(" ORDER BY {order} OFFSET ${idx} LIMIT ${}", idx + 1));
+    sql.push_str(&format!(
+        " ORDER BY {order} OFFSET ${idx} LIMIT ${}",
+        idx + 1
+    ));
 
     let mut q = sqlx::query_as::<_, Tool>(&sql);
     if let Some(text) = query.as_ref().filter(|q| !q.trim().is_empty()) {
@@ -483,6 +493,36 @@ pub async fn list_tools(
     Ok(tools)
 }
 
+/// Batch comment counts for approved tools by slug.
+#[server(GetToolCommentCounts, "/api")]
+pub async fn get_tool_comment_counts(
+    slugs: Vec<String>,
+) -> Result<Vec<(String, i64)>, ServerFnError> {
+    if slugs.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let pool = use_context::<sqlx::PgPool>()
+        .ok_or_else(|| ServerFnError::new("database pool not available"))?;
+
+    let sql = format!(
+        r#"
+        SELECT t.slug, COUNT(c.id)::bigint AS comment_count
+        FROM tools t
+        LEFT JOIN comments c ON c.tool_id = t.id
+        WHERE t.slug = ANY($1) AND {TOOLS_APPROVED_WHERE}
+        GROUP BY t.slug
+        "#
+    );
+    let rows = sqlx::query_as::<_, (String, i64)>(&sql)
+        .bind(&slugs)
+        .fetch_all(&pool)
+        .await
+        .map_err(|e| ServerFnError::new(format!("comment counts failed: {e}")))?;
+
+    Ok(rows)
+}
+
 /// SQL for admin pending-tool review (AC5).
 pub(crate) const LIST_PENDING_TOOLS_SQL: &str =
     "SELECT * FROM tools WHERE approval_status = 'pending' ORDER BY created_at DESC LIMIT $1";
@@ -490,14 +530,14 @@ pub(crate) const LIST_PENDING_TOOLS_SQL: &str =
 /// List tools awaiting admin review (`approval_status = 'pending'`).
 #[server(ListPendingTools, "/api")]
 pub async fn list_pending_tools(limit: i64) -> Result<Vec<Tool>, ServerFnError> {
-    let (parts, pool, jwt_secret) = request_context()?;
-    require_admin(&parts, &pool, &jwt_secret).await?;
+    let (parts, pool, jwt_secret, issuer) = request_context()?;
+    require_admin(&parts, &pool, &jwt_secret, &issuer).await?;
 
     let tools = sqlx::query_as::<_, Tool>(LIST_PENDING_TOOLS_SQL)
-    .bind(limit)
-    .fetch_all(&pool)
-    .await
-    .map_err(|e| ServerFnError::new(format!("failed to list pending tools: {e}")))?;
+        .bind(limit)
+        .fetch_all(&pool)
+        .await
+        .map_err(|e| ServerFnError::new(format!("failed to list pending tools: {e}")))?;
 
     Ok(tools)
 }
@@ -527,14 +567,10 @@ pub async fn set_tool_approval(
         return Err(ServerFnError::new(msg.to_string()));
     }
 
-    let (parts, pool, jwt_secret) = request_context()?;
-    require_admin(&parts, &pool, &jwt_secret).await?;
+    let (parts, pool, jwt_secret, issuer) = request_context()?;
+    require_admin(&parts, &pool, &jwt_secret, &issuer).await?;
 
-    let rejection_reason = if status == "rejected" {
-        reason
-    } else {
-        None
-    };
+    let rejection_reason = if status == "rejected" { reason } else { None };
 
     let result = sqlx::query(
         r#"
@@ -582,8 +618,8 @@ pub struct CrawlerSourceView {
 /// List crawler source status (admin).
 #[server(ListCrawlerSources, "/api")]
 pub async fn list_crawler_sources() -> Result<Vec<CrawlerSourceView>, ServerFnError> {
-    let (parts, pool, jwt_secret) = request_context()?;
-    require_admin(&parts, &pool, &jwt_secret).await?;
+    let (parts, pool, jwt_secret, issuer) = request_context()?;
+    require_admin(&parts, &pool, &jwt_secret, &issuer).await?;
 
     let rows = sqlx::query_as::<_, Source>("SELECT * FROM sources ORDER BY name ASC")
         .fetch_all(&pool)
@@ -649,8 +685,8 @@ pub async fn trigger_crawler_source(source: String) -> Result<(), ServerFnError>
         return Err(ServerFnError::new(msg.to_string()));
     }
 
-    let (parts, pool, jwt_secret) = request_context()?;
-    require_admin(&parts, &pool, &jwt_secret).await?;
+    let (parts, pool, jwt_secret, issuer) = request_context()?;
+    require_admin(&parts, &pool, &jwt_secret, &issuer).await?;
 
     let pool_bg = pool.clone();
     let source_bg = source.clone();
@@ -688,16 +724,19 @@ pub(crate) fn validate_comment_content(content: &str) -> Result<(), &'static str
 
 /// List comments for an approved tool (`sort`: `new` | `top`).
 #[server(GetToolComments, "/api")]
-pub async fn get_tool_comments(slug: String, sort: String) -> Result<Vec<CommentView>, ServerFnError> {
-    let (parts, pool, jwt_secret) = request_context()?;
-    let viewer = session_from_parts(&parts, &pool, &jwt_secret)
+pub async fn get_tool_comments(
+    slug: String,
+    sort: String,
+) -> Result<Vec<CommentView>, ServerFnError> {
+    let (parts, pool, jwt_secret, issuer) = request_context()?;
+    let viewer = session_from_parts(&parts, &pool, &jwt_secret, &issuer)
         .await
         .ok()
         .flatten();
 
-    let tool_id = sqlx::query_scalar::<_, Uuid>(
-        &format!("SELECT id FROM tools WHERE slug = $1 AND {TOOLS_APPROVED_WHERE}"),
-    )
+    let tool_id = sqlx::query_scalar::<_, Uuid>(&format!(
+        "SELECT id FROM tools WHERE slug = $1 AND {TOOLS_APPROVED_WHERE}"
+    ))
     .bind(&slug)
     .fetch_optional(&pool)
     .await
@@ -727,11 +766,11 @@ pub async fn get_tool_comments(slug: String, sort: String) -> Result<Vec<Comment
         "#
     );
     let rows = sqlx::query_as::<_, CommentRow>(&sql)
-    .bind(tool_id)
-    .bind(viewer.as_ref().map(|v| v.id))
-    .fetch_all(&pool)
-    .await
-    .map_err(|e| ServerFnError::new(format!("failed to load comments: {e}")))?;
+        .bind(tool_id)
+        .bind(viewer.as_ref().map(|v| v.id))
+        .fetch_all(&pool)
+        .await
+        .map_err(|e| ServerFnError::new(format!("failed to load comments: {e}")))?;
 
     Ok(rows.into_iter().map(CommentRow::into_view).collect())
 }
@@ -803,12 +842,12 @@ pub async fn create_comment(
         return Err(ServerFnError::new(msg.to_string()));
     }
 
-    let (parts, pool, jwt_secret) = request_context()?;
-    let user = require_user(&parts, &pool, &jwt_secret).await?;
+    let (parts, pool, jwt_secret, issuer) = request_context()?;
+    let user = require_user(&parts, &pool, &jwt_secret, &issuer).await?;
 
-    let tool_id = sqlx::query_scalar::<_, Uuid>(
-        &format!("SELECT id FROM tools WHERE slug = $1 AND {TOOLS_APPROVED_WHERE}"),
-    )
+    let tool_id = sqlx::query_scalar::<_, Uuid>(&format!(
+        "SELECT id FROM tools WHERE slug = $1 AND {TOOLS_APPROVED_WHERE}"
+    ))
     .bind(&slug)
     .fetch_optional(&pool)
     .await
@@ -855,8 +894,8 @@ pub async fn create_comment(
 /// Toggle upvote on a comment (authenticated).
 #[server(ToggleUpvote, "/api")]
 pub async fn toggle_upvote(comment_id: Uuid) -> Result<bool, ServerFnError> {
-    let (parts, pool, jwt_secret) = request_context()?;
-    let user = require_user(&parts, &pool, &jwt_secret).await?;
+    let (parts, pool, jwt_secret, issuer) = request_context()?;
+    let user = require_user(&parts, &pool, &jwt_secret, &issuer).await?;
 
     let exists = sqlx::query_scalar::<_, i64>(
         "SELECT COUNT(*) FROM upvotes WHERE comment_id = $1 AND user_id = $2",
@@ -889,8 +928,8 @@ pub async fn toggle_upvote(comment_id: Uuid) -> Result<bool, ServerFnError> {
 /// Whether the current user bookmarked a tool (false when signed out).
 #[server(IsBookmarked, "/api")]
 pub async fn is_bookmarked(slug: String) -> Result<bool, ServerFnError> {
-    let (parts, pool, jwt_secret) = request_context()?;
-    let Some(user) = session_from_parts(&parts, &pool, &jwt_secret)
+    let (parts, pool, jwt_secret, issuer) = request_context()?;
+    let Some(user) = session_from_parts(&parts, &pool, &jwt_secret, &issuer)
         .await
         .map_err(ServerFnError::new)?
     else {
@@ -917,12 +956,12 @@ pub async fn is_bookmarked(slug: String) -> Result<bool, ServerFnError> {
 /// Toggle bookmark on a tool (authenticated).
 #[server(ToggleBookmark, "/api")]
 pub async fn toggle_bookmark(slug: String) -> Result<bool, ServerFnError> {
-    let (parts, pool, jwt_secret) = request_context()?;
-    let user = require_user(&parts, &pool, &jwt_secret).await?;
+    let (parts, pool, jwt_secret, issuer) = request_context()?;
+    let user = require_user(&parts, &pool, &jwt_secret, &issuer).await?;
 
-    let tool_id = sqlx::query_scalar::<_, Uuid>(
-        &format!("SELECT id FROM tools WHERE slug = $1 AND {TOOLS_APPROVED_WHERE}"),
-    )
+    let tool_id = sqlx::query_scalar::<_, Uuid>(&format!(
+        "SELECT id FROM tools WHERE slug = $1 AND {TOOLS_APPROVED_WHERE}"
+    ))
     .bind(&slug)
     .fetch_optional(&pool)
     .await
@@ -994,10 +1033,7 @@ pub(crate) fn validate_category_input(
     if icon.is_empty() || icon.len() > 32 {
         return Err("icon must be 1–32 characters");
     }
-    if !icon
-        .chars()
-        .all(|c| c.is_ascii_alphanumeric() || c == '-')
-    {
+    if !icon.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
         return Err("icon may only contain letters, numbers, and hyphens");
     }
     let description = description.trim();
@@ -1013,8 +1049,8 @@ pub(crate) fn validate_category_input(
 /// List all categories with tool counts (admin).
 #[server(ListAdminCategories, "/api")]
 pub async fn list_admin_categories() -> Result<Vec<AdminCategoryView>, ServerFnError> {
-    let (parts, pool, jwt_secret) = request_context()?;
-    require_admin(&parts, &pool, &jwt_secret).await?;
+    let (parts, pool, jwt_secret, issuer) = request_context()?;
+    require_admin(&parts, &pool, &jwt_secret, &issuer).await?;
 
     let rows = sqlx::query_as::<_, (String, String, String, String, i32, i64)>(
         r#"
@@ -1032,14 +1068,16 @@ pub async fn list_admin_categories() -> Result<Vec<AdminCategoryView>, ServerFnE
 
     Ok(rows
         .into_iter()
-        .map(|(id, label, icon, description, sort_order, tool_count)| AdminCategoryView {
-            id,
-            label,
-            icon,
-            description,
-            sort_order,
-            tool_count,
-        })
+        .map(
+            |(id, label, icon, description, sort_order, tool_count)| AdminCategoryView {
+                id,
+                label,
+                icon,
+                description,
+                sort_order,
+                tool_count,
+            },
+        )
         .collect())
 }
 
@@ -1056,8 +1094,8 @@ pub async fn create_category(
         return Err(ServerFnError::new(msg.to_string()));
     }
 
-    let (parts, pool, jwt_secret) = request_context()?;
-    require_admin(&parts, &pool, &jwt_secret).await?;
+    let (parts, pool, jwt_secret, issuer) = request_context()?;
+    require_admin(&parts, &pool, &jwt_secret, &issuer).await?;
 
     let category = sqlx::query_as::<_, Category>(
         r#"
@@ -1091,8 +1129,8 @@ pub async fn update_category(
         return Err(ServerFnError::new(msg.to_string()));
     }
 
-    let (parts, pool, jwt_secret) = request_context()?;
-    require_admin(&parts, &pool, &jwt_secret).await?;
+    let (parts, pool, jwt_secret, issuer) = request_context()?;
+    require_admin(&parts, &pool, &jwt_secret, &issuer).await?;
 
     let category = sqlx::query_as::<_, Category>(
         r#"
@@ -1123,16 +1161,14 @@ pub async fn delete_category(id: String) -> Result<(), ServerFnError> {
         return Err(ServerFnError::new("category id required"));
     }
 
-    let (parts, pool, jwt_secret) = request_context()?;
-    require_admin(&parts, &pool, &jwt_secret).await?;
+    let (parts, pool, jwt_secret, issuer) = request_context()?;
+    require_admin(&parts, &pool, &jwt_secret, &issuer).await?;
 
-    let tool_count = sqlx::query_scalar::<_, i64>(
-        "SELECT COUNT(*) FROM tools WHERE function = $1",
-    )
-    .bind(&id)
-    .fetch_one(&pool)
-    .await
-    .map_err(|e| ServerFnError::new(format!("tool count failed: {e}")))?;
+    let tool_count = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM tools WHERE function = $1")
+        .bind(&id)
+        .fetch_one(&pool)
+        .await
+        .map_err(|e| ServerFnError::new(format!("tool count failed: {e}")))?;
 
     if tool_count > 0 {
         return Err(ServerFnError::new(
@@ -1172,8 +1208,8 @@ pub async fn list_admin_users(
     query: Option<String>,
     limit: i64,
 ) -> Result<Vec<AdminUserView>, ServerFnError> {
-    let (parts, pool, jwt_secret) = request_context()?;
-    require_admin(&parts, &pool, &jwt_secret).await?;
+    let (parts, pool, jwt_secret, issuer) = request_context()?;
+    require_admin(&parts, &pool, &jwt_secret, &issuer).await?;
 
     let limit = limit.clamp(1, 100);
     let pattern = query
@@ -1251,21 +1287,20 @@ impl AdminUserRow {
 /// Ban or unban a user (admin).
 #[server(SetUserBanned, "/api")]
 pub async fn set_user_banned(user_id: Uuid, banned: bool) -> Result<(), ServerFnError> {
-    let (parts, pool, jwt_secret) = request_context()?;
-    let admin = require_admin(&parts, &pool, &jwt_secret).await?;
+    let (parts, pool, jwt_secret, issuer) = request_context()?;
+    let admin = require_admin(&parts, &pool, &jwt_secret, &issuer).await?;
 
     if admin.id == user_id {
         return Err(ServerFnError::new("cannot change your own ban status"));
     }
 
-    let result = sqlx::query(
-        "UPDATE profiles SET is_banned = $1, updated_at = now() WHERE id = $2",
-    )
-    .bind(banned)
-    .bind(user_id)
-    .execute(&pool)
-    .await
-    .map_err(|e| ServerFnError::new(format!("failed to update ban status: {e}")))?;
+    let result =
+        sqlx::query("UPDATE profiles SET is_banned = $1, updated_at = now() WHERE id = $2")
+            .bind(banned)
+            .bind(user_id)
+            .execute(&pool)
+            .await
+            .map_err(|e| ServerFnError::new(format!("failed to update ban status: {e}")))?;
 
     if result.rows_affected() == 0 {
         return Err(ServerFnError::new("user not found"));
@@ -1277,21 +1312,19 @@ pub async fn set_user_banned(user_id: Uuid, banned: bool) -> Result<(), ServerFn
 /// Grant or revoke admin role (admin).
 #[server(SetUserAdmin, "/api")]
 pub async fn set_user_admin(user_id: Uuid, is_admin: bool) -> Result<(), ServerFnError> {
-    let (parts, pool, jwt_secret) = request_context()?;
-    let admin = require_admin(&parts, &pool, &jwt_secret).await?;
+    let (parts, pool, jwt_secret, issuer) = request_context()?;
+    let admin = require_admin(&parts, &pool, &jwt_secret, &issuer).await?;
 
     if admin.id == user_id && !is_admin {
         return Err(ServerFnError::new("cannot remove your own admin role"));
     }
 
-    let result = sqlx::query(
-        "UPDATE profiles SET is_admin = $1, updated_at = now() WHERE id = $2",
-    )
-    .bind(is_admin)
-    .bind(user_id)
-    .execute(&pool)
-    .await
-    .map_err(|e| ServerFnError::new(format!("failed to update admin status: {e}")))?;
+    let result = sqlx::query("UPDATE profiles SET is_admin = $1, updated_at = now() WHERE id = $2")
+        .bind(is_admin)
+        .bind(user_id)
+        .execute(&pool)
+        .await
+        .map_err(|e| ServerFnError::new(format!("failed to update admin status: {e}")))?;
 
     if result.rows_affected() == 0 {
         return Err(ServerFnError::new("user not found"));
@@ -1303,8 +1336,8 @@ pub async fn set_user_admin(user_id: Uuid, is_admin: bool) -> Result<(), ServerF
 /// Delete a user profile and cascaded social data (admin).
 #[server(DeleteUser, "/api")]
 pub async fn delete_user(user_id: Uuid) -> Result<(), ServerFnError> {
-    let (parts, pool, jwt_secret) = request_context()?;
-    let admin = require_admin(&parts, &pool, &jwt_secret).await?;
+    let (parts, pool, jwt_secret, issuer) = request_context()?;
+    let admin = require_admin(&parts, &pool, &jwt_secret, &issuer).await?;
 
     if admin.id == user_id {
         return Err(ServerFnError::new("cannot delete your own account"));
@@ -1342,8 +1375,8 @@ pub async fn list_admin_comments(
     query: Option<String>,
     limit: i64,
 ) -> Result<Vec<AdminCommentView>, ServerFnError> {
-    let (parts, pool, jwt_secret) = request_context()?;
-    require_admin(&parts, &pool, &jwt_secret).await?;
+    let (parts, pool, jwt_secret, issuer) = request_context()?;
+    require_admin(&parts, &pool, &jwt_secret, &issuer).await?;
 
     let limit = limit.clamp(1, 100);
     let pattern = query
@@ -1425,8 +1458,8 @@ impl AdminCommentRow {
 /// Delete a comment (admin).
 #[server(DeleteAdminComment, "/api")]
 pub async fn delete_admin_comment(comment_id: Uuid) -> Result<(), ServerFnError> {
-    let (parts, pool, jwt_secret) = request_context()?;
-    require_admin(&parts, &pool, &jwt_secret).await?;
+    let (parts, pool, jwt_secret, issuer) = request_context()?;
+    require_admin(&parts, &pool, &jwt_secret, &issuer).await?;
 
     let result = sqlx::query("DELETE FROM comments WHERE id = $1")
         .bind(comment_id)
@@ -1444,17 +1477,15 @@ pub async fn delete_admin_comment(comment_id: Uuid) -> Result<(), ServerFnError>
 /// Delete a comment and ban its author (admin).
 #[server(DeleteCommentAndBanUser, "/api")]
 pub async fn delete_comment_and_ban_user(comment_id: Uuid) -> Result<(), ServerFnError> {
-    let (parts, pool, jwt_secret) = request_context()?;
-    let admin = require_admin(&parts, &pool, &jwt_secret).await?;
+    let (parts, pool, jwt_secret, issuer) = request_context()?;
+    let admin = require_admin(&parts, &pool, &jwt_secret, &issuer).await?;
 
-    let author_id = sqlx::query_scalar::<_, Uuid>(
-        "SELECT user_id FROM comments WHERE id = $1",
-    )
-    .bind(comment_id)
-    .fetch_optional(&pool)
-    .await
-    .map_err(|e| ServerFnError::new(format!("comment lookup failed: {e}")))?
-    .ok_or_else(|| ServerFnError::new("comment not found"))?;
+    let author_id = sqlx::query_scalar::<_, Uuid>("SELECT user_id FROM comments WHERE id = $1")
+        .bind(comment_id)
+        .fetch_optional(&pool)
+        .await
+        .map_err(|e| ServerFnError::new(format!("comment lookup failed: {e}")))?
+        .ok_or_else(|| ServerFnError::new("comment not found"))?;
 
     if author_id == admin.id {
         return Err(ServerFnError::new("cannot ban yourself"));
@@ -1466,13 +1497,11 @@ pub async fn delete_comment_and_ban_user(comment_id: Uuid) -> Result<(), ServerF
         .await
         .map_err(|e| ServerFnError::new(format!("failed to delete comment: {e}")))?;
 
-    sqlx::query(
-        "UPDATE profiles SET is_banned = true, updated_at = now() WHERE id = $1",
-    )
-    .bind(author_id)
-    .execute(&pool)
-    .await
-    .map_err(|e| ServerFnError::new(format!("failed to ban user: {e}")))?;
+    sqlx::query("UPDATE profiles SET is_banned = true, updated_at = now() WHERE id = $1")
+        .bind(author_id)
+        .execute(&pool)
+        .await
+        .map_err(|e| ServerFnError::new(format!("failed to ban user: {e}")))?;
 
     Ok(())
 }
@@ -1507,9 +1536,8 @@ mod tests {
         );
         assert!(recent.contains("approval_status = 'approved'"));
 
-        let categories = format!(
-            "LEFT JOIN tools t ON t.function = c.id AND t.{TOOLS_APPROVED_WHERE}"
-        );
+        let categories =
+            format!("LEFT JOIN tools t ON t.function = c.id AND t.{TOOLS_APPROVED_WHERE}");
         assert!(categories.contains("approval_status = 'approved'"));
     }
 
@@ -1622,13 +1650,6 @@ mod tests {
 
     #[test]
     fn validate_category_input_rejects_uppercase_id() {
-        assert!(validate_category_input(
-            "Bad-ID",
-            "Label",
-            "icon",
-            "Description.",
-            1
-        )
-        .is_err());
+        assert!(validate_category_input("Bad-ID", "Label", "icon", "Description.", 1).is_err());
     }
 }

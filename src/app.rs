@@ -123,69 +123,71 @@ fn AboutPage() -> impl IntoView {
 
 #[component]
 fn AdminHomePage() -> impl IntoView {
-    admin_page_shell(|| view! {
-        <div class="px-6 py-8 max-w-[960px] mx-auto">
-            <h2 class="text-[20px] font-semibold mb-4">"Admin"</h2>
-            <p class="text-[#6B6B6B] text-[14px] mb-6">
-                "Manage crawled tools, site settings, and moderation."
-            </p>
-            <nav class="flex flex-col gap-2 max-w-[320px]">
-                <a
-                    href="/admin/tools"
-                    class="rounded-lg border border-[#E5E5E5] px-4 py-3 text-[14px] font-medium hover:bg-[#FAFAFA]"
-                >
-                    "Tool Management"
-                    <span class="block text-[12px] text-[#6B6B6B] font-normal mt-0.5">
-                        "Approve or reject pending tools"
-                    </span>
-                </a>
-                <a
-                    href="/admin/settings"
-                    class="rounded-lg border border-[#E5E5E5] px-4 py-3 text-[14px] font-medium hover:bg-[#FAFAFA]"
-                >
-                    "Site Settings"
-                    <span class="block text-[12px] text-[#6B6B6B] font-normal mt-0.5">
-                        "Slogan, keywords, approval rules"
-                    </span>
-                </a>
-                <a
-                    href="/admin/crawler"
-                    class="rounded-lg border border-[#E5E5E5] px-4 py-3 text-[14px] font-medium hover:bg-[#FAFAFA]"
-                >
-                    "Crawler Control"
-                    <span class="block text-[12px] text-[#6B6B6B] font-normal mt-0.5">
-                        "Source status and manual runs"
-                    </span>
-                </a>
-                <a
-                    href="/admin/categories"
-                    class="rounded-lg border border-[#E5E5E5] px-4 py-3 text-[14px] font-medium hover:bg-[#FAFAFA]"
-                >
-                    "Categories"
-                    <span class="block text-[12px] text-[#6B6B6B] font-normal mt-0.5">
-                        "Add, edit, or remove function categories"
-                    </span>
-                </a>
-                <a
-                    href="/admin/users"
-                    class="rounded-lg border border-[#E5E5E5] px-4 py-3 text-[14px] font-medium hover:bg-[#FAFAFA]"
-                >
-                    "Users"
-                    <span class="block text-[12px] text-[#6B6B6B] font-normal mt-0.5">
-                        "Ban, admin roles, account deletion"
-                    </span>
-                </a>
-                <a
-                    href="/admin/comments"
-                    class="rounded-lg border border-[#E5E5E5] px-4 py-3 text-[14px] font-medium hover:bg-[#FAFAFA]"
-                >
-                    "Comments"
-                    <span class="block text-[12px] text-[#6B6B6B] font-normal mt-0.5">
-                        "Moderate spam and abusive content"
-                    </span>
-                </a>
-            </nav>
-        </div>
+    admin_page_shell(|| {
+        view! {
+            <div class="px-6 py-8 max-w-[960px] mx-auto">
+                <h2 class="text-[20px] font-semibold mb-4">"Admin"</h2>
+                <p class="text-[#6B6B6B] text-[14px] mb-6">
+                    "Manage crawled tools, site settings, and moderation."
+                </p>
+                <nav class="flex flex-col gap-2 max-w-[320px]">
+                    <a
+                        href="/admin/tools"
+                        class="rounded-lg border border-[#E5E5E5] px-4 py-3 text-[14px] font-medium hover:bg-[#FAFAFA]"
+                    >
+                        "Tool Management"
+                        <span class="block text-[12px] text-[#6B6B6B] font-normal mt-0.5">
+                            "Approve or reject pending tools"
+                        </span>
+                    </a>
+                    <a
+                        href="/admin/settings"
+                        class="rounded-lg border border-[#E5E5E5] px-4 py-3 text-[14px] font-medium hover:bg-[#FAFAFA]"
+                    >
+                        "Site Settings"
+                        <span class="block text-[12px] text-[#6B6B6B] font-normal mt-0.5">
+                            "Slogan, keywords, approval rules"
+                        </span>
+                    </a>
+                    <a
+                        href="/admin/crawler"
+                        class="rounded-lg border border-[#E5E5E5] px-4 py-3 text-[14px] font-medium hover:bg-[#FAFAFA]"
+                    >
+                        "Crawler Control"
+                        <span class="block text-[12px] text-[#6B6B6B] font-normal mt-0.5">
+                            "Source status and manual runs"
+                        </span>
+                    </a>
+                    <a
+                        href="/admin/categories"
+                        class="rounded-lg border border-[#E5E5E5] px-4 py-3 text-[14px] font-medium hover:bg-[#FAFAFA]"
+                    >
+                        "Categories"
+                        <span class="block text-[12px] text-[#6B6B6B] font-normal mt-0.5">
+                            "Add, edit, or remove function categories"
+                        </span>
+                    </a>
+                    <a
+                        href="/admin/users"
+                        class="rounded-lg border border-[#E5E5E5] px-4 py-3 text-[14px] font-medium hover:bg-[#FAFAFA]"
+                    >
+                        "Users"
+                        <span class="block text-[12px] text-[#6B6B6B] font-normal mt-0.5">
+                            "Ban, admin roles, account deletion"
+                        </span>
+                    </a>
+                    <a
+                        href="/admin/comments"
+                        class="rounded-lg border border-[#E5E5E5] px-4 py-3 text-[14px] font-medium hover:bg-[#FAFAFA]"
+                    >
+                        "Comments"
+                        <span class="block text-[12px] text-[#6B6B6B] font-normal mt-0.5">
+                            "Moderate spam and abusive content"
+                        </span>
+                    </a>
+                </nav>
+            </div>
+        }
     })
 }
 

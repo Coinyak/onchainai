@@ -33,8 +33,12 @@ pub async fn siwx_connect_evm() -> Result<String, String> {
             .map_err(|_| "Invalid wallet request handler".to_string())?;
 
         let payload = Object::new();
-        Reflect::set(&payload, &JsValue::from_str("method"), &JsValue::from_str(method))
-            .map_err(|_| "Failed to build wallet request".to_string())?;
+        Reflect::set(
+            &payload,
+            &JsValue::from_str("method"),
+            &JsValue::from_str(method),
+        )
+        .map_err(|_| "Failed to build wallet request".to_string())?;
         Reflect::set(&payload, &JsValue::from_str("params"), &params)
             .map_err(|_| "Failed to build wallet request".to_string())?;
 

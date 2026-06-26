@@ -13,35 +13,37 @@ use leptos::task::spawn_local;
 pub fn AdminSettingsPage() -> impl IntoView {
     let settings = Resource::new(|| (), |_| async move { get_site_settings().await });
 
-    admin_page_shell(move || view! {
-        <TopNav/>
-        <div class="px-4 md:px-6 py-8 max-w-[720px] mx-auto">
-            <div class="flex items-baseline justify-between gap-4 mb-6">
-                <div>
-                    <h1 class="text-[20px] font-semibold tracking-tight">"Site Settings"</h1>
-                    <p class="text-[#6B6B6B] text-[14px] mt-1">
-                        "Update public copy, MCP endpoint, crawler keywords, and registration rules."
-                    </p>
-                </div>
-                <a href="/admin" class="text-[14px] text-[#E76F00] hover:underline">"Admin home"</a>
-            </div>
-
-            <Suspense fallback=|| view! {
-                <p class="text-[#6B6B6B] text-[14px]">"Loading settings..."</p>
-            }>
-                {move || match settings.get() {
-                    Some(Ok(initial)) => view! {
-                        <AdminSettingsForm initial=initial/>
-                    }.into_any(),
-                    Some(Err(e)) => view! {
-                        <p class="text-[14px] text-[#C0392B]">
-                            "Failed to load settings: " {e.to_string()}
+    admin_page_shell(move || {
+        view! {
+            <TopNav/>
+            <div class="px-4 md:px-6 py-8 max-w-[720px] mx-auto">
+                <div class="flex items-baseline justify-between gap-4 mb-6">
+                    <div>
+                        <h1 class="text-[20px] font-semibold tracking-tight">"Site Settings"</h1>
+                        <p class="text-[#6B6B6B] text-[14px] mt-1">
+                            "Update public copy, MCP endpoint, crawler keywords, and registration rules."
                         </p>
-                    }.into_any(),
-                    None => ().into_any(),
-                }}
-            </Suspense>
-        </div>
+                    </div>
+                    <a href="/admin" class="text-[14px] text-[#E76F00] hover:underline">"Admin home"</a>
+                </div>
+
+                <Suspense fallback=|| view! {
+                    <p class="text-[#6B6B6B] text-[14px]">"Loading settings..."</p>
+                }>
+                    {move || match settings.get() {
+                        Some(Ok(initial)) => view! {
+                            <AdminSettingsForm initial=initial/>
+                        }.into_any(),
+                        Some(Err(e)) => view! {
+                            <p class="text-[14px] text-[#C0392B]">
+                                "Failed to load settings: " {e.to_string()}
+                            </p>
+                        }.into_any(),
+                        None => ().into_any(),
+                    }}
+                </Suspense>
+            </div>
+        }
     })
 }
 

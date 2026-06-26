@@ -6,7 +6,7 @@ use leptos::leptos_dom::helpers::TimeoutHandle;
 use leptos::prelude::*;
 use leptos_router::hooks::{use_navigate, use_query_map};
 
-const DEBOUNCE_MS: u64 = 350;
+const DEBOUNCE_MS: u64 = 200;
 
 /// Cancel any pending debounce timer, then schedule `set_timeout_with_handle`.
 fn schedule_debounced_set(
@@ -118,7 +118,9 @@ pub fn ToolbarSearch(base: BrowserBase, initial_q: String) -> impl IntoView {
                 qm.get("type").map(|s| s.to_string()),
                 qm.get("status").map(|s| s.to_string()),
                 qm.get("chain").map(|s| s.to_string()),
-                qm.get("sort").map(|s| s.to_string()).unwrap_or_else(|| "hot".into()),
+                qm.get("sort")
+                    .map(|s| s.to_string())
+                    .unwrap_or_else(|| "hot".into()),
                 Some(q.clone()).filter(|s| !s.is_empty()),
                 qm.get("selected").map(|s| s.to_string()),
             )

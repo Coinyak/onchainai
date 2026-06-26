@@ -7,9 +7,9 @@ pub mod auth;
 pub mod client_storage;
 pub mod components;
 pub mod config;
-pub mod filter_query;
 #[cfg(feature = "ssr")]
 pub mod crawler;
+pub mod filter_query;
 pub mod models;
 pub mod pages;
 pub mod server;
@@ -155,29 +155,35 @@ pub fn build_app(pool: sqlx::PgPool, config: Config) -> axum::Router {
             leptos_axum::site_pkg_dir_service(&leptos_options),
         )
         .route("/mcp", axum::routing::post(server::mcp::handle_mcp))
-        .route("/auth/github", axum::routing::get(auth::routes::github_login))
-        .route("/auth/email", axum::routing::post(auth::email::send_magic_link))
-        .route("/auth/callback", axum::routing::get(auth::routes::oauth_callback))
+        .route(
+            "/auth/github",
+            axum::routing::get(auth::routes::github_login),
+        )
+        .route(
+            "/auth/email",
+            axum::routing::post(auth::email::send_magic_link),
+        )
+        .route(
+            "/auth/callback",
+            axum::routing::get(auth::routes::oauth_callback),
+        )
         .route("/auth/logout", axum::routing::post(auth::routes::logout))
         .route(
             "/onboarding/complete",
             axum::routing::post(auth::onboarding::complete),
         )
-        .route("/onboarding/skip", axum::routing::post(auth::onboarding::skip))
+        .route(
+            "/onboarding/skip",
+            axum::routing::post(auth::onboarding::skip),
+        )
         .route(
             "/auth/siwx/challenge",
             axum::routing::post(auth::siwx::challenge),
         )
-        .route(
-            "/auth/siwx/verify",
-            axum::routing::post(auth::siwx::verify),
-        )
-        .leptos_routes_with_context(
-            &state,
-            routes,
-            provide_leptos_context,
-            move || app::shell(leptos_options_for_handler.clone()),
-        )
+        .route("/auth/siwx/verify", axum::routing::post(auth::siwx::verify))
+        .leptos_routes_with_context(&state, routes, provide_leptos_context, move || {
+            app::shell(leptos_options_for_handler.clone())
+        })
         .fallback(file_and_error_handler_with_context::<AppState, _>(
             provide_fallback_context,
             app::shell,

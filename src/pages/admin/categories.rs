@@ -2,8 +2,8 @@
 
 use crate::components::top_nav::TopNav;
 use crate::server::functions::{
-    check_admin_access, create_category, delete_category, list_admin_categories,
-    update_category, AdminCategoryView,
+    check_admin_access, create_category, delete_category, list_admin_categories, update_category,
+    AdminCategoryView,
 };
 use leptos::prelude::*;
 use leptos::task::spawn_local;
@@ -194,7 +194,12 @@ fn CategoryForm(
     on_done: impl Fn() + Send + Sync + Copy + 'static,
 ) -> impl IntoView {
     let id = RwSignal::new(initial.as_ref().map(|c| c.id.clone()).unwrap_or_default());
-    let label = RwSignal::new(initial.as_ref().map(|c| c.label.clone()).unwrap_or_default());
+    let label = RwSignal::new(
+        initial
+            .as_ref()
+            .map(|c| c.label.clone())
+            .unwrap_or_default(),
+    );
     let icon = RwSignal::new(
         initial
             .as_ref()

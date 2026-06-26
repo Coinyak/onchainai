@@ -137,8 +137,10 @@ fn verify_solana_signature(message: &str, signature_b58: &str, wallet: &str) -> 
 
 fn set_session_cookie(name: &str, value: &str, max_age_secs: i64, secure: bool) -> String {
     let secure_flag = if secure { "; Secure" } else { "" };
+    // SameSite=Strict for CSRF hardening (SECURITY.md). SIWX verify is a
+    // same-site fetch, so the session cookie is still sent on later requests.
     format!(
-        "{name}={value}; Path=/; HttpOnly; SameSite=Lax; Max-Age={max_age_secs}{secure_flag}"
+        "{name}={value}; Path=/; HttpOnly; SameSite=Strict; Max-Age={max_age_secs}{secure_flag}"
     )
 }
 
@@ -191,15 +193,27 @@ pub async fn verify(
     Json(body): Json<VerifyRequest>,
 ) -> Result<Response, StatusCode> {
     let config = &state.config;
+
+    // Consume the nonce under a row lock so two concurrent verifications of the
+    // same challenge cannot both succeed. The first transaction to grab the
+    // `FOR UPDATE` lock marks `used = true` and commits; any concurrent waiter
+    // then reads `used = true` and is rejected, preventing signature replay.
+    let mut tx = state
+        .pool
+        .begin()
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
     let row = sqlx::query_as::<_, SiwxRow>(
         r#"
         SELECT nonce, wallet_address, chain_id, message, expiration_time, used
         FROM siwx_sessions
         WHERE nonce = $1
+        FOR UPDATE
         "#,
     )
     .bind(&body.nonce)
-    .fetch_optional(&state.pool)
+    .fetch_optional(&mut *tx)
     .await
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
     .ok_or(StatusCode::BAD_REQUEST)?;
@@ -217,17 +231,14 @@ pub async fn verify(
         verify_evm_signature(&row.message, &body.signature, &row.wallet_address)
     };
     if !sig_ok {
+        // Dropping `tx` rolls back the lock without consuming the nonce, so a
+        // genuine retry with a correct signature can still succeed.
         return Err(StatusCode::UNAUTHORIZED);
     }
 
-    let user_id = ensure_siwx_profile(
-        &state.pool,
-        config,
-        &row.wallet_address,
-        &row.chain_id,
-    )
-    .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let user_id = ensure_siwx_profile(&state.pool, config, &row.wallet_address, &row.chain_id)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     sqlx::query(
         r#"
@@ -239,12 +250,21 @@ pub async fn verify(
     .bind(&body.signature)
     .bind(user_id)
     .bind(&body.nonce)
-    .execute(&state.pool)
+    .execute(&mut *tx)
     .await
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    let token = issue_access_token(user_id, &config.jwt_secret, config.siwx_session_ttl)
+    tx.commit()
+        .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let token = issue_access_token(
+        user_id,
+        &config.jwt_secret,
+        config.siwx_session_ttl,
+        &config.jwt_issuer(),
+    )
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let secure_cookie = !config.siwx_domain.contains("localhost");
     let mut headers = HeaderMap::new();

@@ -46,16 +46,16 @@ fn callback_url(config: &Config) -> String {
     }
 }
 
-fn set_cookie(name: &str, value: &str, max_age_secs: i64, secure: bool) -> String {
+fn set_cookie(name: &str, value: &str, max_age_secs: i64, secure: bool, same_site: &str) -> String {
     let secure_flag = if secure { "; Secure" } else { "" };
     format!(
-        "{name}={value}; Path=/; HttpOnly; SameSite=Lax; Max-Age={max_age_secs}{secure_flag}"
+        "{name}={value}; Path=/; HttpOnly; SameSite={same_site}; Max-Age={max_age_secs}{secure_flag}"
     )
 }
 
-fn clear_cookie(name: &str, secure: bool) -> String {
+fn clear_cookie(name: &str, secure: bool, same_site: &str) -> String {
     let secure_flag = if secure { "; Secure" } else { "" };
-    format!("{name}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0{secure_flag}")
+    format!("{name}=; Path=/; HttpOnly; SameSite={same_site}; Max-Age=0{secure_flag}")
 }
 
 fn generate_oauth_state() -> String {
@@ -80,7 +80,10 @@ pub async fn github_login(State(state): State<AppState>) -> Result<Response, Sta
     let mut headers = HeaderMap::new();
     headers.insert(
         header::SET_COOKIE,
-        set_cookie(GITHUB_STATE_COOKIE, &oauth_state, 600, false)
+        // OAuth state cookie must survive the cross-site redirect back from
+        // GitHub, so it stays SameSite=Lax (Strict would drop it on the
+        // top-level navigation and break the callback).
+        set_cookie(GITHUB_STATE_COOKIE, &oauth_state, 600, false, "Lax")
             .parse()
             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?,
     );
@@ -156,12 +159,8 @@ pub async fn oauth_callback(
     }
 
     if let Some(token_hash) = query.token_hash.filter(|t| !t.is_empty()) {
-        return crate::auth::email::complete_magic_link(
-            &state.pool,
-            &state.config,
-            &token_hash,
-        )
-        .await;
+        return crate::auth::email::complete_magic_link(&state.pool, &state.config, &token_hash)
+            .await;
     }
 
     let code = query.code.ok_or(StatusCode::BAD_REQUEST)?;
@@ -190,26 +189,33 @@ pub async fn oauth_callback(
     .await
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    let access_token = issue_access_token(user_id, &config.jwt_secret, config.siwx_session_ttl)
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let access_token = issue_access_token(
+        user_id,
+        &config.jwt_secret,
+        config.siwx_session_ttl,
+        &config.jwt_issuer(),
+    )
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let secure_cookie = !config.siwx_domain.contains("localhost");
 
     let mut headers = HeaderMap::new();
     headers.append(
         header::SET_COOKIE,
+        // Session cookie is SameSite=Strict for CSRF hardening (SECURITY.md).
         set_cookie(
             ACCESS_TOKEN_COOKIE,
             &access_token,
             config.siwx_session_ttl,
             secure_cookie,
+            "Strict",
         )
         .parse()
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?,
     );
     headers.append(
         header::SET_COOKIE,
-        clear_cookie(GITHUB_STATE_COOKIE, false)
+        clear_cookie(GITHUB_STATE_COOKIE, false, "Lax")
             .parse()
             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?,
     );
@@ -225,7 +231,7 @@ pub async fn logout(State(state): State<AppState>) -> Response {
     let mut headers = HeaderMap::new();
     headers.insert(
         header::SET_COOKIE,
-        clear_cookie(ACCESS_TOKEN_COOKIE, secure_cookie)
+        clear_cookie(ACCESS_TOKEN_COOKIE, secure_cookie, "Strict")
             .parse()
             .unwrap_or_else(|_| "onchainai_access_token=; Path=/".parse().unwrap()),
     );

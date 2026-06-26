@@ -4,10 +4,7 @@ use leptos::prelude::*;
 use leptos::task::spawn_local;
 
 #[component]
-pub fn CopyButton(
-    text: String,
-    #[prop(optional)] _label: Option<&'static str>,
-) -> impl IntoView {
+pub fn CopyButton(text: String, #[prop(optional)] _label: Option<&'static str>) -> impl IntoView {
     let copied = RwSignal::new(false);
 
     view! {

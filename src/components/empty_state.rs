@@ -5,8 +5,7 @@ use leptos_router::components::A;
 
 #[component]
 pub fn EmptyState(
-    #[prop(default = "No tools match your filters.")]
-    message: &'static str,
+    #[prop(default = "No tools match your filters.")] message: &'static str,
 ) -> impl IntoView {
     view! {
         <div class="empty-state-panel">

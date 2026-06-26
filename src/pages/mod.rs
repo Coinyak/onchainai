@@ -9,8 +9,8 @@ pub mod tool_detail;
 pub mod tools_list;
 
 pub use admin::{
-    AdminCategoriesPage, AdminCommentsPage, AdminCrawlerPage, AdminSettingsPage,
-    AdminToolsPage, AdminUsersPage,
+    AdminCategoriesPage, AdminCommentsPage, AdminCrawlerPage, AdminSettingsPage, AdminToolsPage,
+    AdminUsersPage,
 };
 pub use category::CategoryPage;
 pub use home::HomePage;

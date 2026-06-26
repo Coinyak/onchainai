@@ -3,12 +3,7 @@
 use crate::models::Tool;
 use crate::server::queries::TOOLS_APPROVED_WHERE;
 use crate::AppState;
-use axum::{
-    extract::State,
-    http::StatusCode,
-    response::IntoResponse,
-    Json,
-};
+use axum::{extract::State, http::StatusCode, response::IntoResponse, Json};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sqlx::PgPool;
@@ -156,8 +151,14 @@ async fn tools_call(pool: &PgPool, params: Option<Value>) -> Result<Value, (i32,
                 .get("query")
                 .and_then(|v| v.as_str())
                 .ok_or((-32602, "query required".into()))?;
-            let category = args.get("category").and_then(|v| v.as_str()).map(str::to_string);
-            let chain = args.get("chain").and_then(|v| v.as_str()).map(str::to_string);
+            let category = args
+                .get("category")
+                .and_then(|v| v.as_str())
+                .map(str::to_string);
+            let chain = args
+                .get("chain")
+                .and_then(|v| v.as_str())
+                .map(str::to_string);
             let tools = mcp_search_tools(pool, query, category, chain).await?;
             serde_json::to_string_pretty(&tools)
                 .map_err(|e| (-32603, format!("serialize error: {e}")))?
@@ -214,11 +215,13 @@ async fn mcp_search_tools(
               @@ plainto_tsquery('english', $1)
         "#
     );
+    let mut idx = 2;
     if category.is_some() {
-        sql.push_str(" AND function = $2");
+        sql.push_str(&format!(" AND function = ${idx}"));
+        idx += 1;
     }
     if chain.is_some() {
-        sql.push_str(" AND $3 = ANY(chains)");
+        sql.push_str(&format!(" AND ${idx} = ANY(chains)"));
     }
     sql.push_str(" ORDER BY stars DESC LIMIT 50");
 
@@ -299,9 +302,7 @@ async fn mcp_install_guide(
         return Err((-32602, format!("invalid platform: {platform}")));
     }
 
-    let tool = mcp_get_tool(pool, slug)
-        .await
-        .map_err(|m| (-32000, m))?;
+    let tool = mcp_get_tool(pool, slug).await.map_err(|m| (-32000, m))?;
     let install = tool
         .install_command
         .clone()
@@ -374,10 +375,8 @@ mod tests {
         let detail = format!("SELECT * FROM tools WHERE slug = $1 AND {TOOLS_APPROVED_WHERE}");
         assert!(detail.contains("approval_status = 'approved'"));
 
-        let categories = format!(
-            "LEFT JOIN tools t ON t.function = c.id AND t.{TOOLS_APPROVED_WHERE}"
-        );
+        let categories =
+            format!("LEFT JOIN tools t ON t.function = c.id AND t.{TOOLS_APPROVED_WHERE}");
         assert!(categories.contains("approval_status = 'approved'"));
     }
-
 }

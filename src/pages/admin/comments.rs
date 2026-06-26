@@ -2,8 +2,8 @@
 
 use crate::components::top_nav::TopNav;
 use crate::server::functions::{
-    check_admin_access, delete_admin_comment, delete_comment_and_ban_user,
-    list_admin_comments, AdminCommentView,
+    check_admin_access, delete_admin_comment, delete_comment_and_ban_user, list_admin_comments,
+    AdminCommentView,
 };
 use leptos::prelude::*;
 use leptos::task::spawn_local;

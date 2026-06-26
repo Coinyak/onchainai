@@ -123,10 +123,7 @@ fn UserRow(
     run_action: impl Fn(Uuid, &'static str) + Copy + 'static,
     busy: RwSignal<bool>,
 ) -> impl IntoView {
-    let nickname = user
-        .nickname
-        .clone()
-        .unwrap_or_else(|| "Unnamed".into());
+    let nickname = user.nickname.clone().unwrap_or_else(|| "Unnamed".into());
     let user_id = user.id;
     let auth = user.auth_method.clone();
 

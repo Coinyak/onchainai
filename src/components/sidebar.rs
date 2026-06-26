@@ -1,6 +1,8 @@
 //! Filter sidebar — multi-select, section collapse, full 40px rail + localStorage.
 
-use crate::client_storage::{read_sidebar_collapsed, read_sidebar_sections, write_sidebar_collapsed, write_sidebar_sections};
+use crate::client_storage::{
+    read_sidebar_collapsed, read_sidebar_sections, write_sidebar_collapsed, write_sidebar_sections,
+};
 use crate::components::tools_browser::BrowserBase;
 use crate::filter_query::{clear_axis, parse_multi, toggle_multi};
 use crate::models::Category;
@@ -8,37 +10,81 @@ use leptos::prelude::*;
 use leptos_router::components::A;
 use std::collections::HashMap;
 
-
 struct FilterOption {
     id: &'static str,
     label: &'static str,
 }
 
 const ASSET_CLASSES: &[FilterOption] = &[
-    FilterOption { id: "crypto", label: "Crypto" },
-    FilterOption { id: "stablecoins", label: "Stablecoins" },
-    FilterOption { id: "derivatives", label: "Derivatives" },
-    FilterOption { id: "rwa", label: "RWA" },
+    FilterOption {
+        id: "crypto",
+        label: "Crypto",
+    },
+    FilterOption {
+        id: "stablecoins",
+        label: "Stablecoins",
+    },
+    FilterOption {
+        id: "derivatives",
+        label: "Derivatives",
+    },
+    FilterOption {
+        id: "rwa",
+        label: "RWA",
+    },
 ];
 
 const ACTORS: &[FilterOption] = &[
-    FilterOption { id: "human", label: "Human" },
-    FilterOption { id: "ai-agent", label: "AI Agent" },
+    FilterOption {
+        id: "human",
+        label: "Human",
+    },
+    FilterOption {
+        id: "ai-agent",
+        label: "AI Agent",
+    },
 ];
 
 const TYPES: &[FilterOption] = &[
-    FilterOption { id: "mcp", label: "MCP" },
-    FilterOption { id: "cli", label: "CLI" },
-    FilterOption { id: "sdk", label: "SDK" },
-    FilterOption { id: "api", label: "API" },
-    FilterOption { id: "x402", label: "x402" },
-    FilterOption { id: "skill", label: "Skill" },
+    FilterOption {
+        id: "mcp",
+        label: "MCP",
+    },
+    FilterOption {
+        id: "cli",
+        label: "CLI",
+    },
+    FilterOption {
+        id: "sdk",
+        label: "SDK",
+    },
+    FilterOption {
+        id: "api",
+        label: "API",
+    },
+    FilterOption {
+        id: "x402",
+        label: "x402",
+    },
+    FilterOption {
+        id: "skill",
+        label: "Skill",
+    },
 ];
 
 const STATUSES: &[FilterOption] = &[
-    FilterOption { id: "community", label: "Community" },
-    FilterOption { id: "verified", label: "Verified" },
-    FilterOption { id: "official", label: "Official" },
+    FilterOption {
+        id: "community",
+        label: "Community",
+    },
+    FilterOption {
+        id: "verified",
+        label: "Verified",
+    },
+    FilterOption {
+        id: "official",
+        label: "Official",
+    },
 ];
 
 fn default_section_state(function_open: bool) -> HashMap<String, bool> {
@@ -56,7 +102,11 @@ fn default_section_state(function_open: bool) -> HashMap<String, bool> {
 }
 
 fn link_class(active: bool) -> &'static str {
-    if active { "sidebar-link active" } else { "sidebar-link" }
+    if active {
+        "sidebar-link active"
+    } else {
+        "sidebar-link"
+    }
 }
 
 /// Function-filter `<A href>` — same logic as the Sidebar function-section `.map` closure.
@@ -85,7 +135,7 @@ fn CollapsibleSection(
             <button
                 type="button"
                 class="sidebar-title sidebar-toggle"
-                prop:aria-expanded=move || is_open()
+                prop:aria-expanded=is_open
                 on:click=move |_| {
                     open_map.update(|m| {
                         let cur = m.get(section_id).copied().unwrap_or(true);
@@ -135,7 +185,9 @@ pub fn Sidebar(
     let chain_active = parse_multi(active_chain.as_deref());
 
     let sidebar_collapsed = RwSignal::new(read_sidebar_collapsed());
-    let open_map = RwSignal::new(read_sidebar_sections(default_section_state(default_function_open)));
+    let open_map = RwSignal::new(read_sidebar_sections(default_section_state(
+        default_function_open,
+    )));
 
     Effect::new(move |_| {
         write_sidebar_collapsed(sidebar_collapsed.get());
@@ -349,8 +401,7 @@ mod tests {
             None,
         );
         let fn_active = parse_multi(Some("bridge"));
-        let (_, bridge_active) =
-            sidebar_function_link("/tools", &query_base, "bridge", &fn_active);
+        let (_, bridge_active) = sidebar_function_link("/tools", &query_base, "bridge", &fn_active);
         assert!(bridge_active);
 
         let (href, swap_active) = sidebar_function_link("/tools", &query_base, "swap", &fn_active);
@@ -362,7 +413,11 @@ mod tests {
                 || href.contains("function=swap,bridge"),
             "Sidebar <A href> must encode comma-separated function param, got: {href}"
         );
-        assert_eq!(href.matches("sort=").count(), 1, "sort must not duplicate: {href}");
+        assert_eq!(
+            href.matches("sort=").count(),
+            1,
+            "sort must not duplicate: {href}"
+        );
         assert!(href.contains("sort=new"));
     }
 }

@@ -1,9 +1,7 @@
 //! Admin crawler control — source status and manual triggers.
 
 use crate::components::top_nav::TopNav;
-use crate::server::functions::{
-    check_admin_access, list_crawler_sources, trigger_crawler_source,
-};
+use crate::server::functions::{check_admin_access, list_crawler_sources, trigger_crawler_source};
 use leptos::prelude::*;
 use leptos::task::spawn_local;
 

@@ -133,11 +133,7 @@ fn CommentForm(
     let content = RwSignal::new(String::new());
     let error = RwSignal::new(None::<String>);
     let busy = RwSignal::new(false);
-    let label = if parent_id.is_some() {
-        "Reply"
-    } else {
-        "Post"
-    };
+    let label = if parent_id.is_some() { "Reply" } else { "Post" };
     let heading = if parent_id.is_some() {
         "Write a reply"
     } else {

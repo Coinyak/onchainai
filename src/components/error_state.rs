@@ -3,10 +3,7 @@
 use leptos::prelude::*;
 
 #[component]
-pub fn ErrorState(
-    message: String,
-    on_retry: impl Fn() + 'static + Copy,
-) -> impl IntoView {
+pub fn ErrorState(message: String, on_retry: impl Fn() + 'static + Copy) -> impl IntoView {
     view! {
         <div class="error-state-panel" role="alert">
             <p class="error-state-message">{message}</p>

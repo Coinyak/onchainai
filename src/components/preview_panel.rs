@@ -6,11 +6,7 @@ use leptos::prelude::*;
 use leptos_router::components::A;
 
 #[component]
-pub fn PreviewPanel(
-    tool: Tool,
-    close_href: String,
-    full_page_href: String,
-) -> impl IntoView {
+pub fn PreviewPanel(tool: Tool, close_href: String, full_page_href: String) -> impl IntoView {
     let close = close_href.clone();
     view! {
         <A href=close_href.clone() attr:class="preview-backdrop" attr:aria-label="Close preview">

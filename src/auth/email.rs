@@ -33,8 +33,11 @@ fn auth_client(config: &Config) -> AuthClient {
 
 fn set_cookie(name: &str, value: &str, max_age_secs: i64, secure: bool) -> String {
     let secure_flag = if secure { "; Secure" } else { "" };
+    // Session cookie is SameSite=Strict for CSRF hardening (SECURITY.md).
+    // Strict governs whether the cookie is *sent* later; setting it here is
+    // unaffected by how the magic-link callback was reached.
     format!(
-        "{name}={value}; Path=/; HttpOnly; SameSite=Lax; Max-Age={max_age_secs}{secure_flag}"
+        "{name}={value}; Path=/; HttpOnly; SameSite=Strict; Max-Age={max_age_secs}{secure_flag}"
     )
 }
 
@@ -95,15 +98,9 @@ pub async fn complete_magic_link(
         .map_err(|_| StatusCode::BAD_REQUEST)?;
 
     let nickname = email_nickname(&session.user.email);
-    ensure_profile(
-        pool,
-        session.user.id,
-        "email",
-        nickname.as_deref(),
-        None,
-    )
-    .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    ensure_profile(pool, session.user.id, "email", nickname.as_deref(), None)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let secure_cookie = !config.siwx_domain.contains("localhost");
     let max_age = session.expires_in.max(3600);
@@ -111,9 +108,14 @@ pub async fn complete_magic_link(
     let mut headers = HeaderMap::new();
     headers.append(
         header::SET_COOKIE,
-        set_cookie(ACCESS_TOKEN_COOKIE, &session.access_token, max_age, secure_cookie)
-            .parse()
-            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?,
+        set_cookie(
+            ACCESS_TOKEN_COOKIE,
+            &session.access_token,
+            max_age,
+            secure_cookie,
+        )
+        .parse()
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?,
     );
     headers.append(
         header::SET_COOKIE,
@@ -133,7 +135,10 @@ mod tests {
 
     #[test]
     fn email_nickname_from_local_part() {
-        assert_eq!(email_nickname("alice@example.com").as_deref(), Some("alice"));
+        assert_eq!(
+            email_nickname("alice@example.com").as_deref(),
+            Some("alice")
+        );
     }
 
     #[test]

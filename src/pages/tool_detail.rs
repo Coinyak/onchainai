@@ -31,7 +31,11 @@ pub fn ToolDetailPage() -> impl IntoView {
             let mut parts: Vec<String> = Vec::new();
             for (k, v) in qm.into_iter() {
                 if k != "selected" {
-                    parts.push(format!("{}={}", urlencoding::encode(k), urlencoding::encode(v)));
+                    parts.push(format!(
+                        "{}={}",
+                        urlencoding::encode(k),
+                        urlencoding::encode(v)
+                    ));
                 }
             }
             if parts.is_empty() {

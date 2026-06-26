@@ -182,9 +182,13 @@ mod tests {
 
     #[test]
     fn toggle_multi_keeps_other_params() {
-        let url = toggle_multi("/tools", "/tools?function=bridge&sort=new", "function", "swap", &[
-            "bridge".into(),
-        ]);
+        let url = toggle_multi(
+            "/tools",
+            "/tools?function=bridge&sort=new",
+            "function",
+            "swap",
+            &["bridge".into()],
+        );
         assert!(
             url.contains("function=bridge%2Cswap")
                 || url.contains("function=swap%2Cbridge")
@@ -221,7 +225,11 @@ mod tests {
 
     #[test]
     fn clear_axis_removes_only_target() {
-        let href = clear_axis("/tools", "/tools?function=bridge&sort=new&q=test", "function");
+        let href = clear_axis(
+            "/tools",
+            "/tools?function=bridge&sort=new&q=test",
+            "function",
+        );
         assert!(!href.contains("function="));
         assert!(href.contains("sort=new"));
         assert!(href.contains("q=test"));

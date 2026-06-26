@@ -2,14 +2,16 @@
 
 use crate::components::{tool_card::ToolCard, top_nav::TopNav};
 use crate::models::{Category, Tool};
-use crate::server::functions::{get_categories, list_tools, ToolFilters};
+use crate::server::functions::{get_categories, get_tool_comment_counts, list_tools, ToolFilters};
 use leptos::prelude::*;
 use leptos_router::hooks::use_params_map;
+use std::collections::HashMap;
 
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
 struct CategoryPageData {
     categories: Vec<(Category, i64)>,
     tools: Vec<Tool>,
+    comment_counts: HashMap<String, i64>,
     cat_id: String,
 }
 
@@ -31,9 +33,16 @@ async fn load_category_page(cat_id: String) -> CategoryPageData {
         .await
         .unwrap_or_default()
     };
+    let slugs = tools.iter().map(|t| t.slug.clone()).collect();
+    let comment_counts: HashMap<String, i64> = get_tool_comment_counts(slugs)
+        .await
+        .unwrap_or_default()
+        .into_iter()
+        .collect();
     CategoryPageData {
         categories,
         tools,
+        comment_counts,
         cat_id,
     }
 }
@@ -73,9 +82,13 @@ pub fn CategoryPage() -> impl IntoView {
                             view! { <h1 class="text-[28px] font-bold mb-4">"Category"</h1> }.into_any()
                         }}
                         {if found {
+                            let comment_counts = data.comment_counts.clone();
                             view! {
                                 <div class="tool-list">
-                                    {data.tools.clone().into_iter().map(|t| view! { <ToolCard tool=t/> }).collect_view()}
+                                    {data.tools.clone().into_iter().map(|t| {
+                                        let count = comment_counts.get(&t.slug).copied().unwrap_or(0);
+                                        view! { <ToolCard tool=t comment_count=count/> }
+                                    }).collect_view()}
                                 </div>
                             }
                             .into_any()

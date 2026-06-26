@@ -8,7 +8,9 @@ use leptos_router::components::A;
 const GITHUB_REPO: &str = "https://github.com/hoyeon4315-cpu/onchainai";
 
 #[component]
-fn AuthNav(user_res: Result<Option<SessionUser>, leptos::server_fn::ServerFnError>) -> impl IntoView {
+fn AuthNav(
+    user_res: Result<Option<SessionUser>, leptos::server_fn::ServerFnError>,
+) -> impl IntoView {
     match user_res {
         Ok(Some(session)) if session.is_admin => view! {
             <A href="/admin" attr:class="text-[#E76F00] hover:underline no-underline font-medium">

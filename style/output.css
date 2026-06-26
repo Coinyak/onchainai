@@ -156,6 +156,10 @@ body {
   .md\:py-12 { padding-top: 48px; padding-bottom: 48px; }
   .md\:grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .md\:flex { display: flex; }
+  .md\:hidden { display: none; }
+}
+@media (max-width: 767px) {
+  .hidden { display: none; }
 }
 
 /* Category grid: 5 / 4 / 2 columns */

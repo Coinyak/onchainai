@@ -31,8 +31,9 @@ pub async fn require_admin(
     parts: &axum::http::request::Parts,
     pool: &PgPool,
     jwt_secret: &str,
+    issuer: &str,
 ) -> Result<SessionUser, AuthError> {
-    let user = session_from_parts(parts, pool, jwt_secret)
+    let user = session_from_parts(parts, pool, jwt_secret, issuer)
         .await
         .map_err(|_| AuthError::Forbidden)?
         .ok_or(AuthError::Forbidden)?;
@@ -49,8 +50,9 @@ pub async fn require_user(
     parts: &axum::http::request::Parts,
     pool: &PgPool,
     jwt_secret: &str,
+    issuer: &str,
 ) -> Result<SessionUser, AuthError> {
-    session_from_parts(parts, pool, jwt_secret)
+    session_from_parts(parts, pool, jwt_secret, issuer)
         .await
         .map_err(|_| AuthError::Unauthorized)?
         .ok_or(AuthError::Unauthorized)

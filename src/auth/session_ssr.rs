@@ -10,17 +10,35 @@ use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 use uuid::Uuid;
 
+/// Required JWT `aud` claim. Supabase stamps `authenticated` on user tokens;
+/// server-minted SIWX/GitHub tokens use the same audience.
+pub const JWT_AUDIENCE: &str = "authenticated";
+
 /// Minimal Supabase JWT claims (`sub` is the user id).
 #[derive(Debug, Deserialize)]
 struct SupabaseClaims {
     sub: String,
 }
 
-/// Verify a Supabase HS256 access token and return the user id.
-pub fn user_id_from_jwt(token: &str, jwt_secret: &str) -> Result<Uuid, AuthSessionError> {
+/// Verify an HS256 access token and return the user id.
+///
+/// Enforces the full claim set required by `docs/SECURITY.md`: signature,
+/// `exp`, `nbf` (when present), `iss`, `aud`, and a parseable `sub`. The
+/// `nbf` claim is validated only when present so Supabase-issued tokens
+/// (which omit it) still pass, while server-minted tokens that include it
+/// are checked.
+pub fn user_id_from_jwt(
+    token: &str,
+    jwt_secret: &str,
+    issuer: &str,
+) -> Result<Uuid, AuthSessionError> {
     let mut validation = Validation::new(Algorithm::HS256);
     validation.validate_exp = true;
+    validation.validate_nbf = true;
     validation.leeway = 0;
+    validation.set_issuer(&[issuer]);
+    validation.set_audience(&[JWT_AUDIENCE]);
+    validation.set_required_spec_claims(&["exp", "iss", "aud", "sub"]);
 
     let data = decode::<SupabaseClaims>(
         token,
@@ -70,6 +88,7 @@ pub async fn session_from_parts(
     parts: &axum::http::request::Parts,
     pool: &PgPool,
     jwt_secret: &str,
+    issuer: &str,
 ) -> Result<Option<SessionUser>, AuthSessionError> {
     let cookie_header = parts
         .headers
@@ -84,7 +103,7 @@ pub async fn session_from_parts(
         return Ok(None);
     };
 
-    let user_id = user_id_from_jwt(token, jwt_secret)?;
+    let user_id = user_id_from_jwt(token, jwt_secret, issuer)?;
     let user = load_session_user(pool, user_id).await?;
     Ok(Some(user))
 }
@@ -95,19 +114,29 @@ struct AccessClaims {
     sub: String,
     exp: i64,
     iat: i64,
+    nbf: i64,
+    iss: String,
+    aud: String,
 }
 
 /// Mint a Supabase-compatible HS256 JWT (`sub` = profile id).
+///
+/// Stamps `iss`/`aud`/`nbf` so the minted token satisfies the same
+/// validation [`user_id_from_jwt`] applies to Supabase tokens.
 pub fn issue_access_token(
     user_id: Uuid,
     jwt_secret: &str,
     ttl_secs: i64,
+    issuer: &str,
 ) -> Result<String, AuthSessionError> {
     let now = Utc::now().timestamp();
     let claims = AccessClaims {
         sub: user_id.to_string(),
         exp: now + ttl_secs,
         iat: now,
+        nbf: now,
+        iss: issuer.to_string(),
+        aud: JWT_AUDIENCE.to_string(),
     };
     encode(
         &Header::new(Algorithm::HS256),
@@ -190,7 +219,15 @@ pub async fn ensure_github_profile(
         if fallback.len() >= 2 {
             fallback
         } else {
-            format!("gh{}", Uuid::new_v4().simple().to_string().chars().take(8).collect::<String>())
+            format!(
+                "gh{}",
+                Uuid::new_v4()
+                    .simple()
+                    .to_string()
+                    .chars()
+                    .take(8)
+                    .collect::<String>()
+            )
         }
     });
 
@@ -260,7 +297,10 @@ async fn create_supabase_user_for_siwx(
     let response = client
         .post(url)
         .header("apikey", &config.supabase_service_key)
-        .header("Authorization", format!("Bearer {}", config.supabase_service_key))
+        .header(
+            "Authorization",
+            format!("Bearer {}", config.supabase_service_key),
+        )
         .json(&serde_json::json!({
             "email": email,
             "password": password,
@@ -283,7 +323,9 @@ async fn create_supabase_user_for_siwx(
     if !response.status().is_success() {
         let status = response.status();
         let body = response.text().await.unwrap_or_default();
-        return Err(format!("supabase admin create user failed ({status}): {body}"));
+        return Err(format!(
+            "supabase admin create user failed ({status}): {body}"
+        ));
     }
 
     let user = response
@@ -311,7 +353,10 @@ async fn create_supabase_user_for_github(
     let response = client
         .post(url)
         .header("apikey", &config.supabase_service_key)
-        .header("Authorization", format!("Bearer {}", config.supabase_service_key))
+        .header(
+            "Authorization",
+            format!("Bearer {}", config.supabase_service_key),
+        )
         .json(&serde_json::json!({
             "email": email,
             "password": password,
@@ -333,7 +378,9 @@ async fn create_supabase_user_for_github(
     if !response.status().is_success() {
         let status = response.status();
         let body = response.text().await.unwrap_or_default();
-        return Err(format!("supabase admin create user failed ({status}): {body}"));
+        return Err(format!(
+            "supabase admin create user failed ({status}): {body}"
+        ));
     }
 
     let user = response
@@ -502,3 +549,113 @@ struct ProfileRow {
     auth_method: String,
 }
 
+#[cfg(test)]
+mod tests {
+    use super::{issue_access_token, user_id_from_jwt, JWT_AUDIENCE};
+    use chrono::Utc;
+    use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
+    use serde::Serialize;
+    use uuid::Uuid;
+
+    const SECRET: &str = "test-secret-at-least-32-bytes-long-aaaa";
+    const ISSUER: &str = "https://proj.supabase.co/auth/v1";
+
+    #[derive(Serialize)]
+    struct TestClaims {
+        sub: String,
+        exp: i64,
+        iss: String,
+        aud: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        nbf: Option<i64>,
+    }
+
+    fn encode_token<T: Serialize>(claims: &T) -> String {
+        encode(
+            &Header::new(Algorithm::HS256),
+            claims,
+            &EncodingKey::from_secret(SECRET.as_bytes()),
+        )
+        .unwrap()
+    }
+
+    fn claims(aud: &str, exp_offset: i64, nbf: Option<i64>) -> TestClaims {
+        TestClaims {
+            sub: Uuid::new_v4().to_string(),
+            exp: Utc::now().timestamp() + exp_offset,
+            iss: ISSUER.into(),
+            aud: aud.into(),
+            nbf,
+        }
+    }
+
+    #[test]
+    fn self_minted_token_roundtrips() {
+        let uid = Uuid::new_v4();
+        let token = issue_access_token(uid, SECRET, 3600, ISSUER).unwrap();
+        assert_eq!(user_id_from_jwt(&token, SECRET, ISSUER).unwrap(), uid);
+    }
+
+    #[test]
+    fn supabase_style_token_without_nbf_validates() {
+        // Supabase access tokens omit `nbf`; validation must still accept them.
+        let c = claims(JWT_AUDIENCE, 3600, None);
+        let token = encode_token(&c);
+        assert_eq!(
+            user_id_from_jwt(&token, SECRET, ISSUER)
+                .unwrap()
+                .to_string(),
+            c.sub
+        );
+    }
+
+    #[test]
+    fn wrong_issuer_rejected() {
+        let token = issue_access_token(Uuid::new_v4(), SECRET, 3600, ISSUER).unwrap();
+        assert!(user_id_from_jwt(&token, SECRET, "https://evil.example/auth/v1").is_err());
+    }
+
+    #[test]
+    fn wrong_secret_rejected() {
+        let token = issue_access_token(Uuid::new_v4(), SECRET, 3600, ISSUER).unwrap();
+        assert!(user_id_from_jwt(&token, "a-totally-different-secret-value-zz", ISSUER).is_err());
+    }
+
+    #[test]
+    fn wrong_audience_rejected() {
+        let token = encode_token(&claims("anon", 3600, None));
+        assert!(user_id_from_jwt(&token, SECRET, ISSUER).is_err());
+    }
+
+    #[test]
+    fn missing_issuer_claim_rejected() {
+        #[derive(Serialize)]
+        struct NoIss {
+            sub: String,
+            exp: i64,
+            aud: String,
+        }
+        let token = encode_token(&NoIss {
+            sub: Uuid::new_v4().to_string(),
+            exp: Utc::now().timestamp() + 3600,
+            aud: JWT_AUDIENCE.into(),
+        });
+        assert!(user_id_from_jwt(&token, SECRET, ISSUER).is_err());
+    }
+
+    #[test]
+    fn expired_token_rejected() {
+        let token = encode_token(&claims(JWT_AUDIENCE, -10, None));
+        assert!(user_id_from_jwt(&token, SECRET, ISSUER).is_err());
+    }
+
+    #[test]
+    fn future_nbf_rejected() {
+        let token = encode_token(&claims(
+            JWT_AUDIENCE,
+            3600,
+            Some(Utc::now().timestamp() + 600),
+        ));
+        assert!(user_id_from_jwt(&token, SECRET, ISSUER).is_err());
+    }
+}

@@ -3,7 +3,7 @@
 use crate::components::copy_button::CopyButton;
 use crate::components::login_modal::LoginModal;
 use crate::models::Tool;
-use crate::server::functions::{get_current_user, get_tool_comment_count, is_bookmarked, toggle_bookmark};
+use crate::server::functions::{get_current_user, is_bookmarked, toggle_bookmark};
 use leptos::prelude::*;
 use leptos::task::spawn_local;
 use leptos_router::components::A;
@@ -36,6 +36,7 @@ pub fn ToolCard(
     tool: Tool,
     #[prop(optional)] preview_href: Option<String>,
     #[prop(optional)] is_selected: bool,
+    #[prop(optional)] comment_count: i64,
 ) -> impl IntoView {
     let slug = tool.slug.clone();
     let detail_href = format!("/tools/{slug}");
@@ -52,7 +53,10 @@ pub fn ToolCard(
         .description
         .clone()
         .unwrap_or_else(|| "No description.".into());
-    let team = tool.official_team.clone().unwrap_or_else(|| tool.source.clone());
+    let team = tool
+        .official_team
+        .clone()
+        .unwrap_or_else(|| tool.source.clone());
     let time_ago = tool
         .last_commit_at
         .map(|t| {
@@ -76,12 +80,6 @@ pub fn ToolCard(
         move || (slug_bm.clone(), refresh.get()),
         |(s, _)| async move { is_bookmarked(s).await },
     );
-    let slug_comments = slug.clone();
-    let comment_count = Resource::new(
-        move || slug_comments.clone(),
-        |s| async move { get_tool_comment_count(s).await.unwrap_or(0) },
-    );
-
     view! {
         <LoginModal show=show_login/>
         <article class=if is_selected { "tool-card is-selected" } else { "tool-card" }>
@@ -136,11 +134,7 @@ pub fn ToolCard(
                             <span class="tool-meta-sep">"·"</span>
                             <span class="tool-stars">{"★ "}{stars}</span>
                             <span class="tool-meta-sep">"·"</span>
-                            <Suspense fallback=|| view! { <span class="tool-comments">"comments —"</span> }>
-                                {move || comment_count.get().map(|n| view! {
-                                    <span class="tool-comments">"comments "{n}</span>
-                                })}
-                            </Suspense>
+                            <span class="tool-comments">"comments "{comment_count}</span>
                         </div>
                         {if !install.is_empty() {
                             view! {

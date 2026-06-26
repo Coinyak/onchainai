@@ -44,7 +44,8 @@ fn AdminToolsContent() -> impl IntoView {
     let action_error = RwSignal::new(None::<String>);
     let action_busy = RwSignal::new(false);
 
-    let run_approval: ApprovalHandler = Arc::new(move |slug: String, status: &'static str, reason: Option<String>| {
+    let run_approval: ApprovalHandler = Arc::new(
+        move |slug: String, status: &'static str, reason: Option<String>| {
             if action_busy.get_untracked() {
                 return;
             }
@@ -62,7 +63,8 @@ fn AdminToolsContent() -> impl IntoView {
                     Err(e) => action_error.set(Some(e.to_string())),
                 }
             });
-    });
+        },
+    );
 
     let run_approval_for_rows = run_approval.clone();
     let run_approval_for_reject = run_approval.clone();

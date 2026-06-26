@@ -9,10 +9,12 @@ use crate::components::{
 use crate::filter_query::build_tool_filters;
 use crate::models::{Category, Tool};
 use crate::server::functions::{
-    count_tools, get_categories, get_chain_counts, get_tool_by_slug, list_tools, ToolFilters,
+    count_tools, get_categories, get_chain_counts, get_tool_by_slug, get_tool_comment_counts,
+    list_tools, ToolFilters,
 };
 use leptos::prelude::*;
 use leptos_router::hooks::use_query_map;
+use std::collections::HashMap;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum BrowserBase {
@@ -120,7 +122,9 @@ pub fn without_selected(base_path: BrowserBase, base: &str) -> String {
     let root = base_path.path();
     let trimmed = base.trim_start_matches('?');
     let query = if base.starts_with(root) {
-        base.strip_prefix(root).unwrap_or("").trim_start_matches('?')
+        base.strip_prefix(root)
+            .unwrap_or("")
+            .trim_start_matches('?')
     } else {
         trimmed
     };
@@ -135,12 +139,17 @@ pub fn without_selected(base_path: BrowserBase, base: &str) -> String {
     }
 }
 
+fn comment_count_for_slug(comment_counts: &HashMap<String, i64>, slug: &str) -> i64 {
+    comment_counts.get(slug).copied().unwrap_or(0)
+}
+
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
 struct BrowserData {
     categories: Vec<(Category, i64)>,
     chains: Vec<(String, i64)>,
     total: i64,
     tools: Vec<Tool>,
+    comment_counts: HashMap<String, i64>,
     preview_tool: Option<Tool>,
 }
 
@@ -154,6 +163,9 @@ async fn load_browser_data(
     let chains = get_chain_counts(12).await?;
     let total = count_tools(filters.clone()).await?;
     let tools = list_tools(sort, 0, 50, filters, search_q).await?;
+    let slugs = tools.iter().map(|t| t.slug.clone()).collect();
+    let comment_counts: HashMap<String, i64> =
+        get_tool_comment_counts(slugs).await?.into_iter().collect();
     let preview_tool = match selected.filter(|s| !s.is_empty()) {
         Some(s) => get_tool_by_slug(s).await.ok(),
         None => None,
@@ -163,6 +175,7 @@ async fn load_browser_data(
         chains,
         total,
         tools,
+        comment_counts,
         preview_tool,
     })
 }
@@ -174,7 +187,8 @@ pub fn ToolsBrowser(
 ) -> impl IntoView {
     let query = use_query_map();
     let function = Memo::new(move |_| query.with(|q| q.get("function").map(|s| s.to_string())));
-    let asset_class = Memo::new(move |_| query.with(|q| q.get("asset_class").map(|s| s.to_string())));
+    let asset_class =
+        Memo::new(move |_| query.with(|q| q.get("asset_class").map(|s| s.to_string())));
     let actor = Memo::new(move |_| query.with(|q| q.get("actor").map(|s| s.to_string())));
     let tool_type = Memo::new(move |_| query.with(|q| q.get("type").map(|s| s.to_string())));
     let status = Memo::new(move |_| query.with(|q| q.get("status").map(|s| s.to_string())));
@@ -311,13 +325,15 @@ pub fn ToolsBrowser(
                                 {if data.tools.is_empty() {
                                     view! { <EmptyState/> }.into_any()
                                 } else {
+                                    let comment_counts = data.comment_counts.clone();
                                     view! {
                                         <div class="tool-list">
                                             {data.tools.clone().into_iter().map(|t| {
                                                 let slug = t.slug.clone();
                                                 let preview = with_selected(base, &qb, &slug);
                                                 let sel = selected.get().map(|s| s == slug).unwrap_or(false);
-                                                view! { <ToolCard tool=t preview_href=preview is_selected=sel/> }
+                                                let count = comment_count_for_slug(&comment_counts, &slug);
+                                                view! { <ToolCard tool=t preview_href=preview is_selected=sel comment_count=count/> }
                                             }).collect_view()}
                                         </div>
                                     }.into_any()
@@ -414,7 +430,8 @@ mod tests {
         );
         assert_eq!(from_new.matches("sort=").count(), 1);
         assert!(
-            from_new.contains("function=bridge%2Cswap") || from_new.contains("function=bridge,swap")
+            from_new.contains("function=bridge%2Cswap")
+                || from_new.contains("function=bridge,swap")
         );
         assert!(from_new.contains("sort=new"));
 
@@ -437,4 +454,11 @@ mod tests {
         assert!(to_hot.contains("type=mcp"));
     }
 
+    #[test]
+    fn missing_comment_count_defaults_to_zero() {
+        let mut counts = HashMap::new();
+        counts.insert("aave".to_string(), 3);
+        assert_eq!(comment_count_for_slug(&counts, "aave"), 3);
+        assert_eq!(comment_count_for_slug(&counts, "uniswap"), 0);
+    }
 }

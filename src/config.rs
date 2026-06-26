@@ -91,6 +91,14 @@ impl Config {
             port,
         })
     }
+
+    /// Expected JWT `iss` claim for both Supabase-issued and server-minted
+    /// access tokens. Supabase GoTrue stamps `{project_url}/auth/v1`; the
+    /// server mints SIWX/GitHub tokens with the same issuer so a single
+    /// validator accepts both.
+    pub fn jwt_issuer(&self) -> String {
+        format!("{}/auth/v1", self.supabase_url.trim_end_matches('/'))
+    }
 }
 
 /// Read a required environment variable, erroring if missing or empty.
@@ -126,12 +134,37 @@ pub async fn setup_db(database_url: &str) -> anyhow::Result<sqlx::PgPool> {
 mod tests {
     use super::*;
 
+    fn base_config() -> Config {
+        Config {
+            database_url: "postgres://localhost/x".into(),
+            supabase_url: "https://proj.supabase.co".into(),
+            supabase_anon_key: "anon".into(),
+            supabase_service_key: "service".into(),
+            github_client_id: "gid".into(),
+            github_client_secret: "gsecret".into(),
+            siwx_domain: "localhost".into(),
+            siwx_session_ttl: 86_400,
+            jwt_secret: "secret".into(),
+            github_api_token: None,
+            port: 3000,
+        }
+    }
+
     #[test]
     fn canonical_domain_constants() {
         assert_eq!(CANONICAL_DOMAIN, "www.onchain-ai.xyz");
         assert_eq!(SITE_ORIGIN, "https://www.onchain-ai.xyz");
         assert!(MCP_ENDPOINT_CMD.contains(CANONICAL_DOMAIN));
         assert!(SITE_ORIGIN.contains(CANONICAL_DOMAIN));
+    }
+
+    #[test]
+    fn jwt_issuer_appends_gotrue_path_and_trims_slash() {
+        let mut cfg = base_config();
+        cfg.supabase_url = "https://proj.supabase.co".into();
+        assert_eq!(cfg.jwt_issuer(), "https://proj.supabase.co/auth/v1");
+        cfg.supabase_url = "https://proj.supabase.co/".into();
+        assert_eq!(cfg.jwt_issuer(), "https://proj.supabase.co/auth/v1");
     }
 
     #[test]

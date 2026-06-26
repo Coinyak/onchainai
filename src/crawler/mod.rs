@@ -180,7 +180,11 @@ pub(crate) fn default_source_registry_url(source_name: &str) -> &'static str {
 }
 
 /// Per-source crawl result before merge/dedupe.
-type SourceCrawlOutcome = (String, &'static str, Result<Vec<normalizer::RawTool>, String>);
+type SourceCrawlOutcome = (
+    String,
+    &'static str,
+    Result<Vec<normalizer::RawTool>, String>,
+);
 
 /// Count raw crawl rows per `RawTool.source` (for diagnostics / status reporting).
 pub(crate) fn count_raws_per_source(
@@ -345,9 +349,7 @@ pub async fn persist_crawl_results(
 /// Spawns work synchronously in the caller's task; long-running crawls should be
 /// invoked from a background `tokio::spawn` at the call site.
 pub async fn trigger_source(pool: &sqlx::PgPool, source: &str) {
-    use crate::crawler::sources::{
-        cryptoskill, github, npm, web3mcp,
-    };
+    use crate::crawler::sources::{cryptoskill, github, npm, web3mcp};
 
     match source {
         "npm" => npm::run_once(pool).await,
@@ -545,10 +547,8 @@ mod tests {
 
     #[test]
     fn prepare_crawled_tools_pending_when_approval_required() {
-        let tools = prepare_crawled_tools(
-            &[raw("Pending Tool", None, 1, "bridge cross-chain")],
-            true,
-        );
+        let tools =
+            prepare_crawled_tools(&[raw("Pending Tool", None, 1, "bridge cross-chain")], true);
         assert_eq!(tools.len(), 1);
         assert_eq!(tools[0].approval_status, "pending");
         assert_eq!(tools[0].function, "bridge");
@@ -556,10 +556,7 @@ mod tests {
 
     #[test]
     fn prepare_crawled_tools_approved_when_auto_publish() {
-        let tools = prepare_crawled_tools(
-            &[raw("Auto Tool", None, 1, "swap dex")],
-            false,
-        );
+        let tools = prepare_crawled_tools(&[raw("Auto Tool", None, 1, "swap dex")], false);
         assert_eq!(tools.len(), 1);
         assert_eq!(tools[0].approval_status, "approved");
         assert_eq!(tools[0].function, "swap");
@@ -593,8 +590,18 @@ mod tests {
     #[test]
     fn prepare_crawled_tools_dedupes_duplicate_repo_urls() {
         let raws = [
-            raw("Low Stars", Some("https://github.com/dup/dup"), 1, "swap dex"),
-            raw("High Stars", Some("https://github.com/dup/dup"), 999, "swap dex"),
+            raw(
+                "Low Stars",
+                Some("https://github.com/dup/dup"),
+                1,
+                "swap dex",
+            ),
+            raw(
+                "High Stars",
+                Some("https://github.com/dup/dup"),
+                999,
+                "swap dex",
+            ),
         ];
         let tools = prepare_crawled_tools(&raws, false);
         assert_eq!(tools.len(), 1);

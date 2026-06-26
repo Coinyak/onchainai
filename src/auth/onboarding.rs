@@ -23,13 +23,17 @@ fn safe_next(next: Option<String>) -> String {
         .unwrap_or_else(|| "/".into())
 }
 
-fn user_from_cookie(headers: &HeaderMap, jwt_secret: &str) -> Result<uuid::Uuid, StatusCode> {
+fn user_from_cookie(
+    headers: &HeaderMap,
+    jwt_secret: &str,
+    issuer: &str,
+) -> Result<uuid::Uuid, StatusCode> {
     let cookie_header = headers
         .get(header::COOKIE)
         .and_then(|v| v.to_str().ok())
         .ok_or(StatusCode::UNAUTHORIZED)?;
     let token = cookie_value(cookie_header, ACCESS_TOKEN_COOKIE).ok_or(StatusCode::UNAUTHORIZED)?;
-    user_id_from_jwt(token, jwt_secret).map_err(|_| StatusCode::UNAUTHORIZED)
+    user_id_from_jwt(token, jwt_secret, issuer).map_err(|_| StatusCode::UNAUTHORIZED)
 }
 
 /// `POST /onboarding/complete` — save nickname/bio and mark onboarding done.
@@ -38,7 +42,11 @@ pub async fn complete(
     headers: HeaderMap,
     Form(form): Form<OnboardingForm>,
 ) -> Result<Response, StatusCode> {
-    let user_id = user_from_cookie(&headers, &state.config.jwt_secret)?;
+    let user_id = user_from_cookie(
+        &headers,
+        &state.config.jwt_secret,
+        &state.config.jwt_issuer(),
+    )?;
     complete_onboarding(
         &state.pool,
         user_id,
@@ -58,7 +66,11 @@ pub async fn skip(
     headers: HeaderMap,
     Form(form): Form<OnboardingForm>,
 ) -> Result<Response, StatusCode> {
-    let user_id = user_from_cookie(&headers, &state.config.jwt_secret)?;
+    let user_id = user_from_cookie(
+        &headers,
+        &state.config.jwt_secret,
+        &state.config.jwt_issuer(),
+    )?;
     complete_onboarding(&state.pool, user_id, form.nickname.as_deref(), None, true)
         .await
         .map_err(|_| StatusCode::BAD_REQUEST)?;
