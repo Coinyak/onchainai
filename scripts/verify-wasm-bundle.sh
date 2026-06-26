@@ -4,19 +4,25 @@ set -euo pipefail
 
 SITE_PKG="${1:-target/site/pkg}"
 JS="${SITE_PKG}/onchainai.js"
-WASM="${SITE_PKG}/onchainai_bg.wasm"
+WASM_BG="${SITE_PKG}/onchainai_bg.wasm"
+WASM_ALT="${SITE_PKG}/onchainai.wasm"
 
-missing=0
-for artifact in "$JS" "$WASM"; do
-  if [[ ! -f "$artifact" ]]; then
-    echo "ERROR: missing WASM bundle artifact: $artifact" >&2
-    missing=1
-  fi
-done
-
-if [[ "$missing" -ne 0 ]]; then
-  echo "WASM bundle verification failed. Full cargo leptos build is required." >&2
+if [[ ! -f "$JS" ]]; then
+  echo "ERROR: missing WASM bundle artifact: $JS" >&2
   exit 1
 fi
 
-echo "WASM bundle OK: $JS, $WASM"
+if [[ -f "$WASM_BG" ]]; then
+  echo "WASM bundle OK: $JS, $WASM_BG"
+  exit 0
+fi
+
+if [[ -f "$WASM_ALT" ]]; then
+  # cargo-leptos 0.3 may emit onchainai.wasm while onchainai.js loads onchainai_bg.wasm
+  cp "$WASM_ALT" "$WASM_BG"
+  echo "WASM bundle OK: $JS, $WASM_ALT (copied to onchainai_bg.wasm for hydration)"
+  exit 0
+fi
+
+echo "ERROR: missing WASM artifact (expected onchainai_bg.wasm or onchainai.wasm in $SITE_PKG)" >&2
+exit 1

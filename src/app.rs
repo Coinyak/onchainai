@@ -22,7 +22,7 @@ use leptos_router::{
 /// It pulls in the generated CSS, Google Fonts, and global meta tags, then
 /// mounts the client-side router inside `<body>`.
 pub fn shell(options: LeptosOptions) -> impl IntoView {
-    // Hydration requires /pkg/onchainai.js + onchainai_bg.wasm. When missing (404),
+    // Hydration requires /pkg/onchainai.js + WASM (onchainai_bg.wasm). When missing (404),
     // injecting HydrationScripts breaks the page — auto-detect bundle on disk.
     let bundle_exists = std::path::Path::new("target/site/pkg/onchainai.js").exists();
     let enable_hydration = match std::env::var("LEPTOS_HYDRATION") {
