@@ -290,11 +290,11 @@ fn parse_github_owner_repo(url: &str) -> Option<(String, String)> {
     Some((owner.to_string(), repo.to_string()))
 }
 
-/// Infer a remote logo URL from repo/homepage metadata (GitHub opengraph PNG).
+/// Infer a remote logo URL from repo/homepage metadata (GitHub owner avatar).
 pub fn infer_logo_url(repo_url: Option<&str>, _homepage: Option<&str>) -> Option<String> {
     if let Some(url) = repo_url {
-        if let Some((owner, repo)) = parse_github_owner_repo(url) {
-            return Some(format!("https://github.com/{owner}/{repo}.png"));
+        if let Some((owner, _repo)) = parse_github_owner_repo(url) {
+            return Some(format!("https://avatars.githubusercontent.com/{owner}"));
         }
     }
     None
@@ -788,11 +788,11 @@ mod tests {
     fn infer_logo_url_from_github_repo() {
         assert_eq!(
             infer_logo_url(Some("https://github.com/bob-collective/bob"), None),
-            Some("https://github.com/bob-collective/bob.png".into())
+            Some("https://avatars.githubusercontent.com/bob-collective".into())
         );
         assert_eq!(
             infer_logo_url(Some("https://github.com/bob-collective/bob.git"), None),
-            Some("https://github.com/bob-collective/bob.png".into())
+            Some("https://avatars.githubusercontent.com/bob-collective".into())
         );
         assert_eq!(infer_logo_url(None, Some("https://gobob.xyz")), None);
         assert_eq!(
@@ -824,7 +824,7 @@ mod tests {
         assert_eq!(tool.license.as_deref(), Some("MIT"));
         assert_eq!(
             tool.logo_url.as_deref(),
-            Some("https://github.com/bob-collective/bob.png")
+            Some("https://avatars.githubusercontent.com/bob-collective")
         );
     }
 

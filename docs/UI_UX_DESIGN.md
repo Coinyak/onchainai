@@ -1373,7 +1373,7 @@ Trade-off: simpler SSR/hydration correctness vs. extra DB rows on deep pages. Ac
 | **UX** | 모바일 **풀스크린 필터 패널** | §9, §5.8 | <1024px 기본 접힘 + ☰ 펼침. 전체 화면 필터 오버레이는 미완 |
 | **UX** | 바텀 시트 **dvh 키보드 처리** | §5.10, §9 | 드래그 확장/닫기는 구현. 가상 키보드 dvh 보정은 추가 여지 |
 | **수익** | x402 **등록 결제** | §2, §10 | 타입·설정 플래그만; 결제 플로우 미연동 |
-| **비주얼** | 도구 **공식 로고** (`logo_url`) | §8 | **부분 구현** — `ToolCard`/`tool_detail_content` 모노그램 fallback 동작; `logo_url` DB 컬럼·`<img>` 렌더·크롤러 수집 루프 미연동 |
+| **비주얼** | 도구 **공식 로고** (`logo_url`) | §8 | **구현** — migration `016_tool_logo_url.sql` DB 컬럼, `ToolCard`/`tool_detail_content` `<img>` + 모노그램 fallback (`onerror`), 크롤러 `infer_logo_url` (GitHub owner avatar), `logo_url_is_http` HTTPS/allowlist 검증 |
 | **비주얼** | 카테고리 그리드 | §2 (구버전) | **의도적 제거** — 사이드바 Function으로 대체 |
 | **비주얼** | 상단 sticky TopNav | §2 (구버전) | **의도적 제거** — 사이드바 브랜드로 대체 |
 | **Admin UX** | 문서 와이어프레임 수준 인라인 편집·배지 일괄 | §11.4+ | 기본 CRUD는 있으나 문서 수준 폴리시 미달 가능 |
@@ -1408,7 +1408,7 @@ Run after release build (`./scripts/release-build.sh`) against the **release** b
 | `/`, `/tools`, filtered URL | No visible deserialization errors in body text |
 | Home H1 | `font-size` differs between 1280px and 375px viewports |
 | `GET /pkg/onchainai.css` | Non-empty served bundle |
-| Mobile `/tools` | `.chain-more` pill not hidden when extra chains exist |
+| Mobile `/tools` | `.chain-tile-more` pill not hidden when chain strip overflows |
 
 Failed smoke **blocks deploy** (see `post-deploy-verify.sh`, `deploy-railway.sh`).
 
@@ -1418,4 +1418,4 @@ Failed smoke **blocks deploy** (see `post-deploy-verify.sh`, `deploy-railway.sh`
 2. 모바일 검색·필터 풀스크린 오버레이 (§9)
 3. 로그인 사용자 북마크 상태 배치 fetch (N+1·rate limit 없이 batch API)
 4. x402 등록 결제 (MVP+)
-5. 공식 로고 수집/캐싱(`logo_url`) 운영 루프
+5. ~~공식 로고 수집/캐싱(`logo_url`) 운영 루프~~ — 크롤러 infer + UI 렌더 연동 완료; 운영 캐시/백필 정책은 별도

@@ -119,9 +119,76 @@ pub fn default_review_fields() -> ToolReviewDefaults {
     ToolReviewDefaults::default()
 }
 
+/// Parse a positive page number from a raw query value (`"2"`, `"abc"` → `None`).
+pub fn parse_page_value(raw: &str) -> Option<u32> {
+    raw.parse::<u32>().ok().filter(|page| *page > 0)
+}
+
 /// Whether `logo_url` is safe to render as an external image.
+///
+/// Requires HTTPS for general hosts. Plain HTTP is allowed only for a small
+/// GitHub-related allowlist. Rejects `javascript:`, `data:`, and other schemes.
 pub fn logo_url_is_http(url: &str) -> bool {
-    url.starts_with("http://") || url.starts_with("https://")
+    let trimmed = url.trim();
+    let lower = trimmed.to_ascii_lowercase();
+    if lower.starts_with("javascript:")
+        || lower.starts_with("data:")
+        || lower.starts_with("vbscript:")
+        || lower.starts_with("file:")
+        || lower.starts_with("blob:")
+    {
+        return false;
+    }
+
+    let (is_https, host) = if let Some(rest) = trimmed.strip_prefix("https://") {
+        (
+            true,
+            rest.split('/')
+                .next()
+                .unwrap_or("")
+                .split(':')
+                .next()
+                .unwrap_or(""),
+        )
+    } else if let Some(rest) = trimmed.strip_prefix("http://") {
+        (
+            false,
+            rest.split('/')
+                .next()
+                .unwrap_or("")
+                .split(':')
+                .next()
+                .unwrap_or(""),
+        )
+    } else {
+        return false;
+    };
+
+    let host = host.to_ascii_lowercase();
+    if host.is_empty() {
+        return false;
+    }
+
+    if is_https {
+        return true;
+    }
+    logo_url_http_allowlist_host(&host)
+}
+
+fn logo_url_http_allowlist_host(host: &str) -> bool {
+    if matches!(
+        host,
+        "github.com" | "avatars.githubusercontent.com" | "raw.githubusercontent.com"
+    ) {
+        return true;
+    }
+    host.ends_with(".githubusercontent.com")
+        || host.ends_with(".cloudfront.net")
+        || host.ends_with(".amazonaws.com")
+        || host == "cdn.jsdelivr.net"
+        || host.ends_with(".jsdelivr.net")
+        || host == "unpkg.com"
+        || host.ends_with(".fastly.net")
 }
 
 /// Monogram from tool name: first two alphanumeric chars, uppercased.
@@ -239,9 +306,29 @@ mod tests {
     }
 
     #[test]
-    fn logo_url_is_http_accepts_http_and_https() {
+    fn parse_page_value_rejects_invalid_values() {
+        assert_eq!(parse_page_value("2"), Some(2));
+        assert_eq!(parse_page_value("abc"), None);
+        assert_eq!(parse_page_value("0"), None);
+        assert_eq!(parse_page_value("-1"), None);
+    }
+
+    #[test]
+    fn logo_url_is_http_requires_https_or_allowlisted_host() {
         assert!(logo_url_is_http("https://example.com/logo.png"));
-        assert!(logo_url_is_http("http://example.com/logo.png"));
+        assert!(logo_url_is_http(
+            "https://cdn.example.cloudfront.net/logo.png"
+        ));
+        assert!(logo_url_is_http(
+            "https://avatars.githubusercontent.com/bob-collective"
+        ));
+        assert!(logo_url_is_http("http://avatars.githubusercontent.com/u/1"));
+        assert!(logo_url_is_http(
+            "http://raw.githubusercontent.com/org/repo/logo.png"
+        ));
+        assert!(!logo_url_is_http("http://example.com/logo.png"));
+        assert!(!logo_url_is_http("javascript:alert(1)"));
+        assert!(!logo_url_is_http("data:image/png;base64,abc"));
         assert!(!logo_url_is_http("//example.com/logo.png"));
         assert!(!logo_url_is_http("/chains/ethereum.svg"));
     }

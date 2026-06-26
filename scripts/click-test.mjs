@@ -71,13 +71,13 @@ try {
     await page.waitForLoadState("networkidle");
     await page
       .waitForFunction(
-        (count) => document.querySelectorAll(".tool-card").length >= count,
+        (count) => document.querySelectorAll(".tool-card").length > count,
         before,
         { timeout: 15000 },
       )
       .catch(() => {});
     const after = (await page.$$(".tool-card")).length;
-    log("load-more-click", after >= before, `${before} -> ${after}`);
+    log("load-more-click", after > before, `${before} -> ${after}`);
   } else {
     log("load-more-click", true, "no button (small catalog or capped)");
   }

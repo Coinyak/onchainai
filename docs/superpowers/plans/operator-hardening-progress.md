@@ -335,7 +335,7 @@ $ node scripts/browser-smoke.mjs http://localhost:3000
 | Home / tools load | PASS | No deserialization errors in body |
 | Sidebar brand + filter click | PASS | `?function=bridge` navigation OK |
 | Tool cards | PASS | 50 cards on `/tools` |
-| Tool logos | PASS (partial) | 50 monograms, 0 `<img>` logos (`logo_url` not wired) |
+| Tool logos | PASS | `logo_url` wired: crawler infer (GitHub avatar), `<img>` render + monogram `onerror` fallback |
 | Chain strip click | PASS | Filter navigation OK |
 | **Load more click** | **FAIL** | Card count **50 → 6** after click (cumulative refetch + cap/validation bug) |
 | Tool preview | PASS | `?selected=` opens preview |
@@ -372,5 +372,5 @@ $ ./scripts/disk-audit.sh
 ### Remaining
 
 - Re-run `click-test.mjs` against production after next deploy (load-more 50→N monotonic, no 500s).
-- Wire `logo_url` collection + `<img>` render (monogram fallback stays).
+- ~~Wire `logo_url` collection + `<img>` render~~ — done (migration 016, `infer_logo_url`, `logo_url_is_http`, `onerror` monogram fallback).
 - Seed production featured cards via `/admin/featured` or operator SQL.

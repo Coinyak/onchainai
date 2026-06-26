@@ -7,6 +7,7 @@ use crate::components::{
     sidebar::Sidebar, skeleton::ToolListSkeleton, tool_card::ToolCard, top_nav::SidebarBrand,
 };
 use crate::filter_query::{build_tool_filters, describe_active_filters, ActiveFiltersSummary};
+use crate::models::tool::parse_page_value;
 use crate::models::{Category, Tool};
 use crate::server::functions::{
     count_tools, get_categories, get_chain_counts, get_tool_by_slug, get_tool_comment_counts,
@@ -142,9 +143,7 @@ pub fn build_filter_navigation_base(
 }
 
 fn parse_page_param(raw: Option<String>) -> u32 {
-    raw.and_then(|s| s.parse::<u32>().ok())
-        .filter(|page| *page > 0)
-        .unwrap_or(1)
+    raw.and_then(|s| parse_page_value(&s)).unwrap_or(1)
 }
 
 /// Parse `page` from a raw query string (`?page=2&sort=hot` or `page=2`).
@@ -153,7 +152,7 @@ pub fn parse_page_from_query_string(query: &str) -> Option<u32> {
     trimmed.split('&').find_map(|pair| {
         let (key, value) = pair.split_once('=')?;
         if key == "page" {
-            value.parse::<u32>().ok().filter(|page| *page > 0)
+            parse_page_value(value)
         } else {
             None
         }
@@ -293,6 +292,19 @@ struct BrowserData {
     tools: Vec<Tool>,
     comment_counts: HashMap<String, i64>,
     preview_tool: Option<Tool>,
+}
+
+#[derive(Clone)]
+struct CachedBrowserPayload {
+    deps: (
+        String,
+        ToolFilters,
+        Option<String>,
+        Option<String>,
+        u32,
+        u32,
+    ),
+    data: BrowserData,
 }
 
 async fn load_browser_data(
@@ -440,10 +452,15 @@ pub fn ToolsBrowser(
 
     // Keep the last successful payload visible while the resource refetches so full-page
     // `?page=N` navigation does not flash an empty/partial list during hydration.
-    let cached_browser_data = RwSignal::<Option<BrowserData>>::new(None);
+    // Only reuse cache when deps still match — back-nav with changed sort/filters/page
+    // must not show a stale list from the previous query.
+    let cached_browser_data = RwSignal::<Option<CachedBrowserPayload>>::new(None);
     Effect::new(move || {
         if let Some(Ok(data)) = page.get() {
-            cached_browser_data.set(Some(data));
+            cached_browser_data.set(Some(CachedBrowserPayload {
+                deps: page_deps.get(),
+                data,
+            }));
         }
     });
 
@@ -505,7 +522,10 @@ pub fn ToolsBrowser(
                     let resolved = match page.get() {
                         Some(Ok(data)) => Some(data),
                         Some(Err(_)) => None,
-                        None => cached_browser_data.get(),
+                        None => cached_browser_data
+                            .get()
+                            .filter(|cached| cached.deps == page_deps.get())
+                            .map(|cached| cached.data),
                     };
                     match (page.get(), resolved) {
                         (Some(Err(e)), _) => view! {
@@ -795,6 +815,16 @@ mod tests {
         assert_eq!(parse_page_from_query_string("page=3"), Some(3));
         assert_eq!(parse_page_from_query_string("?sort=hot"), None);
         assert_eq!(parse_page_from_query_string("?page=0"), None);
+        assert_eq!(parse_page_from_query_string("?page=abc"), None);
+        assert_eq!(parse_page_from_query_string("?page=-1"), None);
+    }
+
+    #[test]
+    fn parse_page_param_falls_back_for_invalid_values() {
+        assert_eq!(parse_page_param(Some("2".into())), 2);
+        assert_eq!(parse_page_param(Some("abc".into())), 1);
+        assert_eq!(parse_page_param(Some("0".into())), 1);
+        assert_eq!(parse_page_param(None), 1);
     }
 
     #[test]

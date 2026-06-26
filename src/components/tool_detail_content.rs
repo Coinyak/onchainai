@@ -82,6 +82,7 @@ pub fn ToolDetailContent(
         .unwrap_or_else(|| "No description.".into());
     let mono = display_monogram(&tool);
     let logo_img = tool.logo_url.clone().filter(|url| logo_url_is_http(url));
+    let show_logo_img = RwSignal::new(logo_img.is_some());
     let tool_name = tool.name.clone();
     let status = tool.status.clone();
     let tool_type = tool.tool_type.clone();
@@ -107,16 +108,21 @@ pub fn ToolDetailContent(
         <div class=if compact { "detail-content compact" } else { "detail-content" }>
             <header class="detail-header">
                 <div class="detail-logo" aria-hidden="true">
-                    {if let Some(url) = logo_img {
-                        view! {
-                            <img
-                                class="tool-logo-img"
-                                src=url
-                                alt=tool_name.clone()
-                                loading="lazy"
-                            />
+                    {move || if show_logo_img.get() {
+                        if let Some(url) = logo_img.clone() {
+                            view! {
+                                <img
+                                    class="tool-logo-img"
+                                    src=url
+                                    alt=tool_name.clone()
+                                    loading="lazy"
+                                    on:error=move |_| show_logo_img.set(false)
+                                />
+                            }
+                            .into_any()
+                        } else {
+                            view! { {mono.clone()} }.into_any()
                         }
-                        .into_any()
                     } else {
                         view! { {mono.clone()} }.into_any()
                     }}
