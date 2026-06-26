@@ -100,9 +100,31 @@ if (!cssText || cssText.trim().length === 0) {
   errors.push("css-empty:/pkg/onchainai.css");
 }
 
-// Tools list: large catalog should expose load-more markup.
+// Tools list: large catalog should expose load-more markup and logo images.
 await page.setViewportSize({ width: 1280, height: 900 });
 await page.goto(`${base}/tools`, { waitUntil: "networkidle" });
+const toolsLogoStats = await page.evaluate(() => ({
+  cards: document.querySelectorAll(".tool-card").length,
+  imgs: document.querySelectorAll(".tool-logo img, .tool-card img.tool-logo-img").length,
+}));
+if (toolsLogoStats.cards >= 50 && toolsLogoStats.imgs === 0) {
+  errors.push(`layout:tools-missing-logo-imgs:cards=${toolsLogoStats.cards}`);
+}
+if (toolsLogoStats.imgs > 0) {
+  const brokeFallback = await page.evaluate(async () => {
+    const img = document.querySelector(".tool-logo-img");
+    if (!img) return { skipped: true };
+    img.src = "https://invalid.onchainai-test.invalid/nope.png";
+    await new Promise((r) => setTimeout(r, 400));
+    const stillImg = !!document.querySelector(".tool-logo-img");
+    const logo = document.querySelector(".tool-card .tool-logo");
+    const text = logo?.textContent?.trim() ?? "";
+    return { skipped: false, stillImg, textLen: text.length };
+  });
+  if (!brokeFallback.skipped && brokeFallback.stillImg && brokeFallback.textLen === 0) {
+    errors.push("layout:tools-logo-fallback-missing");
+  }
+}
 const toolsLoadMore = await page.evaluate(() => {
   const cards = document.querySelectorAll(".tool-card").length;
   const bodyLen = document.body?.innerHTML.length ?? 0;

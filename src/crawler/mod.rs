@@ -145,7 +145,7 @@ pub async fn upsert_tools(pool: &sqlx::PgPool, tools: &[models::Tool]) -> anyhow
                 last_commit_at = EXCLUDED.last_commit_at,
                 source = EXCLUDED.source,
                 source_url = EXCLUDED.source_url,
-                logo_url = COALESCE(EXCLUDED.logo_url, tools.logo_url),
+                logo_url = EXCLUDED.logo_url,
                 logo_monogram = COALESCE(EXCLUDED.logo_monogram, tools.logo_monogram),
                 updated_at = now()
             "#,

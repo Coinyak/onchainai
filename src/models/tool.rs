@@ -163,10 +163,7 @@ pub fn logo_url_is_safe_for_img(url: &str) -> bool {
         _ => return false,
     };
 
-    if scheme == "https" {
-        return true;
-    }
-    logo_url_http_allowlist_host(&host)
+    logo_url_allowed_host(&host, scheme == "https")
 }
 
 /// Back-compat alias for [`logo_url_is_safe_for_img`].
@@ -174,11 +171,26 @@ pub fn logo_url_is_http(url: &str) -> bool {
     logo_url_is_safe_for_img(url)
 }
 
-fn logo_url_http_allowlist_host(host: &str) -> bool {
+fn logo_url_github_host(host: &str) -> bool {
     matches!(
         host,
         "github.com" | "avatars.githubusercontent.com" | "raw.githubusercontent.com"
     ) || host.ends_with(".githubusercontent.com")
+}
+
+fn logo_url_allowed_host(host: &str, is_https: bool) -> bool {
+    if logo_url_github_host(host) {
+        return true;
+    }
+    if !is_https {
+        return false;
+    }
+    host.ends_with(".cloudfront.net")
+        || host.ends_with(".amazonaws.com")
+        || host == "cdn.jsdelivr.net"
+        || host.ends_with(".jsdelivr.net")
+        || host == "unpkg.com"
+        || host.ends_with(".fastly.net")
 }
 
 /// Filter a stored logo URL through [`logo_url_is_safe_for_img`].
@@ -189,6 +201,20 @@ pub fn sanitize_logo_url(url: Option<String>) -> Option<String> {
 /// Logo URL to render for a tool, if safe.
 pub fn tool_logo_img_url(tool: &Tool) -> Option<String> {
     sanitize_logo_url(tool.logo_url.clone())
+}
+
+/// Strip unsafe `logo_url` before serializing to public API/MCP consumers.
+pub fn sanitize_tool_for_public_response(mut tool: Tool) -> Tool {
+    tool.logo_url = sanitize_logo_url(tool.logo_url.take());
+    tool
+}
+
+/// Sanitize a batch of tools for public API/MCP responses.
+pub fn sanitize_tools_for_public_response(tools: Vec<Tool>) -> Vec<Tool> {
+    tools
+        .into_iter()
+        .map(sanitize_tool_for_public_response)
+        .collect()
 }
 
 /// Monogram from tool name: first two alphanumeric chars, uppercased.
@@ -318,10 +344,15 @@ mod tests {
     }
 
     #[test]
-    fn logo_url_is_safe_for_img_requires_https_or_github_http() {
-        assert!(logo_url_is_safe_for_img("  https://example.com/logo.png"));
+    fn logo_url_is_safe_for_img_requires_allowlisted_hosts() {
         assert!(logo_url_is_safe_for_img(
             "https://avatars.githubusercontent.com/bob-collective"
+        ));
+        assert!(logo_url_is_safe_for_img(
+            "https://cdn.example.cloudfront.net/logo.png"
+        ));
+        assert!(logo_url_is_safe_for_img(
+            "https://cdn.jsdelivr.net/npm/pkg/logo.png"
         ));
         assert!(logo_url_is_safe_for_img(
             "http://avatars.githubusercontent.com/u/1"
@@ -330,6 +361,10 @@ mod tests {
             "http://raw.githubusercontent.com/org/repo/logo.png"
         ));
         assert!(logo_url_is_safe_for_img("http://github.com/org/repo"));
+        assert!(!logo_url_is_safe_for_img("https://example.com/logo.png"));
+        assert!(!logo_url_is_safe_for_img(
+            "https://tracker.evil.example/pixel.gif"
+        ));
         assert!(!logo_url_is_safe_for_img("http://example.com/logo.png"));
         assert!(!logo_url_is_safe_for_img(
             "http://cdn.jsdelivr.net/pkg/logo.png"
@@ -366,6 +401,21 @@ mod tests {
     }
 
     #[test]
+    fn sanitize_tool_for_public_response_strips_unsafe_logo() {
+        let mut tool = sample_tool();
+        tool.logo_url = Some("javascript:alert(1)".into());
+        let sanitized = sanitize_tool_for_public_response(tool);
+        assert_eq!(sanitized.logo_url, None);
+
+        let mut tool = sample_tool();
+        tool.logo_url = Some("https://avatars.githubusercontent.com/acme".into());
+        let sanitized = sanitize_tool_for_public_response(tool);
+        assert_eq!(
+            sanitized.logo_url.as_deref(),
+            Some("https://avatars.githubusercontent.com/acme")
+        );
+    }
+
     fn tool_logo_img_url_gates_render_path() {
         let mut tool = sample_tool();
         assert_eq!(tool_logo_img_url(&tool), None);

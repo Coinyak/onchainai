@@ -148,7 +148,10 @@ pub fn clamp_browser_page(page: u32) -> u32 {
 }
 
 fn parse_page_param(raw: Option<String>) -> u32 {
-    clamp_browser_page(raw.and_then(|s| parse_page_value(&s)).unwrap_or(1))
+    clamp_browser_page(
+        raw.and_then(|s| parse_page_value(&decode_page_query_value(&s)))
+            .unwrap_or(1),
+    )
 }
 
 fn decode_page_query_value(value: &str) -> String {
@@ -170,6 +173,8 @@ pub fn parse_page_from_query_string(query: &str) -> Option<u32> {
     })
 }
 
+/// Hydration fallback: reads `window.location.search` when the router has not
+/// surfaced `page` yet. Delegates to [`parse_page_from_query_string`].
 #[cfg(feature = "hydrate")]
 fn page_from_browser_url() -> Option<u32> {
     let window = web_sys::window()?;
@@ -489,10 +494,12 @@ pub fn ToolsBrowser(
                 cache_key.page,
             )
             .await?;
-            last_ok_fetch.set(Some(TaggedBrowserPayload {
-                deps: cache_key,
-                data: data.clone(),
-            }));
+            if page_cache_key.get_untracked() == cache_key {
+                last_ok_fetch.set(Some(TaggedBrowserPayload {
+                    deps: cache_key,
+                    data: data.clone(),
+                }));
+            }
             Ok(data)
         },
     );
@@ -503,8 +510,11 @@ pub fn ToolsBrowser(
     // must not show a stale list from the previous query.
     let cached_browser_data = RwSignal::<Option<TaggedBrowserPayload>>::new(None);
     Effect::new(move || {
+        let current = page_cache_key.get();
         if let Some(tagged) = last_ok_fetch.get() {
-            cached_browser_data.set(Some(tagged));
+            if tagged.deps == current {
+                cached_browser_data.set(Some(tagged));
+            }
         }
     });
 
@@ -890,11 +900,21 @@ mod tests {
     #[test]
     fn parse_page_param_falls_back_for_invalid_values() {
         assert_eq!(parse_page_param(Some("2".into())), 2);
+        assert_eq!(parse_page_param(Some("%32".into())), 2);
         assert_eq!(parse_page_param(Some("abc".into())), 1);
         assert_eq!(parse_page_param(Some("0".into())), 1);
         assert_eq!(parse_page_param(Some("-1".into())), 1);
         assert_eq!(parse_page_param(None), 1);
         assert_eq!(parse_page_param(Some("99".into())), MAX_BROWSER_PAGE);
+    }
+
+    /// `page_from_browser_url` (hydrate) reads `window.location.search` and delegates
+    /// to [`parse_page_from_query_string`] — exercise the parser paths it relies on.
+    #[test]
+    fn page_from_browser_url_parser_paths() {
+        assert_eq!(parse_page_from_query_string("?page=2&sort=hot"), Some(2));
+        assert_eq!(parse_page_from_query_string("?page=%32"), Some(2));
+        assert_eq!(parse_page_from_query_string("?page=abc"), None);
     }
 
     #[test]
@@ -966,6 +986,54 @@ mod tests {
             data: sample_browser_data(100),
         };
         assert!(resolve_browser_data(&current, None, true, Some(&cached)).is_none());
+    }
+
+    #[test]
+    fn resolve_browser_data_rejects_sort_mismatch() {
+        let current = sample_cache_key(1);
+        let mut stale = sample_cache_key(1);
+        stale.sort = "new".into();
+        let tagged = TaggedBrowserPayload {
+            deps: stale,
+            data: sample_browser_data(50),
+        };
+        assert!(resolve_browser_data(&current, Some(&tagged), false, None).is_none());
+    }
+
+    #[test]
+    fn resolve_browser_data_rejects_search_q_mismatch() {
+        let current = sample_cache_key(1);
+        let mut stale = sample_cache_key(1);
+        stale.search_q = Some("wallet".into());
+        let tagged = TaggedBrowserPayload {
+            deps: stale,
+            data: sample_browser_data(50),
+        };
+        assert!(resolve_browser_data(&current, Some(&tagged), false, None).is_none());
+    }
+
+    #[test]
+    fn resolve_browser_data_rejects_selected_mismatch() {
+        let current = sample_cache_key(1);
+        let mut stale = sample_cache_key(1);
+        stale.selected = Some("zapper".into());
+        let tagged = TaggedBrowserPayload {
+            deps: stale,
+            data: sample_browser_data(50),
+        };
+        assert!(resolve_browser_data(&current, Some(&tagged), false, None).is_none());
+    }
+
+    #[test]
+    fn resolve_browser_data_rejects_filter_mismatch() {
+        let current = sample_cache_key(1);
+        let mut stale = sample_cache_key(1);
+        stale.filters.function = vec!["bridge".into()];
+        let tagged = TaggedBrowserPayload {
+            deps: stale,
+            data: sample_browser_data(50),
+        };
+        assert!(resolve_browser_data(&current, Some(&tagged), false, None).is_none());
     }
 
     #[test]

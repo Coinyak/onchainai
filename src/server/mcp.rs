@@ -1,6 +1,7 @@
 //! MCP server — JSON-RPC 2.0 handler with 4 public tools at POST /mcp.
 
 use crate::install_safety::{blocks_structured_config, claude_mcp_config, install_warning_text};
+use crate::models::tool::{sanitize_tool_for_public_response, sanitize_tools_for_public_response};
 use crate::models::Tool;
 use crate::server::queries::PUBLIC_TOOL_WHERE;
 use crate::server::rate_limit::{check_mcp_ip_rate_limit, client_ip_from_parts};
@@ -268,9 +269,11 @@ async fn mcp_search_tools(
         q = q.bind(ch);
     }
 
-    q.fetch_all(pool)
+    let tools = q
+        .fetch_all(pool)
         .await
-        .map_err(|e| (-32603, format!("db error: {e}")))
+        .map_err(|e| (-32603, format!("db error: {e}")))?;
+    Ok(sanitize_tools_for_public_response(tools))
 }
 
 async fn mcp_get_tool(pool: &PgPool, slug: &str) -> Result<Tool, String> {
@@ -280,6 +283,7 @@ async fn mcp_get_tool(pool: &PgPool, slug: &str) -> Result<Tool, String> {
         .fetch_optional(pool)
         .await
         .map_err(|e| format!("db error: {e}"))?
+        .map(sanitize_tool_for_public_response)
         .ok_or_else(|| format!("tool not found: {slug}"))
 }
 

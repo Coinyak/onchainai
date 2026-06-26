@@ -6,6 +6,7 @@
 //! available to both server-rendered and hydrated components.
 
 use crate::auth::session::{optional_session_result, SessionUser};
+use crate::models::tool::{sanitize_tool_for_public_response, sanitize_tools_for_public_response};
 use crate::models::{
     Category, Comment, FeaturedCard, SiteSettings, Source, Tool, ToolClaimRequest, ToolReport,
     ToolSubmission, ToolSubmissionPayload, TOOL_REPORT_REASONS,
@@ -240,7 +241,7 @@ pub async fn get_recent_tools(limit: i64) -> Result<Vec<Tool>, ServerFnError> {
         .await
         .map_err(|e| ServerFnError::new(format!("failed to load tools: {e}")))?;
 
-    Ok(tools)
+    Ok(sanitize_tools_for_public_response(tools))
 }
 
 /// Returns all function categories with live **approved** tool counts.
@@ -314,7 +315,7 @@ pub async fn search_tools(
         .await
         .map_err(|e| ServerFnError::new(format!("search failed: {e}")))?;
 
-    Ok(tools)
+    Ok(sanitize_tools_for_public_response(tools))
 }
 
 /// Fetch a single **approved** tool by slug (404-style error if missing or not approved).
@@ -330,7 +331,8 @@ pub async fn get_tool_by_slug(slug: String) -> Result<Tool, ServerFnError> {
         .await
         .map_err(|e| ServerFnError::new(format!("failed to load tool: {e}")))?;
 
-    tool.ok_or_else(|| ServerFnError::new(format!("tool not found: {slug}")))
+    tool.map(sanitize_tool_for_public_response)
+        .ok_or_else(|| ServerFnError::new(format!("tool not found: {slug}")))
 }
 
 /// Maximum tools returned by `list_tools` / browser "load more" (matches UI cap).
@@ -573,7 +575,7 @@ pub async fn list_tools(
         .await
         .map_err(|e| ServerFnError::new(format!("list tools failed: {e}")))?;
 
-    Ok(tools)
+    Ok(sanitize_tools_for_public_response(tools))
 }
 
 /// Stable browser-facing tool list — wraps positional `list_tools` with a struct payload.
