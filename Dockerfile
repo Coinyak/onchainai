@@ -1,7 +1,7 @@
 # OnchainAI — multi-stage Docker build (SSR server + WASM hydration bundle).
 # Cache-bust: 2026-06-25T16:30Z
 
-FROM rust:1.88-slim AS builder
+FROM rust:1.90-slim AS builder
 WORKDIR /app
 
 RUN apt-get update \
