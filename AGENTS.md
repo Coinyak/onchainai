@@ -140,6 +140,17 @@ Rust debug builds bloat `target/` fast. This is expected, not a bug. The repo is
 - Three migrations: 001_init (tools/sources), 002_auth (profiles/siwx_sessions), 003_social (comments/upvotes/bookmarks).
 - After schema changes: `sqlx migrate run` then `sqlx prepare`.
 
+## Disk hygiene
+
+Leptos SSR + WASM builds write heavily to `target/` — on this project it can exceed **50GB** after repeated `cargo leptos build --release` runs.
+
+- **Before heavy builds:** run `./scripts/disk-guard.sh` (checks free disk and `target/` size).
+- **After long agent sessions:** run `cargo clean` to reclaim space.
+- **Production builds:** prefer `railway up` over local `cargo leptos build --release` when possible.
+- **Never commit** `target/`, stray `*.wasm`, or `tmp/` artifacts.
+
+Deploy/ops scripts live in `./scripts/` (no README — see script headers for usage).
+
 ## Git
 
 - Default branch: `main`. Railway production deploys from `main`.

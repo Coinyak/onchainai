@@ -27,7 +27,11 @@ fn initial_sidebar_collapsed() -> bool {
     #[cfg(target_arch = "wasm32")]
     {
         if is_browser() {
-            if let Ok(w) = window().inner_width() {
+            if let Some(w) = window()
+                .inner_width()
+                .ok()
+                .and_then(|v| v.as_f64())
+            {
                 if w < MOBILE_BREAKPOINT_PX {
                     return read_bool(SIDEBAR_COLLAPSED_KEY, true);
                 }
@@ -50,7 +54,15 @@ fn sidebar_aside_class(collapsed: bool, mobile_open: bool) -> String {
 
 #[cfg(target_arch = "wasm32")]
 fn is_mobile_viewport() -> bool {
-    is_browser() && window().inner_width().map(|w| w < MOBILE_BREAKPOINT_PX).unwrap_or(false)
+    if !is_browser() {
+        return false;
+    }
+    window()
+        .inner_width()
+        .ok()
+        .and_then(|v| v.as_f64())
+        .map(|w| w < MOBILE_BREAKPOINT_PX)
+        .unwrap_or(false)
 }
 
 #[cfg(not(target_arch = "wasm32"))]
