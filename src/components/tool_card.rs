@@ -1,13 +1,20 @@
 //! Stripe-style tool card for list views — badges, bookmark, upvote.
 
-use crate::chains::chain_tags_for_tool;
 use crate::components::copy_button::CopyButton;
 use crate::components::login_modal::LoginModal;
-use crate::components::tool_logo::ToolLogo;
 use crate::models::Tool;
-use crate::server::functions::{get_current_user, toggle_bookmark};
+use crate::server::functions::{get_current_user, is_bookmarked, toggle_bookmark};
 use leptos::prelude::*;
 use leptos::task::spawn_local;
+use leptos_router::components::A;
+
+fn monogram(name: &str) -> String {
+    name.chars()
+        .filter(|c| c.is_alphanumeric())
+        .take(2)
+        .collect::<String>()
+        .to_uppercase()
+}
 
 fn badge_class(status: &str) -> &'static str {
     match status {
@@ -34,11 +41,12 @@ pub fn ToolCard(
     let slug = tool.slug.clone();
     let detail_href = format!("/tools/{slug}");
     let href = preview_href.unwrap_or(detail_href);
-
+    let mono = monogram(&tool.name);
     let status = tool.status.clone();
     let tool_type = tool.tool_type.clone();
     let chains = tool.chains.clone();
-    let (chain_preview, extra_chains) = chain_tags_for_tool(&chains, 5);
+    let chain_preview: Vec<_> = chains.iter().take(5).cloned().collect();
+    let extra_chains = chains.len().saturating_sub(5);
     let install = tool.install_command.clone().unwrap_or_default();
     let stars = tool.stars;
     let description = tool
@@ -66,13 +74,24 @@ pub fn ToolCard(
     let license = tool.license.clone().unwrap_or_default();
 
     let show_login = RwSignal::new(false);
-    let starred = RwSignal::new(false);
+    let refresh = RwSignal::new(0u32);
+    let slug_bm = slug.clone();
+    let bookmarked = Resource::new(
+        move || (slug_bm.clone(), refresh.get()),
+        |(s, _)| async move { is_bookmarked(s).await },
+    );
     view! {
         <LoginModal show=show_login/>
-        <article class=if is_selected { "tool-card is-selected" } else { "tool-card" }>
-            <a href=href class="tool-card-link no-underline text-inherit">
+        <article class=if is_selected {
+            "tool-card tool-card-mobile is-selected"
+        } else {
+            "tool-card tool-card-mobile"
+        }>
+            <A href=href attr:class="tool-card-link no-underline text-inherit">
                 <div class="tool-card-inner">
-                    <ToolLogo tool=tool.clone()/>
+                    <div class="tool-logo" aria-hidden="true">
+                        {mono}
+                    </div>
                     <div class="tool-card-body">
                         <div class="tool-card-header">
                             <h3 class="tool-name">{tool.name.clone()}</h3>
@@ -104,29 +123,24 @@ pub fn ToolCard(
                             }}
                         </div>
                         <div class="tool-meta">
-                            <span class="tool-chains">
-                                {chain_preview.into_iter().map(|tag| {
-                                    if let Some(meta) = tag.meta {
-                                        view! {
-                                            <img
-                                                class="chain-logo chain-logo-tag"
-                                                src=meta.logo
-                                                alt=meta.label
-                                                title=meta.label
-                                            />
-                                        }.into_any()
-                                    } else {
-                                        view! { <span class="chain-pill">{tag.raw}</span> }.into_any()
-                                    }
-                                }).collect_view()}
+                            <div class="tool-chains tool-chains-desktop">
+                                {chain_preview
+                                    .into_iter()
+                                    .map(|c| view! { <span class="chain-pill">{c}</span> })
+                                    .collect_view()}
                                 {if extra_chains > 0 {
                                     view! { <span class="chain-pill chain-more">{"+"}{extra_chains}</span> }
                                         .into_any()
                                 } else {
                                     ().into_any()
                                 }}
-                            </span>
+                            </div>
                             <span class="tool-meta-sep">"·"</span>
+                            <span class="tool-stars">{"★ "}{stars}</span>
+                            <span class="tool-meta-sep">"·"</span>
+                            <span class="tool-comments">"comments "{comment_count}</span>
+                        </div>
+                        <div class="tool-meta-mobile">
                             <span class="tool-stars">{"★ "}{stars}</span>
                             <span class="tool-meta-sep">"·"</span>
                             <span class="tool-comments">"comments "{comment_count}</span>
@@ -146,29 +160,36 @@ pub fn ToolCard(
                         }}
                     </div>
                 </div>
-            </a>
+            </A>
             <div class="tool-card-actions">
-                <button
-                    type="button"
-                    class="card-action-btn"
-                    aria-label="Toggle bookmark"
-                    on:click=move |ev| {
-                        ev.stop_propagation();
+                <Suspense fallback=|| view! { <span class="card-action-btn">"☆"</span> }>
+                    {move || bookmarked.get().map(|res| {
+                        let active = res.unwrap_or(false);
                         let slug_toggle = slug.clone();
-                        spawn_local(async move {
-                            match get_current_user().await {
-                                Ok(Some(_)) => {
-                                    if let Ok(now_starred) = toggle_bookmark(slug_toggle).await {
-                                        starred.set(now_starred);
-                                    }
+                        view! {
+                            <button
+                                type="button"
+                                class="card-action-btn"
+                                aria-label="Toggle bookmark"
+                                on:click=move |ev| {
+                                    ev.stop_propagation();
+                                    let slug_toggle = slug_toggle.clone();
+                                    spawn_local(async move {
+                                        match get_current_user().await {
+                                            Ok(Some(_)) => {
+                                                let _ = toggle_bookmark(slug_toggle).await;
+                                                refresh.update(|n| *n = n.wrapping_add(1));
+                                            }
+                                            _ => show_login.set(true),
+                                        }
+                                    });
                                 }
-                                _ => show_login.set(true),
-                            }
-                        });
-                    }
-                >
-                    {move || if starred.get() { "★" } else { "☆" }}
-                </button>
+                            >
+                                {if active { "★" } else { "☆" }}
+                            </button>
+                        }
+                    })}
+                </Suspense>
             </div>
         </article>
     }

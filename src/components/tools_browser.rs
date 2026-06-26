@@ -2,69 +2,38 @@
 //! Used by Home (`/`) and ToolsList (`/tools`) per UI_UX_DESIGN §2.
 
 use crate::components::{
-    bottom_sheet::BottomSheet, chain_strip::ChainStrip, empty_state::EmptyState,
-    error_state::ErrorState, preview_panel::PreviewPanel, search_bar::ToolbarSearch,
-    sidebar::Sidebar, skeleton::ToolListSkeleton, tool_card::ToolCard, top_nav::SidebarBrand,
+    bottom_sheet::BottomSheet, empty_state::EmptyState, error_state::ErrorState,
+    preview_panel::PreviewPanel, search_bar::ToolbarSearch,
+    sidebar::{FilterOverlayCtx, Sidebar}, skeleton::ToolListSkeleton, tool_card::ToolCard,
 };
-use crate::filter_query::{build_tool_filters, describe_active_filters, ActiveFiltersSummary};
-use crate::models::tool::parse_page_value;
-
+use crate::filter_query::build_tool_filters;
+use crate::models::{Category, Tool};
 use crate::server::functions::{
-    load_browser_data, BrowserDataPayload, LoadBrowserDataRequest, ToolFilters,
-    MAX_LIST_TOOLS_LIMIT,
+    count_tools, get_categories, get_chain_counts, get_tool_by_slug, get_tool_comment_counts,
+    list_tools, ToolFilters,
 };
 use leptos::prelude::*;
-use leptos_router::hooks::use_query_map;
+use leptos_router::hooks::{use_navigate, use_query_map};
 use std::collections::HashMap;
 
-const TOOL_PAGE_SIZE: u32 = 50;
-const MAX_VISIBLE_TOOLS: u32 = MAX_LIST_TOOLS_LIMIT as u32;
-pub const MAX_BROWSER_PAGE: u32 = MAX_VISIBLE_TOOLS / TOOL_PAGE_SIZE;
-
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub enum BrowserBase {
     Home,
     Tools,
-    Category(String),
 }
 
 impl BrowserBase {
-    pub fn path(&self) -> String {
+    pub fn path(self) -> &'static str {
         match self {
-            BrowserBase::Home => "/".into(),
-            BrowserBase::Tools => "/tools".into(),
-            BrowserBase::Category(id) => format!("/categories/{id}"),
+            BrowserBase::Home => "/",
+            BrowserBase::Tools => "/tools",
         }
-    }
-
-    /// Function filter from route (category pages) or query string elsewhere.
-    pub fn function_from_query(&self, from_query: Option<String>) -> Option<String> {
-        match self {
-            BrowserBase::Category(id) => Some(id.clone()),
-            _ => from_query,
-        }
-    }
-}
-
-/// Category page link preserving non-function query params (chain, sort, q, …).
-pub fn category_href(cat_id: &str, query_base: &str) -> String {
-    let params: Vec<&str> = query_base
-        .split('?')
-        .nth(1)
-        .unwrap_or("")
-        .split('&')
-        .filter(|p| !p.is_empty() && !p.starts_with("function="))
-        .collect();
-    if params.is_empty() {
-        format!("/categories/{cat_id}")
-    } else {
-        format!("/categories/{cat_id}?{}", params.join("&"))
     }
 }
 
 #[allow(clippy::too_many_arguments)]
 pub fn build_query_base(
-    base: &BrowserBase,
+    base: BrowserBase,
     function: Option<String>,
     asset_class: Option<String>,
     actor: Option<String>,
@@ -74,13 +43,10 @@ pub fn build_query_base(
     sort: String,
     search_q: Option<String>,
     selected: Option<String>,
-    page: u32,
 ) -> String {
     let mut parts: Vec<String> = Vec::new();
-    if !matches!(base, BrowserBase::Category(_)) {
-        if let Some(v) = function {
-            parts.push(format!("function={}", urlencoding::encode(&v)));
-        }
+    if let Some(v) = function {
+        parts.push(format!("function={}", urlencoding::encode(&v)));
     }
     if let Some(v) = asset_class {
         parts.push(format!("asset_class={}", urlencoding::encode(&v)));
@@ -106,99 +72,14 @@ pub fn build_query_base(
     if let Some(v) = selected {
         parts.push(format!("selected={}", urlencoding::encode(&v)));
     }
-    if page > 1 {
-        parts.push(format!("page={page}"));
-    }
     if parts.is_empty() {
-        base.path()
+        base.path().to_string()
     } else {
         format!("{}?{}", base.path(), parts.join("&"))
     }
 }
 
-#[allow(clippy::too_many_arguments)]
-pub fn build_filter_navigation_base(
-    base: &BrowserBase,
-    function: Option<String>,
-    asset_class: Option<String>,
-    actor: Option<String>,
-    tool_type: Option<String>,
-    status: Option<String>,
-    chain: Option<String>,
-    sort: String,
-    search_q: Option<String>,
-) -> String {
-    build_query_base(
-        base,
-        function,
-        asset_class,
-        actor,
-        tool_type,
-        status,
-        chain,
-        sort,
-        search_q,
-        None,
-        1,
-    )
-}
-
-pub fn clamp_browser_page(page: u32) -> u32 {
-    page.clamp(1, MAX_BROWSER_PAGE)
-}
-
-fn parse_page_param(raw: Option<String>) -> u32 {
-    clamp_browser_page(
-        raw.and_then(|s| parse_page_value(&decode_page_query_value(&s)))
-            .unwrap_or(1),
-    )
-}
-
-fn decode_page_query_value(value: &str) -> String {
-    urlencoding::decode(value)
-        .map(|s| s.into_owned())
-        .unwrap_or_else(|_| value.to_string())
-}
-
-/// Parse `page` from a raw query string (`?page=2&sort=hot` or `page=2`).
-pub fn parse_page_from_query_string(query: &str) -> Option<u32> {
-    let trimmed = query.trim_start_matches('?');
-    trimmed.split('&').find_map(|pair| {
-        let (key, value) = pair.split_once('=')?;
-        if key == "page" {
-            parse_page_value(&decode_page_query_value(value)).map(clamp_browser_page)
-        } else {
-            None
-        }
-    })
-}
-
-pub fn visible_limit_for_page(page: u32) -> i64 {
-    let page = page.max(1);
-    let limit = page.saturating_mul(TOOL_PAGE_SIZE).min(MAX_VISIBLE_TOOLS);
-    i64::from(limit)
-}
-
-/// Whether the load-more control should appear (respects total, UI cap, and page growth).
-pub fn should_show_load_more(shown: usize, total: i64, page: u32) -> bool {
-    let shown = shown as i64;
-    let total = total.max(0);
-    let max_visible = i64::from(MAX_VISIBLE_TOOLS);
-    if shown >= total {
-        return false;
-    }
-    if shown >= max_visible {
-        return false;
-    }
-    let current_limit = visible_limit_for_page(page);
-    let next_limit = visible_limit_for_page(page.saturating_add(1));
-    if current_limit >= max_visible && next_limit == current_limit {
-        return false;
-    }
-    true
-}
-
-pub fn with_selected(base_path: &BrowserBase, base: &str, slug: &str) -> String {
+pub fn with_selected(base_path: BrowserBase, base: &str, slug: &str) -> String {
     let root = base_path.path();
     if base == root || base.is_empty() {
         format!("{root}?selected={slug}")
@@ -212,7 +93,7 @@ pub fn with_selected(base_path: &BrowserBase, base: &str, slug: &str) -> String 
 /// Sort toolbar link — rebuilds query via `build_query_base` (no duplicate `sort=` params).
 #[allow(clippy::too_many_arguments)]
 pub fn build_sort_href(
-    base: &BrowserBase,
+    base: BrowserBase,
     function: Option<String>,
     asset_class: Option<String>,
     actor: Option<String>,
@@ -221,6 +102,7 @@ pub fn build_sort_href(
     chain: Option<String>,
     sort: &str,
     search_q: Option<String>,
+    selected: Option<String>,
 ) -> String {
     build_query_base(
         base,
@@ -232,45 +114,15 @@ pub fn build_sort_href(
         chain,
         sort.to_string(),
         search_q,
-        None,
-        1,
+        selected,
     )
 }
 
-#[allow(clippy::too_many_arguments)]
-pub fn build_load_more_href(
-    base: &BrowserBase,
-    function: Option<String>,
-    asset_class: Option<String>,
-    actor: Option<String>,
-    tool_type: Option<String>,
-    status: Option<String>,
-    chain: Option<String>,
-    sort: String,
-    search_q: Option<String>,
-    _selected: Option<String>,
-    page: u32,
-) -> String {
-    build_query_base(
-        base,
-        function,
-        asset_class,
-        actor,
-        tool_type,
-        status,
-        chain,
-        sort,
-        search_q,
-        None,
-        page.saturating_add(1),
-    )
-}
-
-pub fn without_selected(base_path: &BrowserBase, base: &str) -> String {
+pub fn without_selected(base_path: BrowserBase, base: &str) -> String {
     let root = base_path.path();
     let trimmed = base.trim_start_matches('?');
-    let query = if base.starts_with(&root) {
-        base.strip_prefix(&root)
+    let query = if base.starts_with(root) {
+        base.strip_prefix(root)
             .unwrap_or("")
             .trim_start_matches('?')
     } else {
@@ -291,50 +143,64 @@ fn comment_count_for_slug(comment_counts: &HashMap<String, i64>, slug: &str) -> 
     comment_counts.get(slug).copied().unwrap_or(0)
 }
 
-/// Cache identity for browser list data (excludes `retry_tick`).
-#[derive(Clone, PartialEq)]
-pub struct BrowserCacheKey {
-    pub sort: String,
-    pub filters: ToolFilters,
-    pub search_q: Option<String>,
-    pub selected: Option<String>,
-    pub page: u32,
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
+struct BrowserData {
+    categories: Vec<(Category, i64)>,
+    chains: Vec<(String, i64)>,
+    total: i64,
+    tools: Vec<Tool>,
+    comment_counts: HashMap<String, i64>,
+    preview_tool: Option<Tool>,
 }
 
-#[derive(Clone)]
-struct TaggedBrowserPayload {
-    deps: BrowserCacheKey,
-    data: BrowserDataPayload,
-}
+async fn load_browser_data(
+    sort: String,
+    filters: ToolFilters,
+    search_q: Option<String>,
+    selected: Option<String>,
+) -> Result<BrowserData, ServerFnError> {
+    // Round 1: these queries are independent, so run them concurrently — one
+    // network round-trip to the DB instead of five (the DB is remote; latency,
+    // not execution time, dominates page load).
+    let preview_fut = async {
+        match selected.filter(|s| !s.is_empty()) {
+            Some(s) => get_tool_by_slug(s).await.ok(),
+            None => None,
+        }
+    };
+    let (categories, chains, total, tools, preview_tool) = futures::join!(
+        get_categories(),
+        get_chain_counts(12),
+        count_tools(filters.clone()),
+        list_tools(sort, 0, 50, filters, search_q),
+        preview_fut,
+    );
+    let categories = categories?;
+    let chains = chains?;
+    let total = total?;
+    let tools = tools?;
 
-/// Choose list payload for render: hydrated resource wins; cache only while pending.
-/// Invariant: Leptos `Resource` invalidates `Some(Ok)` when `page_cache_key` changes.
-fn browser_data_for_render(
-    page_state: &Option<Result<BrowserDataPayload, ServerFnError>>,
-    cache_key: &BrowserCacheKey,
-    cached: Option<&TaggedBrowserPayload>,
-) -> Option<BrowserDataPayload> {
-    match page_state.as_ref() {
-        Some(Ok(data)) => Some(data.clone()),
-        None => cached
-            .filter(|tagged| tagged.deps == *cache_key)
-            .map(|tagged| tagged.data.clone()),
-        Some(Err(_)) => None,
-    }
+    // Round 2: comment counts need the resolved tool slugs.
+    let slugs = tools.iter().map(|t| t.slug.clone()).collect();
+    let comment_counts: HashMap<String, i64> =
+        get_tool_comment_counts(slugs).await?.into_iter().collect();
+    Ok(BrowserData {
+        categories,
+        chains,
+        total,
+        tools,
+        comment_counts,
+        preview_tool,
+    })
 }
 
 #[component]
 pub fn ToolsBrowser(
     base: BrowserBase,
     #[prop(optional)] show_toolbar_search: bool,
-    #[prop(optional)] children: Option<ChildrenFn>,
 ) -> impl IntoView {
-    let base = StoredValue::new(base);
     let query = use_query_map();
-    let function = Memo::new(move |_| {
-        base.get_value()
-            .function_from_query(query.with(|q| q.get("function").map(|s| s.to_string())))
-    });
+    let function = Memo::new(move |_| query.with(|q| q.get("function").map(|s| s.to_string())));
     let asset_class =
         Memo::new(move |_| query.with(|q| q.get("asset_class").map(|s| s.to_string())));
     let actor = Memo::new(move |_| query.with(|q| q.get("actor").map(|s| s.to_string())));
@@ -348,13 +214,10 @@ pub fn ToolsBrowser(
     });
     let search_q = Memo::new(move |_| query.with(|q| q.get("q").map(|s| s.to_string())));
     let selected = Memo::new(move |_| query.with(|q| q.get("selected").map(|s| s.to_string())));
-    // Router query only — do not read window.location (SSR/hydration divergence).
-    let page_number =
-        Memo::new(move |_| parse_page_param(query.with(|q| q.get("page").map(|s| s.to_string()))));
 
     let query_base = Memo::new(move |_| {
         build_query_base(
-            &base.get_value(),
+            base,
             function.get(),
             asset_class.get(),
             actor.get(),
@@ -364,20 +227,6 @@ pub fn ToolsBrowser(
             sort.get(),
             search_q.get(),
             selected.get(),
-            page_number.get(),
-        )
-    });
-    let filter_query_base = Memo::new(move |_| {
-        build_filter_navigation_base(
-            &base.get_value(),
-            function.get(),
-            asset_class.get(),
-            actor.get(),
-            tool_type.get(),
-            status.get(),
-            chain.get(),
-            sort.get(),
-            search_q.get(),
         )
     });
 
@@ -393,51 +242,26 @@ pub fn ToolsBrowser(
     });
 
     let retry_tick = RwSignal::new(0u32);
-    let page_cache_key = Memo::new(move |_| BrowserCacheKey {
-        sort: sort.get(),
-        filters: filters.get(),
-        search_q: search_q.get(),
-        selected: selected.get(),
-        page: page_number.get(),
+    let page_deps = Memo::new(move |_| {
+        (
+            sort.get(),
+            filters.get(),
+            search_q.get(),
+            selected.get(),
+            retry_tick.get(),
+        )
     });
-    let page_fetch_deps = Memo::new(move |_| (page_cache_key.get(), retry_tick.get()));
 
-    // Stale-while-revalidate cache for in-flight refetches (not serialized on hydrate).
-    let cached_browser_data = RwSignal::<Option<TaggedBrowserPayload>>::new(None);
-
-    let page: Resource<Result<BrowserDataPayload, ServerFnError>> = Resource::new_blocking(
-        move || page_fetch_deps.get(),
-        move |(cache_key, _retry_tick)| async move {
-            let data = load_browser_data(LoadBrowserDataRequest {
-                sort: cache_key.sort.clone(),
-                filters: cache_key.filters.clone(),
-                search_q: cache_key.search_q.clone(),
-                selected: cache_key.selected.clone(),
-                page: cache_key.page,
-            })
-            .await?;
-            if page_cache_key.get_untracked() == cache_key {
-                cached_browser_data.set(Some(TaggedBrowserPayload {
-                    deps: cache_key,
-                    data: data.clone(),
-                }));
-            }
-            Ok(data)
+    let page = Resource::new(
+        move || page_deps.get(),
+        |(sort, filters, search_q, selected, _)| async move {
+            load_browser_data(sort, filters, search_q, selected).await
         },
     );
 
-    Effect::new(move || {
-        let current = page_cache_key.get();
-        if let Some(tagged) = cached_browser_data.get() {
-            if tagged.deps != current {
-                cached_browser_data.set(None);
-            }
-        }
-    });
-
     let sort_hot = Memo::new(move |_| {
         build_sort_href(
-            &base.get_value(),
+            base,
             function.get(),
             asset_class.get(),
             actor.get(),
@@ -446,11 +270,12 @@ pub fn ToolsBrowser(
             chain.get(),
             "hot",
             search_q.get(),
+            selected.get(),
         )
     });
     let sort_new = Memo::new(move |_| {
         build_sort_href(
-            &base.get_value(),
+            base,
             function.get(),
             asset_class.get(),
             actor.get(),
@@ -459,11 +284,12 @@ pub fn ToolsBrowser(
             chain.get(),
             "new",
             search_q.get(),
+            selected.get(),
         )
     });
     let sort_comments = Memo::new(move |_| {
         build_sort_href(
-            &base.get_value(),
+            base,
             function.get(),
             asset_class.get(),
             actor.get(),
@@ -472,186 +298,133 @@ pub fn ToolsBrowser(
             chain.get(),
             "comments",
             search_q.get(),
+            selected.get(),
         )
     });
 
-    let children_fallback = children.clone();
+    let filter_overlay_open = RwSignal::new(false);
+    provide_context(FilterOverlayCtx(filter_overlay_open));
+
+    let navigate = StoredValue::new(use_navigate());
 
     view! {
         <div class="tools-layout" data-tools-browser="">
-            <Suspense fallback=move || view! {
-                <aside class="tools-sidebar site-sidebar-chrome">
-                    <SidebarBrand/>
-                    <p class="sidebar-empty">"Loading filters…"</p>
-                </aside>
-                <div class="tools-main">
-                    {children_fallback.as_ref().map(|content| view! { <div class="tools-prepend">{content()}</div> })}
-                    <ToolListSkeleton count=6/>
-                </div>
-            }>
-                {move || {
-                    let cache_key = page_cache_key.get();
-                    let page_state = page.get();
-                    let browser_data = browser_data_for_render(
-                        &page_state,
-                        &cache_key,
-                        cached_browser_data.get().as_ref(),
-                    );
-                    match (page_state, browser_data) {
-                        (Some(Err(e)), _) => view! {
-                            <aside class="tools-sidebar site-sidebar-chrome">
-                                <SidebarBrand/>
-                                <p class="sidebar-empty">"Loading filters…"</p>
-                            </aside>
+            <Suspense fallback=|| view! { <ToolListSkeleton count=6/> }>
+                {move || match page.get() {
+                    Some(Ok(data)) => {
+                        let qb = query_base.get();
+                        view! {
                             <div class="tools-main">
-                                {children.as_ref().map(|content| view! { <div class="tools-prepend">{content()}</div> })}
-                                <ErrorState
-                                    message=e.to_string()
-                                    on_retry=move || retry_tick.update(|n| *n = n.wrapping_add(1))
-                                />
+                                <div class="tools-toolbar sticky-toolbar">
+                                    {if show_toolbar_search {
+                                        view! { <ToolbarSearch base=base initial_q=search_q.get().unwrap_or_default()/> }.into_any()
+                                    } else {
+                                        ().into_any()
+                                    }}
+                                    <button
+                                        type="button"
+                                        class="toolbar-filters-btn"
+                                        aria-label="Open filters"
+                                        on:click=move |_| filter_overlay_open.set(true)
+                                    >
+                                        "☰ Filters"
+                                    </button>
+                                    <div class="toolbar-sort toolbar-sort-desktop">
+                                        <a href=move || sort_hot.get() class=move || if sort.get() == "hot" { "sort-link active" } else { "sort-link" }>"HOT ↓"</a>
+                                        <a href=move || sort_new.get() class=move || if sort.get() == "new" { "sort-link active" } else { "sort-link" }>"New"</a>
+                                        <a href=move || sort_comments.get() class=move || if sort.get() == "comments" { "sort-link active" } else { "sort-link" }>"Comments"</a>
+                                    </div>
+                                    <div class="toolbar-sort toolbar-sort-mobile">
+                                        <select
+                                            class="sort-select"
+                                            aria-label="Sort tools"
+                                            prop:value=move || sort.get()
+                                            on:change=move |ev| {
+                                                let new_sort = event_target_value(&ev);
+                                                let href = build_sort_href(
+                                                    base,
+                                                    function.get_untracked(),
+                                                    asset_class.get_untracked(),
+                                                    actor.get_untracked(),
+                                                    tool_type.get_untracked(),
+                                                    status.get_untracked(),
+                                                    chain.get_untracked(),
+                                                    &new_sort,
+                                                    search_q.get_untracked(),
+                                                    selected.get_untracked(),
+                                                );
+                                                navigate.with_value(|nav| nav(&href, Default::default()));
+                                            }
+                                        >
+                                            <option value="hot">"HOT ↓"</option>
+                                            <option value="new">"New"</option>
+                                            <option value="comments">"Comments"</option>
+                                        </select>
+                                    </div>
+                                    <span class="tool-count">{data.total}" tools"</span>
+                                </div>
+                                {if data.tools.is_empty() {
+                                    view! { <EmptyState/> }.into_any()
+                                } else {
+                                    let comment_counts = data.comment_counts.clone();
+                                    view! {
+                                        <div class="tool-list">
+                                            {data.tools.clone().into_iter().map(|t| {
+                                                let slug = t.slug.clone();
+                                                let preview = with_selected(base, &qb, &slug);
+                                                let sel = selected.get().map(|s| s == slug).unwrap_or(false);
+                                                let count = comment_count_for_slug(&comment_counts, &slug);
+                                                view! { <ToolCard tool=t preview_href=preview is_selected=sel comment_count=count/> }
+                                            }).collect_view()}
+                                        </div>
+                                    }.into_any()
+                                }}
                             </div>
-                        }.into_any(),
-                        (_, Some(data)) => {
-                            let qb = query_base.get();
-                            let filter_qb = filter_query_base.get();
-                            let browser_base = base.get_value();
-                            view! {
+
+                            <div class="tools-sidebar-slot">
                                 <Sidebar
-                                    base=browser_base.clone()
+                                    base=base
                                     categories=data.categories.clone()
-                                    query_base=filter_qb.clone()
+                                    query_base=qb.clone()
                                     active_function=function.get()
                                     active_asset_class=asset_class.get()
                                     active_actor=actor.get()
                                     active_type=tool_type.get()
                                     active_status=status.get()
-                                    default_function_open=matches!(browser_base, BrowserBase::Tools)
+                                    active_chain=chain.get()
+                                    chain_options=data.chains.clone()
+                                    default_function_open=base == BrowserBase::Tools
+                                    overlay_open=filter_overlay_open
                                 />
-                                <div class="tools-main">
-                                    {children.as_ref().map(|content| view! { <div class="tools-prepend">{content()}</div> })}
-                                    <ChainStrip
-                                        base=browser_base.clone()
-                                        query_base=filter_qb.clone()
-                                        active_chain=chain.get()
-                                        chain_counts=data.chains.clone()
-                                    />
-                                    <div class="tools-toolbar sticky-toolbar">
-                                        {if show_toolbar_search {
-                                            view! { <ToolbarSearch base=browser_base.clone() initial_q=search_q.get().unwrap_or_default()/> }.into_any()
-                                        } else {
-                                            ().into_any()
-                                        }}
-                                        <div class="toolbar-sort">
-                                            <a href=move || sort_hot.get() class=move || if sort.get() == "hot" { "sort-link active" } else { "sort-link" }>"HOT ↓"</a>
-                                            <a href=move || sort_new.get() class=move || if sort.get() == "new" { "sort-link active" } else { "sort-link" }>"New"</a>
-                                            <a href=move || sort_comments.get() class=move || if sort.get() == "comments" { "sort-link active" } else { "sort-link" }>"Comments"</a>
-                                        </div>
-                                        <span class="tool-count">{data.total}" tools"</span>
-                                    </div>
-                                    {if data.tools.is_empty() {
-                                        let filter_summary = ActiveFiltersSummary::from_query(
-                                            function.get(),
-                                            asset_class.get(),
-                                            actor.get(),
-                                            tool_type.get(),
-                                            status.get(),
-                                            chain.get(),
-                                            search_q.get(),
-                                            Some(sort.get()),
-                                        );
-                                        let function_labels: std::collections::HashMap<String, String> =
-                                            data.categories.iter().map(|(c, _)| (c.id.clone(), c.label.clone())).collect();
-                                        let filter_lines = describe_active_filters(&filter_summary, &function_labels);
-                                        let clear_href = if filter_summary.has_active_filters() {
-                                            browser_base.path()
-                                        } else {
-                                            String::new()
-                                        };
-                                        view! {
-                                            <EmptyState filter_lines=filter_lines clear_href=clear_href/>
-                                        }.into_any()
-                                    } else {
-                                        let comment_counts = data.comment_counts.clone();
-                                        let tools = data.tools.clone();
-                                        let tools_len = tools.len();
-                                        let browser_base_list = browser_base.clone();
-                                        let qb_list = qb.clone();
-                                        view! {
-                                            <div class="tool-list">
-                                                <For
-                                                    each=move || tools.clone()
-                                                    key=|tool| tool.slug.clone()
-                                                    children=move |t| {
-                                                        let slug = t.slug.clone();
-                                                        let preview = with_selected(&browser_base_list, &qb_list, &slug);
-                                                        let sel = selected.get().map(|s| s == slug).unwrap_or(false);
-                                                        let count = comment_count_for_slug(&comment_counts, &slug);
-                                                        view! {
-                                                            <ToolCard
-                                                                tool=t
-                                                                preview_href=preview
-                                                                is_selected=sel
-                                                                comment_count=count
-                                                            />
-                                                        }
-                                                    }
-                                                />
-                                            </div>
-                                            {if should_show_load_more(tools_len, data.total, page_number.get()) {
-                                                let next_href = build_load_more_href(
-                                                    &browser_base,
-                                                    function.get(),
-                                                    asset_class.get(),
-                                                    actor.get(),
-                                                    tool_type.get(),
-                                                    status.get(),
-                                                    chain.get(),
-                                                    sort.get(),
-                                                    search_q.get(),
-                                                    selected.get(),
-                                                    page_number.get(),
-                                                );
-                                                view! {
-                                                    <div class="load-more-row">
-                                                        <a href=next_href class="load-more-btn">
-                                                            "Load more"
-                                                        </a>
-                                                        <span class="load-more-count">
-                                                            "Showing "{tools_len}" of "{data.total}
-                                                        </span>
-                                                    </div>
-                                                }.into_any()
-                                            } else {
-                                                ().into_any()
-                                            }}
-                                        }.into_any()
-                                    }}
-                                    {data.preview_tool.clone().map(|tool| {
-                                        let close = without_selected(&browser_base, &qb);
-                                        let full = format!("/tools/{}", tool.slug);
-                                        view! {
-                                            <div class="preview-desktop">
-                                                <PreviewPanel tool=tool.clone() close_href=close.clone() full_page_href=full.clone()/>
-                                            </div>
-                                            <div class="preview-mobile">
-                                                <BottomSheet tool=tool close_href=close full_page_href=full/>
-                                            </div>
-                                        }
-                                    })}
-                                </div>
-                            }.into_any()
-                        }
-                        _ => view! {
-                            <aside class="tools-sidebar site-sidebar-chrome">
-                                <SidebarBrand/>
-                                <p class="sidebar-empty">"Loading filters…"</p>
-                            </aside>
-                            <div class="tools-main">
-                                {children.as_ref().map(|content| view! { <div class="tools-prepend">{content()}</div> })}
-                                <ToolListSkeleton count=6/>
                             </div>
-                        }.into_any(),
+
+                            {data.preview_tool.clone().map(|tool| {
+                                let close = without_selected(base, &qb);
+                                let full = format!("/tools/{}", tool.slug);
+                                view! {
+                                    <div class="preview-desktop">
+                                        <PreviewPanel tool=tool.clone() close_href=close.clone() full_page_href=full.clone()/>
+                                    </div>
+                                    <div class="preview-mobile">
+                                        <BottomSheet tool=tool close_href=close full_page_href=full/>
+                                    </div>
+                                }
+                            })}
+                        }.into_any()
                     }
+                    Some(Err(e)) => view! {
+                        <div class="tools-main tools-main-full">
+                            <ErrorState
+                                message=e.to_string()
+                                on_retry=move || retry_tick.update(|n| *n = n.wrapping_add(1))
+                            />
+                        </div>
+                    }.into_any(),
+                    None => view! {
+                        <div class="tools-main tools-main-full">
+                            <ToolListSkeleton count=6/>
+                        </div>
+                    }.into_any(),
                 }}
             </Suspense>
         </div>
@@ -663,36 +436,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn category_path_omits_function_param_but_keeps_chain() {
-        let q = build_query_base(
-            &BrowserBase::Category("bridge".into()),
-            Some("bridge".into()),
-            None,
-            None,
-            None,
-            None,
-            Some("ethereum,solana".into()),
-            "hot".into(),
-            None,
-            None,
-            1,
-        );
-        assert_eq!(q, "/categories/bridge?chain=ethereum%2Csolana");
-    }
-
-    #[test]
-    fn category_href_preserves_chain_sort() {
-        let href = category_href(
-            "swap",
-            "/categories/bridge?chain=ethereum&sort=new&function=bridge",
-        );
-        assert_eq!(href, "/categories/swap?chain=ethereum&sort=new");
-    }
-
-    #[test]
     fn home_query_includes_multi_filters_and_selected() {
         let q = build_query_base(
-            &BrowserBase::Home,
+            BrowserBase::Home,
             Some("bridge,swap".into()),
             None,
             None,
@@ -702,7 +448,6 @@ mod tests {
             "hot".into(),
             None,
             Some("zapper".into()),
-            1,
         );
         assert!(q.starts_with("/?"));
         assert!(q.contains("function=bridge%2Cswap") || q.contains("function=bridge,swap"));
@@ -711,239 +456,10 @@ mod tests {
     }
 
     #[test]
-    fn query_base_keeps_page_only_after_first_page() {
-        let first = build_query_base(
-            &BrowserBase::Tools,
-            None,
-            None,
-            None,
-            None,
-            None,
-            Some("base".into()),
-            "hot".into(),
-            Some("wallet".into()),
-            None,
-            1,
-        );
-        assert_eq!(first, "/tools?chain=base&q=wallet");
-
-        let second = build_query_base(
-            &BrowserBase::Tools,
-            None,
-            None,
-            None,
-            None,
-            None,
-            Some("base".into()),
-            "hot".into(),
-            Some("wallet".into()),
-            None,
-            2,
-        );
-        assert_eq!(second, "/tools?chain=base&q=wallet&page=2");
-    }
-
-    #[test]
-    fn load_more_href_increments_page_and_drops_preview_selection() {
-        let href = build_load_more_href(
-            &BrowserBase::Tools,
-            Some("bridge".into()),
-            None,
-            None,
-            Some("mcp".into()),
-            None,
-            Some("base".into()),
-            "comments".into(),
-            Some("agent".into()),
-            Some("selected-tool".into()),
-            2,
-        );
-        assert_eq!(
-            href,
-            "/tools?function=bridge&type=mcp&chain=base&sort=comments&q=agent&page=3"
-        );
-    }
-
-    #[test]
-    fn filter_navigation_base_omits_pagination_and_preview_selection() {
-        let href = build_filter_navigation_base(
-            &BrowserBase::Tools,
-            Some("bridge".into()),
-            None,
-            None,
-            Some("mcp".into()),
-            None,
-            Some("base".into()),
-            "comments".into(),
-            Some("agent".into()),
-        );
-        assert_eq!(
-            href,
-            "/tools?function=bridge&type=mcp&chain=base&sort=comments&q=agent"
-        );
-        assert!(!href.contains("selected="));
-        assert!(!href.contains("page="));
-    }
-
-    #[test]
-    fn visible_limit_for_page_is_bounded() {
-        assert_eq!(visible_limit_for_page(0), 50);
-        assert_eq!(visible_limit_for_page(1), 50);
-        assert_eq!(visible_limit_for_page(2), 100);
-        assert_eq!(visible_limit_for_page(3), 150);
-        assert_eq!(visible_limit_for_page(99), 500);
-    }
-
-    #[test]
-    fn parse_page_from_query_string_reads_page_param() {
-        assert_eq!(parse_page_from_query_string("?page=2&sort=hot"), Some(2));
-        assert_eq!(parse_page_from_query_string("page=3"), Some(3));
-        assert_eq!(parse_page_from_query_string("?page=%32"), Some(2));
-        assert_eq!(parse_page_from_query_string("?sort=hot"), None);
-        assert_eq!(parse_page_from_query_string("?page=0"), None);
-        assert_eq!(parse_page_from_query_string("?page=abc"), None);
-        assert_eq!(parse_page_from_query_string("?page=-1"), None);
-        assert_eq!(
-            parse_page_from_query_string("?page=999"),
-            Some(MAX_BROWSER_PAGE)
-        );
-    }
-
-    #[test]
-    fn parse_page_param_falls_back_for_invalid_values() {
-        assert_eq!(parse_page_param(Some("2".into())), 2);
-        assert_eq!(parse_page_param(Some("%32".into())), 2);
-        assert_eq!(parse_page_param(Some("abc".into())), 1);
-        assert_eq!(parse_page_param(Some("0".into())), 1);
-        assert_eq!(parse_page_param(Some("-1".into())), 1);
-        assert_eq!(parse_page_param(None), 1);
-        assert_eq!(parse_page_param(Some("99".into())), MAX_BROWSER_PAGE);
-    }
-
-    #[test]
-    fn clamp_browser_page_bounds_visible_window() {
-        assert_eq!(clamp_browser_page(0), 1);
-        assert_eq!(clamp_browser_page(1), 1);
-        assert_eq!(clamp_browser_page(10), 10);
-        assert_eq!(clamp_browser_page(11), MAX_BROWSER_PAGE);
-    }
-
-    fn sample_cache_key(page: u32) -> BrowserCacheKey {
-        BrowserCacheKey {
-            sort: "hot".into(),
-            filters: ToolFilters::default(),
-            search_q: None,
-            selected: None,
-            page,
-        }
-    }
-
-    fn sample_browser_data(total: i64) -> BrowserDataPayload {
-        BrowserDataPayload {
-            categories: vec![],
-            chains: vec![],
-            total,
-            tools: vec![],
-            comment_counts: HashMap::new(),
-            preview_tool: None,
-        }
-    }
-
-    #[test]
-    fn browser_data_for_render_uses_hydrated_resource_without_cache() {
-        let current = sample_cache_key(2);
-        let data = sample_browser_data(100);
-        let page_state = Some(Ok(data.clone()));
-        let resolved = browser_data_for_render(&page_state, &current, None);
-        assert_eq!(resolved.map(|d| d.total), Some(100));
-    }
-
-    #[test]
-    fn browser_data_for_render_ignores_cache_when_resource_ready() {
-        let current = sample_cache_key(2);
-        let hydrated = sample_browser_data(100);
-        let stale = TaggedBrowserPayload {
-            deps: sample_cache_key(1),
-            data: sample_browser_data(50),
-        };
-        let page_state = Some(Ok(hydrated));
-        let resolved = browser_data_for_render(&page_state, &current, Some(&stale));
-        assert_eq!(resolved.map(|d| d.total), Some(100));
-    }
-
-    #[test]
-    fn browser_data_for_render_reuses_cache_while_pending() {
-        let current = sample_cache_key(1);
-        let cached = TaggedBrowserPayload {
-            deps: current.clone(),
-            data: sample_browser_data(50),
-        };
-        let resolved = browser_data_for_render(&None, &current, Some(&cached));
-        assert_eq!(resolved.map(|d| d.total), Some(50));
-    }
-
-    #[test]
-    fn browser_data_for_render_returns_none_on_error() {
-        let current = sample_cache_key(1);
-        let cached = TaggedBrowserPayload {
-            deps: current.clone(),
-            data: sample_browser_data(50),
-        };
-        let page_state = Some(Err(ServerFnError::ServerError("boom".into())));
-        assert!(browser_data_for_render(&page_state, &current, Some(&cached)).is_none());
-    }
-
-    #[test]
-    fn browser_data_for_render_ignores_cache_when_deps_mismatch_and_pending() {
-        let current = sample_cache_key(1);
-        let stale = TaggedBrowserPayload {
-            deps: sample_cache_key(2),
-            data: sample_browser_data(100),
-        };
-        assert!(browser_data_for_render(&None, &current, Some(&stale)).is_none());
-    }
-
-    #[test]
-    fn browser_data_for_render_returns_none_when_pending_without_cache() {
-        let current = sample_cache_key(1);
-        assert!(browser_data_for_render(&None, &current, None).is_none());
-    }
-
-    #[test]
-    fn browser_data_for_render_rejects_stale_cache_on_sort_mismatch() {
-        let current = sample_cache_key(1);
-        let mut stale_key = sample_cache_key(1);
-        stale_key.sort = "new".into();
-        let stale = TaggedBrowserPayload {
-            deps: stale_key,
-            data: sample_browser_data(50),
-        };
-        assert!(browser_data_for_render(&None, &current, Some(&stale)).is_none());
-    }
-
-    #[test]
-    fn browser_data_for_render_rejects_stale_cache_on_filter_mismatch() {
-        let current = sample_cache_key(1);
-        let mut stale_key = sample_cache_key(1);
-        stale_key.filters.function = vec!["bridge".into()];
-        let stale = TaggedBrowserPayload {
-            deps: stale_key,
-            data: sample_browser_data(50),
-        };
-        assert!(browser_data_for_render(&None, &current, Some(&stale)).is_none());
-    }
-
-    #[test]
-    fn load_more_page_two_requests_cumulative_limit() {
-        assert_eq!(visible_limit_for_page(2), 100);
-        assert!(should_show_load_more(100, 500, 2));
-    }
-
-    #[test]
     fn tools_path_clear_is_root() {
-        assert_eq!(without_selected(&BrowserBase::Tools, "/tools"), "/tools");
+        assert_eq!(without_selected(BrowserBase::Tools, "/tools"), "/tools");
         assert_eq!(
-            without_selected(&BrowserBase::Tools, "/tools?function=swap&selected=foo"),
+            without_selected(BrowserBase::Tools, "/tools?function=swap&selected=foo"),
             "/tools?function=swap"
         );
     }
@@ -959,7 +475,7 @@ mod tests {
             None,
         );
         let from_new = build_sort_href(
-            &BrowserBase::Tools,
+            BrowserBase::Tools,
             filters.0.clone(),
             filters.1.clone(),
             filters.2.clone(),
@@ -967,6 +483,7 @@ mod tests {
             filters.4.clone(),
             filters.5.clone(),
             "new",
+            None,
             None,
         );
         assert_eq!(from_new.matches("sort=").count(), 1);
@@ -977,7 +494,7 @@ mod tests {
         assert!(from_new.contains("sort=new"));
 
         let to_hot = build_sort_href(
-            &BrowserBase::Tools,
+            BrowserBase::Tools,
             filters.0,
             filters.1,
             filters.2,
@@ -986,71 +503,13 @@ mod tests {
             filters.5,
             "hot",
             None,
+            None,
         );
         assert!(!to_hot.contains("sort="));
         assert!(
             to_hot.contains("function=bridge%2Cswap") || to_hot.contains("function=bridge,swap")
         );
         assert!(to_hot.contains("type=mcp"));
-    }
-
-    #[test]
-    fn sort_href_omits_selected_preview() {
-        let href = build_sort_href(
-            &BrowserBase::Tools,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            "new",
-            None,
-        );
-        assert!(!href.contains("selected="));
-    }
-
-    #[test]
-    fn should_show_load_more_hides_when_all_shown() {
-        assert!(!should_show_load_more(50, 50, 1));
-    }
-
-    #[test]
-    fn should_show_load_more_hides_at_visible_cap() {
-        assert!(!should_show_load_more(500, 1000, 10));
-    }
-
-    #[test]
-    fn should_show_load_more_shows_when_more_available() {
-        assert!(should_show_load_more(50, 200, 1));
-        assert!(should_show_load_more(450, 1000, 9));
-    }
-
-    #[test]
-    fn should_show_load_more_hides_when_page_cannot_grow() {
-        assert!(!should_show_load_more(480, 1000, 10));
-    }
-
-    #[test]
-    fn should_show_load_more_shows_from_empty_first_page() {
-        assert!(should_show_load_more(0, 100, 1));
-    }
-
-    #[test]
-    fn should_show_load_more_hides_when_total_non_positive() {
-        assert!(!should_show_load_more(0, 0, 1));
-        assert!(!should_show_load_more(0, -5, 1));
-    }
-
-    #[test]
-    fn should_show_load_more_treats_page_zero_like_first_page() {
-        assert!(should_show_load_more(50, 200, 0));
-        assert!(!should_show_load_more(50, 50, 0));
-    }
-
-    #[test]
-    fn should_show_load_more_shows_one_below_cap_with_room_to_grow() {
-        assert!(should_show_load_more(499, 1000, 9));
     }
 
     #[test]
