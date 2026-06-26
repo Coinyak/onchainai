@@ -6,11 +6,11 @@ use crate::components::{
     preview_panel::PreviewPanel, search_bar::ToolbarSearch, sidebar::Sidebar,
     skeleton::ToolListSkeleton, tool_card::ToolCard,
 };
-use crate::filter_query::build_tool_filters;
+use crate::filter_query::{build_tool_filters, describe_active_filters, ActiveFiltersSummary};
 use crate::models::{Category, Tool};
 use crate::server::functions::{
     count_tools, get_categories, get_chain_counts, get_tool_by_slug, get_tool_comment_counts,
-    list_tools, ToolFilters,
+    list_tools_v1, ToolFilters, ToolListRequest,
 };
 use leptos::prelude::*;
 use leptos_router::hooks::use_query_map;
@@ -172,7 +172,13 @@ async fn load_browser_data(
         get_categories(),
         get_chain_counts(12),
         count_tools(filters.clone()),
-        list_tools(sort, 0, 50, filters, search_q),
+        list_tools_v1(ToolListRequest {
+            sort,
+            offset: 0,
+            limit: 50,
+            filters,
+            query: search_q,
+        }),
         preview_fut,
     );
     let categories = categories?;
@@ -337,7 +343,27 @@ pub fn ToolsBrowser(
                                     <span class="tool-count">{data.total}" tools"</span>
                                 </div>
                                 {if data.tools.is_empty() {
-                                    view! { <EmptyState/> }.into_any()
+                                    let filter_summary = ActiveFiltersSummary::from_query(
+                                        function.get(),
+                                        asset_class.get(),
+                                        actor.get(),
+                                        tool_type.get(),
+                                        status.get(),
+                                        chain.get(),
+                                        search_q.get(),
+                                        Some(sort.get()),
+                                    );
+                                    let function_labels: std::collections::HashMap<String, String> =
+                                        data.categories.iter().map(|(c, _)| (c.id.clone(), c.label.clone())).collect();
+                                    let filter_lines = describe_active_filters(&filter_summary, &function_labels);
+                                    let clear_href = if filter_summary.has_active_filters() {
+                                        base.path().to_string()
+                                    } else {
+                                        String::new()
+                                    };
+                                    view! {
+                                        <EmptyState filter_lines=filter_lines clear_href=clear_href/>
+                                    }.into_any()
                                 } else {
                                     let comment_counts = data.comment_counts.clone();
                                     view! {

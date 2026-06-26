@@ -14,6 +14,7 @@
 
 pub mod deduper;
 pub mod normalizer;
+pub mod relevance;
 pub mod scheduler;
 pub mod settings;
 pub mod sources;
@@ -95,10 +96,15 @@ pub async fn upsert_tools(pool: &sqlx::PgPool, tools: &[models::Tool]) -> anyhow
                 name, slug, description, function, asset_class, actor, type,
                 repo_url, homepage, npm_package, install_command, mcp_endpoint,
                 chains, status, official_team, trust_score, approval_status,
-                submitted_by, rejection_reason, license, pricing, x402_price,
+                submitted_by, rejection_reason,
+                crypto_relevance_score, crypto_relevance_reasons, relevance_status,
+                install_risk_level, install_risk_reasons, requires_secret, safe_copy_command,
+                review_policy_version,
+                license, pricing, x402_price,
                 stars, last_commit_at, source, source_url, created_at, updated_at
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, now())
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19,
+                    $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, now())
             ON CONFLICT (slug) DO UPDATE SET
                 name = EXCLUDED.name,
                 description = EXCLUDED.description,
@@ -121,6 +127,14 @@ pub async fn upsert_tools(pool: &sqlx::PgPool, tools: &[models::Tool]) -> anyhow
                 approval_status = COALESCE(NULLIF(tools.approval_status, ''), EXCLUDED.approval_status),
                 submitted_by = tools.submitted_by,
                 rejection_reason = tools.rejection_reason,
+                crypto_relevance_score = EXCLUDED.crypto_relevance_score,
+                crypto_relevance_reasons = EXCLUDED.crypto_relevance_reasons,
+                relevance_status = EXCLUDED.relevance_status,
+                install_risk_level = EXCLUDED.install_risk_level,
+                install_risk_reasons = EXCLUDED.install_risk_reasons,
+                requires_secret = EXCLUDED.requires_secret,
+                safe_copy_command = EXCLUDED.safe_copy_command,
+                review_policy_version = EXCLUDED.review_policy_version,
                 license = EXCLUDED.license,
                 pricing = EXCLUDED.pricing,
                 x402_price = EXCLUDED.x402_price,
@@ -150,6 +164,14 @@ pub async fn upsert_tools(pool: &sqlx::PgPool, tools: &[models::Tool]) -> anyhow
         .bind(&tool.approval_status)
         .bind(tool.submitted_by)
         .bind(&tool.rejection_reason)
+        .bind(tool.crypto_relevance_score)
+        .bind(&tool.crypto_relevance_reasons)
+        .bind(&tool.relevance_status)
+        .bind(&tool.install_risk_level)
+        .bind(&tool.install_risk_reasons)
+        .bind(tool.requires_secret)
+        .bind(&tool.safe_copy_command)
+        .bind(&tool.review_policy_version)
         .bind(&tool.license)
         .bind(&tool.pricing)
         .bind(&tool.x402_price)

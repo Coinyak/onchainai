@@ -3,6 +3,7 @@
 pub mod categories;
 pub mod comments;
 pub mod crawler;
+pub mod dashboard;
 pub mod settings;
 pub mod tools;
 pub mod users;
@@ -10,6 +11,7 @@ pub mod users;
 pub use categories::AdminCategoriesPage;
 pub use comments::AdminCommentsPage;
 pub use crawler::AdminCrawlerPage;
+pub use dashboard::AdminDashboardPage;
 pub use settings::AdminSettingsPage;
 pub use tools::AdminToolsPage;
 pub use users::AdminUsersPage;

@@ -1,5 +1,6 @@
-/* OnchainAI generated CSS — Tailwind output stub */
-/* Replace with full Tailwind build when tooling is wired. */
+/* OnchainAI stylesheet.
+   This file is the current source of truth for production CSS.
+   Do not rely on Tailwind utility classes unless they are defined here. */
 
 *,
 *::before,
@@ -145,6 +146,7 @@ body {
 .rounded-md { border-radius: 6px; }
 .border { border-width: 1px; border-style: solid; }
 .border-b { border-bottom-width: 1px; border-bottom-style: solid; }
+.border-t { border-top-width: 1px; border-top-style: solid; }
 .border-\[\#E5E5E5\] { border-color: #E5E5E5; }
 .sticky { position: sticky; }
 .top-0 { top: 0; }
@@ -154,6 +156,8 @@ body {
 @media (min-width: 768px) {
   .md\:px-6 { padding-left: 24px; padding-right: 24px; }
   .md\:py-12 { padding-top: 48px; padding-bottom: 48px; }
+  .md\:text-\[36px\] { font-size: 36px; }
+  .md\:text-\[16px\] { font-size: 16px; }
   .md\:grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .md\:flex { display: flex; }
   .md\:hidden { display: none; }
@@ -437,6 +441,25 @@ body {
 .install-tab.active { border-color: #E76F00; color: #E76F00; }
 .trust-section { margin-top: 16px; }
 .trust-list { margin: 0; padding-left: 18px; font-size: 13px; color: #6B6B6B; }
+.trust-evidence-item { list-style: none; margin-left: -18px; padding-left: 18px; }
+.trust-evidence-list {
+  margin: 6px 0 0; padding-left: 18px; color: #1A1A1A;
+}
+.trust-evidence-empty { color: #999999; }
+.trust-report-link { color: #E76F00; text-decoration: none; font-weight: 500; }
+.trust-report-link:hover { text-decoration: underline; }
+.badge-risk-low { background: #E8F5EE; border-color: #1A7F4B; color: #1A7F4B; }
+.badge-risk-medium { background: #FFF8E6; border-color: #B8860B; color: #8A6508; }
+.badge-risk-high { background: #FDEDEC; border-color: #C0392B; color: #C0392B; }
+.badge-risk-critical { background: #F8D7DA; border-color: #A93226; color: #922B21; }
+.badge-relevance-accepted { background: #E8F5EE; border-color: #1A7F4B; color: #1A7F4B; }
+.badge-relevance-pending { background: #FFF8E6; border-color: #B8860B; color: #8A6508; }
+.badge-relevance-rejected { background: #FDEDEC; border-color: #C0392B; color: #C0392B; }
+.install-warning {
+  font-size: 13px; color: #8A6508; background: #FFF8E6; border: 1px solid #F0D78C;
+  border-radius: 8px; padding: 10px 12px; margin: 0 0 12px;
+}
+.install-tab:disabled { opacity: 0.45; cursor: not-allowed; }
 .full-page-link {
   display: inline-block; margin-top: 16px; font-size: 14px; color: #1A1A1A; text-decoration: none;
 }
@@ -518,6 +541,31 @@ body {
   border-radius: 8px; margin: 16px 0;
 }
 .empty-state-message, .error-state-message { font-size: 14px; color: #6B6B6B; margin: 0 0 16px; }
+.empty-state-filters {
+  margin: 0 auto 12px; max-width: 420px; text-align: left; background: #FAFAFA;
+  border: 1px solid #E5E5E5; border-radius: 8px; padding: 12px 14px;
+}
+.empty-state-filters-heading {
+  margin: 0 0 8px; font-size: 12px; font-weight: 600; color: #1A1A1A; text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.empty-state-filter-list {
+  margin: 0; padding-left: 18px; font-size: 13px; color: #1A1A1A;
+}
+.empty-state-hint { font-size: 13px; color: #6B6B6B; margin: 0 0 16px; }
+.empty-state-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+.empty-state-clear-btn, .empty-state-submit-btn {
+  display: inline-flex; align-items: center; justify-content: center; height: 36px;
+  padding: 0 16px; border-radius: 8px; font-size: 14px; font-weight: 500; text-decoration: none;
+}
+.empty-state-clear-btn {
+  border: 1px solid #E5E5E5; background: #FFFFFF; color: #1A1A1A;
+}
+.empty-state-clear-btn:hover { background: #FAFAFA; }
+.empty-state-submit-btn {
+  border: 0; background: #E76F00; color: #FFFFFF;
+}
+.empty-state-submit-btn:hover { background: #D96400; }
 .error-state-message { color: #C0392B; }
 .error-retry-btn {
   height: 36px; padding: 0 16px; border-radius: 8px; border: 1px solid #E5E5E5;

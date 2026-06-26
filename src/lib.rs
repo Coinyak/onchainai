@@ -10,6 +10,7 @@ pub mod config;
 #[cfg(feature = "ssr")]
 pub mod crawler;
 pub mod filter_query;
+pub mod install_safety;
 pub mod models;
 pub mod pages;
 pub mod server;
@@ -90,12 +91,29 @@ pub fn build_app(pool: sqlx::PgPool, config: Config) -> axum::Router {
         ])
         .allow_credentials(true);
 
-    let governor_conf = GovernorConfigBuilder::default()
-        .per_second(1)
-        .burst_size(30)
-        .finish()
-        .expect("governor config");
-    let rate_limit = GovernorLayer::new(governor_conf);
+    use crate::server::rate_limit::{AUTH_PER_MINUTE, GENERAL_PER_MINUTE, MCP_PER_MINUTE};
+
+    let general_rate_limit = GovernorLayer::new(
+        GovernorConfigBuilder::default()
+            .per_second(1)
+            .burst_size(GENERAL_PER_MINUTE)
+            .finish()
+            .expect("general governor config"),
+    );
+    let auth_rate_limit = GovernorLayer::new(
+        GovernorConfigBuilder::default()
+            .per_second(12)
+            .burst_size(AUTH_PER_MINUTE)
+            .finish()
+            .expect("auth governor config"),
+    );
+    let mcp_rate_limit = GovernorLayer::new(
+        GovernorConfigBuilder::default()
+            .per_millisecond(600)
+            .burst_size(MCP_PER_MINUTE)
+            .finish()
+            .expect("mcp governor config"),
+    );
 
     let security_headers = ServiceBuilder::new()
         .layer(SetResponseHeaderLayer::if_not_present(
@@ -148,13 +166,7 @@ pub fn build_app(pool: sqlx::PgPool, config: Config) -> axum::Router {
         }
     };
 
-    Router::new()
-        .route_service("/pkg/onchainai.css", ServeFile::new("style/output.css"))
-        .route_service(
-            &static_route,
-            leptos_axum::site_pkg_dir_service(&leptos_options),
-        )
-        .route("/mcp", axum::routing::post(server::mcp::handle_mcp))
+    let auth_routes = Router::new()
         .route(
             "/auth/github",
             axum::routing::get(auth::routes::github_login),
@@ -181,6 +193,28 @@ pub fn build_app(pool: sqlx::PgPool, config: Config) -> axum::Router {
             axum::routing::post(auth::siwx::challenge),
         )
         .route("/auth/siwx/verify", axum::routing::post(auth::siwx::verify))
+        .with_state(state.clone())
+        .layer(auth_rate_limit);
+
+    let mcp_routes = Router::new()
+        .route("/mcp", axum::routing::post(server::mcp::handle_mcp))
+        .with_state(state.clone())
+        .layer(mcp_rate_limit);
+
+    let app_routes = Router::new()
+        .route_service("/pkg/onchainai.css", ServeFile::new("style/output.css"))
+        .route_service(
+            &static_route,
+            leptos_axum::site_pkg_dir_service(&leptos_options),
+        )
+        .route(
+            "/api/admin/operator/snapshot",
+            axum::routing::get(server::operator_harness::get_operator_snapshot),
+        )
+        .route(
+            "/api/admin/operator/run",
+            axum::routing::post(server::operator_harness::post_operator_run),
+        )
         .leptos_routes_with_context(&state, routes, provide_leptos_context, move || {
             app::shell(leptos_options_for_handler.clone())
         })
@@ -189,11 +223,16 @@ pub fn build_app(pool: sqlx::PgPool, config: Config) -> axum::Router {
             app::shell,
         ))
         .with_state(state.clone())
+        .layer(general_rate_limit);
+
+    Router::new()
+        .merge(auth_routes)
+        .merge(mcp_routes)
+        .merge(app_routes)
         .layer(security_headers)
         .layer(cors)
         .layer(CompressionLayer::new())
         .layer(RequestBodyLimitLayer::new(1024 * 1024))
-        .layer(rate_limit)
         .layer(TraceLayer::new_for_http())
 }
 

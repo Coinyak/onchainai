@@ -17,11 +17,16 @@ COPY style/ ./style/
 RUN rustup target add wasm32-unknown-unknown
 
 # Install cargo-leptos (portable across amd64/arm64 builders)
-RUN cargo install cargo-leptos --locked
+ARG CARGO_LEPTOS_VERSION=0.3.6
+RUN cargo install cargo-leptos --version "${CARGO_LEPTOS_VERSION}" --locked
 
-# Full Leptos build: keep SSR deployment healthy even if the WASM bundle step fails.
-RUN cargo leptos build --release 2>&1 | tee /tmp/leptos-build.log \
-    || echo "WASM bundle build skipped; SSR-only mode"
+# Full Leptos build — fail the image build if SSR, WASM, or JS artifacts are invalid.
+RUN cargo leptos build --release 2>&1 | tee /tmp/leptos-build.log
+
+RUN test -s /app/target/release/onchainai \
+    && test -s /app/target/site/pkg/onchainai.js \
+    && test -s /app/target/site/pkg/onchainai.wasm \
+    && test -s /app/style/output.css
 
 # --- runtime stage ---
 FROM debian:bookworm-slim

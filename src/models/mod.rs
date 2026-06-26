@@ -8,6 +8,7 @@
 
 pub mod category;
 pub mod comment;
+pub mod submission;
 pub mod tool;
 pub mod user;
 
@@ -17,6 +18,11 @@ pub mod user;
 pub use category::Category;
 #[allow(unused_imports)]
 pub use comment::{Bookmark, Comment, Upvote};
+#[allow(unused_imports)]
+pub use submission::{
+    ToolClaimRequest, ToolReport, ToolSubmission, ToolSubmissionPayload, CLAIM_STATES,
+    TOOL_REPORT_REASONS,
+};
 #[allow(unused_imports)]
 pub use tool::Tool;
 #[allow(unused_imports)]

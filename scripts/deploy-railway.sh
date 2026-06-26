@@ -103,10 +103,25 @@ sync_vars
 echo "Deploying from Dockerfile with production env..."
 railway up -y --detach -s "${SERVICE_NAME}"
 
+echo "Waiting for production deployment to become reachable..."
+PROD_URL="https://www.onchain-ai.xyz"
+for attempt in $(seq 1 30); do
+  if ./scripts/smoke-test.sh "${PROD_URL}"; then
+    echo "Production smoke passed."
+    break
+  fi
+  if [[ "${attempt}" -eq 30 ]]; then
+    echo "Production smoke failed after 30 attempts." >&2
+    exit 1
+  fi
+  echo "Smoke attempt ${attempt}/30 failed; retrying in 10s..."
+  sleep 10
+done
+
 echo ""
 echo "Next steps:"
 echo "  1. Add custom domain: railway domain add www.onchain-ai.xyz"
 echo "  2. GitHub OAuth App callback: https://www.onchain-ai.xyz/auth/callback"
 echo "  3. Supabase prod URLs: ONCHAINAI_ENV=prod SUPABASE_ACCESS_TOKEN=sbp_... ./scripts/configure-supabase-auth.sh"
-echo "  4. Smoke test: curl -sI https://www.onchain-ai.xyz/"
+echo "  4. Smoke test: ./scripts/smoke-test.sh https://www.onchain-ai.xyz"
 echo "  5. Admin crawl: https://www.onchain-ai.xyz/admin/crawler"

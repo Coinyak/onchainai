@@ -5,16 +5,18 @@ pub mod category;
 pub mod home;
 pub mod login;
 pub mod onboarding;
+pub mod submit;
 pub mod tool_detail;
 pub mod tools_list;
 
 pub use admin::{
-    AdminCategoriesPage, AdminCommentsPage, AdminCrawlerPage, AdminSettingsPage, AdminToolsPage,
-    AdminUsersPage,
+    AdminCategoriesPage, AdminCommentsPage, AdminCrawlerPage, AdminDashboardPage,
+    AdminSettingsPage, AdminToolsPage, AdminUsersPage,
 };
 pub use category::CategoryPage;
 pub use home::HomePage;
 pub use login::LoginPage;
 pub use onboarding::OnboardingProfilePage;
+pub use submit::SubmitPage;
 pub use tool_detail::ToolDetailPage;
 pub use tools_list::ToolsListPage;

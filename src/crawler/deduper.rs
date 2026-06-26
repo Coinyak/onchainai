@@ -51,6 +51,7 @@ mod tests {
     use uuid::Uuid;
 
     fn make_tool(name: &str, repo_url: Option<&str>, stars: i32) -> Tool {
+        let review = crate::models::tool::default_review_fields();
         Tool {
             id: Uuid::new_v4(),
             name: name.into(),
@@ -72,6 +73,17 @@ mod tests {
             approval_status: "approved".into(),
             submitted_by: None,
             rejection_reason: None,
+            crypto_relevance_score: review.crypto_relevance_score,
+            crypto_relevance_reasons: review.crypto_relevance_reasons,
+            relevance_status: review.relevance_status,
+            install_risk_level: review.install_risk_level,
+            install_risk_reasons: review.install_risk_reasons,
+            requires_secret: review.requires_secret,
+            safe_copy_command: review.safe_copy_command,
+            quarantined_at: review.quarantined_at,
+            last_reviewed_at: review.last_reviewed_at,
+            review_policy_version: review.review_policy_version,
+            claim_state: "unclaimed".into(),
             license: None,
             pricing: "free".into(),
             x402_price: None,

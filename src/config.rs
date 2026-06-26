@@ -49,7 +49,8 @@ impl Config {
     /// Required variables that are missing or empty produce an error
     /// naming the variable so the operator knows what to fill in.
     pub fn from_env() -> anyhow::Result<Self> {
-        // dotenvy is invoked in main before this; re-loading is harmless.
+        // dotenvy is invoked in main before this; re-loading is harmless (SSR only).
+        #[cfg(feature = "ssr")]
         let _ = dotenvy::dotenv();
 
         let database_url = required("DATABASE_URL")?;
@@ -123,8 +124,16 @@ fn required(key: &str) -> anyhow::Result<String> {
 /// connection limit. Returns an error (not a panic) on a bad URL.
 #[cfg(feature = "ssr")]
 pub async fn setup_db(database_url: &str) -> anyhow::Result<sqlx::PgPool> {
+    // Supabase session pooler caps concurrent clients (often 15). Keep headroom for
+    // deploy overlap, sqlx migrate, and admin tools.
+    let max_connections = env::var("DATABASE_MAX_CONNECTIONS")
+        .ok()
+        .and_then(|s| s.parse::<u32>().ok())
+        .filter(|&n| (1..=10).contains(&n))
+        .unwrap_or(5);
+
     sqlx::postgres::PgPoolOptions::new()
-        .max_connections(10)
+        .max_connections(max_connections)
         .connect(database_url)
         .await
         .map_err(|e| anyhow::anyhow!("failed to connect to Postgres: {e}"))

@@ -6,7 +6,10 @@
 //! available to both server-rendered and hydrated components.
 
 use crate::auth::session::SessionUser;
-use crate::models::{Category, Comment, SiteSettings, Source, Tool};
+use crate::models::{
+    Category, Comment, SiteSettings, Source, Tool, ToolClaimRequest, ToolReport, ToolSubmission,
+    ToolSubmissionPayload, TOOL_REPORT_REASONS,
+};
 use leptos::prelude::*;
 use uuid::Uuid;
 
@@ -17,9 +20,20 @@ use crate::auth::session::session_from_parts;
 #[cfg(feature = "ssr")]
 use crate::config::Config;
 #[cfg(feature = "ssr")]
+use crate::crawler::normalizer::base_slug;
+#[cfg(feature = "ssr")]
+use crate::crawler::relevance::{assess_relevance, RelevanceInput};
+#[cfg(feature = "ssr")]
 use crate::crawler::{self, default_source_registry_url};
 #[cfg(feature = "ssr")]
+use crate::install_safety::assess_install;
+#[cfg(feature = "ssr")]
 use crate::server::queries::TOOLS_APPROVED_WHERE;
+#[cfg(feature = "ssr")]
+use crate::server::rate_limit::{check_user_rate_limit, UserRateLimitAction};
+use crate::server::secret_redaction::redact_secrets;
+#[cfg(feature = "ssr")]
+use crate::server::secret_redaction::redact_tool_for_admin;
 #[cfg(feature = "ssr")]
 use axum::http::request::Parts;
 
@@ -321,6 +335,16 @@ pub async fn get_tool_by_slug(slug: String) -> Result<Tool, ServerFnError> {
     tool.ok_or_else(|| ServerFnError::new(format!("tool not found: {slug}")))
 }
 
+/// Stable request payload for browser tool-list queries (avoids positional arg drift).
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ToolListRequest {
+    pub sort: String,
+    pub offset: i64,
+    pub limit: i64,
+    pub filters: ToolFilters,
+    pub query: Option<String>,
+}
+
 /// Optional axis filters for tool list/count queries (AND across axes; OR within axis via ANY).
 #[derive(Debug, Clone, Default, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct ToolFilters {
@@ -493,6 +517,12 @@ pub async fn list_tools(
     Ok(tools)
 }
 
+/// Stable browser-facing tool list — wraps positional `list_tools` with a struct payload.
+#[server(ListToolsV1, "/api")]
+pub async fn list_tools_v1(req: ToolListRequest) -> Result<Vec<Tool>, ServerFnError> {
+    list_tools(req.sort, req.offset, req.limit, req.filters, req.query).await
+}
+
 /// Batch comment counts for approved tools by slug.
 #[server(GetToolCommentCounts, "/api")]
 pub async fn get_tool_comment_counts(
@@ -542,21 +572,552 @@ pub async fn list_pending_tools(limit: i64) -> Result<Vec<Tool>, ServerFnError> 
     Ok(tools)
 }
 
+/// Operator review queue identifiers.
+pub const REVIEW_QUEUES: &[&str] = &[
+    "new_candidate",
+    "known_update",
+    "needs_manual_research",
+    "low_relevance",
+    "reported",
+    "high_risk_install",
+];
+
+/// SQL WHERE fragment for a review queue (testable without DB).
+pub(crate) fn review_queue_where(queue: &str) -> Result<&'static str, &'static str> {
+    match queue {
+        "new_candidate" => Ok(
+            "approval_status = 'pending' AND last_reviewed_at IS NULL AND quarantined_at IS NULL",
+        ),
+        "known_update" => Ok(
+            "approval_status = 'approved' AND last_reviewed_at IS NOT NULL \
+             AND updated_at > last_reviewed_at AND quarantined_at IS NULL",
+        ),
+        "needs_manual_research" => Ok(
+            "approval_status IN ('pending', 'approved') AND relevance_status = 'needs_review' \
+             AND crypto_relevance_score < 50 AND quarantined_at IS NULL",
+        ),
+        "low_relevance" => Ok(
+            "approval_status = 'pending' AND relevance_status = 'rejected' AND quarantined_at IS NULL",
+        ),
+        "reported" => Ok(
+            "id IN (SELECT DISTINCT tool_id FROM tool_reports WHERE status = 'open') \
+             AND quarantined_at IS NULL",
+        ),
+        "high_risk_install" => Ok(
+            "approval_status IN ('pending', 'approved') \
+             AND install_risk_level IN ('high', 'critical') AND quarantined_at IS NULL",
+        ),
+        _ => Err("unknown review queue"),
+    }
+}
+
+/// Stub duplicate candidate surfaced in review rows until dedupe table ships.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct DuplicateCandidateStub {
+    pub slug: String,
+    pub name: String,
+}
+
+/// Enriched review row for operator console queues.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ReviewQueueItem {
+    pub tool: Tool,
+    pub duplicate_candidates: Vec<DuplicateCandidateStub>,
+    pub lifecycle_state: String,
+    pub claim_state: String,
+}
+
+/// Derive lifecycle label from tool fields (stub until lifecycle column exists).
+pub(crate) fn derive_lifecycle_state(tool: &Tool) -> String {
+    if tool.quarantined_at.is_some() {
+        return "flagged".into();
+    }
+    match tool.approval_status.as_str() {
+        "approved" => "public_unclaimed".into(),
+        "pending" if tool.last_reviewed_at.is_none() => "candidate".into(),
+        "pending" => "pending".into(),
+        "rejected" => "delisted".into(),
+        other => other.into(),
+    }
+}
+
+/// Claim state from tool row (defaults to unclaimed when empty).
+pub(crate) fn derive_claim_state(tool: &Tool) -> String {
+    let state = tool.claim_state.trim();
+    if state.is_empty() {
+        "unclaimed".into()
+    } else {
+        state.to_string()
+    }
+}
+
+/// Admin dashboard aggregate counts and crawler health.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct AdminDashboardStats {
+    pub pending_candidates: i64,
+    pub known_updates: i64,
+    pub high_risk_installs: i64,
+    pub open_reports: i64,
+    pub public_tool_count: i64,
+    pub needs_manual_research: i64,
+    pub low_relevance: i64,
+    pub reported: i64,
+    pub crawler_sources: Vec<CrawlerSourceView>,
+}
+
+/// Count open tool reports; returns 0 when the reports table is not migrated yet.
+#[cfg(feature = "ssr")]
+async fn count_open_reports(pool: &sqlx::PgPool) -> i64 {
+    sqlx::query_scalar::<_, i64>("SELECT COUNT(*)::bigint FROM tool_reports WHERE status = 'open'")
+        .fetch_one(pool)
+        .await
+        .unwrap_or(0)
+}
+
+/// Operator dashboard stats — queue counts, public tools, crawler source health.
+#[server(GetAdminDashboardStats, "/api")]
+pub async fn get_admin_dashboard_stats() -> Result<AdminDashboardStats, ServerFnError> {
+    let (parts, pool, jwt_secret, issuer) = request_context()?;
+    require_admin(&parts, &pool, &jwt_secret, &issuer).await?;
+
+    let counts = sqlx::query_as::<_, (i64, i64, i64, i64, i64, i64, i64)>(
+        r#"
+        SELECT
+          COUNT(*) FILTER (
+            WHERE approval_status = 'pending'
+              AND last_reviewed_at IS NULL
+              AND quarantined_at IS NULL
+          )::bigint,
+          COUNT(*) FILTER (
+            WHERE approval_status = 'approved'
+              AND last_reviewed_at IS NOT NULL
+              AND updated_at > last_reviewed_at
+              AND quarantined_at IS NULL
+          )::bigint,
+          COUNT(*) FILTER (
+            WHERE approval_status IN ('pending', 'approved')
+              AND install_risk_level IN ('high', 'critical')
+              AND quarantined_at IS NULL
+          )::bigint,
+          COUNT(*) FILTER (
+            WHERE approval_status = 'approved'
+              AND relevance_status = 'accepted'
+              AND install_risk_level <> 'critical'
+              AND quarantined_at IS NULL
+          )::bigint,
+          COUNT(*) FILTER (
+            WHERE approval_status IN ('pending', 'approved')
+              AND relevance_status = 'needs_review'
+              AND crypto_relevance_score < 50
+              AND quarantined_at IS NULL
+          )::bigint,
+          COUNT(*) FILTER (
+            WHERE approval_status = 'pending'
+              AND relevance_status = 'rejected'
+              AND quarantined_at IS NULL
+          )::bigint,
+          COUNT(*) FILTER (
+            WHERE id IN (SELECT DISTINCT tool_id FROM tool_reports WHERE status = 'open')
+              AND quarantined_at IS NULL
+          )::bigint
+        FROM tools
+        "#,
+    )
+    .fetch_one(&pool)
+    .await
+    .map_err(|e| ServerFnError::new(format!("failed to load dashboard counts: {e}")))?;
+
+    let open_reports = count_open_reports(&pool).await;
+    let crawler_sources = list_crawler_sources_inner(&pool).await?;
+
+    Ok(AdminDashboardStats {
+        pending_candidates: counts.0,
+        known_updates: counts.1,
+        high_risk_installs: counts.2,
+        public_tool_count: counts.3,
+        needs_manual_research: counts.4,
+        low_relevance: counts.5,
+        reported: counts.6,
+        open_reports,
+        crawler_sources,
+    })
+}
+
+/// List tools in an operator review queue with enriched row metadata.
+#[server(ListReviewQueue, "/api")]
+pub async fn list_review_queue(
+    queue: String,
+    limit: i64,
+) -> Result<Vec<ReviewQueueItem>, ServerFnError> {
+    if let Err(msg) = review_queue_where(&queue) {
+        return Err(ServerFnError::new(msg.to_string()));
+    }
+
+    let (parts, pool, jwt_secret, issuer) = request_context()?;
+    require_admin(&parts, &pool, &jwt_secret, &issuer).await?;
+
+    let where_clause = review_queue_where(&queue).expect("validated above");
+    let sql = format!("SELECT * FROM tools WHERE {where_clause} ORDER BY updated_at DESC LIMIT $1");
+    let tools = sqlx::query_as::<_, Tool>(&sql)
+        .bind(limit)
+        .fetch_all(&pool)
+        .await
+        .map_err(|e| ServerFnError::new(format!("failed to list review queue: {e}")))?;
+
+    let mut items = Vec::with_capacity(tools.len());
+    for tool in tools {
+        let duplicates = fetch_duplicate_candidates(&pool, &tool).await?;
+        items.push(ReviewQueueItem {
+            lifecycle_state: derive_lifecycle_state(&tool),
+            claim_state: derive_claim_state(&tool),
+            duplicate_candidates: duplicates,
+            tool: redact_tool_for_admin(tool),
+        });
+    }
+
+    Ok(items)
+}
+
+#[cfg(feature = "ssr")]
+async fn fetch_duplicate_candidates(
+    pool: &sqlx::PgPool,
+    tool: &Tool,
+) -> Result<Vec<DuplicateCandidateStub>, ServerFnError> {
+    let repo = tool.repo_url.as_deref().unwrap_or("");
+    let rows = if repo.is_empty() {
+        sqlx::query_as::<_, (String, String)>(
+            r#"
+            SELECT slug, name
+            FROM tools
+            WHERE id <> $1
+              AND approval_status = 'pending'
+              AND lower(name) = lower($2)
+            ORDER BY created_at DESC
+            LIMIT 3
+            "#,
+        )
+        .bind(tool.id)
+        .bind(&tool.name)
+        .fetch_all(pool)
+        .await
+    } else {
+        sqlx::query_as::<_, (String, String)>(
+            r#"
+            SELECT slug, name
+            FROM tools
+            WHERE id <> $1
+              AND approval_status = 'pending'
+              AND repo_url = $2
+            ORDER BY created_at DESC
+            LIMIT 3
+            "#,
+        )
+        .bind(tool.id)
+        .bind(repo)
+        .fetch_all(pool)
+        .await
+    }
+    .map_err(|e| ServerFnError::new(format!("failed to load duplicate candidates: {e}")))?;
+
+    Ok(rows
+        .into_iter()
+        .map(|(slug, name)| DuplicateCandidateStub { slug, name })
+        .collect())
+}
+
+/// Gated admin review payload — writes audit events and enforces publication gates.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ReviewToolPayload {
+    pub slug: String,
+    pub action: String,
+    pub reason: String,
+    pub override_reason: Option<String>,
+    pub expected_updated_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub snapshot_id: Option<uuid::Uuid>,
+    pub recommendation_id: Option<uuid::Uuid>,
+}
+
+/// Whether a tool has at least one trustworthy publication URL or package id.
+pub(crate) fn tool_has_trustworthy_url(tool: &Tool) -> bool {
+    let valid_url = |value: &Option<String>| {
+        value.as_ref().is_some_and(|u| {
+            let trimmed = u.trim();
+            trimmed.starts_with("https://") || trimmed.starts_with("http://")
+        })
+    };
+    valid_url(&tool.repo_url)
+        || valid_url(&tool.homepage)
+        || tool
+            .npm_package
+            .as_ref()
+            .is_some_and(|p| !p.trim().is_empty())
+        || valid_url(&tool.mcp_endpoint)
+}
+
+/// Override reason is required when approving despite rejected relevance or critical install risk.
+pub(crate) fn review_override_required(tool: &Tool) -> bool {
+    tool.relevance_status == "rejected" || tool.install_risk_level == "critical"
+}
+
+/// Validate approval gates without touching the database.
+pub(crate) fn validate_review_approval_gate(
+    tool: &Tool,
+    override_reason: Option<&str>,
+) -> Result<(), &'static str> {
+    if !tool_has_trustworthy_url(tool) {
+        return Err("approval requires a repo, homepage, npm package, or MCP endpoint");
+    }
+    if review_override_required(tool) {
+        if override_reason.map(str::trim).is_none_or(str::is_empty) {
+            return Err("override reason required when overriding rejected relevance or critical install risk");
+        }
+        return Ok(());
+    }
+    if tool.relevance_status == "needs_review" {
+        // Human approval in admin review implies relevance acceptance.
+        return Ok(());
+    }
+    if tool.relevance_status != "accepted" {
+        return Err("approval requires relevance status accepted");
+    }
+    Ok(())
+}
+
+/// Validate review action inputs without touching the database.
+pub(crate) fn validate_review_action(action: &str, reason: &str) -> Result<(), &'static str> {
+    const APPROVAL_ACTIONS: &[&str] = &[
+        "approved",
+        "rejected",
+        "pending",
+        "needs_info",
+        "quarantine",
+        "mark_verified",
+        "mark_official",
+    ];
+    if !APPROVAL_ACTIONS.contains(&action) {
+        return Err(
+            "invalid review action (expected approved|rejected|pending|needs_info|quarantine|mark_verified|mark_official)",
+        );
+    }
+    if action == "rejected" && reason.trim().is_empty() {
+        return Err("rejection requires a non-empty reason");
+    }
+    if matches!(
+        action,
+        "needs_info" | "quarantine" | "mark_verified" | "mark_official"
+    ) && reason.trim().is_empty()
+    {
+        return Err("review action requires a non-empty reason");
+    }
+    if action == "approved" && reason.trim().is_empty() {
+        return Err("approval requires a non-empty reason");
+    }
+    Ok(())
+}
+
+/// Audit before/after labels for review events.
+pub(crate) fn review_audit_statuses(tool: &Tool, action: &str) -> (String, String) {
+    match action {
+        "mark_verified" => (tool.status.clone(), "verified".into()),
+        "mark_official" => (tool.status.clone(), "official".into()),
+        "quarantine" => (
+            if tool.quarantined_at.is_some() {
+                "quarantined".into()
+            } else {
+                "active".into()
+            },
+            "quarantined".into(),
+        ),
+        "needs_info" => (tool.approval_status.clone(), "needs_info".into()),
+        other => (tool.approval_status.clone(), other.to_string()),
+    }
+}
+
 /// Validate admin approval inputs without touching the database.
 pub(crate) fn validate_set_tool_approval_input(
     status: &str,
     reason: Option<&str>,
 ) -> Result<(), &'static str> {
-    if !matches!(status, "approved" | "rejected" | "pending") {
-        return Err("invalid approval status (expected approved|rejected|pending)");
+    let reason_text = reason.map(str::trim).unwrap_or("");
+    validate_review_action(
+        status,
+        if reason_text.is_empty() && status == "approved" {
+            "legacy approval"
+        } else {
+            reason_text
+        },
+    )
+}
+
+/// Gated tool review — enforces publication gates, writes audit event, updates tool.
+#[server(ReviewTool, "/api")]
+pub async fn review_tool(payload: ReviewToolPayload) -> Result<(), ServerFnError> {
+    if let Err(msg) = validate_review_action(&payload.action, &payload.reason) {
+        return Err(ServerFnError::new(msg.to_string()));
     }
-    if status == "rejected" && reason.map(str::trim).is_none_or(str::is_empty) {
-        return Err("rejection requires a non-empty reason");
+
+    let (parts, pool, jwt_secret, issuer) = request_context()?;
+    let admin = require_admin(&parts, &pool, &jwt_secret, &issuer).await?;
+
+    let mut tx = pool
+        .begin()
+        .await
+        .map_err(|e| ServerFnError::new(format!("failed to start review transaction: {e}")))?;
+
+    let tool = sqlx::query_as::<_, Tool>("SELECT * FROM tools WHERE slug = $1 FOR UPDATE")
+        .bind(&payload.slug)
+        .fetch_optional(&mut *tx)
+        .await
+        .map_err(|e| ServerFnError::new(format!("failed to load tool: {e}")))?
+        .ok_or_else(|| ServerFnError::new(format!("tool not found: {}", payload.slug)))?;
+
+    if let Some(expected) = payload.expected_updated_at {
+        if tool.updated_at != expected {
+            return Err(ServerFnError::new(
+                "tool was modified by another session; refresh and retry",
+            ));
+        }
     }
+
+    if payload.action == "approved" {
+        if let Err(msg) = validate_review_approval_gate(&tool, payload.override_reason.as_deref()) {
+            return Err(ServerFnError::new(msg.to_string()));
+        }
+    }
+
+    let (before_status, after_status) = review_audit_statuses(&tool, &payload.action);
+    let rejection_reason = if payload.action == "rejected" {
+        Some(payload.reason.trim().to_string())
+    } else {
+        None
+    };
+
+    let new_relevance = if payload.action == "approved"
+        && (tool.relevance_status == "needs_review" || review_override_required(&tool))
+    {
+        "accepted"
+    } else {
+        tool.relevance_status.as_str()
+    };
+
+    sqlx::query(
+        r#"
+        INSERT INTO tool_review_events (
+            tool_id, admin_id, action, reason, override_reason,
+            before_status, after_status, snapshot_id, recommendation_id
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        "#,
+    )
+    .bind(tool.id)
+    .bind(admin.id)
+    .bind(&payload.action)
+    .bind(payload.reason.trim())
+    .bind(payload.override_reason.as_deref().map(str::trim))
+    .bind(&before_status)
+    .bind(&after_status)
+    .bind(payload.snapshot_id)
+    .bind(payload.recommendation_id)
+    .execute(&mut *tx)
+    .await
+    .map_err(|e| ServerFnError::new(format!("failed to write review event: {e}")))?;
+
+    let result = match payload.action.as_str() {
+        "approved" | "rejected" | "pending" => {
+            sqlx::query(
+                r#"
+                UPDATE tools
+                SET approval_status = $1,
+                    rejection_reason = $2,
+                    relevance_status = $3,
+                    last_reviewed_at = now(),
+                    updated_at = now()
+                WHERE slug = $4
+                "#,
+            )
+            .bind(&payload.action)
+            .bind(&rejection_reason)
+            .bind(new_relevance)
+            .bind(&payload.slug)
+            .execute(&mut *tx)
+            .await
+        }
+        "needs_info" => {
+            sqlx::query(
+                r#"
+                UPDATE tools
+                SET approval_status = 'pending',
+                    rejection_reason = NULL,
+                    last_reviewed_at = now(),
+                    updated_at = now()
+                WHERE slug = $1
+                "#,
+            )
+            .bind(&payload.slug)
+            .execute(&mut *tx)
+            .await
+        }
+        "quarantine" => {
+            sqlx::query(
+                r#"
+                UPDATE tools
+                SET quarantined_at = now(),
+                    last_reviewed_at = now(),
+                    updated_at = now()
+                WHERE slug = $1
+                "#,
+            )
+            .bind(&payload.slug)
+            .execute(&mut *tx)
+            .await
+        }
+        "mark_verified" => {
+            sqlx::query(
+                r#"
+                UPDATE tools
+                SET status = 'verified',
+                    last_reviewed_at = now(),
+                    updated_at = now()
+                WHERE slug = $1
+                "#,
+            )
+            .bind(&payload.slug)
+            .execute(&mut *tx)
+            .await
+        }
+        "mark_official" => {
+            sqlx::query(
+                r#"
+                UPDATE tools
+                SET status = 'official',
+                    last_reviewed_at = now(),
+                    updated_at = now()
+                WHERE slug = $1
+                "#,
+            )
+            .bind(&payload.slug)
+            .execute(&mut *tx)
+            .await
+        }
+        _ => unreachable!("validated above"),
+    }
+    .map_err(|e| ServerFnError::new(format!("failed to update tool: {e}")))?;
+
+    if result.rows_affected() == 0 {
+        return Err(ServerFnError::new(format!(
+            "tool not found: {}",
+            payload.slug
+        )));
+    }
+
+    tx.commit()
+        .await
+        .map_err(|e| ServerFnError::new(format!("failed to commit review: {e}")))?;
+
     Ok(())
 }
 
-/// Approve or reject a tool by slug (admin growth-mode workflow).
+/// Approve or reject a tool by slug — legacy wrapper around gated `review_tool`.
 #[server(SetToolApproval, "/api")]
 pub async fn set_tool_approval(
     slug: String,
@@ -567,32 +1128,22 @@ pub async fn set_tool_approval(
         return Err(ServerFnError::new(msg.to_string()));
     }
 
-    let (parts, pool, jwt_secret, issuer) = request_context()?;
-    require_admin(&parts, &pool, &jwt_secret, &issuer).await?;
+    let review_reason = match reason {
+        Some(r) if !r.trim().is_empty() => r,
+        _ if status == "approved" => "Approved via legacy set_tool_approval".into(),
+        _ => String::new(),
+    };
 
-    let rejection_reason = if status == "rejected" { reason } else { None };
-
-    let result = sqlx::query(
-        r#"
-        UPDATE tools
-        SET approval_status = $1,
-            rejection_reason = $2,
-            updated_at = now()
-        WHERE slug = $3
-        "#,
-    )
-    .bind(&status)
-    .bind(&rejection_reason)
-    .bind(&slug)
-    .execute(&pool)
+    review_tool(ReviewToolPayload {
+        slug,
+        action: status,
+        reason: review_reason,
+        override_reason: None,
+        expected_updated_at: None,
+        snapshot_id: None,
+        recommendation_id: None,
+    })
     .await
-    .map_err(|e| ServerFnError::new(format!("failed to update approval: {e}")))?;
-
-    if result.rows_affected() == 0 {
-        return Err(ServerFnError::new(format!("tool not found: {slug}")));
-    }
-
-    Ok(())
 }
 
 /// Known crawler sources for the admin dashboard (merged with DB rows).
@@ -615,14 +1166,13 @@ pub struct CrawlerSourceView {
     pub error_message: Option<String>,
 }
 
-/// List crawler source status (admin).
-#[server(ListCrawlerSources, "/api")]
-pub async fn list_crawler_sources() -> Result<Vec<CrawlerSourceView>, ServerFnError> {
-    let (parts, pool, jwt_secret, issuer) = request_context()?;
-    require_admin(&parts, &pool, &jwt_secret, &issuer).await?;
-
+/// Build crawler source rows for admin views (shared by dashboard and crawler page).
+#[cfg(feature = "ssr")]
+async fn list_crawler_sources_inner(
+    pool: &sqlx::PgPool,
+) -> Result<Vec<CrawlerSourceView>, ServerFnError> {
     let rows = sqlx::query_as::<_, Source>("SELECT * FROM sources ORDER BY name ASC")
-        .fetch_all(&pool)
+        .fetch_all(pool)
         .await
         .map_err(|e| ServerFnError::new(format!("failed to list sources: {e}")))?;
 
@@ -668,6 +1218,14 @@ pub async fn list_crawler_sources() -> Result<Vec<CrawlerSourceView>, ServerFnEr
     }
 
     Ok(views)
+}
+
+/// List crawler source status (admin).
+#[server(ListCrawlerSources, "/api")]
+pub async fn list_crawler_sources() -> Result<Vec<CrawlerSourceView>, ServerFnError> {
+    let (parts, pool, jwt_secret, issuer) = request_context()?;
+    require_admin(&parts, &pool, &jwt_secret, &issuer).await?;
+    list_crawler_sources_inner(&pool).await
 }
 
 /// Validate manual crawler trigger input.
@@ -791,6 +1349,7 @@ struct CommentRow {
     viewer_upvoted: Option<bool>,
 }
 
+#[cfg(feature = "ssr")]
 impl CommentRow {
     fn into_view(self) -> CommentView {
         CommentView {
@@ -815,14 +1374,14 @@ pub async fn get_tool_comment_count(slug: String) -> Result<i64, ServerFnError> 
     let pool = use_context::<sqlx::PgPool>()
         .ok_or_else(|| ServerFnError::new("database pool not available"))?;
 
-    let count = sqlx::query_scalar::<_, i64>(
+    let count = sqlx::query_scalar::<_, i64>(&format!(
         r#"
         SELECT COUNT(*)::bigint
         FROM comments c
         JOIN tools t ON t.id = c.tool_id
-        WHERE t.slug = $1 AND t.approval_status = 'approved'
-        "#,
-    )
+        WHERE t.slug = $1 AND {TOOLS_APPROVED_WHERE}
+        "#
+    ))
     .bind(slug)
     .fetch_one(&pool)
     .await
@@ -844,6 +1403,9 @@ pub async fn create_comment(
 
     let (parts, pool, jwt_secret, issuer) = request_context()?;
     let user = require_user(&parts, &pool, &jwt_secret, &issuer).await?;
+    if let Err(limit) = check_user_rate_limit(user.id, UserRateLimitAction::CreateComment) {
+        return Err(ServerFnError::new(limit.to_string()));
+    }
 
     let tool_id = sqlx::query_scalar::<_, Uuid>(&format!(
         "SELECT id FROM tools WHERE slug = $1 AND {TOOLS_APPROVED_WHERE}"
@@ -936,14 +1498,14 @@ pub async fn is_bookmarked(slug: String) -> Result<bool, ServerFnError> {
         return Ok(false);
     };
 
-    let bookmarked = sqlx::query_scalar::<_, i64>(
+    let bookmarked = sqlx::query_scalar::<_, i64>(&format!(
         r#"
         SELECT COUNT(*)::bigint
         FROM bookmarks b
         JOIN tools t ON t.id = b.tool_id
-        WHERE t.slug = $1 AND b.user_id = $2 AND t.approval_status = 'approved'
-        "#,
-    )
+        WHERE t.slug = $1 AND b.user_id = $2 AND {TOOLS_APPROVED_WHERE}
+        "#
+    ))
     .bind(slug)
     .bind(user.id)
     .fetch_one(&pool)
@@ -958,6 +1520,9 @@ pub async fn is_bookmarked(slug: String) -> Result<bool, ServerFnError> {
 pub async fn toggle_bookmark(slug: String) -> Result<bool, ServerFnError> {
     let (parts, pool, jwt_secret, issuer) = request_context()?;
     let user = require_user(&parts, &pool, &jwt_secret, &issuer).await?;
+    if let Err(limit) = check_user_rate_limit(user.id, UserRateLimitAction::ToggleBookmark) {
+        return Err(ServerFnError::new(limit.to_string()));
+    }
 
     let tool_id = sqlx::query_scalar::<_, Uuid>(&format!(
         "SELECT id FROM tools WHERE slug = $1 AND {TOOLS_APPROVED_WHERE}"
@@ -1269,6 +1834,7 @@ struct AdminUserRow {
     bookmark_count: Option<i64>,
 }
 
+#[cfg(feature = "ssr")]
 impl AdminUserRow {
     fn into_view(self) -> AdminUserView {
         AdminUserView {
@@ -1440,11 +2006,12 @@ struct AdminCommentRow {
     tool_slug: String,
 }
 
+#[cfg(feature = "ssr")]
 impl AdminCommentRow {
     fn into_view(self) -> AdminCommentView {
         AdminCommentView {
             id: self.id,
-            content: self.content,
+            content: redact_secrets(&self.content),
             created_at: self.created_at,
             author_id: self.author_id,
             author_nickname: self.author_nickname,
@@ -1506,9 +2073,522 @@ pub async fn delete_comment_and_ban_user(comment_id: Uuid) -> Result<(), ServerF
     Ok(())
 }
 
+/// Payload for public tool submission intake.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct SubmitToolInput {
+    pub name: String,
+    pub description: String,
+    pub tool_type: String,
+    pub function: String,
+    pub repo_url: Option<String>,
+    pub homepage: Option<String>,
+    pub npm_package: Option<String>,
+    pub mcp_endpoint: Option<String>,
+    pub install_command: Option<String>,
+    pub chains_raw: String,
+    pub category_suggestion: Option<String>,
+    pub official_team_claim: bool,
+    pub verification_note: Option<String>,
+}
+
+/// Payload for reporting a published listing.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ReportToolInput {
+    pub slug: String,
+    pub reason: String,
+    pub details: Option<String>,
+}
+
+/// Payload for requesting project claim (skeleton).
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ClaimToolInput {
+    pub slug: String,
+    pub verification_note: String,
+    pub contact_email: Option<String>,
+}
+
+/// Scanned intake metadata attached to a submission row.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SubmissionScanResult {
+    pub crypto_relevance_score: i32,
+    pub relevance_status: String,
+    pub install_risk_level: String,
+}
+
+const SUBMIT_TOOL_TYPES: &[&str] = &["mcp", "cli", "sdk", "api", "skill", "x402"];
+const SUBMIT_FUNCTIONS: &[&str] = &[
+    "bridge",
+    "swap",
+    "wallet",
+    "payments",
+    "lending",
+    "staking",
+    "trading",
+    "nft",
+    "data",
+    "dev-tool",
+    "identity",
+    "governance",
+    "social",
+    "ai-agent",
+];
+
+/// Validate optional https URL (localhost http allowed for dev).
+pub(crate) fn validate_optional_https_url(value: Option<&str>) -> Result<(), &'static str> {
+    let Some(raw) = value.map(str::trim).filter(|s| !s.is_empty()) else {
+        return Ok(());
+    };
+    if raw.len() > 500 {
+        return Err("URL must be at most 500 characters");
+    }
+    if raw.starts_with("https://") {
+        return Ok(());
+    }
+    if raw.starts_with("http://localhost") || raw.starts_with("http://127.0.0.1") {
+        return Ok(());
+    }
+    Err("URLs must use https:// (http://localhost allowed in dev)")
+}
+
+/// Parse comma-separated chain list from submission form.
+pub(crate) fn parse_submission_chains(raw: &str) -> Vec<String> {
+    raw.split([',', '\n'])
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
+        .take(20)
+        .collect()
+}
+
+/// Intake gate: minimally plausible submission (relevance gates public approval, not intake).
+pub(crate) fn submission_is_minimally_plausible(input: &SubmitToolInput) -> bool {
+    let name = input.name.trim();
+    let description = input.description.trim();
+    if name.len() < 2 || name.len() > 100 {
+        return false;
+    }
+    if description.len() < 20 || description.len() > 500 {
+        return false;
+    }
+    if !SUBMIT_TOOL_TYPES.contains(&input.tool_type.trim()) {
+        return false;
+    }
+    if !SUBMIT_FUNCTIONS.contains(&input.function.trim()) {
+        return false;
+    }
+    let has_link = [
+        input.repo_url.as_deref(),
+        input.homepage.as_deref(),
+        input.npm_package.as_deref(),
+        input.mcp_endpoint.as_deref(),
+    ]
+    .into_iter()
+    .any(|v| v.is_some_and(|s| !s.trim().is_empty()));
+    has_link
+}
+
+/// Validate submission form input.
+pub(crate) fn validate_submit_tool_input(input: &SubmitToolInput) -> Result<(), &'static str> {
+    if !submission_is_minimally_plausible(input) {
+        return Err(
+            "submission must include name (2–100), description (20–500), valid type/function, and at least one link",
+        );
+    }
+    validate_optional_https_url(input.repo_url.as_deref())?;
+    validate_optional_https_url(input.homepage.as_deref())?;
+    validate_optional_https_url(input.mcp_endpoint.as_deref())?;
+    if let Some(npm) = input
+        .npm_package
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        if npm.len() > 200 {
+            return Err("npm package must be at most 200 characters");
+        }
+    }
+    if let Some(cmd) = input
+        .install_command
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        if cmd.len() > 500 {
+            return Err("install command must be at most 500 characters");
+        }
+        if cmd.contains('\n') || cmd.contains('\r') {
+            return Err("install command must be a single line");
+        }
+    }
+    if let Some(note) = input
+        .verification_note
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        if note.len() > 1000 {
+            return Err("verification note must be at most 1000 characters");
+        }
+    }
+    if let Some(cat) = input
+        .category_suggestion
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        if cat.len() > 100 {
+            return Err("category suggestion must be at most 100 characters");
+        }
+    }
+    Ok(())
+}
+
+/// Run relevance and install safety scanners on submission intake.
+#[cfg(feature = "ssr")]
+pub(crate) fn scan_submission(input: &SubmitToolInput) -> SubmissionScanResult {
+    let chains = parse_submission_chains(&input.chains_raw);
+    let relevance = assess_relevance(&RelevanceInput {
+        name: input.name.trim(),
+        description: Some(input.description.trim()),
+        tool_type: input.tool_type.trim(),
+        repo_url: input.repo_url.as_deref().map(str::trim),
+        homepage: input.homepage.as_deref().map(str::trim),
+        npm_package: input.npm_package.as_deref().map(str::trim),
+        mcp_endpoint: input.mcp_endpoint.as_deref().map(str::trim),
+        chains: &chains,
+        source: "user_submission",
+    });
+    let install = assess_install(
+        input.install_command.as_deref().map(str::trim),
+        input.npm_package.as_deref().map(str::trim),
+    );
+    SubmissionScanResult {
+        crypto_relevance_score: relevance.score,
+        relevance_status: relevance.status,
+        install_risk_level: install.risk_level,
+    }
+}
+
+/// Validate report reason against allowlist.
+pub(crate) fn validate_report_reason(reason: &str) -> Result<(), &'static str> {
+    if TOOL_REPORT_REASONS.iter().any(|(k, _)| *k == reason) {
+        Ok(())
+    } else {
+        Err("invalid report reason")
+    }
+}
+
+/// Validate report details length.
+pub(crate) fn validate_report_details(details: Option<&str>) -> Result<(), &'static str> {
+    if let Some(text) = details.map(str::trim).filter(|s| !s.is_empty()) {
+        if text.len() > 1000 {
+            return Err("report details must be at most 1000 characters");
+        }
+    }
+    Ok(())
+}
+
+/// Validate claim request input.
+pub(crate) fn validate_claim_tool_input(input: &ClaimToolInput) -> Result<(), &'static str> {
+    let slug = input.slug.trim();
+    if slug.is_empty() || slug.len() > 120 {
+        return Err("tool slug is required");
+    }
+    let note = input.verification_note.trim();
+    if note.len() < 20 || note.len() > 2000 {
+        return Err("verification note must be 20–2000 characters");
+    }
+    if let Some(email) = input
+        .contact_email
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        if email.len() > 200 || !email.contains('@') {
+            return Err("contact email is invalid");
+        }
+    }
+    Ok(())
+}
+
+/// Submit a tool suggestion for operator review (authenticated, never directly public).
+#[server(SubmitTool, "/api")]
+pub async fn submit_tool(input: SubmitToolInput) -> Result<ToolSubmission, ServerFnError> {
+    if let Err(msg) = validate_submit_tool_input(&input) {
+        return Err(ServerFnError::new(msg.to_string()));
+    }
+
+    let (parts, pool, jwt_secret, issuer) = request_context()?;
+    let user = require_user(&parts, &pool, &jwt_secret, &issuer).await?;
+    if let Err(limit) = check_user_rate_limit(user.id, UserRateLimitAction::SubmitTool) {
+        return Err(ServerFnError::new(limit.to_string()));
+    }
+
+    let scan = scan_submission(&input);
+    let chains = parse_submission_chains(&input.chains_raw);
+    let slug = base_slug(input.name.trim());
+
+    let duplicate = sqlx::query_scalar::<_, i64>(
+        r#"
+        SELECT COUNT(*)::bigint FROM (
+          SELECT slug FROM tools WHERE lower(slug) = lower($1)
+          UNION ALL
+          SELECT payload->>'slug' FROM tool_submissions
+            WHERE status IN ('pending', 'needs_info')
+              AND lower(payload->>'slug') = lower($1)
+        ) d
+        "#,
+    )
+    .bind(&slug)
+    .fetch_one(&pool)
+    .await
+    .map_err(|e| ServerFnError::new(format!("duplicate check failed: {e}")))?;
+
+    if duplicate > 0 {
+        return Err(ServerFnError::new(
+            "a similar tool is already listed or pending review",
+        ));
+    }
+
+    let payload = ToolSubmissionPayload {
+        name: input.name.trim().to_string(),
+        description: input.description.trim().to_string(),
+        tool_type: input.tool_type.trim().to_string(),
+        function: input.function.trim().to_string(),
+        repo_url: input
+            .repo_url
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(str::to_string),
+        homepage: input
+            .homepage
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(str::to_string),
+        npm_package: input
+            .npm_package
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(str::to_string),
+        mcp_endpoint: input
+            .mcp_endpoint
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(str::to_string),
+        install_command: input
+            .install_command
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(str::to_string),
+        chains,
+        category_suggestion: input
+            .category_suggestion
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(str::to_string),
+        official_team_claim: input.official_team_claim,
+        verification_note: input
+            .verification_note
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(str::to_string),
+        slug,
+    };
+
+    let payload_json = serde_json::to_value(&payload)
+        .map_err(|e| ServerFnError::new(format!("failed to encode submission: {e}")))?;
+
+    let row = sqlx::query_as::<_, ToolSubmission>(
+        r#"
+        INSERT INTO tool_submissions (
+          submitted_by, status, payload,
+          crypto_relevance_score, relevance_status, install_risk_level
+        )
+        VALUES ($1, 'pending', $2, $3, $4, $5)
+        RETURNING *
+        "#,
+    )
+    .bind(user.id)
+    .bind(payload_json)
+    .bind(scan.crypto_relevance_score)
+    .bind(scan.relevance_status)
+    .bind(scan.install_risk_level)
+    .fetch_one(&pool)
+    .await
+    .map_err(|e| ServerFnError::new(format!("failed to save submission: {e}")))?;
+
+    Ok(row)
+}
+
+/// List the current user's tool submissions.
+#[server(ListMySubmissions, "/api")]
+pub async fn list_my_submissions() -> Result<Vec<ToolSubmission>, ServerFnError> {
+    let (parts, pool, jwt_secret, issuer) = request_context()?;
+    let user = require_user(&parts, &pool, &jwt_secret, &issuer).await?;
+
+    let rows = sqlx::query_as::<_, ToolSubmission>(
+        r#"
+        SELECT * FROM tool_submissions
+        WHERE submitted_by = $1
+        ORDER BY created_at DESC
+        LIMIT 50
+        "#,
+    )
+    .bind(user.id)
+    .fetch_all(&pool)
+    .await
+    .map_err(|e| ServerFnError::new(format!("failed to list submissions: {e}")))?;
+
+    Ok(rows)
+}
+
+/// Report a published listing (authenticated).
+#[server(ReportTool, "/api")]
+pub async fn report_tool(input: ReportToolInput) -> Result<ToolReport, ServerFnError> {
+    if let Err(msg) = validate_report_reason(input.reason.trim()) {
+        return Err(ServerFnError::new(msg.to_string()));
+    }
+    if let Err(msg) = validate_report_details(input.details.as_deref()) {
+        return Err(ServerFnError::new(msg.to_string()));
+    }
+
+    let slug = input.slug.trim();
+    if slug.is_empty() {
+        return Err(ServerFnError::new("tool slug is required"));
+    }
+
+    let (parts, pool, jwt_secret, issuer) = request_context()?;
+    let user = require_user(&parts, &pool, &jwt_secret, &issuer).await?;
+
+    let tool_id = sqlx::query_scalar::<_, Uuid>(&format!(
+        "SELECT id FROM tools WHERE slug = $1 AND {TOOLS_APPROVED_WHERE}"
+    ))
+    .bind(slug)
+    .fetch_optional(&pool)
+    .await
+    .map_err(|e| ServerFnError::new(format!("failed to resolve tool: {e}")))?
+    .ok_or_else(|| ServerFnError::new("tool not found"))?;
+
+    let details = input
+        .details
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string);
+
+    let row = sqlx::query_as::<_, ToolReport>(
+        r#"
+        INSERT INTO tool_reports (tool_id, reported_by, reason, details, status)
+        VALUES ($1, $2, $3, $4, 'open')
+        RETURNING *
+        "#,
+    )
+    .bind(tool_id)
+    .bind(user.id)
+    .bind(input.reason.trim())
+    .bind(details)
+    .fetch_one(&pool)
+    .await
+    .map_err(|e| ServerFnError::new(format!("failed to save report: {e}")))?;
+
+    Ok(row)
+}
+
+/// Request project claim for a listing (skeleton — sets claim_pending).
+#[server(RequestToolClaim, "/api")]
+pub async fn request_tool_claim(input: ClaimToolInput) -> Result<ToolClaimRequest, ServerFnError> {
+    if let Err(msg) = validate_claim_tool_input(&input) {
+        return Err(ServerFnError::new(msg.to_string()));
+    }
+
+    let (parts, pool, jwt_secret, issuer) = request_context()?;
+    let user = require_user(&parts, &pool, &jwt_secret, &issuer).await?;
+
+    let tool = sqlx::query_as::<_, Tool>(&format!(
+        "SELECT * FROM tools WHERE slug = $1 AND {TOOLS_APPROVED_WHERE}"
+    ))
+    .bind(input.slug.trim())
+    .fetch_optional(&pool)
+    .await
+    .map_err(|e| ServerFnError::new(format!("failed to resolve tool: {e}")))?
+    .ok_or_else(|| ServerFnError::new("tool not found"))?;
+
+    if tool.claim_state == "claimed" {
+        return Err(ServerFnError::new("this listing is already claimed"));
+    }
+    if tool.claim_state == "claim_pending" {
+        return Err(ServerFnError::new(
+            "a claim request is already pending review",
+        ));
+    }
+
+    let contact_email = input
+        .contact_email
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string);
+
+    let mut tx = pool
+        .begin()
+        .await
+        .map_err(|e| ServerFnError::new(format!("transaction failed: {e}")))?;
+
+    let claim = sqlx::query_as::<_, ToolClaimRequest>(
+        r#"
+        INSERT INTO tool_claim_requests (tool_id, requested_by, verification_note, contact_email, status)
+        VALUES ($1, $2, $3, $4, 'pending')
+        RETURNING *
+        "#,
+    )
+    .bind(tool.id)
+    .bind(user.id)
+    .bind(input.verification_note.trim())
+    .bind(contact_email)
+    .fetch_one(&mut *tx)
+    .await
+    .map_err(|e| ServerFnError::new(format!("failed to save claim request: {e}")))?;
+
+    sqlx::query("UPDATE tools SET claim_state = 'claim_pending', updated_at = now() WHERE id = $1")
+        .bind(tool.id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| ServerFnError::new(format!("failed to update claim state: {e}")))?;
+
+    tx.commit()
+        .await
+        .map_err(|e| ServerFnError::new(format!("commit failed: {e}")))?;
+
+    Ok(claim)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn tool_list_request_serializes_filters_field() {
+        let req = ToolListRequest {
+            sort: "hot".into(),
+            offset: 0,
+            limit: 50,
+            filters: ToolFilters {
+                function: vec!["bridge".into()],
+                ..Default::default()
+            },
+            query: Some("mcp".into()),
+        };
+        let json = serde_json::to_value(&req).expect("serialize request");
+        assert!(json.get("filters").is_some());
+        assert_eq!(json["sort"], "hot");
+    }
 
     #[test]
     fn append_tool_filters_supports_multi_select_any() {
@@ -1530,15 +2610,121 @@ mod tests {
     }
 
     #[test]
-    fn public_queries_include_approved_filter() {
+    fn public_tool_where_used_in_public_queries() {
         let recent = format!(
             "SELECT * FROM tools WHERE {TOOLS_APPROVED_WHERE} ORDER BY stars DESC, created_at DESC LIMIT $1"
         );
         assert!(recent.contains("approval_status = 'approved'"));
+        assert!(recent.contains("relevance_status = 'accepted'"));
+        assert!(recent.contains("install_risk_level <> 'critical'"));
+        assert!(recent.contains("quarantined_at IS NULL"));
 
         let categories =
             format!("LEFT JOIN tools t ON t.function = c.id AND t.{TOOLS_APPROVED_WHERE}");
-        assert!(categories.contains("approval_status = 'approved'"));
+        assert!(categories.contains("relevance_status = 'accepted'"));
+    }
+
+    fn sample_review_tool() -> Tool {
+        let review = crate::models::tool::default_review_fields();
+        Tool {
+            id: Uuid::nil(),
+            name: "Bridge MCP".into(),
+            slug: "bridge-mcp".into(),
+            description: Some("Ethereum bridge tool".into()),
+            function: "bridge".into(),
+            asset_class: "crypto".into(),
+            actor: "human".into(),
+            tool_type: "mcp".into(),
+            repo_url: Some("https://github.com/example/bridge".into()),
+            homepage: None,
+            npm_package: None,
+            install_command: None,
+            mcp_endpoint: None,
+            chains: vec![],
+            status: "community".into(),
+            official_team: None,
+            trust_score: 0,
+            approval_status: "pending".into(),
+            submitted_by: None,
+            rejection_reason: None,
+            crypto_relevance_score: review.crypto_relevance_score,
+            crypto_relevance_reasons: review.crypto_relevance_reasons,
+            relevance_status: review.relevance_status,
+            install_risk_level: review.install_risk_level,
+            install_risk_reasons: review.install_risk_reasons,
+            requires_secret: review.requires_secret,
+            safe_copy_command: review.safe_copy_command,
+            quarantined_at: review.quarantined_at,
+            last_reviewed_at: review.last_reviewed_at,
+            review_policy_version: review.review_policy_version,
+            claim_state: "unclaimed".into(),
+            license: None,
+            pricing: "free".into(),
+            x402_price: None,
+            stars: 0,
+            last_commit_at: None,
+            source: "github".into(),
+            source_url: None,
+            created_at: chrono::Utc::now(),
+            updated_at: chrono::Utc::now(),
+        }
+    }
+
+    #[test]
+    fn review_approval_gate_requires_trustworthy_url() {
+        let mut tool = sample_review_tool();
+        tool.repo_url = None;
+        assert_eq!(
+            validate_review_approval_gate(&tool, None),
+            Err("approval requires a repo, homepage, npm package, or MCP endpoint")
+        );
+    }
+
+    #[test]
+    fn review_approval_gate_allows_needs_review_with_url() {
+        let tool = sample_review_tool();
+        assert!(validate_review_approval_gate(&tool, None).is_ok());
+    }
+
+    #[test]
+    fn review_approval_gate_requires_override_for_rejected_relevance() {
+        let mut tool = sample_review_tool();
+        tool.relevance_status = "rejected".into();
+        assert_eq!(
+            validate_review_approval_gate(&tool, None),
+            Err("override reason required when overriding rejected relevance or critical install risk")
+        );
+        assert!(validate_review_approval_gate(&tool, Some("operator override")).is_ok());
+    }
+
+    #[test]
+    fn review_approval_gate_requires_override_for_critical_install() {
+        let mut tool = sample_review_tool();
+        tool.install_risk_level = "critical".into();
+        assert_eq!(
+            validate_review_approval_gate(&tool, None),
+            Err("override reason required when overriding rejected relevance or critical install risk")
+        );
+    }
+
+    #[test]
+    fn review_override_required_detects_rejected_and_critical() {
+        let mut tool = sample_review_tool();
+        assert!(!review_override_required(&tool));
+        tool.relevance_status = "rejected".into();
+        assert!(review_override_required(&tool));
+        tool.relevance_status = "accepted".into();
+        tool.install_risk_level = "critical".into();
+        assert!(review_override_required(&tool));
+    }
+
+    #[test]
+    fn tool_has_trustworthy_url_accepts_repo_or_npm() {
+        let mut tool = sample_review_tool();
+        assert!(tool_has_trustworthy_url(&tool));
+        tool.repo_url = None;
+        tool.npm_package = Some("@example/pkg".into());
+        assert!(tool_has_trustworthy_url(&tool));
     }
 
     #[test]
@@ -1568,6 +2754,145 @@ mod tests {
     fn list_pending_tools_sql_filters_pending_only() {
         assert!(LIST_PENDING_TOOLS_SQL.contains("approval_status = 'pending'"));
         assert!(!LIST_PENDING_TOOLS_SQL.contains("approved"));
+    }
+
+    #[test]
+    fn review_queue_where_covers_all_queues() {
+        for queue in REVIEW_QUEUES {
+            assert!(
+                review_queue_where(queue).is_ok(),
+                "missing where for {queue}"
+            );
+        }
+        assert_eq!(review_queue_where("unknown"), Err("unknown review queue"));
+    }
+
+    #[test]
+    fn derive_lifecycle_state_maps_pending_and_quarantine() {
+        let mut tool = sample_review_tool();
+        assert_eq!(derive_lifecycle_state(&tool), "candidate");
+        tool.last_reviewed_at = Some(chrono::Utc::now());
+        assert_eq!(derive_lifecycle_state(&tool), "pending");
+        tool.quarantined_at = Some(chrono::Utc::now());
+        assert_eq!(derive_lifecycle_state(&tool), "flagged");
+    }
+
+    #[test]
+    fn derive_claim_state_reads_tool_column() {
+        let mut tool = sample_review_tool();
+        assert_eq!(derive_claim_state(&tool), "unclaimed");
+        tool.claim_state = "claim_pending".into();
+        assert_eq!(derive_claim_state(&tool), "claim_pending");
+    }
+
+    fn sample_submit_input() -> SubmitToolInput {
+        SubmitToolInput {
+            name: "Bridge MCP".into(),
+            description: "Ethereum bridge MCP server for crypto agents.".into(),
+            tool_type: "mcp".into(),
+            function: "bridge".into(),
+            repo_url: Some("https://github.com/example/bridge".into()),
+            homepage: None,
+            npm_package: None,
+            mcp_endpoint: None,
+            install_command: Some("npm i @example/bridge-mcp".into()),
+            chains_raw: "ethereum, arbitrum".into(),
+            category_suggestion: None,
+            official_team_claim: false,
+            verification_note: None,
+        }
+    }
+
+    #[test]
+    fn validate_submit_tool_accepts_minimally_plausible_crypto_tool() {
+        assert!(validate_submit_tool_input(&sample_submit_input()).is_ok());
+    }
+
+    #[test]
+    fn validate_submit_tool_rejects_without_link() {
+        let mut input = sample_submit_input();
+        input.repo_url = None;
+        assert!(validate_submit_tool_input(&input).is_err());
+    }
+
+    #[test]
+    fn validate_submit_tool_rejects_short_description() {
+        let mut input = sample_submit_input();
+        input.description = "too short".into();
+        assert!(validate_submit_tool_input(&input).is_err());
+    }
+
+    #[cfg(feature = "ssr")]
+    #[test]
+    fn scan_submission_runs_relevance_and_install_scanners() {
+        let scan = scan_submission(&sample_submit_input());
+        assert!(scan.crypto_relevance_score > 0);
+        assert!(!scan.relevance_status.is_empty());
+        assert_eq!(scan.install_risk_level, "low");
+    }
+
+    #[cfg(feature = "ssr")]
+    #[test]
+    fn scan_submission_accepts_low_relevance_intake() {
+        let mut input = sample_submit_input();
+        input.name = "Generic Helper".into();
+        input.description = "A generic helper tool without crypto terms.".into();
+        input.repo_url = Some("https://example.com".into());
+        let scan = scan_submission(&input);
+        assert!(scan.relevance_status == "needs_review" || scan.relevance_status == "rejected");
+        assert!(validate_submit_tool_input(&input).is_ok());
+    }
+
+    #[test]
+    fn validate_report_reason_accepts_allowlist() {
+        assert!(validate_report_reason("scam_phishing").is_ok());
+        assert!(validate_report_reason("broken_link").is_ok());
+        assert!(validate_report_reason("invalid").is_err());
+    }
+
+    #[test]
+    fn validate_claim_tool_input_bounds() {
+        assert!(validate_claim_tool_input(&ClaimToolInput {
+            slug: "bridge-mcp".into(),
+            verification_note: "I maintain this repo and can verify via DNS TXT.".into(),
+            contact_email: Some("team@example.com".into()),
+        })
+        .is_ok());
+        assert!(validate_claim_tool_input(&ClaimToolInput {
+            slug: "bridge-mcp".into(),
+            verification_note: "short".into(),
+            contact_email: None,
+        })
+        .is_err());
+    }
+
+    #[test]
+    fn review_queue_where_reported_uses_open_reports() {
+        let where_clause = review_queue_where("reported").expect("reported queue");
+        assert!(where_clause.contains("tool_reports"));
+        assert!(where_clause.contains("status = 'open'"));
+    }
+
+    #[test]
+    fn validate_review_action_accepts_operator_actions() {
+        assert!(validate_review_action("needs_info", "more context").is_ok());
+        assert!(validate_review_action("quarantine", "unsafe install").is_ok());
+        assert!(validate_review_action("mark_verified", "checked repo").is_ok());
+        assert!(validate_review_action("mark_official", "official domain").is_ok());
+        assert!(validate_review_action("needs_info", "   ").is_err());
+    }
+
+    #[test]
+    fn review_audit_statuses_tracks_trust_and_quarantine() {
+        let tool = sample_review_tool();
+        assert_eq!(
+            review_audit_statuses(&tool, "mark_verified"),
+            ("community".into(), "verified".into())
+        );
+        assert_eq!(
+            review_audit_statuses(&tool, "needs_info"),
+            ("pending".into(), "needs_info".into())
+        );
     }
 
     #[test]
@@ -1622,6 +2947,65 @@ mod tests {
     fn validate_trigger_crawler_source_accepts_known_sources() {
         assert!(validate_trigger_crawler_source("npm").is_ok());
         assert!(validate_trigger_crawler_source("sync_stars").is_ok());
+    }
+
+    #[test]
+    fn admin_review_queue_redacts_secrets_in_tool_json() {
+        use crate::server::secret_redaction::assert_json_has_no_secrets;
+
+        let review_fields = crate::models::tool::default_review_fields();
+        let tool = Tool {
+            id: Uuid::new_v4(),
+            name: "Leak test".into(),
+            slug: "leak-test".into(),
+            description: Some("SUPABASE_SERVICE_KEY=leaked-service-key".into()),
+            function: "bridge".into(),
+            asset_class: "multi".into(),
+            actor: "agent".into(),
+            tool_type: "mcp".into(),
+            repo_url: None,
+            homepage: None,
+            npm_package: None,
+            install_command: Some("GITHUB_CLIENT_SECRET=leaked-client-secret".into()),
+            mcp_endpoint: None,
+            chains: vec![],
+            status: "community".into(),
+            official_team: None,
+            trust_score: 0,
+            approval_status: "pending".into(),
+            submitted_by: None,
+            rejection_reason: None,
+            crypto_relevance_score: 0,
+            crypto_relevance_reasons: vec![],
+            relevance_status: "needs_review".into(),
+            install_risk_level: "low".into(),
+            install_risk_reasons: vec![],
+            requires_secret: false,
+            safe_copy_command: None,
+            quarantined_at: None,
+            last_reviewed_at: None,
+            review_policy_version: review_fields.review_policy_version,
+            claim_state: "unclaimed".into(),
+            license: None,
+            pricing: "free".into(),
+            x402_price: None,
+            stars: 0,
+            last_commit_at: None,
+            source: "manual".into(),
+            source_url: None,
+            created_at: chrono::Utc::now(),
+            updated_at: chrono::Utc::now(),
+        };
+        let item = ReviewQueueItem {
+            tool: redact_tool_for_admin(tool),
+            duplicate_candidates: vec![],
+            lifecycle_state: "candidate".into(),
+            claim_state: "unclaimed".into(),
+        };
+        let json = serde_json::to_string(&item).expect("serialize");
+        assert_json_has_no_secrets(&json);
+        assert!(!json.contains("leaked-service-key"));
+        assert!(!json.contains("leaked-client-secret"));
     }
 
     #[test]
