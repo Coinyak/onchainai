@@ -341,19 +341,9 @@ pub fn ToolsBrowser(
         )
     });
 
-    let children_fallback = children.clone();
-    let children_body = children;
-
     view! {
         <div class="tools-layout" data-tools-browser="">
-            <Suspense fallback=move || view! {
-                <aside class="tools-sidebar"><p class="sidebar-empty">"Loading filters…"</p></aside>
-                <div class="tools-main">
-                    {children_fallback.as_ref().map(|content| view! { <div class="tools-prepend">{content()}</div> })}
-                    <ToolListSkeleton count=6/>
-                </div>
-            }>
-                {move || match page.get() {
+            {move || match page.get() {
                         Some(Ok(data)) => {
                             let qb = query_base.get();
                             let browser_base = base.get_value();
@@ -370,7 +360,7 @@ pub fn ToolsBrowser(
                                     default_function_open=matches!(browser_base, BrowserBase::Tools)
                                 />
                                 <div class="tools-main">
-                                    {children_body.as_ref().map(|content| view! { <div class="tools-prepend">{content()}</div> })}
+                                    {children.as_ref().map(|content| view! { <div class="tools-prepend">{content()}</div> })}
                                     <ChainStrip
                                         base=browser_base.clone()
                                         query_base=qb.clone()
@@ -444,7 +434,7 @@ pub fn ToolsBrowser(
                         Some(Err(e)) => view! {
                             <aside class="tools-sidebar"><p class="sidebar-empty">"Loading filters…"</p></aside>
                             <div class="tools-main">
-                                {children_body.as_ref().map(|content| view! { <div class="tools-prepend">{content()}</div> })}
+                                {children.as_ref().map(|content| view! { <div class="tools-prepend">{content()}</div> })}
                                 <ErrorState
                                     message=e.to_string()
                                     on_retry=move || retry_tick.update(|n| *n = n.wrapping_add(1))
@@ -454,12 +444,11 @@ pub fn ToolsBrowser(
                         None => view! {
                             <aside class="tools-sidebar"><p class="sidebar-empty">"Loading filters…"</p></aside>
                             <div class="tools-main">
-                                {children_body.as_ref().map(|content| view! { <div class="tools-prepend">{content()}</div> })}
+                                {children.as_ref().map(|content| view! { <div class="tools-prepend">{content()}</div> })}
                                 <ToolListSkeleton count=6/>
                             </div>
                         }.into_any(),
-                }}
-            </Suspense>
+            }}
         </div>
     }
 }

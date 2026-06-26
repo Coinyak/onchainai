@@ -75,11 +75,20 @@ pub fn ToolCard(
 
     let show_login = RwSignal::new(false);
     let refresh = RwSignal::new(0u32);
-    let slug_bm = slug.clone();
-    let bookmarked = Resource::new(
-        move || (slug_bm.clone(), refresh.get()),
-        |(s, _)| async move { is_bookmarked(s).await },
-    );
+    let starred = RwSignal::new(false);
+    #[cfg(feature = "hydrate")]
+    {
+        let slug_fetch = slug.clone();
+        Effect::new(move |_| {
+            let _ = refresh.get();
+            let slug_fetch = slug_fetch.clone();
+            leptos::task::spawn_local(async move {
+                if let Ok(v) = is_bookmarked(slug_fetch).await {
+                    starred.set(v);
+                }
+            });
+        });
+    }
     view! {
         <LoginModal show=show_login/>
         <article class=if is_selected { "tool-card is-selected" } else { "tool-card" }>
@@ -163,34 +172,26 @@ pub fn ToolCard(
                 </div>
             </A>
             <div class="tool-card-actions">
-                <Suspense fallback=|| view! { <span class="card-action-btn">"☆"</span> }>
-                    {move || bookmarked.get().map(|res| {
-                        let active = res.unwrap_or(false);
+                <button
+                    type="button"
+                    class="card-action-btn"
+                    aria-label="Toggle bookmark"
+                    on:click=move |ev| {
+                        ev.stop_propagation();
                         let slug_toggle = slug.clone();
-                        view! {
-                            <button
-                                type="button"
-                                class="card-action-btn"
-                                aria-label="Toggle bookmark"
-                                on:click=move |ev| {
-                                    ev.stop_propagation();
-                                    let slug_toggle = slug_toggle.clone();
-                                    spawn_local(async move {
-                                        match get_current_user().await {
-                                            Ok(Some(_)) => {
-                                                let _ = toggle_bookmark(slug_toggle).await;
-                                                refresh.update(|n| *n = n.wrapping_add(1));
-                                            }
-                                            _ => show_login.set(true),
-                                        }
-                                    });
+                        spawn_local(async move {
+                            match get_current_user().await {
+                                Ok(Some(_)) => {
+                                    let _ = toggle_bookmark(slug_toggle).await;
+                                    refresh.update(|n| *n = n.wrapping_add(1));
                                 }
-                            >
-                                {if active { "★" } else { "☆" }}
-                            </button>
-                        }
-                    })}
-                </Suspense>
+                                _ => show_login.set(true),
+                            }
+                        });
+                    }
+                >
+                    {move || if starred.get() { "★" } else { "☆" }}
+                </button>
             </div>
         </article>
     }

@@ -192,10 +192,18 @@ pub fn Sidebar(
     let type_active = parse_multi(active_type.as_deref());
     let status_active = parse_multi(active_status.as_deref());
 
-    let sidebar_collapsed = RwSignal::new(read_sidebar_collapsed());
-    let open_map = RwSignal::new(read_sidebar_sections(default_section_state(
-        default_function_open,
-    )));
+    // SSR-safe defaults — localStorage is applied after hydration to avoid DOM mismatch.
+    let default_sections = default_section_state(default_function_open);
+    let sidebar_collapsed = RwSignal::new(false);
+    let open_map = RwSignal::new(default_sections.clone());
+
+    #[cfg(feature = "hydrate")]
+    {
+        Effect::new(move |_| {
+            sidebar_collapsed.set(read_sidebar_collapsed());
+            open_map.set(read_sidebar_sections(default_sections.clone()));
+        });
+    }
 
     Effect::new(move |_| {
         write_sidebar_collapsed(sidebar_collapsed.get());
