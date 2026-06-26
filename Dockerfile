@@ -44,6 +44,9 @@ COPY --from=builder /app/style /app/style
 
 ENV PORT=3000
 ENV RUST_LOG=info
+# Leptos SSR + deep view trees need a larger tokio worker stack on Linux containers.
+ENV RUST_MIN_STACK=8388608
+ENV SKIP_CRAWLER=1
 EXPOSE 3000
 
 CMD ["/app/onchainai"]
