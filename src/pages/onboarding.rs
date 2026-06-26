@@ -1,6 +1,6 @@
 //! First-login profile onboarding — nickname + optional bio.
 
-use crate::components::top_nav::TopNav;
+use crate::components::site_shell::SiteShell;
 use crate::server::functions::get_current_user;
 use leptos::prelude::*;
 use leptos_router::hooks::use_query_map;
@@ -18,8 +18,8 @@ pub fn OnboardingProfilePage() -> impl IntoView {
     let user = Resource::new_blocking(|| (), |_| async move { get_current_user().await });
 
     view! {
-        <TopNav/>
-        <div class="max-w-[480px] mx-auto px-4 py-12">
+        <SiteShell>
+        <div class="max-w-[480px] px-4 py-12">
             <h1 class="text-[28px] font-bold mb-2">"Set up your profile"</h1>
             <p class="text-[#6B6B6B] text-[14px] mb-8 leading-relaxed">
                 "Choose a nickname for comments and submissions. You can change it later."
@@ -82,5 +82,6 @@ pub fn OnboardingProfilePage() -> impl IntoView {
                 .into_any(),
             })}
         </div>
+        </SiteShell>
     }
 }

@@ -1,7 +1,7 @@
 //! Public tool submission page — intake queue for operator review.
 
 use crate::components::login_modal::LoginModal;
-use crate::components::top_nav::TopNav;
+use crate::components::site_shell::SiteShell;
 use crate::server::functions::{
     get_current_user, list_my_submissions, submit_tool, SubmitToolInput,
 };
@@ -126,9 +126,9 @@ pub fn SubmitPage() -> impl IntoView {
     };
 
     view! {
-        <TopNav/>
+        <SiteShell>
         <LoginModal show=show_login/>
-        <div class="max-w-[720px] mx-auto px-4 py-8">
+        <div class="max-w-[720px] px-4 py-8">
             <h1 class="text-[28px] font-bold mb-2">"Suggest a Tool"</h1>
             <p class="text-[#6B6B6B] text-[14px] leading-relaxed mb-8">
                 "Know a crypto MCP, CLI, SDK, API, or x402 tool we should review? Submit it for operator review. "
@@ -327,5 +327,6 @@ pub fn SubmitPage() -> impl IntoView {
                 </Suspense>
             </section>
         </div>
+        </SiteShell>
     }
 }

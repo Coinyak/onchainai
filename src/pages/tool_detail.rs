@@ -2,10 +2,10 @@
 
 use crate::components::comments_section::CommentsSection;
 use crate::components::error_state::ErrorState;
+use crate::components::site_shell::SiteShell;
 use crate::components::skeleton::ToolCardSkeleton;
 use crate::components::tool_detail_content::ToolDetailContent;
 use crate::components::tool_listing_actions::ToolListingActions;
-use crate::components::top_nav::TopNav;
 use crate::models::Tool;
 use crate::server::functions::get_tool_by_slug;
 use leptos::prelude::*;
@@ -53,8 +53,8 @@ pub fn ToolDetailPage() -> impl IntoView {
     );
 
     view! {
-        <TopNav/>
-        <div class="detail-page max-w-[720px] mx-auto px-4 py-8">
+        <SiteShell>
+            <div class="detail-page px-4 md:px-8 py-8 max-w-[800px]">
             <Suspense fallback=|| view! { <ToolCardSkeleton/> }>
                 {move || match tool.get() {
                     Some(Ok(t)) => {
@@ -75,6 +75,7 @@ pub fn ToolDetailPage() -> impl IntoView {
                     None => view! { <ToolCardSkeleton/> }.into_any(),
                 }}
             </Suspense>
-        </div>
+            </div>
+        </SiteShell>
     }
 }

@@ -44,6 +44,43 @@ fn AuthNav(
     }
 }
 
+/// Site logo + primary actions — rendered at the top of the left sidebar.
+#[component]
+pub fn SidebarBrand() -> impl IntoView {
+    view! {
+        <div class="sidebar-brand">
+            <A
+                href="/"
+                attr:class="sidebar-brand-logo text-[16px] font-semibold tracking-tight text-[#1A1A1A] no-underline"
+            >
+                "OnchainAI"
+            </A>
+            <nav class="sidebar-brand-nav">
+                <A
+                    href="/submit"
+                    attr:class="sidebar-brand-submit inline-flex items-center justify-center h-8 px-3 rounded-lg bg-[#E76F00] text-white text-[13px] font-medium no-underline hover:bg-[#D96400]"
+                >
+                    "Submit"
+                </A>
+                <a
+                    href=GITHUB_REPO
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="sidebar-brand-link text-[#6B6B6B] hover:text-[#1A1A1A] no-underline text-[13px]"
+                >
+                    "GitHub"
+                </a>
+                <Await future=async move { get_current_user().await } let:user_res blocking=true>
+                    <div class="sidebar-brand-auth">
+                        <AuthNav user_res=user_res.clone()/>
+                    </div>
+                </Await>
+            </nav>
+        </div>
+    }
+}
+
+/// Legacy horizontal header — admin pages only.
 #[component]
 pub fn TopNav() -> impl IntoView {
     view! {

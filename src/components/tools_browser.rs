@@ -232,6 +232,7 @@ async fn load_browser_data(
 pub fn ToolsBrowser(
     base: BrowserBase,
     #[prop(optional)] show_toolbar_search: bool,
+    #[prop(optional)] children: Option<Children>,
 ) -> impl IntoView {
     let base = StoredValue::new(base);
     let query = use_query_map();
@@ -342,7 +343,7 @@ pub fn ToolsBrowser(
 
     view! {
         <div class="tools-layout" data-tools-browser="">
-            <Suspense fallback=|| view! { <ToolListSkeleton count=6/> }>
+            <Suspense fallback=|| view! { <aside class="tools-sidebar"><p class="sidebar-empty">"Loading filters…"</p></aside> }>
                 {move || match page.get() {
                     Some(Ok(data)) => {
                         let qb = query_base.get();
@@ -359,7 +360,23 @@ pub fn ToolsBrowser(
                                 active_status=status.get()
                                 default_function_open=matches!(browser_base, BrowserBase::Tools)
                             />
-                            <div class="tools-main">
+                        }.into_any()
+                    }
+                    _ => view! {
+                        <aside class="tools-sidebar"><p class="sidebar-empty">"Loading filters…"</p></aside>
+                    }.into_any(),
+                }}
+            </Suspense>
+            <div class="tools-main">
+                {children.map(|content| view! {
+                    <div class="tools-prepend">{content()}</div>
+                })}
+                <Suspense fallback=|| view! { <ToolListSkeleton count=6/> }>
+                    {move || match page.get() {
+                    Some(Ok(data)) => {
+                        let qb = query_base.get();
+                        let browser_base = base.get_value();
+                        view! {
                                 <ChainStrip
                                     base=browser_base.clone()
                                     query_base=qb.clone()
@@ -415,8 +432,6 @@ pub fn ToolsBrowser(
                                         </div>
                                     }.into_any()
                                 }}
-                            </div>
-
                             {data.preview_tool.clone().map(|tool| {
                                 let close = without_selected(&browser_base, &qb);
                                 let full = format!("/tools/{}", tool.slug);
@@ -432,20 +447,15 @@ pub fn ToolsBrowser(
                         }.into_any()
                     }
                     Some(Err(e)) => view! {
-                        <div class="tools-main tools-main-full">
-                            <ErrorState
-                                message=e.to_string()
-                                on_retry=move || retry_tick.update(|n| *n = n.wrapping_add(1))
-                            />
-                        </div>
+                        <ErrorState
+                            message=e.to_string()
+                            on_retry=move || retry_tick.update(|n| *n = n.wrapping_add(1))
+                        />
                     }.into_any(),
-                    None => view! {
-                        <div class="tools-main tools-main-full">
-                            <ToolListSkeleton count=6/>
-                        </div>
-                    }.into_any(),
+                    None => view! { <ToolListSkeleton count=6/> }.into_any(),
                 }}
-            </Suspense>
+                </Suspense>
+            </div>
         </div>
     }
 }

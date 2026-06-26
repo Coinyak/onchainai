@@ -3,7 +3,7 @@
 //! Defines the top-level router, the HTML shell, and placeholder page
 //! components for all routes required by the website-core milestone.
 
-use crate::components::top_nav::TopNav;
+use crate::components::site_shell::SiteShell;
 use crate::pages::{
     AdminCategoriesPage, AdminCommentsPage, AdminCrawlerPage, AdminDashboardPage,
     AdminFeaturedPage, AdminSettingsPage, AdminToolsPage, AdminUsersPage, CategoryPage, HomePage,
@@ -98,8 +98,8 @@ pub fn App() -> impl IntoView {
 #[component]
 fn AboutPage() -> impl IntoView {
     view! {
-        <TopNav/>
-        <div class="px-6 py-8 max-w-[720px] mx-auto">
+        <SiteShell>
+        <div class="px-6 py-8 max-w-[720px]">
             <h2 class="text-[20px] font-semibold mb-4">"About OnchainAI"</h2>
             <p class="text-[#6B6B6B] mb-8 leading-relaxed">
                 "OnchainAI is a crypto tool directory for humans and agents. We crawl public registries and GitHub to surface MCP, CLI, SDK, and API tools in one searchable hub."
@@ -119,15 +119,18 @@ fn AboutPage() -> impl IntoView {
                 </a>
             </section>
         </div>
+        </SiteShell>
     }
 }
 
 #[component]
 fn NotFoundPage() -> impl IntoView {
     view! {
-        <div class="px-6 py-12 max-w-[720px] mx-auto text-center">
+        <SiteShell>
+        <div class="px-6 py-12 max-w-[720px] text-center">
             <h1 class="text-[28px] font-bold mb-4">"404"</h1>
             <p class="text-[#6B6B6B]">"Page not found."</p>
         </div>
+        </SiteShell>
     }
 }

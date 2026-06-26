@@ -4,6 +4,7 @@ use crate::client_storage::{
     read_sidebar_collapsed, read_sidebar_sections, write_sidebar_collapsed, write_sidebar_sections,
 };
 use crate::components::tools_browser::BrowserBase;
+use crate::components::top_nav::SidebarBrand;
 use crate::filter_query::{clear_axis, parse_multi, toggle_multi};
 use crate::models::Category;
 use leptos::prelude::*;
@@ -228,6 +229,7 @@ pub fn Sidebar(
 
     view! {
         <aside class=aside_class>
+            <SidebarBrand/>
             <div class="sidebar-header">
                 <button
                     type="button"
