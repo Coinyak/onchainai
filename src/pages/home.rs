@@ -11,7 +11,10 @@ use crate::server::functions::{get_categories, get_site_settings};
 use leptos::prelude::*;
 
 async fn load_home_header() -> (SiteSettings, Vec<(Category, i64)>) {
-    let settings = get_site_settings().await.unwrap_or_else(|_| SiteSettings {
+    // Independent queries — run concurrently to save a DB round-trip (the DB is
+    // remote; latency dominates).
+    let (settings, categories) = futures::join!(get_site_settings(), get_categories());
+    let settings = settings.unwrap_or_else(|_| SiteSettings {
         id: 1,
         site_name: "OnchainAI".into(),
         slogan: "Crypto tools, unified.".into(),
@@ -23,7 +26,7 @@ async fn load_home_header() -> (SiteSettings, Vec<(Category, i64)>) {
         allow_x402_registration: false,
         updated_at: chrono::Utc::now(),
     });
-    let categories = get_categories().await.unwrap_or_default();
+    let categories = categories.unwrap_or_default();
     (settings, categories)
 }
 

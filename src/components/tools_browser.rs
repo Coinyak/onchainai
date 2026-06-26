@@ -159,17 +159,31 @@ async fn load_browser_data(
     search_q: Option<String>,
     selected: Option<String>,
 ) -> Result<BrowserData, ServerFnError> {
-    let categories = get_categories().await?;
-    let chains = get_chain_counts(12).await?;
-    let total = count_tools(filters.clone()).await?;
-    let tools = list_tools(sort, 0, 50, filters, search_q).await?;
+    // Round 1: these queries are independent, so run them concurrently — one
+    // network round-trip to the DB instead of five (the DB is remote; latency,
+    // not execution time, dominates page load).
+    let preview_fut = async {
+        match selected.filter(|s| !s.is_empty()) {
+            Some(s) => get_tool_by_slug(s).await.ok(),
+            None => None,
+        }
+    };
+    let (categories, chains, total, tools, preview_tool) = futures::join!(
+        get_categories(),
+        get_chain_counts(12),
+        count_tools(filters.clone()),
+        list_tools(sort, 0, 50, filters, search_q),
+        preview_fut,
+    );
+    let categories = categories?;
+    let chains = chains?;
+    let total = total?;
+    let tools = tools?;
+
+    // Round 2: comment counts need the resolved tool slugs.
     let slugs = tools.iter().map(|t| t.slug.clone()).collect();
     let comment_counts: HashMap<String, i64> =
         get_tool_comment_counts(slugs).await?.into_iter().collect();
-    let preview_tool = match selected.filter(|s| !s.is_empty()) {
-        Some(s) => get_tool_by_slug(s).await.ok(),
-        None => None,
-    };
     Ok(BrowserData {
         categories,
         chains,
