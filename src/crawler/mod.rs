@@ -101,10 +101,12 @@ pub async fn upsert_tools(pool: &sqlx::PgPool, tools: &[models::Tool]) -> anyhow
                 install_risk_level, install_risk_reasons, requires_secret, safe_copy_command,
                 review_policy_version,
                 license, pricing, x402_price,
-                stars, last_commit_at, source, source_url, created_at, updated_at
+                stars, last_commit_at, source, source_url, logo_url, logo_monogram,
+                created_at, updated_at
             )
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19,
-                    $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, now())
+                    $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36,
+                    $37, now())
             ON CONFLICT (slug) DO UPDATE SET
                 name = EXCLUDED.name,
                 description = EXCLUDED.description,
@@ -142,6 +144,8 @@ pub async fn upsert_tools(pool: &sqlx::PgPool, tools: &[models::Tool]) -> anyhow
                 last_commit_at = EXCLUDED.last_commit_at,
                 source = EXCLUDED.source,
                 source_url = EXCLUDED.source_url,
+                logo_url = COALESCE(EXCLUDED.logo_url, tools.logo_url),
+                logo_monogram = COALESCE(EXCLUDED.logo_monogram, tools.logo_monogram),
                 updated_at = now()
             "#,
         )
@@ -179,6 +183,8 @@ pub async fn upsert_tools(pool: &sqlx::PgPool, tools: &[models::Tool]) -> anyhow
         .bind(tool.last_commit_at)
         .bind(&tool.source)
         .bind(&tool.source_url)
+        .bind(&tool.logo_url)
+        .bind(&tool.logo_monogram)
         .bind(tool.created_at)
         .execute(pool)
         .await

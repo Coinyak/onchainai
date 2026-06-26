@@ -5,7 +5,7 @@
 //! These functions are auto-registered by the Leptos runtime and are
 //! available to both server-rendered and hydrated components.
 
-use crate::auth::session::SessionUser;
+use crate::auth::session::{optional_session_result, SessionUser};
 use crate::models::{
     Category, Comment, FeaturedCard, SiteSettings, Source, Tool, ToolClaimRequest, ToolReport,
     ToolSubmission, ToolSubmissionPayload, TOOL_REPORT_REASONS,
@@ -53,9 +53,7 @@ fn request_context() -> Result<(Parts, sqlx::PgPool, String, String), ServerFnEr
 #[server(GetCurrentUser, "/api")]
 pub async fn get_current_user() -> Result<Option<SessionUser>, ServerFnError> {
     let (parts, pool, jwt_secret, issuer) = request_context()?;
-    session_from_parts(&parts, &pool, &jwt_secret, &issuer)
-        .await
-        .map_err(ServerFnError::new)
+    optional_session_result(session_from_parts(&parts, &pool, &jwt_secret, &issuer).await)
 }
 
 /// Admin gate — returns the admin session or a generic "not found" error.
@@ -338,6 +336,11 @@ pub async fn get_tool_by_slug(slug: String) -> Result<Tool, ServerFnError> {
 /// Maximum tools returned by `list_tools` / browser "load more" (matches UI cap).
 pub const MAX_LIST_TOOLS_LIMIT: i64 = 500;
 
+/// Clamp list-tools `limit` to the browser cap (500), never the legacy 100 ceiling.
+pub(crate) fn clamp_list_tools_limit(limit: i64) -> i64 {
+    limit.clamp(1, MAX_LIST_TOOLS_LIMIT)
+}
+
 const MAX_TOOL_FILTER_VALUES: usize = 20;
 const MAX_TOOL_FILTER_VALUE_LEN: usize = 64;
 const MAX_TOOL_LIST_QUERY_LEN: usize = 200;
@@ -516,7 +519,7 @@ pub async fn list_tools(
         .ok_or_else(|| ServerFnError::new("database pool not available"))?;
 
     let offset = offset.max(0);
-    let limit = limit.clamp(1, MAX_LIST_TOOLS_LIMIT);
+    let limit = clamp_list_tools_limit(limit);
     let order = match sort.as_str() {
         "new" => "created_at DESC",
         "comments" => {
@@ -1548,9 +1551,8 @@ pub async fn toggle_upvote(comment_id: Uuid) -> Result<bool, ServerFnError> {
 #[server(IsBookmarked, "/api")]
 pub async fn is_bookmarked(slug: String) -> Result<bool, ServerFnError> {
     let (parts, pool, jwt_secret, issuer) = request_context()?;
-    let Some(user) = session_from_parts(&parts, &pool, &jwt_secret, &issuer)
-        .await
-        .map_err(ServerFnError::new)?
+    let Some(user) =
+        optional_session_result(session_from_parts(&parts, &pool, &jwt_secret, &issuer).await)?
     else {
         return Ok(false);
     };
@@ -3080,6 +3082,15 @@ mod tests {
     }
 
     #[test]
+    fn list_tools_limit_uses_max_cap_not_legacy_100() {
+        assert_eq!(clamp_list_tools_limit(100), 100);
+        assert_eq!(clamp_list_tools_limit(150), 150);
+        assert_eq!(clamp_list_tools_limit(500), MAX_LIST_TOOLS_LIMIT);
+        assert_eq!(clamp_list_tools_limit(501), MAX_LIST_TOOLS_LIMIT);
+        assert_eq!(clamp_list_tools_limit(0), 1);
+    }
+
+    #[test]
     fn tool_list_request_limit_500_accepted() {
         let req = ToolListRequest {
             sort: "hot".into(),
@@ -3179,6 +3190,8 @@ mod tests {
             last_commit_at: None,
             source: "github".into(),
             source_url: None,
+            logo_url: None,
+            logo_monogram: None,
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
         }
@@ -3507,6 +3520,8 @@ mod tests {
             last_commit_at: None,
             source: "manual".into(),
             source_url: None,
+            logo_url: None,
+            logo_monogram: None,
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
         };

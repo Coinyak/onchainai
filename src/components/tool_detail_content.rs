@@ -5,16 +5,9 @@ use crate::components::copy_button::CopyButton;
 use crate::install_safety::{
     blocks_structured_config, claude_mcp_config, cursor_install_note, install_warning_text,
 };
+use crate::models::tool::{display_monogram, logo_url_is_http};
 use crate::models::Tool;
 use leptos::prelude::*;
-
-fn monogram(name: &str) -> String {
-    name.chars()
-        .filter(|c| c.is_alphanumeric())
-        .take(2)
-        .collect::<String>()
-        .to_uppercase()
-}
 
 fn badge_class(status: &str) -> &'static str {
     match status {
@@ -87,7 +80,9 @@ pub fn ToolDetailContent(
         .description
         .clone()
         .unwrap_or_else(|| "No description.".into());
-    let mono = monogram(&tool.name);
+    let mono = display_monogram(&tool);
+    let logo_img = tool.logo_url.clone().filter(|url| logo_url_is_http(url));
+    let tool_name = tool.name.clone();
     let status = tool.status.clone();
     let tool_type = tool.tool_type.clone();
     let active_tab = RwSignal::new("generic".to_string());
@@ -111,7 +106,21 @@ pub fn ToolDetailContent(
     view! {
         <div class=if compact { "detail-content compact" } else { "detail-content" }>
             <header class="detail-header">
-                <div class="detail-logo" aria-hidden="true">{mono}</div>
+                <div class="detail-logo" aria-hidden="true">
+                    {if let Some(url) = logo_img {
+                        view! {
+                            <img
+                                class="tool-logo-img"
+                                src=url
+                                alt=tool_name.clone()
+                                loading="lazy"
+                            />
+                        }
+                        .into_any()
+                    } else {
+                        view! { {mono.clone()} }.into_any()
+                    }}
+                </div>
                 <div class="detail-header-text">
                     <h2 class="detail-title">{tool.name.clone()}</h2>
                     <div class="tool-badges">
@@ -373,6 +382,8 @@ mod tests {
             last_commit_at: None,
             source: "manual".into(),
             source_url: None,
+            logo_url: None,
+            logo_monogram: None,
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
         }

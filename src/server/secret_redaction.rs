@@ -193,6 +193,8 @@ mod tests {
             last_commit_at: None,
             source: "manual".into(),
             source_url: None,
+            logo_url: None,
+            logo_monogram: None,
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
         };

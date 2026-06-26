@@ -274,6 +274,32 @@ pub fn classify_actor(text: &str) -> &'static str {
     }
 }
 
+/// Parse `owner/repo` from a GitHub repository URL.
+fn parse_github_owner_repo(url: &str) -> Option<(String, String)> {
+    let url = url.trim().trim_end_matches('/');
+    let rest = url
+        .strip_prefix("https://github.com/")
+        .or_else(|| url.strip_prefix("http://github.com/"))?;
+    let mut parts = rest.split('/');
+    let owner = parts.next()?.trim();
+    let repo = parts.next()?.trim();
+    let repo = repo.strip_suffix(".git").unwrap_or(repo);
+    if owner.is_empty() || repo.is_empty() {
+        return None;
+    }
+    Some((owner.to_string(), repo.to_string()))
+}
+
+/// Infer a remote logo URL from repo/homepage metadata (GitHub opengraph PNG).
+pub fn infer_logo_url(repo_url: Option<&str>, _homepage: Option<&str>) -> Option<String> {
+    if let Some(url) = repo_url {
+        if let Some((owner, repo)) = parse_github_owner_repo(url) {
+            return Some(format!("https://github.com/{owner}/{repo}.png"));
+        }
+    }
+    None
+}
+
 /// Generate a base slug from a tool name (kebab-case, trimmed).
 ///
 /// Uses the `slug` crate which handles Unicode + punctuation stripping. The
@@ -399,6 +425,8 @@ pub fn normalize(
         last_commit_at: raw.last_commit_at,
         source: raw.source.clone(),
         source_url: raw.source_url.clone(),
+        logo_url: infer_logo_url(raw.repo_url.as_deref(), raw.homepage.as_deref()),
+        logo_monogram: None,
         created_at: now,
         updated_at: now,
     }
@@ -757,6 +785,23 @@ mod tests {
     }
 
     #[test]
+    fn infer_logo_url_from_github_repo() {
+        assert_eq!(
+            infer_logo_url(Some("https://github.com/bob-collective/bob"), None),
+            Some("https://github.com/bob-collective/bob.png".into())
+        );
+        assert_eq!(
+            infer_logo_url(Some("https://github.com/bob-collective/bob.git"), None),
+            Some("https://github.com/bob-collective/bob.png".into())
+        );
+        assert_eq!(infer_logo_url(None, Some("https://gobob.xyz")), None);
+        assert_eq!(
+            infer_logo_url(Some("https://gitlab.com/foo/bar"), None),
+            None
+        );
+    }
+
+    #[test]
     fn normalize_produces_classified_tool() {
         let taken = std::collections::HashSet::new();
         let tool = normalize(&sample_raw(), &taken, "approved");
@@ -777,6 +822,10 @@ mod tests {
         assert_eq!(tool.source, "github");
         assert_eq!(tool.chains, vec!["bitcoin", "ethereum", "base"]);
         assert_eq!(tool.license.as_deref(), Some("MIT"));
+        assert_eq!(
+            tool.logo_url.as_deref(),
+            Some("https://github.com/bob-collective/bob.png")
+        );
     }
 
     #[test]

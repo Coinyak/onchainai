@@ -712,6 +712,8 @@ mod tests {
             last_commit_at: None,
             source: "github".into(),
             source_url: Some("https://github.com/example/bridge".into()),
+            logo_url: None,
+            logo_monogram: None,
             created_at: Utc::now(),
             updated_at: Utc::now(),
         }

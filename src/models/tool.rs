@@ -74,6 +74,10 @@ pub struct Tool {
     pub source: String,
     pub source_url: Option<String>,
 
+    // Branding
+    pub logo_url: Option<String>,
+    pub logo_monogram: Option<String>,
+
     // Timestamps
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -113,6 +117,29 @@ impl Default for ToolReviewDefaults {
 
 pub fn default_review_fields() -> ToolReviewDefaults {
     ToolReviewDefaults::default()
+}
+
+/// Whether `logo_url` is safe to render as an external image.
+pub fn logo_url_is_http(url: &str) -> bool {
+    url.starts_with("http://") || url.starts_with("https://")
+}
+
+/// Monogram from tool name: first two alphanumeric chars, uppercased.
+pub fn monogram_from_name(name: &str) -> String {
+    name.chars()
+        .filter(|c| c.is_alphanumeric())
+        .take(2)
+        .collect::<String>()
+        .to_uppercase()
+}
+
+/// Display monogram: DB override when set, else computed from name.
+pub fn display_monogram(tool: &Tool) -> String {
+    tool.logo_monogram
+        .as_deref()
+        .filter(|m| !m.is_empty())
+        .map(str::to_string)
+        .unwrap_or_else(|| monogram_from_name(&tool.name))
 }
 
 #[cfg(test)]
@@ -160,6 +187,8 @@ mod tests {
             last_commit_at: None,
             source: "manual".into(),
             source_url: None,
+            logo_url: None,
+            logo_monogram: None,
             created_at: DateTime::parse_from_rfc3339("2026-01-01T00:00:00Z")
                 .unwrap()
                 .with_timezone(&Utc),
@@ -187,6 +216,34 @@ mod tests {
         // Round-trip back into the struct.
         let back: Tool = serde_json::from_str(&json).expect("deserialize tool");
         assert_eq!(back.tool_type, "mcp");
+    }
+
+    #[test]
+    fn monogram_from_name_takes_first_two_alphanumeric() {
+        assert_eq!(monogram_from_name("BOB Gateway"), "BO");
+        assert_eq!(monogram_from_name("  @foo/bar  "), "FO");
+        assert_eq!(monogram_from_name("!!!"), "");
+    }
+
+    #[test]
+    fn display_monogram_prefers_db_override() {
+        let mut tool = sample_tool();
+        tool.name = "Uniswap V4".into();
+        assert_eq!(display_monogram(&tool), "UN");
+
+        tool.logo_monogram = Some("UV".into());
+        assert_eq!(display_monogram(&tool), "UV");
+
+        tool.logo_monogram = Some("".into());
+        assert_eq!(display_monogram(&tool), "UN");
+    }
+
+    #[test]
+    fn logo_url_is_http_accepts_http_and_https() {
+        assert!(logo_url_is_http("https://example.com/logo.png"));
+        assert!(logo_url_is_http("http://example.com/logo.png"));
+        assert!(!logo_url_is_http("//example.com/logo.png"));
+        assert!(!logo_url_is_http("/chains/ethereum.svg"));
     }
 
     #[test]

@@ -3,18 +3,11 @@
 use crate::chains::chain_tags_for_tool;
 use crate::components::copy_button::CopyButton;
 use crate::components::login_modal::LoginModal;
+use crate::models::tool::{display_monogram, logo_url_is_http};
 use crate::models::Tool;
 use crate::server::functions::{get_current_user, toggle_bookmark};
 use leptos::prelude::*;
 use leptos::task::spawn_local;
-
-fn monogram(name: &str) -> String {
-    name.chars()
-        .filter(|c| c.is_alphanumeric())
-        .take(2)
-        .collect::<String>()
-        .to_uppercase()
-}
 
 fn badge_class(status: &str) -> &'static str {
     match status {
@@ -41,7 +34,9 @@ pub fn ToolCard(
     let slug = tool.slug.clone();
     let detail_href = format!("/tools/{slug}");
     let href = preview_href.unwrap_or(detail_href);
-    let mono = monogram(&tool.name);
+    let mono = display_monogram(&tool);
+    let logo_img = tool.logo_url.clone().filter(|url| logo_url_is_http(url));
+    let tool_name = tool.name.clone();
     let status = tool.status.clone();
     let tool_type = tool.tool_type.clone();
     let chains = tool.chains.clone();
@@ -80,7 +75,19 @@ pub fn ToolCard(
             <a href=href class="tool-card-link no-underline text-inherit">
                 <div class="tool-card-inner">
                     <div class="tool-logo" aria-hidden="true">
-                        {mono}
+                        {if let Some(url) = logo_img {
+                            view! {
+                                <img
+                                    class="tool-logo-img"
+                                    src=url
+                                    alt=tool_name.clone()
+                                    loading="lazy"
+                                />
+                            }
+                            .into_any()
+                        } else {
+                            view! { {mono.clone()} }.into_any()
+                        }}
                     </div>
                     <div class="tool-card-body">
                         <div class="tool-card-header">
