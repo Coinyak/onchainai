@@ -70,6 +70,8 @@ hydrate = [
     "dep:gloo-net",
     "dep:gloo-timers",
     "dep:web-sys",
+    # Shared config helpers (from_env) are compiled into the WASM bundle.
+    "dep:dotenvy",
 ]
 
 [profile.dev]
@@ -134,8 +136,6 @@ js-sys = { version = "0.3", optional = true }
 wasm-bindgen-futures = { version = "0.4", optional = true }
 web-sys = { version = "0.3", features = ["RequestCredentials", "Window", "Navigator", "Clipboard", "Storage", "Location", "File", "FileList", "FileReader", "HtmlInputElement", "Event"], optional = true }
 
-[dev-dependencies]
-tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
-
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 wiremock = "0.6"
