@@ -71,6 +71,7 @@ Read before working on a feature:
 - `DESIGN.md` — Design tokens (Stitch spec, colors, typography, components)
 - `docs/SECURITY.md` — Security rules (auth, RLS, headers, rate limiting)
 - `docs/BUILD_DEPLOY_RULES.md` — SSR/WASM bundle coherence, local restart workflow, deploy checklist
+- `docs/DISK_MAINTENANCE.md` — Disk audit log, hidden `var/folders` junk, monthly cleanup script
 
 ## Code Style
 
