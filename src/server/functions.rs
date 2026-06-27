@@ -6,7 +6,7 @@
 //! available to both server-rendered and hydrated components.
 
 // Server fns are invoked via Leptos macro registration; silence lib-build dead_code noise.
-#![allow(dead_code)]
+#![allow(dead_code, unused_imports)]
 
 use crate::auth::session::{optional_session_result, SessionUser};
 use crate::models::tool::{sanitize_tool_for_public_response, sanitize_tools_for_public_response};

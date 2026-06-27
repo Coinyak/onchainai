@@ -17,14 +17,11 @@ pub fn PreviewPanel(tool: Tool, close_href: String, full_page_href: String) -> i
             role="dialog"
             aria-label="Tool preview"
             tabindex="-1"
-            on:keydown={
-                let _close = close_href.clone();
-                move |ev| {
-                    if ev.key() == "Escape" {
-                        #[cfg(feature = "hydrate")]
-                        if let Some(win) = web_sys::window() {
-                            let _ = win.location().set_href(&close);
-                        }
+            on:keydown=move |ev| {
+                if ev.key() == "Escape" {
+                    #[cfg(feature = "hydrate")]
+                    if let Some(win) = web_sys::window() {
+                        let _ = win.location().set_href(&close_href);
                     }
                 }
             }
