@@ -94,10 +94,12 @@ pub fn build_app(pool: sqlx::PgPool, config: Config) -> axum::Router {
 
     use crate::server::rate_limit::{AUTH_PER_MINUTE, GENERAL_PER_MINUTE, MCP_PER_MINUTE};
 
+    // Catalog pages fan out ~6 read-only server-fn calls on hydrate; smoke tests
+    // navigate quickly — allow short bursts above 60/min without blocking SSR reads.
     let general_rate_limit = GovernorLayer::new(
         GovernorConfigBuilder::default()
-            .per_second(1)
-            .burst_size(GENERAL_PER_MINUTE)
+            .per_second(5)
+            .burst_size(GENERAL_PER_MINUTE.saturating_mul(2))
             .finish()
             .expect("general governor config"),
     );

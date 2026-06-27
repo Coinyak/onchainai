@@ -55,6 +55,16 @@ pub fn ToolLogo(
                                 alt=""
                                 loading="lazy"
                                 referrerpolicy="no-referrer"
+                                on:load=move |_| {
+                                    #[cfg(feature = "hydrate")]
+                                    if let Some(img) = img_ref.get() {
+                                        let el: web_sys::HtmlImageElement = img.clone().into();
+                                        if el.natural_width() == 0 {
+                                            show_logo_img.set(false);
+                                            let _ = el.remove();
+                                        }
+                                    }
+                                }
                             />
                         }
                         .into_any()

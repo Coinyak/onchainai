@@ -20,7 +20,7 @@ pub const BOOKMARK_PER_MINUTE: u32 = 60;
 pub const MCP_PER_MINUTE: u32 = 100;
 /// Auth endpoints allow at most 5 attempts per minute per IP.
 pub const AUTH_PER_MINUTE: u32 = 5;
-/// General API traffic allows 60 requests per minute per IP.
+/// General API traffic baseline (see [`crate::build_app`] — burst is 2× this, 5 req/s refill).
 pub const GENERAL_PER_MINUTE: u32 = 60;
 
 static SUBMIT_LIMITER: LazyLock<DefaultKeyedRateLimiter<Uuid>> =

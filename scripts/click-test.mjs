@@ -1,26 +1,22 @@
 import { chromium } from "playwright";
 import { writeFileSync } from "fs";
+import {
+  TOOL_PAGE_SIZE,
+  expectedCumulativeMin,
+  sleep,
+  NAV_PACE_MS,
+  clearSidebarStorage,
+  probeLogoFallback,
+  logoFallbackOk,
+} from "./browser-test-helpers.mjs";
 
 const base = (process.argv[2] || "https://www.onchain-ai.xyz").replace(/\/$/, "");
 const outDir = "/tmp/onchainai-browser-test";
-const TOOL_PAGE_SIZE = 50;
 const results = [];
-
-function expectedCumulativeMin(page1Cards, pageNum = 2) {
-  if (page1Cards < TOOL_PAGE_SIZE) return page1Cards;
-  return page1Cards + (pageNum - 1) * TOOL_PAGE_SIZE;
-}
 
 function log(step, ok, detail = "") {
   results.push({ step, ok, detail });
   console.log(`${ok ? "PASS" : "FAIL"} ${step}${detail ? ` — ${detail}` : ""}`);
-}
-
-async function clearSidebarStorage(page) {
-  await page.evaluate(() => {
-    localStorage.removeItem("onchain-ai-sidebar-collapsed");
-    localStorage.removeItem("onchain-ai-sidebar-sections");
-  });
 }
 
 /** Expand collapsed sidebar rail and function section so filter links are visible. */
@@ -59,15 +55,14 @@ page.on("console", (msg) => {
 });
 
 try {
-  await clearSidebarStorage(page);
   await page.goto(`${base}/`, { waitUntil: "networkidle", timeout: 60000 });
+  await clearSidebarStorage(page);
   log("home-load", true);
 
   const bodyText = await page.textContent("body");
   log("no-deser-error-home", !/error deserializing|missing field filters/i.test(bodyText || ""));
   log("sidebar-brand", !!(await page.$(".sidebar-brand")));
 
-  // Sidebar filters: use /tools where function section defaults open (home keeps it collapsed).
   await page.goto(`${base}/tools`, { waitUntil: "networkidle" });
   await ensureSidebarFiltersVisible(page);
   const fnLink = await page.$('aside .sidebar-body a[href*="function="]:visible');
@@ -83,13 +78,13 @@ try {
   await page.goto(`${base}/tools`, { waitUntil: "networkidle" });
   log("tools-load", true);
 
-  const toolCards = await page.$$(".tool-card");
+  const toolCards = await page.$$(".tool-card:not(.skeleton-card)");
   const cardCount = toolCards.length;
   log("tool-cards-present", cardCount > 0, `count=${cardCount}`);
 
   const logoStats = await page.evaluate(() => ({
     monograms: document.querySelectorAll(".tool-logo-monogram").length,
-    imgs: document.querySelectorAll(".tool-logo img, .tool-card img.tool-logo-img").length,
+    imgs: document.querySelectorAll("img.tool-logo-img").length,
   }));
   const expectLogos = cardCount >= TOOL_PAGE_SIZE;
   log(
@@ -99,26 +94,16 @@ try {
   );
 
   if (logoStats.imgs > 0) {
-    const brokeFallback = await page.evaluate(async () => {
-      const img = document.querySelector(".tool-logo-img");
-      if (!img) return { skipped: true };
-      img.src = "https://invalid.onchainai-test.invalid/nope.png";
-      await new Promise((r) => setTimeout(r, 600));
-      const stillImg = !!document.querySelector(".tool-logo-img");
-      const logo = document.querySelector(".tool-card .tool-logo");
-      const text = logo?.querySelector(".tool-logo-monogram")?.textContent?.trim() ?? "";
-      return { skipped: false, stillImg, textLen: text.length };
-    });
+    const brokeFallback = await probeLogoFallback(page);
     if (!brokeFallback.skipped) {
       log(
         "tool-logo-fallback",
-        !brokeFallback.stillImg && brokeFallback.textLen > 0,
-        `stillImg=${brokeFallback.stillImg} textLen=${brokeFallback.textLen}`,
+        logoFallbackOk(brokeFallback),
+        `imgCount=${brokeFallback.imgCount} textLen=${brokeFallback.textLen}`,
       );
     }
   }
 
-  // Chain strip click
   const chainLink = await page.$(".chain-strip a:visible, .chain-tile:visible");
   if (chainLink && (await chainLink.isVisible())) {
     await chainLink.click({ force: false });
@@ -130,16 +115,17 @@ try {
 
   const page1Cards = cardCount;
   const expectedPage2 = expectedCumulativeMin(page1Cards, 2);
+  await sleep(NAV_PACE_MS);
   await page.goto(`${base}/tools?page=2`, { waitUntil: "networkidle" });
-  const page2Cards = (await page.$$(".tool-card")).length;
+  const page2Cards = (await page.$$(".tool-card:not(.skeleton-card)")).length;
   const page2Ok =
     !/error deserializing/i.test((await page.textContent("body")) || "") &&
     page2Cards >= expectedPage2;
   log("page-2-load", page2Ok, `count=${page2Cards} expected>=${expectedPage2}`);
 
-  // Load more: full-page navigation to ?page=2
+  await sleep(NAV_PACE_MS);
   await page.goto(`${base}/tools`, { waitUntil: "networkidle" });
-  const beforeLoadMore = (await page.$$(".tool-card")).length;
+  const beforeLoadMore = (await page.$$(".tool-card:not(.skeleton-card)")).length;
   const loadMore = await page.$("a.load-more-btn, .load-more-row a.load-more-btn");
   if (loadMore) {
     const loadMoreApiErrors = [];
@@ -156,11 +142,12 @@ try {
       navTimedOut = true;
     });
     await page.waitForLoadState("networkidle");
-    const expectedMin = beforeLoadMore + TOOL_PAGE_SIZE;
+    const expectedMin = expectedCumulativeMin(beforeLoadMore, 2);
     let waitTimedOut = false;
     await page
       .waitForFunction(
-        (min) => document.querySelectorAll(".tool-card").length >= min,
+        (min) =>
+          document.querySelectorAll(".tool-card:not(.skeleton-card)").length >= min,
         expectedMin,
         { timeout: 20000 },
       )
@@ -168,7 +155,7 @@ try {
         waitTimedOut = true;
       });
     page.off("response", onLoadMoreResponse);
-    const after = (await page.$$(".tool-card")).length;
+    const after = (await page.$$(".tool-card:not(.skeleton-card)")).length;
     const detail = navTimedOut
       ? `nav timeout url=${page.url()}`
       : waitTimedOut
@@ -190,9 +177,8 @@ try {
     log("load-more-present", true, "small catalog");
   }
 
-  // Open first tool preview
   await page.goto(`${base}/tools`, { waitUntil: "networkidle" });
-  const firstCard = await page.$(".tool-card a.tool-card-link");
+  const firstCard = await page.$(".tool-card:not(.skeleton-card) a.tool-card-link");
   if (firstCard) {
     await firstCard.click();
     await page.waitForLoadState("networkidle");
@@ -200,16 +186,14 @@ try {
     log("tool-preview-click", hasPreview || page.url().includes("selected="), page.url());
   }
 
-  // Tool detail page
   const detailHref = await page
-    .$eval(".tool-card a.tool-card-link", (a) => a.getAttribute("href"))
+    .$eval(".tool-card:not(.skeleton-card) a.tool-card-link", (a) => a.getAttribute("href"))
     .catch(() => null);
   if (detailHref && detailHref.startsWith("/tools/")) {
     await page.goto(`${base}${detailHref}`, { waitUntil: "networkidle" });
     log("tool-detail", (await page.textContent("h1, .tool-detail h1"))?.length > 0, detailHref);
   }
 
-  // Mobile viewport
   await page.setViewportSize({ width: 375, height: 812 });
   await page.goto(`${base}/tools`, { waitUntil: "networkidle" });
   log("mobile-tools", !/error deserializing/i.test((await page.textContent("body")) || ""));

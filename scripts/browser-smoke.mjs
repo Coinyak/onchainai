@@ -1,15 +1,25 @@
 import { chromium } from "playwright";
+import {
+  TOOL_PAGE_SIZE,
+  expectedCumulativeMin,
+  sleep,
+  NAV_PACE_MS,
+  clearSidebarStorage,
+  probeLogoFallback,
+  logoFallbackOk,
+} from "./browser-test-helpers.mjs";
 
 const base = (process.argv[2] || "http://localhost:3000").replace(/\/$/, "");
-const TOOL_PAGE_SIZE = 50;
 const errors = [];
 const hydrationPanicRe =
   /hydration|entered unreachable code|panicked at|reactive value disposed/i;
 
-function expectedCumulativeMin(page1Cards, pageNum = 2) {
-  if (page1Cards < TOOL_PAGE_SIZE) return page1Cards;
-  return page1Cards + (pageNum - 1) * TOOL_PAGE_SIZE;
+function countRealToolCards(page) {
+  return page.evaluate(
+    () => document.querySelectorAll(".tool-card:not(.skeleton-card)").length,
+  );
 }
+
 const browser = await chromium.launch({ headless: true });
 const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
 
@@ -24,7 +34,6 @@ page.on("console", (msg) => {
 });
 page.on("requestfailed", (req) => {
   const url = req.url();
-  // External font CDN flakes in headless CI; not an app regression signal.
   if (url.includes("fonts.gstatic.com") || url.includes("fonts.googleapis.com")) {
     return;
   }
@@ -52,12 +61,8 @@ page.on("response", async (res) => {
 });
 
 await page.goto(`${base}/`, { waitUntil: "domcontentloaded" });
-await page.evaluate(() => {
-  localStorage.removeItem("onchain-ai-sidebar-collapsed");
-  localStorage.removeItem("onchain-ai-sidebar-sections");
-});
+await clearSidebarStorage(page);
 
-// Home layout: sidebar brand present, legacy category grid removed.
 await page.goto(`${base}/`, { waitUntil: "networkidle" });
 const homeLayout = await page.evaluate(() => ({
   hasSidebarBrand: !!document.querySelector(".sidebar-brand"),
@@ -78,7 +83,6 @@ for (const path of ["/", "/tools", "/tools?function=bridge&type=mcp"]) {
   }
 }
 
-// Home H1 font-size should differ between desktop and mobile breakpoints.
 await page.setViewportSize({ width: 1280, height: 900 });
 await page.goto(`${base}/`, { waitUntil: "networkidle" });
 const desktopH1Size = await page.evaluate(() => {
@@ -97,7 +101,6 @@ if (!desktopH1Size || !mobileH1Size) {
   errors.push(`computed-style:home-h1-same:${desktopH1Size}`);
 }
 
-// Served CSS bundle must be non-empty.
 const cssRes = await page.goto(`${base}/pkg/onchainai.css`, {
   waitUntil: "networkidle",
 });
@@ -106,38 +109,25 @@ if (!cssText || cssText.trim().length === 0) {
   errors.push("css-empty:/pkg/onchainai.css");
 }
 
-// Tools list: large catalog should expose load-more markup and logo images.
 await page.setViewportSize({ width: 1280, height: 900 });
 await page.goto(`${base}/tools`, { waitUntil: "networkidle" });
 const toolsLogoStats = await page.evaluate(() => ({
-  cards: document.querySelectorAll(".tool-card").length,
-  imgs: document.querySelectorAll(".tool-logo img, .tool-card img.tool-logo-img").length,
+  cards: document.querySelectorAll(".tool-card:not(.skeleton-card)").length,
+  imgs: document.querySelectorAll("img.tool-logo-img").length,
 }));
 if (toolsLogoStats.cards >= 50 && toolsLogoStats.imgs === 0) {
   errors.push(`layout:tools-missing-logo-imgs:cards=${toolsLogoStats.cards}`);
 }
 if (toolsLogoStats.imgs > 0) {
-  const brokeFallback = await page.evaluate(async () => {
-    const img = document.querySelector(".tool-logo-img");
-    if (!img) return { skipped: true };
-    img.src = "https://invalid.onchainai-test.invalid/nope.png";
-    await new Promise((r) => setTimeout(r, 600));
-    const stillImg = !!document.querySelector(".tool-logo-img");
-    const logo = document.querySelector(".tool-card .tool-logo");
-    const text = logo?.querySelector(".tool-logo-monogram")?.textContent?.trim() ?? "";
-    return { skipped: false, stillImg, textLen: text.length };
-  });
-  if (
-    !brokeFallback.skipped &&
-    (brokeFallback.stillImg || brokeFallback.textLen === 0)
-  ) {
+  const brokeFallback = await probeLogoFallback(page);
+  if (!brokeFallback.skipped && !logoFallbackOk(brokeFallback)) {
     errors.push(
-      `layout:tools-logo-fallback-missing:stillImg=${brokeFallback.stillImg} textLen=${brokeFallback.textLen}`,
+      `layout:tools-logo-fallback-missing:imgCount=${brokeFallback.imgCount} textLen=${brokeFallback.textLen}`,
     );
   }
 }
 const toolsLoadMore = await page.evaluate(() => {
-  const cards = document.querySelectorAll(".tool-card").length;
+  const cards = document.querySelectorAll(".tool-card:not(.skeleton-card)").length;
   const bodyLen = document.body?.innerHTML.length ?? 0;
   const hasLoadMore =
     !!document.querySelector(".load-more-btn") ||
@@ -151,12 +141,23 @@ if (!toolsLoadMore) {
   errors.push("layout:tools-missing-load-more");
 }
 
-// Large catalog: click load-more and assert card count strictly increases.
-const toolsCards = await page.evaluate(
-  () => document.querySelectorAll(".tool-card").length,
-);
+const toolsCards = await countRealToolCards(page);
 if (toolsCards >= 50) {
-  const before = toolsCards;
+  const expectedPage2 = expectedCumulativeMin(toolsCards, 2);
+  await sleep(NAV_PACE_MS);
+  await page.goto(`${base}/tools?page=2`, { waitUntil: "networkidle" });
+  const page2Text = await page.textContent("body");
+  const page2Cards = await countRealToolCards(page);
+  if (/error deserializing|missing field filters/i.test(page2Text || "")) {
+    errors.push("visible-error:/tools?page=2");
+  }
+  if (page2Cards < expectedPage2) {
+    errors.push(`layout:page-2-too-few-cards:${page2Cards}<${expectedPage2}`);
+  }
+
+  await sleep(NAV_PACE_MS);
+  await page.goto(`${base}/tools`, { waitUntil: "networkidle" });
+  const before = await countRealToolCards(page);
   const loadMore = await page.$("a.load-more-btn, .load-more-row a.load-more-btn");
   if (!loadMore) {
     errors.push("interaction:tools-missing-load-more-button");
@@ -183,7 +184,8 @@ if (toolsCards >= 50) {
     let timedOut = false;
     await page
       .waitForFunction(
-        (min) => document.querySelectorAll(".tool-card").length >= min,
+        (min) =>
+          document.querySelectorAll(".tool-card:not(.skeleton-card)").length >= min,
         expectedMin,
         { timeout: 20000 },
       )
@@ -191,9 +193,7 @@ if (toolsCards >= 50) {
         timedOut = true;
       });
     page.off("response", onLoadMoreResponse);
-    const after = await page.evaluate(
-      () => document.querySelectorAll(".tool-card").length,
-    );
+    const after = await countRealToolCards(page);
     if (navTimedOut || timedOut || after < expectedMin) {
       errors.push(`interaction:load-more-not-growing:${before}->${after}`);
     }
@@ -205,24 +205,9 @@ if (toolsCards >= 50) {
   }
 }
 
-const expectedPage2 = expectedCumulativeMin(toolsCards, 2);
-await page.goto(`${base}/tools?page=2`, { waitUntil: "networkidle" });
-const page2Text = await page.textContent("body");
-const page2Cards = await page.evaluate(() => document.querySelectorAll(".tool-card").length);
-if (/error deserializing|missing field filters/i.test(page2Text || "")) {
-  errors.push("visible-error:/tools?page=2");
-}
-if (page2Cards < expectedPage2) {
-  errors.push(`layout:page-2-too-few-cards:${page2Cards}<${expectedPage2}`);
-}
-
-// Mobile sidebar defaults collapsed at 375px when localStorage is cleared.
 await page.setViewportSize({ width: 375, height: 812 });
 await page.goto(`${base}/tools`, { waitUntil: "domcontentloaded" });
-await page.evaluate(() => {
-  localStorage.removeItem("onchain-ai-sidebar-collapsed");
-  localStorage.removeItem("onchain-ai-sidebar-sections");
-});
+await clearSidebarStorage(page);
 await page.reload({ waitUntil: "networkidle" });
 const mobileSidebarCollapsed = await page.evaluate(() => {
   const aside = document.querySelector(".tools-sidebar");
@@ -232,7 +217,6 @@ if (!mobileSidebarCollapsed) {
   errors.push("layout:mobile-sidebar-not-collapsed");
 }
 
-// Chain strip "+N" overflow control (not tool-card .chain-more — hidden on mobile by CSS).
 await page.goto(`${base}/tools`, { waitUntil: "networkidle" });
 const chainMoreVisible = await page.evaluate(() => {
   const pill = document.querySelector(".chain-tile-more");
