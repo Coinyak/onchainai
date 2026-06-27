@@ -17,7 +17,7 @@ tags: animation, transition, transform, performance
 
 ```tsx
 <div className="transition-transform hover:translate-x-4">
-<div className="transition-[width] duration-300 hover:w-64">
+<div className="transition-opacity duration-300 hover:opacity-80">
 ```
 
 Prefer animating `transform` and `opacity` over `width`, `height`, `margin`, or `padding`.

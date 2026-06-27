@@ -1,8 +1,25 @@
 ---
-description: "Routing-first skill for web accessibility remediation and verification. Use when the main job is classifying which accessibility surface is failing — semantics, keyboard/focus, labels/announcements, visual perception/reflow, media alternatives, or routed-app navigation feedback — and turning vague audit, WCAG, axe/Lighthouse, or \"make this accessible\" requests into one concrete remediation packet. Route broad UI critique to `web-design-guidelines`, component API architecture to `ui-component-patterns`, responsive layout strategy to `responsive-design`, and system governance to `design-system`.\n"
-license: "MIT"
-metadata: {"tags":"accessibility, a11y, wcag, aria, keyboard-navigation, focus-management, screen-reader, frontend","platforms":"Claude, ChatGPT, Gemini, Codex","version":"2.1.0","modernization":"2026-04-13","hardening":"2026-04-18","source":"akillness/jeo-skills"}
+name: web-accessibility
+description: >
+  Routing-first skill for web accessibility remediation and verification. Use when
+  the main job is classifying which accessibility surface is failing — semantics,
+  keyboard/focus, labels/announcements, visual perception/reflow, media
+  alternatives, or routed-app navigation feedback — and turning vague audit,
+  WCAG, axe/Lighthouse, or "make this accessible" requests into one concrete
+  remediation packet. Route broad UI critique to `web-design-guidelines`,
+  component API architecture to `ui-component-patterns`, responsive layout
+  strategy to `responsive-design`, and system governance to `design-system`.
+allowed-tools: Read Write Bash Grep Glob
+license: MIT
+metadata:
+  tags: accessibility, a11y, wcag, aria, keyboard-navigation, focus-management, screen-reader, frontend
+  platforms: Claude, ChatGPT, Gemini, Codex
+  version: "2.1.0"
+  modernization: 2026-04-13
+  hardening: 2026-04-18
+  source: akillness/jeo-skills
 ---
+
 # Web Accessibility
 
 Use this skill when the job is to **name the failing accessibility surface, fix it at the right layer, and leave behind a short remediation + verification packet**.

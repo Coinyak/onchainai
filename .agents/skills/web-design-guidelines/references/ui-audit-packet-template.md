@@ -29,6 +29,9 @@ Use this structure for the final output.
 ### Consistency and states
 - ...
 
+### Interaction feedback and recovery
+- ...
+
 ### Navigation and wayfinding
 - ...
 

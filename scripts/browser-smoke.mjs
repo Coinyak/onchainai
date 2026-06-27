@@ -1,3 +1,4 @@
+// harness-round-11: browser smoke for desktop/mobile public UI
 import { chromium } from "playwright";
 import {
   TOOL_PAGE_SIZE,

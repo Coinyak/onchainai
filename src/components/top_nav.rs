@@ -1,10 +1,8 @@
 //! Sticky top navigation — UI spec: Logo + Submit + GitHub (+ admin session).
 
 use crate::auth::session::SessionUser;
-use crate::components::search_bar::SearchBar;
 use crate::server::functions::get_current_user;
 use leptos::prelude::*;
-use leptos_router::components::A;
 
 const GITHUB_REPO: &str = "https://github.com/hoyeon4315-cpu/onchainai";
 
@@ -14,9 +12,9 @@ fn AuthNav(
 ) -> impl IntoView {
     match user_res {
         Ok(Some(session)) if session.is_admin => view! {
-            <A href="/admin" attr:class="text-[#E76F00] hover:underline no-underline font-medium">
+            <a href="/admin" class="text-[#E76F00] hover:underline no-underline font-medium">
                 "Admin"
-            </A>
+            </a>
             <span class="text-[#6B6B6B] hidden sm:inline">
                 {session.nickname.clone().unwrap_or_else(|| "admin".into())}
             </span>
@@ -45,31 +43,58 @@ fn AuthNav(
     }
 }
 
+/// Site logo + primary actions — rendered at the top of the left sidebar.
+#[component]
+pub fn SidebarBrand() -> impl IntoView {
+    view! {
+        <div class="sidebar-brand">
+            <a
+                href="/"
+                class="sidebar-brand-logo text-[16px] font-semibold tracking-tight text-[#1A1A1A] no-underline"
+            >
+                "OnchainAI"
+            </a>
+            <nav class="sidebar-brand-nav">
+                <a
+                    href="/submit"
+                    class="sidebar-brand-submit inline-flex items-center justify-center h-8 px-3 rounded-lg bg-[#E76F00] text-white text-[13px] font-medium no-underline hover:bg-[#D96400]"
+                >
+                    "Submit"
+                </a>
+                <a
+                    href=GITHUB_REPO
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="sidebar-brand-link text-[#6B6B6B] hover:text-[#1A1A1A] no-underline text-[13px]"
+                >
+                    "GitHub"
+                </a>
+                <Await future=async move { get_current_user().await } let:user_res blocking=true>
+                    <div class="sidebar-brand-auth">
+                        <AuthNav user_res=user_res.clone()/>
+                    </div>
+                </Await>
+            </nav>
+        </div>
+    }
+}
+
+/// Legacy horizontal header — unused; site uses `SidebarBrand` in the left sidebar.
 #[component]
 pub fn TopNav() -> impl IntoView {
-    let search_overlay_open = RwSignal::new(false);
-
     view! {
         <header class="sticky top-0 z-50 bg-white border-b border-[#E5E5E5]">
             <div class="max-w-[1200px] mx-auto px-4 md:px-6 h-12 md:h-14 flex items-center justify-between">
-                <A href="/" attr:class="text-[16px] font-semibold tracking-tight text-[#1A1A1A] no-underline">
+                <a href="/" class="text-[16px] font-semibold tracking-tight text-[#1A1A1A] no-underline">
                     "OnchainAI"
-                </A>
+                </a>
                 <nav class="flex items-center gap-2 md:gap-5 text-[14px]">
-                    <button
-                        type="button"
-                        class="nav-search-btn"
-                        aria-label="Search"
-                        on:click=move |_| search_overlay_open.set(true)
-                    >
-                        "🔍"
-                    </button>
-                    <A
-                        href="/about#submit"
-                        attr:class="inline-flex items-center justify-center h-8 md:h-9 px-3 md:px-4 rounded-lg bg-[#E76F00] text-white text-[13px] md:text-[14px] font-medium no-underline hover:bg-[#D96400]"
+                    <a
+                        href="/submit"
+                        class="inline-flex items-center justify-center h-8 md:h-9 px-3 md:px-4 rounded-lg bg-[#E76F00] text-white text-[13px] md:text-[14px] font-medium no-underline hover:bg-[#D96400]"
                     >
                         "Submit"
-                    </A>
+                    </a>
                     <a
                         href=GITHUB_REPO
                         target="_blank"
@@ -83,36 +108,6 @@ pub fn TopNav() -> impl IntoView {
                     </Await>
                 </nav>
             </div>
-
-            <Show when=move || search_overlay_open.get()>
-                <div
-                    class="search-overlay"
-                    role="dialog"
-                    aria-modal="true"
-                    aria-label="Search"
-                >
-                    <div
-                        class="search-overlay-backdrop"
-                        aria-hidden="true"
-                        on:click=move |_| search_overlay_open.set(false)
-                    />
-                    <div class="search-overlay-panel">
-                        <div class="search-overlay-header">
-                            <button
-                                type="button"
-                                class="search-overlay-close"
-                                aria-label="Close search"
-                                on:click=move |_| search_overlay_open.set(false)
-                            >
-                                "✕"
-                            </button>
-                        </div>
-                        <div class="search-overlay-body">
-                            <SearchBar/>
-                        </div>
-                    </div>
-                </div>
-            </Show>
         </header>
     }
 }

@@ -10,11 +10,6 @@ description: >
   system-wide breakpoint/token governance to `design-system`, and broad UI audit
   work to `web-design-guidelines`.
 allowed-tools: Read Write Bash Grep Glob
-compatibility: >
-  Best for frontend and fullstack web repos using CSS, utility frameworks, or
-  component libraries where the main task is responsive layout strategy or
-  verification. Not for reusable component API architecture, broad UI polish
-  reviews, or accessibility-heavy remediation as the primary owner.
 license: MIT
 metadata:
   tags: responsive, mobile-first, layout, container-queries, breakpoints, frontend, css, reflow

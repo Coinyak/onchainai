@@ -1,5 +1,12 @@
 #!/usr/bin/env bash
-# Verify production after Railway deploy.
+# Verify production after Railway deploy (curl smoke + optional Playwright).
+#
+# deploy-railway.sh already retries curl smoke before exit; use this script for
+# browser checks (browser-smoke.mjs, click-test.mjs) or a manual re-verify.
+#
+# Usage:
+#   ./scripts/post-deploy-verify.sh
+#   ./scripts/post-deploy-verify.sh https://www.onchain-ai.xyz
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"

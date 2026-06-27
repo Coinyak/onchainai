@@ -35,4 +35,4 @@ Rust debug builds bloat `target/` fast. Expected, not a bug. Repo is configured 
 - No emojis in UI text. Lucide SVG icons only. UI text in English.
 - Admin routes (`/admin/*`) require server-side `is_admin = true`.
 - Run `cargo clippy` + `cargo fmt --check` before committing. Add/update tests for changed code.
-- Conventional commits. Branch `feat/`, `fix/`, `docs/`. Squash merge only.
+- Conventional commits. Default branch `main` (Railway production deploys from `main`). Feature branches `feat/`, `fix/`, `docs/`. Squash merge only.

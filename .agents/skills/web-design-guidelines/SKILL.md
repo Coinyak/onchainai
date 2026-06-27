@@ -12,11 +12,6 @@ description: >
   UX review, interface critique, polish review, landing-page review, dashboard
   review, usability review, visual consistency, CTA clarity.
 allowed-tools: Bash Read Write Grep Glob
-compatibility: >
-  Best for frontend and fullstack web work where the main task is a broad page or
-  flow review. Route specialized remediation to neighboring frontend skills when
-  the issue is mainly accessibility, responsive layout, design-system governance,
-  component architecture, or React behavior.
 license: MIT
 metadata:
   tags: frontend, ui-review, ux, usability, design-audit, heuristics, accessibility-basics, responsive-basics
@@ -192,17 +187,34 @@ Preferred format:
 ### Clarity and language
 - ...
 
-### Consistency and states
+### Consistency and component behavior
+- ...
+
+### Interaction feedback and recovery
+- ...
+
+### Navigation and wayfinding
+- ...
+
+### Responsiveness basics
+- ...
+
+### Accessibility basics
+- ...
+
+### Performance and trust signals
 - ...
 
 ## Recommended next moves
 - Quick wins:
-- Follow-up redesigns:
-- Route-outs:
+- Medium follow-ups:
+- Structural redesigns:
 
 ## Route-outs
 - `web-accessibility`: ...
 - `responsive-design`: ...
+- `ui-component-patterns`: ...
+- `design-system`: ...
 ```
 
 If the user asked for terse review notes, keep the categories but compress each bullet.

@@ -37,7 +37,7 @@ browser: screenshot (captures the current page)
 
 **Via node screen capture (if available):**
 ```
-nodes: screen_record
+node: screen_record
 ```
 
 **Via Peekaboo (macOS):**

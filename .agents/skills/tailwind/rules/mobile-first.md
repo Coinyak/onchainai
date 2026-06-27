@@ -11,7 +11,7 @@ tags: responsive, breakpoints, mobile-first
 ```tsx
 <!-- Desktop-first — shrinking down -->
 <div className="text-2xl md:text-xl sm:text-lg">
-<div className="grid-cols-4 md:grid-cols-2 sm:grid-cols-1">
+<div className="grid grid-cols-4 md:grid-cols-2 sm:grid-cols-1">
 ```
 
 ### Correct
@@ -19,5 +19,5 @@ tags: responsive, breakpoints, mobile-first
 ```tsx
 <!-- Mobile-first — scaling up -->
 <div className="text-lg md:text-xl lg:text-2xl">
-<div className="grid-cols-1 md:grid-cols-2 lg:grid-cols-4">
+<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4">
 ```

@@ -81,6 +81,7 @@ wait_for_bind() {
   return 1
 }
 
+# Kill stale :3000 first — #1 cause of "changes not showing" (see BUILD_DEPLOY_RULES.md §2).
 kill_port
 
 if [[ "$SKIP_BUILD" == "false" ]]; then

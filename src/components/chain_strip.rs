@@ -1,4 +1,4 @@
-//! Horizontal chain logo strip — toggles `?chain=` multi-select filters.
+//! Horizontal chain logo strip — toggles `?chain=` multi-select filters (harness-round-11).
 
 use crate::chains::{chain_filter_active, strip_chains, ChainMeta, STRIP_PRIMARY_VISIBLE};
 use crate::components::tools_browser::BrowserBase;

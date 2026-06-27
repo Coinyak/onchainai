@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Goal verification plan — single authoritative log with git provenance.
+# Goal verification plan — single authoritative log with git provenance (harness-round-11).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -44,7 +44,12 @@ if ! cargo test --features ssr -- --quiet 2>&1 | tee "$STEP1_OUT"; then
   echo "STEP1 FAIL: cargo test"
   exit 1
 fi
-if grep -E "never used|dead_code" "$STEP1_OUT" | grep -q "functions.rs"; then
+if awk '
+  /warning: .*never used|warning: .*dead_code/ { warned = 1; next }
+  warned && /functions\.rs/ { found = 1; exit }
+  { warned = 0 }
+  END { exit(found ? 0 : 1) }
+' "$STEP1_OUT"; then
   echo "STEP1 FAIL: dead_code warnings in functions.rs"
   exit 1
 fi

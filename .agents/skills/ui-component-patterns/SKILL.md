@@ -12,11 +12,6 @@ description: >
   `responsive-design`, app-level state ownership to `state-management`, and
   React performance work to `react-best-practices`.
 allowed-tools: Read Write Bash Grep Glob
-compatibility: >
-  Best for React, TypeScript, and frontend/fullstack repos where the main job is
-  reusable component API architecture. Not for full design-system governance,
-  accessibility-only remediation, responsive layout strategy, or React/Next.js
-  performance tuning as the primary owner.
 license: MIT
 metadata:
   tags: ui-components, react, typescript, composition, variants, slots, reusable, frontend

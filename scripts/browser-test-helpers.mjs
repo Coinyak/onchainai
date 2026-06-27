@@ -1,4 +1,4 @@
-/** Shared helpers for Playwright smoke / click-test scripts. */
+/** Shared helpers for Playwright smoke / click-test scripts (harness-round-11). */
 
 export const TOOL_PAGE_SIZE = 50;
 

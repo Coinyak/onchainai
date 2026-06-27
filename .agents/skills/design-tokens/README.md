@@ -11,7 +11,7 @@ Copy the `design-tokens` folder into your agent's skills directory.
 - **Type scale generator** with ratio-based calculation and line-height/letter-spacing/weight rules
 - **Color palette generator** with HSL-based shade scales (50–950) and semantic token mapping
 - **WCAG contrast checker** with the actual luminance formula and pass/fail requirements
-- **Spacing system** using base-4 grid (matches Tailwind)
+- **Spacing system** using a 4px-based grid with micro-steps
 - **Dark mode derivation** — systematic inversion, not manual picking
 - **Multiple output formats** — CSS custom properties, Tailwind config, JSON (W3C)
 

@@ -1,8 +1,25 @@
 ---
-description: "Run a broad web UI review for pages, flows, or component surfaces using audit categories such as layout hierarchy, content clarity, CTA emphasis, visual consistency, interaction states, responsiveness basics, performance signals, and accessibility basics. Use when the user asks to review a UI, audit a page, critique UX polish, check interface quality before launch, or turn vague design-feedback requests into a structured audit packet. Not for accessibility- only remediation, reusable component API design, system-level token governance, or React/runtime performance debugging. Triggers on: UI audit, design review, UX review, interface critique, polish review, landing-page review, dashboard review, usability review, visual consistency, CTA clarity.\n"
-license: "MIT"
-metadata: {"tags":"frontend, ui-review, ux, usability, design-audit, heuristics, accessibility-basics, responsive-basics","platforms":"Claude, ChatGPT, Gemini, Codex","version":"2.0","source":"akillness/jeo-skills"}
+name: web-design-guidelines
+description: >
+  Run a broad web UI review for pages, flows, or component surfaces using audit
+  categories such as layout hierarchy, content clarity, CTA emphasis, visual
+  consistency, interaction states, responsiveness basics, performance signals,
+  and accessibility basics. Use when the user asks to review a UI, audit a page,
+  critique UX polish, check interface quality before launch, or turn vague
+  design-feedback requests into a structured audit packet. Not for accessibility-
+  only remediation, reusable component API design, system-level token governance,
+  or React/runtime performance debugging. Triggers on: UI audit, design review,
+  UX review, interface critique, polish review, landing-page review, dashboard
+  review, usability review, visual consistency, CTA clarity.
+allowed-tools: Bash Read Write Grep Glob
+license: MIT
+metadata:
+  tags: frontend, ui-review, ux, usability, design-audit, heuristics, accessibility-basics, responsive-basics
+  platforms: Claude, ChatGPT, Gemini, Codex
+  version: "2.0"
+  source: akillness/jeo-skills
 ---
+
 # Web Design Guidelines
 
 Use this skill when the question is **"how good is this interface overall, what is creating friction, and what should we fix first?"**
@@ -170,17 +187,34 @@ Preferred format:
 ### Clarity and language
 - ...
 
-### Consistency and states
+### Consistency and component behavior
+- ...
+
+### Interaction feedback and recovery
+- ...
+
+### Navigation and wayfinding
+- ...
+
+### Responsiveness basics
+- ...
+
+### Accessibility basics
+- ...
+
+### Performance and trust signals
 - ...
 
 ## Recommended next moves
 - Quick wins:
-- Follow-up redesigns:
-- Route-outs:
+- Medium follow-ups:
+- Structural redesigns:
 
 ## Route-outs
 - `web-accessibility`: ...
 - `responsive-design`: ...
+- `ui-component-patterns`: ...
+- `design-system`: ...
 ```
 
 If the user asked for terse review notes, keep the categories but compress each bullet.
