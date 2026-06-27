@@ -47,7 +47,7 @@ Codex/non-interactive runner note: if `restart-dev.sh --no-build` reports ready 
 4. **Smoke:** `./scripts/smoke-test.sh http://localhost:3000` (and optional `node scripts/browser-smoke.mjs`)
 5. **DB:** Migrations run automatically on server startup (`run_migrations` in `lib.rs`). If local `sqlx migrate run` hits Supabase session pool limits, deploy still applies pending migrations on boot. Optional: Supabase SQL editor for `006`/`007`/`008`.
 6. **Railway:** `./scripts/deploy-railway.sh` (requires `railway login`, `.env` secrets). Docker build runs on Railway (local Docker optional).
-7. **Post-deploy:** `./scripts/post-deploy-verify.sh` — hard refresh browser if UI looks stale (`docs/BUILD_DEPLOY_RULES.md` §6)
+7. **Post-deploy:** `./scripts/post-deploy-verify.sh` — browser/click tests; hard refresh if UI looks stale (`docs/BUILD_DEPLOY_RULES.md` §7)
 8. **Pool sizing:** `DATABASE_MAX_CONNECTIONS` defaults to `10` (deploy script). `ToolsBrowser` uses one bundled `LoadBrowserData` RPC per navigation. Rate limits are in-process; use a single Railway replica or add shared store before scaling out.
 
 ## Architecture
@@ -142,7 +142,8 @@ Rust debug builds bloat `target/` fast. This is expected, not a bug. The repo is
 
 ## Git
 
-- Branch: `feat/<name>`, `fix/<name>`, `docs/<name>`
+- Default branch: `main`. Railway production deploys from `main`.
+- Feature branches: `feat/<name>`, `fix/<name>`, `docs/<name>`
 - Commit: conventional commits — `feat:`, `fix:`, `chore:`, `docs:`, `refactor:`
 - Squash merge only.
 - Run `cargo test` + `cargo clippy` before PR.

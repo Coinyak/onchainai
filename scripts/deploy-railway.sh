@@ -13,6 +13,14 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
+if command -v git >/dev/null 2>&1 && git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  DEPLOY_BRANCH="$(git branch --show-current 2>/dev/null || true)"
+  echo "Git branch: ${DEPLOY_BRANCH:-unknown}"
+  if [[ -n "${DEPLOY_BRANCH}" && "${DEPLOY_BRANCH}" != "main" ]]; then
+    echo "Note: production deploys are normally cut from main (current: ${DEPLOY_BRANCH})." >&2
+  fi
+fi
+
 VARS_ONLY=false
 if [[ "${1:-}" == "--vars-only" ]]; then
   VARS_ONLY=true
@@ -54,13 +62,12 @@ fi
 : "${GITHUB_CLIENT_SECRET:?Set GITHUB_CLIENT_SECRET in .env}"
 : "${JWT_SECRET:?Set JWT_SECRET in .env}"
 
-if ! railway whoami >/dev/null 2>&1; then
+if ! RAILWAY_USER="$(railway whoami 2>/dev/null)"; then
   echo "Not logged in. Run: railway login" >&2
   echo "Or set RAILWAY_TOKEN from https://railway.com/account/tokens" >&2
   exit 1
 fi
-
-echo "Railway user: $(railway whoami)"
+echo "Railway user: ${RAILWAY_USER}"
 
 SERVICE_NAME="${RAILWAY_SERVICE:-onchainai}"
 
@@ -96,9 +103,11 @@ if [[ "${VARS_ONLY}" == true ]]; then
   exit 0
 fi
 
-# First deploy creates the service; env vars are applied before the production deploy.
+# First deploy: Railway needs a service before `variable set` works. We create it with
+# `railway up`, sync vars with --skip-deploys, then deploy again so the image boots
+# with production env (not the empty/default first boot).
 if ! railway status --json 2>/dev/null | /usr/bin/grep -q '"services"'; then
-  echo "Initial deploy (creates service)..."
+  echo "Initial deploy (creates service; production env applied on the next up)..."
   railway up -y --detach -s "${SERVICE_NAME}"
 fi
 
@@ -143,7 +152,7 @@ for attempt in $(seq 1 "${DEPLOY_WAIT_ATTEMPTS}"); do
 done
 
 echo "Waiting for production deployment to become reachable..."
-PROD_URL="https://www.onchain-ai.xyz"
+PROD_URL="https://${SIWX_DOMAIN}"
 for attempt in $(seq 1 "${DEPLOY_SMOKE_ATTEMPTS}"); do
   if ./scripts/smoke-test.sh "${PROD_URL}"; then
     echo "Production smoke passed."
@@ -162,5 +171,5 @@ echo "Next steps:"
 echo "  1. Add custom domain: railway domain add www.onchain-ai.xyz"
 echo "  2. GitHub OAuth App callback: https://www.onchain-ai.xyz/auth/callback"
 echo "  3. Supabase prod URLs: ONCHAINAI_ENV=prod SUPABASE_ACCESS_TOKEN=sbp_... ./scripts/configure-supabase-auth.sh"
-echo "  4. Smoke test: ./scripts/smoke-test.sh https://www.onchain-ai.xyz"
+echo "  4. Full verify (curl + browser): ./scripts/post-deploy-verify.sh https://${SIWX_DOMAIN}"
 echo "  5. Admin crawl: https://www.onchain-ai.xyz/admin/crawler"

@@ -123,15 +123,18 @@ Smoke scripts encode these checks: `scripts/smoke-test.sh`, `scripts/browser-smo
 
 ### Railway builder: Dockerfile vs RAILPACK
 
-`railway.json` pins **`dockerfilePath: Dockerfile`**. Use **`./scripts/deploy-railway.sh`** or **`railway up`** so Railway builds from the Dockerfile.
+**Production:** Railway watches the **`main`** branch (repo default). `railway.json` pins **`builder: DOCKERFILE`** and **`dockerfilePath: Dockerfile`**.
+
+Use **`./scripts/deploy-railway.sh`** or **`railway up`** so Railway builds from the Dockerfile.
 
 | Method | Builder | Notes |
 |--------|---------|-------|
 | `./scripts/deploy-railway.sh` | Dockerfile | **Preferred** — single `cargo leptos build --release` in image |
 | `railway up` (CLI) | Dockerfile | Same as deploy script |
-| GitHub auto-deploy (default) | Often **RAILPACK** | May ignore `railway.json` or stall in BUILDING; not validated for this repo |
+| Git push to `main` (Railway GitHub integration) | Dockerfile | Auto-deploy when Railway is connected to `main`; must respect `railway.json` |
+| Misconfigured Railway builder | Often **RAILPACK** | May ignore `railway.json` or stall in BUILDING; not validated for this repo |
 
-If GitHub deploy sticks in **BUILDING**, cancel it and deploy via `./scripts/deploy-railway.sh` instead. Do not mix a RAILPACK image with a Dockerfile-built WASM/pkg bundle.
+If a Railway deploy sticks in **BUILDING** or uses RAILPACK instead of Dockerfile, cancel it and deploy via `./scripts/deploy-railway.sh` instead. Do not mix a RAILPACK image with a Dockerfile-built WASM/pkg bundle.
 
 > **한국어 요약:** 8시간 넘게 돌던 로컬 서버(구 바이너리)와 새로 빌드한 WASM/pkg가 어긋나 서버 함수 역직렬화 오류 및 UI 불일치 발생. 프로세스 종료 후 동일 빌드 바이너리로 재시작하여 해결. 프로덕션은 정상.
 
@@ -141,12 +144,15 @@ If GitHub deploy sticks in **BUILDING**, cancel it and deploy via `./scripts/dep
 
 Leptos SSR + WASM builds are large (`target/` often 10–50GB). Linker failures on macOS also write **multi-GB** snapshots under `/tmp/onchainai*.ld-snapshot` — these are safe to delete and are a common hidden disk drain.
 
-**When `./scripts/disk-guard.sh` fails (<25GB free):**
+**`disk-guard.sh` thresholds (defaults):** free disk **≥25GB**, `target/` **≤35GB**. Override: `ONCHAINAI_MIN_FREE_GB`, `ONCHAINAI_MAX_TARGET_GB`. When over either limit it auto-runs `clean-build-artifacts.sh --incremental-only` once (`ONCHAINAI_DISK_GUARD_AUTOCLEAN=0` to disable).
 
-1. Preview cleanup: `./scripts/clean-build-artifacts.sh --dry-run`
-2. Run cleanup: `./scripts/clean-build-artifacts.sh` (`cargo clean` + `/tmp` linker snapshots)
-3. Re-check: `df -h` — aim for **≥25GB** free before `cargo leptos build --release`
-4. If still tight: `ONCHAINAI_DISK_GUARD_FORCE=1 ./scripts/release-build.sh` (emergency only)
+**When `./scripts/disk-guard.sh` still fails:**
+
+1. Fast reclaim: `./scripts/clean-build-artifacts.sh --incremental-only`
+2. Preview full clean: `./scripts/clean-build-artifacts.sh --dry-run`
+3. Full clean: `./scripts/clean-build-artifacts.sh` (`cargo clean` + `/tmp` linker snapshots)
+4. Re-check: `df -h` — aim for **≥25GB** free before `cargo leptos build --release`
+5. If still tight: `ONCHAINAI_DISK_GUARD_FORCE=1 ./scripts/release-build.sh` (emergency only)
 
 **During development:**
 
@@ -160,6 +166,8 @@ Leptos SSR + WASM builds are large (`target/` often 10–50GB). Linker failures 
 
 Run in order before `./scripts/deploy-railway.sh`:
 
+> **Branch:** Cut production deploys from `main`. `deploy-railway.sh` prints the current branch and warns (non-blocking) when it is not `main`.
+
 1. **Disk guard** — `./scripts/disk-guard.sh` (or clean per §5; `ONCHAINAI_DISK_GUARD_FORCE=1` if emergency)
 2. **Compile check** — `cargo check --features ssr --lib` (full `cargo test --features ssr` when disk/linker allow)
 3. **Release build** — `./scripts/release-build.sh` (not partial `cargo build`)
@@ -167,8 +175,8 @@ Run in order before `./scripts/deploy-railway.sh`:
 5. **Local smoke** — restart release binary, then:
    - `./scripts/smoke-test.sh http://localhost:3000`
    - `node scripts/browser-smoke.mjs http://localhost:3000` (if Playwright installed)
-6. **Deploy** — `./scripts/deploy-railway.sh`
-7. **Post-deploy verify** — `./scripts/post-deploy-verify.sh https://www.onchain-ai.xyz`
+6. **Deploy** — `./scripts/deploy-railway.sh` (echoes git branch; warns if not `main`; retries curl smoke before exit)
+7. **Post-deploy verify** — `./scripts/post-deploy-verify.sh https://www.onchain-ai.xyz` (adds Playwright browser/click tests; curl smoke is redundant if step 6 just passed)
 
 ---
 

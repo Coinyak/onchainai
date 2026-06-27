@@ -9,13 +9,18 @@ pub const SECRET_ENV_NAMES: &[&str] = &[
     "SUPABASE_SERVICE_KEY",
     "JWT_SECRET",
     "GITHUB_CLIENT_SECRET",
+    "GITHUB_API_TOKEN",
+    "RAILWAY_TOKEN",
+    "GODADDY_API_KEY",
+    "GODADDY_API_SECRET",
     "DATABASE_URL",
     "SUPABASE_ANON_KEY",
 ];
 
 /// Token-like prefixes redacted from arbitrary strings.
 pub const SECRET_PREFIXES: &[&str] = &[
-    "ghp_", "gho_", "ghu_", "ghs_", "ghr_", "sk-", "xoxb-", "xoxp-",
+    "ghp_", "gho_", "ghu_", "ghs_", "ghr_", "sk-", "xoxb-", "xoxp-", "sb_secret_",
+    "sb_publishable_",
 ];
 
 /// Redact secrets from text before it reaches clients or Hermes.
@@ -47,7 +52,7 @@ pub fn redact_secrets(input: &str) -> String {
     }
 
     for prefix in SECRET_PREFIXES {
-        if let Some(idx) = out.find(prefix) {
+        while let Some(idx) = out.find(prefix) {
             let tail: String = out[idx..].chars().take(40).collect();
             out = out.replacen(&tail, "[REDACTED_TOKEN]", 1);
         }
@@ -138,6 +143,24 @@ mod tests {
         assert!(!out.contains("super-secret-key"));
         assert!(!out.contains("ghp_abcdefghijklmnopqrstuvwxyz"));
         assert!(out.contains("[REDACTED]"));
+    }
+
+    #[test]
+    fn redact_secrets_masks_deploy_and_supabase_prefix_tokens() {
+        let input = "GITHUB_API_TOKEN=ghp_leak RAILWAY_TOKEN=rw_leak sb_secret_abc123 sb_publishable_xyz";
+        let out = redact_secrets(input);
+        assert!(!out.contains("ghp_leak"));
+        assert!(!out.contains("rw_leak"));
+        assert!(!out.contains("sb_secret_abc123"));
+        assert!(!out.contains("sb_publishable_xyz"));
+    }
+
+    #[test]
+    fn redact_secrets_masks_multiple_ghp_tokens() {
+        let input = "ghp_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa ghp_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+        let out = redact_secrets(input);
+        assert!(!out.contains("ghp_aaaaaaaa"));
+        assert!(!out.contains("ghp_bbbbbbbb"));
     }
 
     #[test]

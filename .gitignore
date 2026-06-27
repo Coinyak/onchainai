@@ -7,6 +7,12 @@ style/node_modules/
 .env
 .env.local
 .env.*.local
+.env.*
+!.env.example
+.railway/
+*.pem
+secrets/
+credentials.json
 
 # Rust
 *.rs.bk
