@@ -29,9 +29,14 @@ export async function waitForToolCards(page, timeout = 20000) {
   await page.waitForSelector(".tool-card:not(.skeleton-card)", { timeout });
 }
 
-/** Wait for sidebar localStorage hydration before UI filter clicks. */
-export async function waitForSidebarReady(page, timeout = 15000) {
-  await page.waitForSelector("aside[data-sidebar-ready]", { timeout });
+/** Wait until sidebar filter links are present (SSR HTML or post-hydrate). */
+export async function waitForSidebarFilterLinks(page, timeout = 20000) {
+  await page.waitForSelector('aside .sidebar-body a[href*="function="]', { timeout });
+}
+
+/** Wait for client localStorage to apply (mobile rail state). */
+export async function waitForSidebarStorageLoaded(page, timeout = 15000) {
+  await page.waitForSelector("aside[data-sidebar-storage-loaded]", { timeout });
 }
 
 export async function clearSidebarStorage(page) {

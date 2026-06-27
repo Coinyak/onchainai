@@ -11,7 +11,7 @@ import {
   isBenignConsoleError,
   visiblePageText,
   waitForToolCards,
-  waitForSidebarReady,
+  waitForSidebarFilterLinks,
 } from "./browser-test-helpers.mjs";
 
 const base = (process.argv[2] || "https://www.onchain-ai.xyz").replace(/\/$/, "");
@@ -26,6 +26,7 @@ const gating = new Set([
   "no-deser-error-home",
   "sidebar-brand",
   "sidebar-filter-nav",
+  "sidebar-filter-ui-click",
   "tools-load",
   "tool-cards-present",
   "tool-logos-present",
@@ -103,27 +104,22 @@ try {
     page.url(),
   );
 
-  // Non-gating: optional UI click path (hydration + collapsed rail).
+  // Gating: click a visible sidebar filter link (real UI path).
   await page.goto(`${base}/tools`, { waitUntil: "networkidle" });
-  try {
-    await waitForSidebarReady(page);
-    await ensureSidebarFiltersVisible(page);
-    const fnLink = await page.$('aside .sidebar-body a[href*="function="]:visible');
-    if (fnLink) {
-      await fnLink.click();
-      await page.waitForLoadState("networkidle");
-      const after = await visiblePageText(page);
-      log(
-        "sidebar-filter-ui-click",
-        !/error deserializing/i.test(after || ""),
-        page.url(),
-        false,
-      );
-    } else {
-      log("sidebar-filter-ui-click", false, "no visible filter link", false);
-    }
-  } catch (e) {
-    log("sidebar-filter-ui-click", false, String(e), false);
+  await waitForSidebarFilterLinks(page);
+  await ensureSidebarFiltersVisible(page);
+  const fnLink = await page.$('aside .sidebar-body a[href*="function="]:visible');
+  if (fnLink) {
+    await fnLink.click();
+    await page.waitForLoadState("networkidle");
+    const after = await visiblePageText(page);
+    log(
+      "sidebar-filter-ui-click",
+      !/error deserializing|missing field/i.test(after || ""),
+      page.url(),
+    );
+  } else {
+    log("sidebar-filter-ui-click", false, "no visible filter link");
   }
 
   await page.goto(`${base}/tools`, { waitUntil: "networkidle" });

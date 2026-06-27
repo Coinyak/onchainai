@@ -248,7 +248,8 @@ pub fn Sidebar(
     view! {
         <aside
             class=aside_class
-            attr:data-sidebar-ready=move || sidebar_storage_loaded.get().then_some("")
+            attr:data-sidebar-ready=""
+            attr:data-sidebar-storage-loaded=move || sidebar_storage_loaded.get().then_some("")
         >
             <SidebarBrand/>
             <div class="sidebar-header">

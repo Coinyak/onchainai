@@ -635,7 +635,7 @@ body {
 .external-link:hover { color: #E76F00; text-decoration: underline; }
 
 @media (max-width: 1023px) {
-  .tools-sidebar:not([data-sidebar-ready]) .sidebar-body {
+  .tools-sidebar:not([data-sidebar-storage-loaded]) .sidebar-body {
     display: none;
   }
 }

@@ -25,6 +25,20 @@ echo "=== Git provenance ==="
 git rev-parse HEAD
 git diff --stat HEAD~3..HEAD || git diff --stat HEAD~1..HEAD
 
+# Harness-trackable file list (repo paths, not .grok scratch)
+{
+  echo "# OnchainAI CHANGED_FILES (repo paths)"
+  echo "HEAD=$(git rev-parse HEAD)"
+  echo ""
+  git diff --name-only HEAD~1..HEAD 2>/dev/null || git diff --name-only --cached
+  echo ""
+  echo "## Goal-touched paths (verification gate)"
+  git ls-files scripts/run-verification-plan.sh scripts/chain-logo-manifest.json \
+    scripts/regen-chain-logos.sh scripts/click-test.mjs scripts/browser-test-helpers.mjs \
+    scripts/wrap-chain-logos.py src/chains.rs src/components/sidebar.rs style/output.css \
+    public/chains/*.svg 2>/dev/null
+} > "$SCRATCH/CHANGED_FILES.txt"
+
 echo ""
 echo "=== Step 1: cargo test --features ssr ==="
 cargo test --features ssr -- --quiet
