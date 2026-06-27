@@ -31,15 +31,62 @@ async fn post_json(path: &str, body: serde_json::Value) -> Result<(), String> {
 }
 
 #[component]
+pub fn WalletConnectButton(
+    #[prop(default = "Connect Wallet (SIWX)")] label: &'static str,
+    #[prop(optional)] class: Option<&'static str>,
+) -> impl IntoView {
+    let siwx_error = RwSignal::new(None::<String>);
+    let siwx_busy = RwSignal::new(false);
+    let btn_class = class.unwrap_or(
+        "flex items-center justify-center w-full px-4 py-2.5 rounded-lg border border-[#E5E5E5] text-[14px] font-medium hover:bg-[#FAFAFA] disabled:opacity-60",
+    );
+
+    view! {
+        <>
+            <button
+                type="button"
+                class=btn_class
+                disabled=move || siwx_busy.get()
+                on:click=move |_| {
+                    siwx_error.set(None);
+                    if !is_browser() {
+                        siwx_error.set(Some("Wallet sign-in requires a browser.".into()));
+                        return;
+                    }
+                    siwx_busy.set(true);
+                    spawn_local(async move {
+                        match siwx_connect_evm().await {
+                            Ok(redirect) => {
+                                #[cfg(feature = "hydrate")]
+                                if let Some(win) = web_sys::window() {
+                                    let _ = win.location().set_href(&redirect);
+                                }
+                                #[cfg(not(feature = "hydrate"))]
+                                let _ = redirect;
+                            }
+                            Err(e) => siwx_error.set(Some(e)),
+                        }
+                        siwx_busy.set(false);
+                    });
+                }
+            >
+                {move || if siwx_busy.get() { "Connecting wallet..." } else { label }}
+            </button>
+            {move || siwx_error.get().map(|e| view! {
+                <p class="mt-1 text-[13px] text-[#C0392B]">{e}</p>
+            })}
+        </>
+    }
+}
+
+#[component]
 pub fn LoginForm(
     #[prop(optional)] on_cancel: Option<Callback<()>>,
     #[prop(optional)] compact: bool,
 ) -> impl IntoView {
     let email = RwSignal::new(String::new());
     let email_msg = RwSignal::new(None::<String>);
-    let siwx_error = RwSignal::new(None::<String>);
     let email_busy = RwSignal::new(false);
-    let siwx_busy = RwSignal::new(false);
 
     let heading_class = if compact {
         "text-[18px] font-semibold mb-2"
@@ -101,38 +148,9 @@ pub fn LoginForm(
         {move || email_msg.get().map(|m| view! {
             <p class="mt-2 text-[13px] text-[#6B6B6B]">{m}</p>
         })}
-        <button
-            type="button"
-            class="flex items-center justify-center w-full mt-3 px-4 py-2.5 rounded-lg border border-[#E5E5E5] text-[14px] font-medium hover:bg-[#FAFAFA] disabled:opacity-60"
-            disabled=move || siwx_busy.get()
-            on:click=move |_| {
-                siwx_error.set(None);
-                if !is_browser() {
-                    siwx_error.set(Some("Wallet sign-in requires a browser.".into()));
-                    return;
-                }
-                siwx_busy.set(true);
-                spawn_local(async move {
-                    match siwx_connect_evm().await {
-                        Ok(redirect) => {
-                            #[cfg(feature = "hydrate")]
-                            if let Some(win) = web_sys::window() {
-                                let _ = win.location().set_href(&redirect);
-                            }
-                            #[cfg(not(feature = "hydrate"))]
-                            let _ = redirect;
-                        }
-                        Err(e) => siwx_error.set(Some(e)),
-                    }
-                    siwx_busy.set(false);
-                });
-            }
-        >
-            {move || if siwx_busy.get() { "Connecting wallet..." } else { "Connect Wallet (SIWX)" }}
-        </button>
-        {move || siwx_error.get().map(|e| view! {
-            <p class="mt-2 text-[13px] text-[#C0392B]">{e}</p>
-        })}
+        <div class="mt-3">
+            <WalletConnectButton/>
+        </div>
         {move || on_cancel.map(|cb| view! {
             <button
                 type="button"
