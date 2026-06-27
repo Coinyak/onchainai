@@ -2,13 +2,10 @@
 # Docs: https://docs.qodo.ai/code-review/get-started/configuration-overview/configuration-file
 
 [github_app]
-# Auto-run on PR open/update (same commands as manual /agentic_*).
-pr_commands = [
-    "/agentic_describe",
-    "/agentic_review",
-]
-handle_push_trigger = true
-push_commands = ["/agentic_review"]
+# Manual only: comment on a PR to trigger Qodo.
+#   /agentic_review   — code review
+#   /agentic_describe — PR summary
+handle_push_trigger = false
 
 [review_agent]
 comments_location_policy = "both"
