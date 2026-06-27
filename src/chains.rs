@@ -221,6 +221,38 @@ mod tests {
     }
 
     #[test]
+    fn catalog_logos_use_official_brand_markers() {
+        let markers: &[(&str, &[&str])] = &[
+            ("bitcoin", &["#f7931a", "#F7931A", "Bitcoin"]),
+            ("ethereum", &["#8a92b2", "#8A92B2", "m959.8"]),
+            ("solana", &["#00FFA3", "#9945FF", "linearGradient"]),
+            ("base", &["#0052FF"]),
+            ("arbitrum", &["#213147", "#12AAFF"]),
+            ("optimism", &["image", "Optimism"]),
+            ("polygon", &["Polygon", "image", "path"]),
+            ("bsc", &["#F0B90B", "#f0b90b"]),
+            ("avalanche", &["#FF394A", "#E84142"]),
+            ("sui", &["#4DA2FF", "fill-rule"]),
+            ("zksync", &["#11141A", "path"]),
+            ("bob", &["#F58B00", "#343536"]),
+        ];
+        for (id, needles) in markers {
+            let entry = chain_by_id(id).unwrap_or_else(|| panic!("missing catalog id: {id}"));
+            let text = std::fs::read_to_string(logo_path_on_disk(entry.logo))
+                .unwrap_or_else(|e| panic!("read {}: {e}", entry.logo));
+            assert!(
+                needles.iter().any(|needle| text.contains(needle)),
+                "logo for {id} missing official marker; got head: {}",
+                &text[..text.len().min(200)]
+            );
+            assert!(
+                !text.contains("font-size=\"12\""),
+                "logo for {id} still uses text monogram"
+            );
+        }
+    }
+
+    #[test]
     fn bitcoin_first_and_pinned() {
         assert_eq!(CHAIN_CATALOG.first().map(|c| c.id), Some("bitcoin"));
         assert!(CHAIN_CATALOG[0].pinned);

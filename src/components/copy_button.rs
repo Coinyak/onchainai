@@ -12,7 +12,9 @@ pub fn CopyButton(text: String, #[prop(optional)] _label: Option<&'static str>) 
             type="button"
             class=move || if copied.get() { "copy-btn copied" } else { "copy-btn" }
             aria-label="Copy to clipboard"
-            on:click=move |_| {
+            on:click=move |ev| {
+                ev.stop_propagation();
+                ev.prevent_default();
                 let t = text.clone();
                 spawn_local(async move {
                     copy_text_to_clipboard(&t, copied).await;

@@ -1,10 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" role="img" aria-label="zkSync">
   <rect width="48" height="48" rx="8" fill="#fff"/>
-  <defs>
-    <linearGradient id="zk" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#8B8CF8"/>
-      <stop offset="100%" stop-color="#4E529A"/>
-    </linearGradient>
-  </defs>
-  <path fill="url(#zk)" d="M14 14h8v8h-8zm12 0h8v8h-8zm-12 12h8v8h-8zm12 0h8v8h-8z"/>
+  <g transform="translate(24 24) scale(0.800000) translate(-25.000 -14.500)">
+    <svg viewBox="0 0 50.0 29.0" width="50.0" height="29.0" overflow="visible"><path d="M14.2222 0L0 14.2222L14.2222 28.4444V17.7778L28.4444 7.11111H14.2222V0Z" fill="#11141A"/>
+<path d="M49.7778 14.2222L35.5556 0V10.6667L21.3333 21.3333H35.5556V28.4444L49.7778 14.2222Z" fill="#11141A"/></svg>
+  </g>
 </svg>

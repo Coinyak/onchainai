@@ -55,7 +55,11 @@ pub fn ChainStrip(
                         aria-label=format!("Show {overflow_count} more chains")
                         title=format!("Show {overflow_count} more chains")
                         aria-expanded=move || if expanded.get() { "true" } else { "false" }
-                        on:click=move |_| expanded.update(|v| *v = !*v)
+                        on:click=move |ev| {
+                            ev.stop_propagation();
+                            ev.prevent_default();
+                            expanded.update(|v| *v = !*v);
+                        }
                     >
                         "+"
                     </button>

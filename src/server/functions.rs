@@ -482,11 +482,17 @@ pub struct ToolListRequest {
 /// Optional axis filters for tool list/count queries (AND across axes; OR within axis via ANY).
 #[derive(Debug, Clone, Default, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct ToolFilters {
+    #[serde(default)]
     pub function: Vec<String>,
+    #[serde(default)]
     pub asset_class: Vec<String>,
+    #[serde(default)]
     pub actor: Vec<String>,
+    #[serde(default)]
     pub tool_type: Vec<String>,
+    #[serde(default)]
     pub status: Vec<String>,
+    #[serde(default)]
     pub chain: Vec<String>,
 }
 
@@ -3436,6 +3442,30 @@ mod tests {
         assert_eq!(round_trip.limit, 50);
         assert_eq!(round_trip.filters.function, vec!["bridge"]);
         assert_eq!(round_trip.query.as_deref(), Some("mcp"));
+    }
+
+    #[test]
+    fn tool_filters_deserialize_partial_wasm_payload() {
+        let json = serde_json::json!({
+            "function": ["bridge"]
+        });
+        let filters: ToolFilters = serde_json::from_value(json).expect("partial filters");
+        assert_eq!(filters.function, vec!["bridge"]);
+        assert!(filters.asset_class.is_empty());
+        assert!(filters.chain.is_empty());
+    }
+
+    #[test]
+    fn load_browser_data_request_deserialize_partial_filters() {
+        let json = serde_json::json!({
+            "sort": "hot",
+            "filters": { "function": ["bridge"] },
+            "page": 1
+        });
+        let req: LoadBrowserDataRequest = serde_json::from_value(json).expect("partial request");
+        assert_eq!(req.sort, "hot");
+        assert_eq!(req.filters.function, vec!["bridge"]);
+        assert_eq!(req.page, 1);
     }
 
     #[test]

@@ -6,9 +6,10 @@ use leptos::prelude::*;
 
 #[component]
 pub fn PreviewPanel(tool: Tool, close_href: String, full_page_href: String) -> impl IntoView {
-    let close = close_href.clone();
+    let close_backdrop = close_href.clone();
+    let close_button = close_href.clone();
     view! {
-        <a href=close_href.clone() class="preview-backdrop" aria-label="Close preview">
+        <a href=close_backdrop class="preview-backdrop" aria-label="Close preview">
             <span class="sr-only">"Close"</span>
         </a>
         <aside
@@ -16,15 +17,20 @@ pub fn PreviewPanel(tool: Tool, close_href: String, full_page_href: String) -> i
             role="dialog"
             aria-label="Tool preview"
             tabindex="-1"
-            on:keydown=move |ev| {
-                if ev.key() == "Escape" {
-                    let win = window();
-                    let _ = win.location().set_href(&close);
+            on:keydown={
+                let close = close_href.clone();
+                move |ev| {
+                    if ev.key() == "Escape" {
+                        #[cfg(feature = "hydrate")]
+                        if let Some(win) = web_sys::window() {
+                            let _ = win.location().set_href(&close);
+                        }
+                    }
                 }
             }
         >
             <div class="preview-panel-header">
-                <a href=close_href class="preview-close" aria-label="Close preview">
+                <a href=close_button class="preview-close" aria-label="Close preview">
                     "×"
                 </a>
             </div>

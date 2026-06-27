@@ -8,6 +8,7 @@ import {
   probeLogoFallback,
   evaluateLogoFallback,
   isBenignConsoleError,
+  visiblePageText,
 } from "./browser-test-helpers.mjs";
 
 const base = (process.argv[2] || "http://localhost:3000").replace(/\/$/, "");
@@ -83,7 +84,7 @@ if (homeLayout.hasCategoryGrid) {
 
 for (const path of ["/", "/tools", "/tools?function=bridge&type=mcp"]) {
   await page.goto(`${base}${path}`, { waitUntil: "networkidle" });
-  const text = await page.textContent("body");
+  const text = await visiblePageText(page);
   if (/error deserializing|missing field filters/i.test(text || "")) {
     errors.push(`visible-error:${path}`);
   }
@@ -151,7 +152,7 @@ if (toolsCards >= 50) {
   const expectedPage2 = expectedCumulativeMin(toolsCards, 2);
   await sleep(NAV_PACE_MS);
   await page.goto(`${base}/tools?page=2`, { waitUntil: "networkidle" });
-  const page2Text = await page.textContent("body");
+  const page2Text = await visiblePageText(page);
   const page2Cards = await countRealToolCards(page);
   if (/error deserializing|missing field filters/i.test(page2Text || "")) {
     errors.push("visible-error:/tools?page=2");

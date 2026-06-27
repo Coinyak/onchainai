@@ -9,6 +9,7 @@ import {
   probeLogoFallback,
   evaluateLogoFallback,
   isBenignConsoleError,
+  visiblePageText,
 } from "./browser-test-helpers.mjs";
 
 const base = (process.argv[2] || "https://www.onchain-ai.xyz").replace(/\/$/, "");
@@ -60,7 +61,7 @@ try {
   await clearSidebarStorage(page);
   log("home-load", true);
 
-  const bodyText = await page.textContent("body");
+  const bodyText = await visiblePageText(page);
   log("no-deser-error-home", !/error deserializing|missing field filters/i.test(bodyText || ""));
   log("sidebar-brand", !!(await page.$(".sidebar-brand")));
 
@@ -70,7 +71,7 @@ try {
   if (fnLink) {
     await fnLink.click();
     await page.waitForLoadState("networkidle");
-    const after = await page.textContent("body");
+    const after = await visiblePageText(page);
     log("sidebar-filter-click", !/error deserializing/i.test(after || ""), page.url());
   } else {
     log("sidebar-filter-click", false, "no visible filter link");
@@ -104,7 +105,7 @@ try {
   if (chainLink && (await chainLink.isVisible())) {
     await chainLink.click({ force: false });
     await page.waitForLoadState("networkidle");
-    log("chain-strip-click", !/error deserializing/i.test((await page.textContent("body")) || ""), page.url());
+    log("chain-strip-click", !/error deserializing/i.test((await visiblePageText(page)) || ""), page.url());
   } else {
     log("chain-strip-click", false, "no chain link");
   }
@@ -115,7 +116,7 @@ try {
   await page.goto(`${base}/tools?page=2`, { waitUntil: "networkidle" });
   const page2Cards = (await page.$$(".tool-card:not(.skeleton-card)")).length;
   const page2Ok =
-    !/error deserializing/i.test((await page.textContent("body")) || "") &&
+    !/error deserializing/i.test((await visiblePageText(page)) || "") &&
     page2Cards >= expectedPage2;
   log("page-2-load", page2Ok, `count=${page2Cards} expected>=${expectedPage2}`);
 
@@ -192,7 +193,7 @@ try {
 
   await page.setViewportSize({ width: 375, height: 812 });
   await page.goto(`${base}/tools`, { waitUntil: "networkidle" });
-  log("mobile-tools", !/error deserializing/i.test((await page.textContent("body")) || ""));
+  log("mobile-tools", !/error deserializing/i.test((await visiblePageText(page)) || ""));
 
   const chainMoreVisible = await page.evaluate(() => {
     const pill = document.querySelector(".chain-tile-more");

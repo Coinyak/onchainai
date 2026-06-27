@@ -99,7 +99,11 @@ pub fn FeaturedCarousel(cards: Vec<FeaturedCardView>) -> impl IntoView {
                                     role="tab"
                                     aria-label=format!("Show {label}")
                                     aria-selected=move || if current.get() == idx { "true" } else { "false" }
-                                    on:click=move |_| current.set(idx)
+                                    on:click=move |ev| {
+                                        ev.stop_propagation();
+                                        ev.prevent_default();
+                                        current.set(idx);
+                                    }
                                 />
                             }
                         }).collect_view()}

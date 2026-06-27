@@ -19,6 +19,11 @@ export function isBenignConsoleError(text) {
     || /invalid\.onchainai-test\.invalid/i.test(text);
 }
 
+/** Visible page text only — excludes `<script>`/`<style>` noise from bundled WASM. */
+export async function visiblePageText(page) {
+  return page.evaluate(() => document.body.innerText || "");
+}
+
 export async function clearSidebarStorage(page) {
   try {
     await page.evaluate(() => {
