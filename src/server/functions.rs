@@ -673,8 +673,11 @@ pub struct BrowserDataPayload {
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct LoadBrowserDataRequest {
     pub sort: String,
+    #[serde(default)]
     pub filters: ToolFilters,
+    #[serde(default)]
     pub search_q: Option<String>,
+    #[serde(default)]
     pub selected: Option<String>,
     pub page: u32,
 }
