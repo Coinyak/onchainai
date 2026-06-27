@@ -102,6 +102,62 @@ pub const CHAIN_CATALOG: &[ChainMeta] = &[
         aliases: &["zk-sync", "zksync-era"],
         pinned: false,
     },
+    ChainMeta {
+        id: "sonic",
+        label: "Sonic",
+        logo: "/chains/sonic.svg",
+        aliases: &[],
+        pinned: false,
+    },
+    ChainMeta {
+        id: "unichain",
+        label: "Unichain",
+        logo: "/chains/unichain.svg",
+        aliases: &[],
+        pinned: false,
+    },
+    ChainMeta {
+        id: "bera",
+        label: "Berachain",
+        logo: "/chains/bera.svg",
+        aliases: &["berachain"],
+        pinned: false,
+    },
+    ChainMeta {
+        id: "sei",
+        label: "Sei",
+        logo: "/chains/sei.svg",
+        aliases: &[],
+        pinned: false,
+    },
+    ChainMeta {
+        id: "soneium",
+        label: "Soneium",
+        logo: "/chains/soneium.svg",
+        aliases: &[],
+        pinned: false,
+    },
+    ChainMeta {
+        id: "tron",
+        label: "Tron",
+        logo: "/chains/tron.svg",
+        aliases: &["trx"],
+        pinned: false,
+    },
+    ChainMeta {
+        id: "hyperliquid",
+        label: "Hyperliquid",
+        logo: "/chains/hyperliquid.svg",
+        aliases: &["hype"],
+        pinned: false,
+    },
+    ChainMeta {
+        id: "plasma",
+        label: "Plasma",
+        logo: "/chains/plasma.svg",
+        aliases: &[],
+        pinned: false,
+    },
 ];
 
 /// Primary-row chain tiles (excluding the All tile).
@@ -467,8 +523,8 @@ mod tests {
 
         assert_eq!(visible.len(), registered.len());
         assert_eq!(overflow, 0);
-        assert!(catalog_hits >= 9, "major chains should have catalog logos");
-        assert!(pill_hits >= 4, "route-only chains should render as pills");
+        assert_eq!(pill_hits, 0, "all BOB chains should resolve to catalog logos");
+        assert_eq!(catalog_hits, registered.len());
         assert!(resolve_chain("bitcoin").unwrap().pinned);
         assert!(resolve_chain("bob").unwrap().pinned);
     }
