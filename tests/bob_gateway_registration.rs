@@ -9,6 +9,30 @@ use sqlx::postgres::PgPoolOptions;
 use std::collections::HashSet;
 use std::env;
 
+/// Full chain union: @gobob/bob-sdk supportedChainsMapping (12 EVM) + bitcoin +
+/// live Gateway route chains (polygon, tron, hyperliquid, plasma) from discovery.
+pub fn bob_gateway_all_chains() -> Vec<String> {
+    vec![
+        "bitcoin".into(),
+        "bob".into(),
+        "ethereum".into(),
+        "base".into(),
+        "arbitrum".into(),
+        "optimism".into(),
+        "avalanche".into(),
+        "bsc".into(),
+        "polygon".into(),
+        "sonic".into(),
+        "unichain".into(),
+        "bera".into(),
+        "sei".into(),
+        "soneium".into(),
+        "tron".into(),
+        "hyperliquid".into(),
+        "plasma".into(),
+    ]
+}
+
 /// Metadata from isolated discovery passes (discovery-1..4.log), not unit-test fixtures.
 fn discovery_bob_raw_tool() -> RawTool {
     RawTool {
@@ -24,15 +48,7 @@ fn discovery_bob_raw_tool() -> RawTool {
         npm_package: Some("@gobob/gateway-cli".into()),
         install_command: Some("npx @gobob/gateway-cli".into()),
         mcp_endpoint: None,
-        chains: vec![
-            "bitcoin".into(),
-            "bob".into(),
-            "ethereum".into(),
-            "base".into(),
-            "arbitrum".into(),
-            "avalanche".into(),
-            "bsc".into(),
-        ],
+        chains: bob_gateway_all_chains(),
         stars: 0,
         last_commit_at: None,
         source: "npm".into(),

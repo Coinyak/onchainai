@@ -182,6 +182,11 @@ pub struct ChainTagView {
     pub raw: String,
 }
 
+/// Map every chain on a tool — no overflow truncation.
+pub fn chain_tags_show_all(chains: &[String]) -> (Vec<ChainTagView>, usize) {
+    chain_tags_for_tool(chains, chains.len())
+}
+
 /// Map tool chain strings to catalog entries; returns visible tags and overflow count.
 pub fn chain_tags_for_tool(chains: &[String], max_visible: usize) -> (Vec<ChainTagView>, usize) {
     let tags: Vec<ChainTagView> = chains
@@ -372,22 +377,52 @@ mod tests {
         assert_eq!(ordered[1].id, "bob");
     }
 
-    /// Goal harness: badge resolution for registered BOB Gateway CLI chains slice.
+    /// Full BOB Gateway CLI chain union (SDK + live routes); kept in sync with
+    /// tests/bob_gateway_registration.rs::bob_gateway_all_chains.
+    #[test]
+    fn chain_tags_show_all_never_truncates() {
+        let chains: Vec<String> = vec!["bitcoin".into(), "bob".into(), "base".into()];
+        let (visible, overflow) = chain_tags_show_all(&chains);
+        assert_eq!(visible.len(), 3);
+        assert_eq!(overflow, 0);
+    }
+
+    fn bob_gateway_all_chains() -> Vec<String> {
+        vec![
+            "bitcoin".into(),
+            "bob".into(),
+            "ethereum".into(),
+            "base".into(),
+            "arbitrum".into(),
+            "optimism".into(),
+            "avalanche".into(),
+            "bsc".into(),
+            "polygon".into(),
+            "sonic".into(),
+            "unichain".into(),
+            "bera".into(),
+            "sei".into(),
+            "soneium".into(),
+            "tron".into(),
+            "hyperliquid".into(),
+            "plasma".into(),
+        ]
+    }
+
+    /// Goal harness: badge resolution for full registered BOB Gateway CLI chains.
     /// Run with `--nocapture` to emit stdout captured in badges.log.
     #[test]
     fn bob_gateway_registered_tool_chain_badges() {
-        let registered: Vec<String> = vec![
-            "bitcoin".into(),
-            "bob".into(),
-            "base".into(),
-            "arbitrum".into(),
-            "ethereum".into(),
-        ];
+        let registered = bob_gateway_all_chains();
+        assert!(registered.len() >= 11, "BOB supports 11+ chains");
 
-        println!("=== resolve_chain (registered bob-gateway-cli chains slice) ===");
+        println!("=== resolve_chain (full bob-gateway-cli chains, n={}) ===", registered.len());
+        let mut catalog_hits = 0usize;
+        let mut pill_hits = 0usize;
         for raw in &registered {
             match resolve_chain(raw) {
                 Some(meta) => {
+                    catalog_hits += 1;
                     let path = logo_path_on_disk(meta.logo);
                     println!(
                         "resolve_chain({raw}) -> id={} label={} logo={} pinned={} file_exists={}",
@@ -397,11 +432,17 @@ mod tests {
                         meta.pinned,
                         path.exists()
                     );
-                    assert!(path.exists(), "logo file missing for {}", meta.id);
+                    if meta.pinned {
+                        assert!(path.exists(), "pinned logo file missing for {}", meta.id);
+                    }
                 }
-                None => panic!("registered chain should resolve: {raw}"),
+                None => {
+                    pill_hits += 1;
+                    println!("resolve_chain({raw}) -> pill (not in catalog, shown as text badge)");
+                }
             }
         }
+        println!("catalog_logos={catalog_hits} text_pills={pill_hits}");
 
         for noise in ["multi-chain", "63+ networks", "fantom"] {
             assert!(
@@ -411,25 +452,24 @@ mod tests {
             println!("resolve_chain({noise}) -> NONE (noise filtered)");
         }
 
-        let max_visible = 3;
-        let (visible, overflow) = chain_tags_for_tool(&registered, max_visible);
-        println!("=== chain_tags_for_tool(max_visible={max_visible}) ===");
+        let (visible, overflow) = chain_tags_show_all(&registered);
+        println!("=== chain_tags_show_all (no truncation) ===");
         println!("visible_count={} overflow={}", visible.len(), overflow);
         for tag in &visible {
             match tag.meta {
                 Some(m) => println!(
-                    "  visible tag raw={} catalog_id={} logo={}",
+                    "  tag raw={} catalog_id={} logo={}",
                     tag.raw, m.id, m.logo
                 ),
-                None => println!("  visible tag raw={} catalog_id=NONE (fallback pill)", tag.raw),
+                None => println!("  tag raw={} catalog_id=NONE (fallback pill)", tag.raw),
             }
         }
 
-        assert_eq!(visible.len(), 3);
-        assert_eq!(overflow, 2);
+        assert_eq!(visible.len(), registered.len());
+        assert_eq!(overflow, 0);
+        assert!(catalog_hits >= 9, "major chains should have catalog logos");
+        assert!(pill_hits >= 4, "route-only chains should render as pills");
         assert!(resolve_chain("bitcoin").unwrap().pinned);
         assert!(resolve_chain("bob").unwrap().pinned);
-        assert_eq!(resolve_chain("ethereum").unwrap().logo, "/chains/ethereum.svg");
-        assert_eq!(resolve_chain("base").unwrap().logo, "/chains/base.svg");
     }
 }

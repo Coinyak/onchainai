@@ -1,6 +1,6 @@
 //! Shared tool detail body — install tabs, trust, chains, links.
 
-use crate::chains::chain_tags_for_tool;
+use crate::chains::chain_tags_show_all;
 use crate::components::copy_button::CopyButton;
 use crate::components::tool_logo::ToolLogo;
 use crate::install_safety::{
@@ -201,7 +201,7 @@ pub fn ToolDetailContent(
             <div class="detail-meta detail-meta-wrap">
                 <span>{"★ "}{tool.stars}</span>
                 {if !tool.chains.is_empty() {
-                    let (chain_tags, extra_chains) = chain_tags_for_tool(&tool.chains, 12);
+                    let (chain_tags, extra_chains) = chain_tags_show_all(&tool.chains);
                     view! {
                         <span class="tool-chains chains-wrap">
                             {chain_tags.into_iter().map(|tag| {
