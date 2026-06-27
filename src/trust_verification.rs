@@ -1,5 +1,7 @@
 //! Trust verification — operator-facing scores and public explainable trust facts.
 
+use std::collections::HashSet;
+
 use crate::models::{Tool, ToolOfficialLink};
 
 /// Normalize an identity token for cross-source comparison (org, scope, domain label).
@@ -222,7 +224,9 @@ pub fn official_promotion_allowed(
     let verified_count = official_links
         .iter()
         .filter(|l| l.verification_status == "verified" && l.evidence_strength == "strong")
-        .count();
+        .map(|l| (&l.link_type, l.url.as_str()))
+        .collect::<HashSet<_>>()
+        .len();
     verified_count >= 2 && trust.claim_strength_score >= 20
 }
 

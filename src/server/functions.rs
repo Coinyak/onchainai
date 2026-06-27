@@ -3096,8 +3096,15 @@ pub(crate) fn validate_report_details(details: Option<&str>) -> Result<(), &'sta
     Ok(())
 }
 
+pub(crate) const MAX_CLAIM_PROOF_LINKS: usize = 10;
+pub(crate) const MAX_CLAIM_VERIFICATION_NOTE_TOTAL: usize = 4000;
+
 /// Validate optional proof URLs for claim flow.
 pub(crate) fn validate_claim_proof_urls(urls: &[String]) -> Result<(), &'static str> {
+    let non_empty = urls.iter().filter(|u| !u.trim().is_empty()).count();
+    if non_empty > MAX_CLAIM_PROOF_LINKS {
+        return Err("at most 10 proof links allowed");
+    }
     for url in urls {
         let trimmed = url.trim();
         if trimmed.is_empty() {
@@ -3114,6 +3121,35 @@ pub(crate) fn validate_claim_proof_urls(urls: &[String]) -> Result<(), &'static 
         }
     }
     Ok(())
+}
+
+/// Build the stored verification note after team name and proof links are appended.
+pub(crate) fn build_claim_proof_note(input: &ClaimToolInput) -> Result<String, &'static str> {
+    let mut proof_note = input.verification_note.trim().to_string();
+    if !input.proof_links.is_empty() {
+        let links = input
+            .proof_links
+            .iter()
+            .map(|u| u.trim())
+            .filter(|u| !u.is_empty())
+            .collect::<Vec<_>>()
+            .join("\n");
+        if !links.is_empty() {
+            proof_note = format!("{proof_note}\n\nProof links:\n{links}");
+        }
+    }
+    if let Some(team) = input
+        .team_name
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        proof_note = format!("Team: {team}\n{proof_note}");
+    }
+    if proof_note.len() > MAX_CLAIM_VERIFICATION_NOTE_TOTAL {
+        return Err("verification note must be at most 4000 characters after formatting");
+    }
+    Ok(proof_note)
 }
 
 /// Validate claim request input with proof-oriented fields.
@@ -3153,6 +3189,7 @@ pub(crate) fn validate_claim_tool_input(input: &ClaimToolInput) -> Result<(), &'
     validate_optional_https_url(input.website_url.as_deref())?;
     validate_optional_https_url(input.x_url.as_deref())?;
     validate_claim_proof_urls(&input.proof_links)?;
+    build_claim_proof_note(input)?;
     Ok(())
 }
 
@@ -3514,25 +3551,8 @@ pub async fn request_tool_claim(input: ClaimToolInput) -> Result<ToolClaimReques
         .await
         .map_err(|e| ServerFnError::new(format!("transaction failed: {e}")))?;
 
-    let mut proof_note = input.verification_note.trim().to_string();
-    if !input.proof_links.is_empty() {
-        let links = input
-            .proof_links
-            .iter()
-            .map(|u| u.trim())
-            .filter(|u| !u.is_empty())
-            .collect::<Vec<_>>()
-            .join("\n");
-        proof_note = format!("{proof_note}\n\nProof links:\n{links}");
-    }
-    if let Some(team) = input
-        .team_name
-        .as_deref()
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-    {
-        proof_note = format!("Team: {team}\n{proof_note}");
-    }
+    let proof_note = build_claim_proof_note(&input)
+        .map_err(|msg| ServerFnError::new(msg.to_string()))?;
 
     let claim = sqlx::query_as::<_, ToolClaimRequest>(
         r#"
@@ -4022,6 +4042,42 @@ mod tests {
         let urls = vec!["javascript:alert(1)".to_string()];
         let err = validate_claim_proof_urls(&urls).expect_err("unsafe links should fail");
         assert!(err.contains("https"));
+    }
+
+    #[test]
+    fn validate_claim_tool_input_rejects_too_many_proof_links() {
+        let links: Vec<String> = (0..11).map(|i| format!("https://example.com/{i}")).collect();
+        let err = validate_claim_tool_input(&ClaimToolInput {
+            slug: "bridge-mcp".into(),
+            verification_note: "I maintain this repo and can verify via DNS TXT.".into(),
+            contact_email: None,
+            team_name: None,
+            github_url: None,
+            website_url: None,
+            x_url: None,
+            proof_links: links,
+        })
+        .expect_err("too many proof links should fail");
+        assert!(err.contains("10 proof links"));
+    }
+
+    #[test]
+    fn build_claim_proof_note_enforces_total_size_cap() {
+        let links: Vec<String> = (0..10)
+            .map(|i| format!("https://example.com/proof-path-segment-{i:03}/extra"))
+            .collect();
+        let err = build_claim_proof_note(&ClaimToolInput {
+            slug: "bridge-mcp".into(),
+            verification_note: "x".repeat(3500),
+            contact_email: None,
+            team_name: Some("A very long team name that pushes the note over the limit".into()),
+            github_url: None,
+            website_url: None,
+            x_url: None,
+            proof_links: links,
+        })
+        .expect_err("oversized formatted note should fail");
+        assert!(err.contains("4000"));
     }
 
     #[test]

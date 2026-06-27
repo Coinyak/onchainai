@@ -39,9 +39,12 @@ pub fn review_override_required(tool: &Tool) -> bool {
 }
 
 fn tool_has_trustworthy_url(tool: &Tool) -> bool {
-    fn valid_url(url: &Option<String>) -> bool {
-        url.as_ref().is_some_and(|u| !u.trim().is_empty())
-    }
+    let valid_url = |value: &Option<String>| {
+        value.as_ref().is_some_and(|u| {
+            let trimmed = u.trim();
+            trimmed.starts_with("https://") || trimmed.starts_with("http://")
+        })
+    };
     valid_url(&tool.repo_url)
         || valid_url(&tool.homepage)
         || tool
@@ -345,6 +348,18 @@ mod tests {
         let effect = plan_operator_review(&tool, "rejected", "proof insufficient", None);
         assert_eq!(effect.tool_update.claim_state.as_deref(), Some("unclaimed"));
         assert_eq!(effect.verdict.to_claim_state.as_deref(), Some("unclaimed"));
+    }
+
+    #[test]
+    fn approval_gate_rejects_non_http_urls() {
+        let mut tool = sample_tool("unclaimed", "community", "pending");
+        tool.repo_url = Some("javascript:alert(1)".into());
+        tool.homepage = None;
+        tool.npm_package = None;
+        assert_eq!(
+            validate_review_approval_gate(&tool, None),
+            Err("approval requires a repo, homepage, npm package, or MCP endpoint")
+        );
     }
 
     #[test]

@@ -217,8 +217,8 @@ pub async fn list_operator_verdicts(
     .map_err(|e| ServerFnError::new(format!("failed to list operator verdicts: {e}")))
 }
 
-/// Statuses safe for public tool detail — excludes operator-rejected links.
-pub const PUBLIC_OFFICIAL_LINK_STATUSES: &[&str] = &["candidate", "claimed", "verified"];
+/// Statuses safe for public tool detail — operator-verified only (no user-submitted candidates).
+pub const PUBLIC_OFFICIAL_LINK_STATUSES: &[&str] = &["claimed", "verified"];
 
 pub fn is_public_official_link(link: &ToolOfficialLink) -> bool {
     PUBLIC_OFFICIAL_LINK_STATUSES.contains(&link.verification_status.as_str())
@@ -264,23 +264,6 @@ pub async fn insert_candidate_official_link(
     display_label: &str,
     discovered_from: &str,
 ) -> Result<(), ServerFnError> {
-    let existing = sqlx::query_scalar::<_, i64>(
-        r#"
-        SELECT COUNT(*)::bigint FROM tool_official_links
-        WHERE tool_id = $1 AND link_type = $2 AND url = $3
-        "#,
-    )
-    .bind(tool_id)
-    .bind(link_type)
-    .bind(url)
-    .fetch_one(&mut **tx)
-    .await
-    .map_err(|e| ServerFnError::new(format!("official link check failed: {e}")))?;
-
-    if existing > 0 {
-        return Ok(());
-    }
-
     sqlx::query(
         r#"
         INSERT INTO tool_official_links (
@@ -288,6 +271,7 @@ pub async fn insert_candidate_official_link(
             official_badge_allowed, evidence_strength, discovered_from
         )
         VALUES ($1, $2, $3, $4, 'candidate', false, 'weak', $5)
+        ON CONFLICT (tool_id, link_type, url) DO NOTHING
         "#,
     )
     .bind(tool_id)
