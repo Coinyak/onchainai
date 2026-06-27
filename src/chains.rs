@@ -220,41 +220,46 @@ mod tests {
         }
     }
 
+    #[derive(serde::Deserialize)]
+    struct LogoManifest {
+        forbidden: Vec<String>,
+        entries: Vec<LogoManifestEntry>,
+    }
+
+    #[derive(serde::Deserialize)]
+    struct LogoManifestEntry {
+        id: String,
+        markers: Vec<String>,
+        #[serde(default)]
+        require_vector: bool,
+    }
+
+    fn load_logo_manifest() -> LogoManifest {
+        let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("scripts")
+            .join("chain-logo-manifest.json");
+        let raw = std::fs::read_to_string(&path)
+            .unwrap_or_else(|e| panic!("read manifest {}: {e}", path.display()));
+        serde_json::from_str(&raw)
+            .unwrap_or_else(|e| panic!("parse manifest {}: {e}", path.display()))
+    }
+
     #[test]
     fn catalog_logos_use_official_brand_markers() {
-        let markers: &[(&str, &[&str])] = &[
-            ("bitcoin", &["#f7931a", "#F7931A"]),
-            ("ethereum", &["#8a92b2", "#8A92B2", "m959.8"]),
-            ("solana", &["#00FFA3", "#9945FF", "linearGradient"]),
-            ("base", &["#0052FF"]),
-            ("arbitrum", &["#213147", "#12AAFF"]),
-            ("optimism", &["#FF0421", "#FF0420"]),
-            ("polygon", &["path", "fill"]),
-            ("bsc", &["#F0B90B", "#f0b90b"]),
-            ("avalanche", &["#FF394A", "#E84142"]),
-            ("sui", &["#4DA2FF", "fill-rule"]),
-            ("zksync", &["#11141A", "path"]),
-            ("bob", &["#F58B00", "#343536"]),
-        ];
-        let forbidden = [
-            "font-size=\"12\"",
-            "image content will be provided separately",
-            "<!DOCTYPE",
-            "404: This page",
-            "next-error-h1",
-        ];
-        for (id, needles) in markers {
-            let entry = chain_by_id(id).unwrap_or_else(|| panic!("missing catalog id: {id}"));
-            let text = std::fs::read_to_string(logo_path_on_disk(entry.logo))
-                .unwrap_or_else(|e| panic!("read {}: {e}", entry.logo));
+        let manifest = load_logo_manifest();
+        for entry in &manifest.entries {
+            let id = entry.id.as_str();
+            let catalog = chain_by_id(id).unwrap_or_else(|| panic!("missing catalog id: {id}"));
+            let text = std::fs::read_to_string(logo_path_on_disk(catalog.logo))
+                .unwrap_or_else(|e| panic!("read {}: {e}", catalog.logo));
             assert!(
-                needles.iter().any(|needle| text.contains(needle)),
+                entry.markers.iter().any(|needle| text.contains(needle)),
                 "logo for {id} missing official marker; got head: {}",
                 &text[..text.len().min(200)]
             );
-            for bad in forbidden {
+            for bad in &manifest.forbidden {
                 assert!(
-                    !text.contains(bad),
+                    !text.contains(bad.as_str()),
                     "logo for {id} contains placeholder/error content: {bad}"
                 );
             }
@@ -270,16 +275,17 @@ mod tests {
                     payload.len()
                 );
             }
+            if entry.require_vector {
+                assert!(
+                    text.contains("circle") && text.contains("path"),
+                    "logo for {id} should be vector circle+path"
+                );
+                assert!(
+                    !text.contains("data:image/png;base64,"),
+                    "logo for {id} should not use embedded png"
+                );
+            }
         }
-        let optimism = std::fs::read_to_string(logo_path_on_disk("/chains/optimism.svg")).unwrap();
-        assert!(
-            optimism.contains("circle") && optimism.contains("path"),
-            "optimism logo should be vector circle+path, not raster placeholder"
-        );
-        assert!(
-            !optimism.contains("data:image/png;base64,"),
-            "optimism logo should use official vector mark, not embedded png"
-        );
     }
 
     #[test]

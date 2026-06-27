@@ -445,4 +445,33 @@ mod tests {
         assert!(!active);
         assert_eq!(href, "/categories/swap?chain=ethereum&sort=new");
     }
+
+    #[test]
+    fn sidebar_function_link_bridge_href_includes_function_param() {
+        let query_base = build_query_base(
+            &BrowserBase::Tools,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            "new".into(),
+            None,
+            None,
+            1,
+        );
+        let (href, active) =
+            sidebar_function_link(&BrowserBase::Tools, &query_base, "bridge", &[]);
+        assert!(!active);
+        assert!(
+            href.contains("function=bridge"),
+            "bridge filter href must include function=bridge, got: {href}"
+        );
+        let lower = href.to_lowercase();
+        assert!(
+            !lower.contains("error deserializing") && !lower.contains("missing field"),
+            "href must not contain error strings: {href}"
+        );
+    }
 }

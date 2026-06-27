@@ -1,20 +1,17 @@
 #!/usr/bin/env python3
-"""Wrap official chain logo SVGs into 48x48 public/chains/*.svg tiles."""
+"""Wrap official chain logo SVGs into 48x48 public/chains/*.svg tiles (manifest-driven)."""
 
 from __future__ import annotations
 
 import base64
+import json
 import re
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "public" / "chains"
-SCRATCH = Path(
-    sys.argv[1]
-    if len(sys.argv) > 1
-    else "/var/folders/k7/_r0bjtp12dngr0ncryvtt4mc0000gn/T/grok-goal-11e98898edeb/implementer/raw-logos"
-)
+MANIFEST = ROOT / "scripts" / "chain-logo-manifest.json"
 
 TILE = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" role="img" aria-label="{label}">
   <rect width="48" height="48" rx="8" fill="#fff"/>
@@ -39,12 +36,29 @@ SUI_DROPLET = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" rol
 </svg>
 """
 
+BOB_ICON = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" role="img" aria-label="BOB">
+  <rect width="48" height="48" rx="8" fill="#fff"/>
+  <g transform="translate(8 10) scale(0.31)">
+    <rect x="259.4" y="413.5" fill="#343536" width="101.6" height="101.6"/>
+    <rect x="373.8" y="413.5" fill="#F58B00" width="101.6" height="101.6"/>
+    <rect x="373.8" y="299.2" fill="#F58B00" width="101.6" height="101.6"/>
+    <rect x="259.4" y="299.2" fill="#343536" width="101.6" height="101.6"/>
+    <rect x="259.4" y="184.8" fill="#343536" width="101.6" height="101.6"/>
+  </g>
+</svg>
+"""
+
+INLINE = {
+    "inline_bob": BOB_ICON,
+    "inline_base": BASE_SQUARE,
+    "inline_sui": SUI_DROPLET,
+}
+
 
 def read_svg_body(path: Path) -> str:
     text = path.read_text(encoding="utf-8", errors="replace")
     if "<svg" not in text:
         raise ValueError(f"not svg: {path}")
-    # Strip outer svg wrapper; keep defs + content.
     text = re.sub(r"<\?xml[^>]*\?>", "", text, flags=re.I)
     text = re.sub(r"<!DOCTYPE[^>]*>", "", text, flags=re.I)
     m = re.search(r"<svg[^>]*>(.*)</svg>", text, flags=re.S | re.I)
@@ -65,7 +79,7 @@ def parse_viewbox(svg_text: str) -> tuple[float, float, float, float]:
     return parts[0], parts[1], parts[2], parts[3]
 
 
-def wrap_file(name: str, label: str, src: Path, padding: float = 4.0) -> str:
+def wrap_file(label: str, src: Path, padding: float = 4.0) -> str:
     raw = src.read_text(encoding="utf-8", errors="replace")
     body = read_svg_body(src)
     _, _, vw, vh = parse_viewbox(raw)
@@ -77,67 +91,46 @@ def wrap_file(name: str, label: str, src: Path, padding: float = 4.0) -> str:
     return TILE.format(label=label, scale=f"{scale:.6f}", tx=f"{tx:.3f}", ty=f"{ty:.3f}", inner=inner)
 
 
-def wrap_png(name: str, label: str, src: Path) -> str:
-    raw = src.read_bytes()
-    if len(raw) < 200 or not raw.startswith(b"\x89PNG\r\n\x1a\n"):
-        raise ValueError(f"invalid png for {name}: {src}")
-    data = base64.b64encode(raw).decode("ascii")
-    return f"""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" role="img" aria-label="{label}">
-  <rect width="48" height="48" rx="8" fill="#fff"/>
-  <image href="data:image/png;base64,{data}" xlink:href="data:image/png;base64,{data}" x="6" y="6" width="36" height="36" preserveAspectRatio="xMidYMid meet"/>
-</svg>
-"""
+def load_manifest() -> dict:
+    return json.loads(MANIFEST.read_text(encoding="utf-8"))
 
 
 def main() -> None:
+    if len(sys.argv) > 1:
+        raw_root = Path(sys.argv[1])
+    else:
+        data = load_manifest()
+        scratch = Path(
+            "/var/folders/k7/_r0bjtp12dngr0ncryvtt4mc0000gn/T/grok-goal-11e98898edeb/implementer"
+        )
+        raw_root = scratch / data.get("raw_logos_dir", "raw-logos")
+
+    data = load_manifest()
     OUT.mkdir(parents=True, exist_ok=True)
-    BOB_ICON = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" role="img" aria-label="BOB">
-  <rect width="48" height="48" rx="8" fill="#fff"/>
-  <g transform="translate(8 10) scale(0.31)">
-    <rect x="259.4" y="413.5" fill="#343536" width="101.6" height="101.6"/>
-    <rect x="373.8" y="413.5" fill="#F58B00" width="101.6" height="101.6"/>
-    <rect x="373.8" y="299.2" fill="#F58B00" width="101.6" height="101.6"/>
-    <rect x="259.4" y="299.2" fill="#343536" width="101.6" height="101.6"/>
-    <rect x="259.4" y="184.8" fill="#343536" width="101.6" height="101.6"/>
-  </g>
-</svg>
-"""
-
-    mapping = {
-        "bitcoin": ("Bitcoin", SCRATCH / "bitcoin_official.svg"),
-        "ethereum": ("Ethereum", SCRATCH / "ethereum_official.svg"),
-        "solana": ("Solana", SCRATCH / "solana_official.svg"),
-        "arbitrum": ("Arbitrum", SCRATCH / "arbitrum_official.svg"),
-        "bsc": ("BNB Chain", SCRATCH / "bsc_official.svg"),
-        "avalanche": ("Avalanche", SCRATCH / "avalanche_official.svg"),
-        "polygon": ("Polygon", SCRATCH / "polygon_official.svg"),
-        "zksync": ("zkSync", SCRATCH / "zksync_official.svg"),
-    }
     written: list[str] = []
-    for slug, (label, path) in mapping.items():
-        if not path.exists():
-            raise SystemExit(f"missing source for {slug}: {path}")
+
+    for entry in data["entries"]:
+        slug = entry["id"]
+        label = entry["label"]
+        kind = entry["kind"]
         out = OUT / f"{slug}.svg"
-        out.write_text(wrap_file(slug, label, path), encoding="utf-8")
+
+        if kind in INLINE:
+            out.write_text(INLINE[kind], encoding="utf-8")
+        elif kind == "wrap":
+            src = raw_root / entry["source"]
+            if not src.exists():
+                raise SystemExit(f"missing source for {slug}: {src}")
+            if entry.get("require_vector"):
+                body = read_svg_body(src)
+                markers = entry.get("markers", [])
+                if not any(m in body for m in markers):
+                    raise SystemExit(f"{slug} svg missing brand markers in {src}")
+            out.write_text(wrap_file(label, src), encoding="utf-8")
+        else:
+            raise SystemExit(f"unknown kind for {slug}: {kind}")
+
         written.append(slug)
-
-    (OUT / "bob.svg").write_text(BOB_ICON, encoding="utf-8")
-    written.append("bob")
-
-    (OUT / "base.svg").write_text(BASE_SQUARE, encoding="utf-8")
-    written.append("base")
-
-    (OUT / "sui.svg").write_text(SUI_DROPLET, encoding="utf-8")
-    written.append("sui")
-
-    op_svg = SCRATCH / "optimism_official.svg"
-    if not op_svg.exists():
-        raise SystemExit(f"missing optimism svg: {op_svg}")
-    op_body = read_svg_body(op_svg)
-    if "#FF0421" not in op_body and "#FF0420" not in op_body:
-        raise SystemExit(f"optimism svg missing brand red: {op_svg}")
-    (OUT / "optimism.svg").write_text(wrap_file("optimism", "Optimism", op_svg), encoding="utf-8")
-    written.append("optimism")
 
     print("wrapped:", ", ".join(sorted(written)))
 

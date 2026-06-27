@@ -24,6 +24,16 @@ export async function visiblePageText(page) {
   return page.evaluate(() => document.body.innerText || "");
 }
 
+/** Wait until hydrated tool cards are present (not skeleton placeholders). */
+export async function waitForToolCards(page, timeout = 20000) {
+  await page.waitForSelector(".tool-card:not(.skeleton-card)", { timeout });
+}
+
+/** Wait for sidebar localStorage hydration before UI filter clicks. */
+export async function waitForSidebarReady(page, timeout = 15000) {
+  await page.waitForSelector("aside[data-sidebar-ready]", { timeout });
+}
+
 export async function clearSidebarStorage(page) {
   try {
     await page.evaluate(() => {

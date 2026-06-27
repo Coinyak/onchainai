@@ -1,0 +1,94 @@
+{
+  "raw_logos_dir": "raw-logos",
+  "forbidden": [
+    "font-size=\"12\"",
+    "image content will be provided separately",
+    "<!DOCTYPE",
+    "404: This page",
+    "next-error-h1"
+  ],
+  "entries": [
+    {
+      "id": "bitcoin",
+      "label": "Bitcoin",
+      "kind": "wrap",
+      "source": "bitcoin_official.svg",
+      "markers": ["#f7931a", "#F7931A"]
+    },
+    {
+      "id": "bob",
+      "label": "BOB",
+      "kind": "inline_bob",
+      "markers": ["#F58B00", "#343536"]
+    },
+    {
+      "id": "ethereum",
+      "label": "Ethereum",
+      "kind": "wrap",
+      "source": "ethereum_official.svg",
+      "markers": ["#8a92b2", "#8A92B2", "m959.8"]
+    },
+    {
+      "id": "solana",
+      "label": "Solana",
+      "kind": "wrap",
+      "source": "solana_official.svg",
+      "markers": ["#00FFA3", "#9945FF", "linearGradient"]
+    },
+    {
+      "id": "base",
+      "label": "Base",
+      "kind": "inline_base",
+      "markers": ["#0052FF"]
+    },
+    {
+      "id": "arbitrum",
+      "label": "Arbitrum",
+      "kind": "wrap",
+      "source": "arbitrum_official.svg",
+      "markers": ["#213147", "#12AAFF"]
+    },
+    {
+      "id": "optimism",
+      "label": "Optimism",
+      "kind": "wrap",
+      "source": "optimism_official.svg",
+      "markers": ["#FF0421", "#FF0420"],
+      "require_vector": true
+    },
+    {
+      "id": "polygon",
+      "label": "Polygon",
+      "kind": "wrap",
+      "source": "polygon_official.svg",
+      "markers": ["path", "fill"]
+    },
+    {
+      "id": "bsc",
+      "label": "BNB Chain",
+      "kind": "wrap",
+      "source": "bsc_official.svg",
+      "markers": ["#F0B90B", "#f0b90b"]
+    },
+    {
+      "id": "avalanche",
+      "label": "Avalanche",
+      "kind": "wrap",
+      "source": "avalanche_official.svg",
+      "markers": ["#FF394A", "#E84142"]
+    },
+    {
+      "id": "sui",
+      "label": "Sui",
+      "kind": "inline_sui",
+      "markers": ["#4DA2FF", "fill-rule"]
+    },
+    {
+      "id": "zksync",
+      "label": "zkSync",
+      "kind": "wrap",
+      "source": "zksync_official.svg",
+      "markers": ["#11141A", "path"]
+    }
+  ]
+}
