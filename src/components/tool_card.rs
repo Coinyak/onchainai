@@ -1,6 +1,6 @@
 //! Stripe-style tool card for list views — badges, bookmark, upvote.
 
-use crate::chains::chain_tags_for_tool;
+use crate::chains::chain_tags_show_all;
 use crate::components::copy_button::CopyButton;
 use crate::components::login_modal::LoginModal;
 use crate::components::tool_logo::ToolLogo;
@@ -38,7 +38,7 @@ pub fn ToolCard(
     let status = tool.status.clone();
     let tool_type = tool.tool_type.clone();
     let chains = tool.chains.clone();
-    let (chain_preview, extra_chains) = chain_tags_for_tool(&chains, 5);
+    let (chain_preview, extra_chains) = chain_tags_show_all(&chains);
     let install = tool.install_command.clone().unwrap_or_default();
     let stars = tool.stars;
     let description = tool
@@ -87,6 +87,17 @@ pub fn ToolCard(
                                     }}
                                 </span>
                                 <span class=type_badge_class(&tool_type)>{tool_type.to_uppercase()}</span>
+                                {if tool.claim_state == "claimed" {
+                                    view! {
+                                        <span class="badge badge-neutral">"Claimed by team"</span>
+                                    }.into_any()
+                                } else if tool.install_risk_level == "low" && !install.is_empty() {
+                                    view! {
+                                        <span class="badge badge-neutral">"Verified install"</span>
+                                    }.into_any()
+                                } else {
+                                    ().into_any()
+                                }}
                             </div>
                         </div>
                         <p class="tool-desc">{description}</p>

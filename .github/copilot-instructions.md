@@ -12,6 +12,7 @@ The crate default feature set is empty. Plain `cargo` commands that touch server
 
 - `cargo build --features ssr` — debug build
 - `cargo test --features ssr` — tests
+- `ONCHAINAI_REQUIRE_DB_TESTS=1 cargo test --features ssr --test review_tool_execution -- --nocapture` — fail if review-tool DB integration tests skip
 - `cargo clippy --features ssr -- -W clippy::all` — lint (must pass before commit)
 - `cargo fmt --check` — format check
 - `cargo leptos build --release` — full build (SSR binary + WASM + CSS)
@@ -36,3 +37,11 @@ Rust debug builds bloat `target/` fast. Expected, not a bug. Repo is configured 
 - Admin routes (`/admin/*`) require server-side `is_admin = true`.
 - Run `cargo clippy` + `cargo fmt --check` before committing. Add/update tests for changed code.
 - Conventional commits. Default branch `main` (Railway production deploys from `main`). Feature branches `feat/`, `fix/`, `docs/`. Squash merge only.
+
+## Code Review
+
+- When asked for a review, prioritize bugs, regressions, missing tests, and security or data-loss risks.
+- Put findings first, ordered by severity, and include concrete file/line references when possible.
+- Keep summaries brief and secondary to the findings.
+- If no issues are found, say that explicitly and mention any residual risks or test gaps.
+- AI PR reviews are opt-in: do not request `@copilot`, `@coderabbitai review`, or `@coderabbitai full review` unless the user explicitly asks.

@@ -1,9 +1,12 @@
 //! Shared UI components for the website-core milestone.
 
+pub mod admin_review_decision_panel;
+pub mod admin_review_timeline;
 pub mod admin_shell;
 pub mod bottom_sheet;
 pub mod category_grid;
 pub mod chain_strip;
+pub mod claim_status_timeline;
 pub mod comments_section;
 pub mod copy_button;
 pub mod empty_state;
@@ -12,6 +15,7 @@ pub mod featured_carousel;
 pub mod icons;
 pub mod login_form;
 pub mod login_modal;
+pub mod official_links_list;
 pub mod preview_panel;
 pub mod promo_cards;
 pub mod search_bar;
@@ -22,5 +26,6 @@ pub mod tool_card;
 pub mod tool_detail_content;
 pub mod tool_listing_actions;
 pub mod tool_logo;
+pub mod tool_trust_facts;
 pub mod tools_browser;
 pub mod top_nav;

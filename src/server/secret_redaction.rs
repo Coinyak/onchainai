@@ -19,7 +19,15 @@ pub const SECRET_ENV_NAMES: &[&str] = &[
 
 /// Token-like prefixes redacted from arbitrary strings.
 pub const SECRET_PREFIXES: &[&str] = &[
-    "ghp_", "gho_", "ghu_", "ghs_", "ghr_", "sk-", "xoxb-", "xoxp-", "sb_secret_",
+    "ghp_",
+    "gho_",
+    "ghu_",
+    "ghs_",
+    "ghr_",
+    "sk-",
+    "xoxb-",
+    "xoxp-",
+    "sb_secret_",
     "sb_publishable_",
 ];
 
@@ -147,7 +155,8 @@ mod tests {
 
     #[test]
     fn redact_secrets_masks_deploy_and_supabase_prefix_tokens() {
-        let input = "GITHUB_API_TOKEN=ghp_leak RAILWAY_TOKEN=rw_leak sb_secret_abc123 sb_publishable_xyz";
+        let input =
+            "GITHUB_API_TOKEN=ghp_leak RAILWAY_TOKEN=rw_leak sb_secret_abc123 sb_publishable_xyz";
         let out = redact_secrets(input);
         assert!(!out.contains("ghp_leak"));
         assert!(!out.contains("rw_leak"));

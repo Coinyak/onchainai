@@ -91,6 +91,62 @@
       "kind": "wrap",
       "source": "zksync_official.svg",
       "markers": ["#11141A", "path"]
+    },
+    {
+      "id": "sonic",
+      "label": "Sonic",
+      "kind": "wrap",
+      "source": "sonic_official.svg",
+      "markers": ["#fac461", "#e3570a", "linearGradient"]
+    },
+    {
+      "id": "unichain",
+      "label": "Unichain",
+      "kind": "wrap_raster",
+      "source": "unichain_official.png",
+      "markers": ["data:image/png;base64,"]
+    },
+    {
+      "id": "bera",
+      "label": "Berachain",
+      "kind": "wrap_raster",
+      "source": "bera_official.webp",
+      "markers": ["data:image/webp;base64,"]
+    },
+    {
+      "id": "sei",
+      "label": "Sei",
+      "kind": "wrap_raster",
+      "source": "sei_official.png",
+      "markers": ["data:image/png;base64,"]
+    },
+    {
+      "id": "soneium",
+      "label": "Soneium",
+      "kind": "wrap_raster",
+      "source": "soneium_official.webp",
+      "markers": ["data:image/webp;base64,"]
+    },
+    {
+      "id": "tron",
+      "label": "Tron",
+      "kind": "wrap_raster",
+      "source": "tron_official.png",
+      "markers": ["data:image/png;base64,"]
+    },
+    {
+      "id": "hyperliquid",
+      "label": "Hyperliquid",
+      "kind": "wrap_raster",
+      "source": "hyperliquid_official.webp",
+      "markers": ["data:image/webp;base64,"]
+    },
+    {
+      "id": "plasma",
+      "label": "Plasma",
+      "kind": "wrap",
+      "source": "plasma_official.svg",
+      "markers": ["#0F0F0F", "path"]
     }
   ]
 }

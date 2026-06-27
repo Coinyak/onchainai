@@ -43,6 +43,10 @@ Thumbs.db
 # Playwright CLI artifacts
 .playwright-cli/
 
+# Agent scratch artifacts
+.superpowers/
+__pycache__/
+
 # Supabase
 supabase/.branches
 supabase/.temp

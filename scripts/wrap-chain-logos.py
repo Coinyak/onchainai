@@ -79,6 +79,26 @@ def parse_viewbox(svg_text: str) -> tuple[float, float, float, float]:
     return parts[0], parts[1], parts[2], parts[3]
 
 
+def wrap_raster(label: str, src: Path, padding: float = 4.0) -> str:
+    data = src.read_bytes()
+    suffix = src.suffix.lower()
+    if suffix == ".webp":
+        mime = "image/webp"
+    elif suffix == ".png":
+        mime = "image/png"
+    elif suffix in {".jpg", ".jpeg"}:
+        mime = "image/jpeg"
+    else:
+        raise ValueError(f"unsupported raster: {src}")
+    b64 = base64.b64encode(data).decode("ascii")
+    inner = 48.0 - 2 * padding
+    return f"""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" role="img" aria-label="{label}">
+  <rect width="48" height="48" rx="8" fill="#fff"/>
+  <image href="data:{mime};base64,{b64}" x="{padding}" y="{padding}" width="{inner}" height="{inner}" preserveAspectRatio="xMidYMid meet"/>
+</svg>
+"""
+
+
 def wrap_file(label: str, src: Path, padding: float = 4.0) -> str:
     raw = src.read_text(encoding="utf-8", errors="replace")
     body = read_svg_body(src)
@@ -127,6 +147,15 @@ def main() -> None:
                 if not any(m in body for m in markers):
                     raise SystemExit(f"{slug} svg missing brand markers in {src}")
             out.write_text(wrap_file(label, src), encoding="utf-8")
+        elif kind == "wrap_raster":
+            src = raw_root / entry["source"]
+            if not src.exists():
+                raise SystemExit(f"missing raster for {slug}: {src}")
+            text = wrap_raster(label, src)
+            markers = entry.get("markers", [])
+            if markers and not any(m in text for m in markers):
+                raise SystemExit(f"{slug} raster tile missing markers")
+            out.write_text(text, encoding="utf-8")
         else:
             raise SystemExit(f"unknown kind for {slug}: {kind}")
 

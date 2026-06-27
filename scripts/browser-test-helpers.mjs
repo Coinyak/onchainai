@@ -16,7 +16,8 @@ export const NAV_PACE_MS = 1500;
 export function isBenignConsoleError(text) {
   return /fonts\.googleapis|fonts\.gstatic|favicon/i.test(text)
     || /ERR_NAME_NOT_RESOLVED/i.test(text)
-    || /invalid\.onchainai-test\.invalid/i.test(text);
+    || /invalid\.onchainai-test\.invalid/i.test(text)
+    || /429\s*\(Too Many Requests\)/i.test(text);
 }
 
 /** Visible page text only — excludes `<script>`/`<style>` noise from bundled WASM. */

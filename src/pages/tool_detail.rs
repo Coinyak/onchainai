@@ -1,4 +1,4 @@
-//! Tool detail page — full tool info via ToolDetailContent + comments.
+//! Tool detail page — trust facts, official links, comments.
 
 use crate::components::comments_section::CommentsSection;
 use crate::components::error_state::ErrorState;
@@ -6,18 +6,9 @@ use crate::components::site_shell::SiteShell;
 use crate::components::skeleton::ToolCardSkeleton;
 use crate::components::tool_detail_content::ToolDetailContent;
 use crate::components::tool_listing_actions::ToolListingActions;
-use crate::models::Tool;
-use crate::server::functions::get_tool_by_slug;
+use crate::server::functions::get_tool_trust_view;
 use leptos::prelude::*;
 use leptos_router::hooks::{use_params_map, use_query_map};
-
-async fn load_tool(slug: String) -> Result<Tool, ServerFnError> {
-    if slug.is_empty() {
-        Err(ServerFnError::new("missing slug"))
-    } else {
-        get_tool_by_slug(slug).await
-    }
-}
 
 #[component]
 pub fn ToolDetailPage() -> impl IntoView {
@@ -26,7 +17,6 @@ pub fn ToolDetailPage() -> impl IntoView {
     let slug = Memo::new(move |_| params.with(|p| p.get("slug").unwrap_or_default()));
     let retry = RwSignal::new(0u32);
 
-    // Build back link preserving filter query (spec: ← All Tools keeps ?function=bridge&sort=hot)
     let back_href = Memo::new(move |_| {
         query.with(|qm| {
             let mut parts: Vec<String> = Vec::new();
@@ -47,23 +37,35 @@ pub fn ToolDetailPage() -> impl IntoView {
         })
     });
 
-    let tool = Resource::new(
+    let trust_view = Resource::new(
         move || (slug.get(), retry.get()),
-        |(s, _)| async move { load_tool(s).await },
+        |(s, _)| async move {
+            if s.is_empty() {
+                Err(ServerFnError::new("missing slug"))
+            } else {
+                get_tool_trust_view(s).await
+            }
+        },
     );
 
     view! {
         <SiteShell>
             <div class="detail-page px-4 md:px-8 py-8 max-w-[800px]">
             <Suspense fallback=|| view! { <ToolCardSkeleton/> }>
-                {move || match tool.get() {
-                    Some(Ok(t)) => {
+                {move || match trust_view.get() {
+                    Some(Ok(view)) => {
                         let bh = back_href.get();
+                        let tool = view.tool.clone();
                         view! {
                             <a href=bh class="back-link">"← All Tools"</a>
-                            <ToolDetailContent tool=t.clone() compact=false/>
-                            <ToolListingActions tool=t.clone()/>
-                            <CommentsSection slug=slug tool_name=t.name.clone()/>
+                            <ToolDetailContent
+                                tool=tool.clone()
+                                compact=false
+                                trust_facts=view.trust_facts.clone()
+                                official_links=view.official_links.clone()
+                            />
+                            <ToolListingActions tool=tool.clone()/>
+                            <CommentsSection slug=slug tool_name=tool.name.clone()/>
                         }.into_any()
                     }
                     Some(Err(e)) => view! {

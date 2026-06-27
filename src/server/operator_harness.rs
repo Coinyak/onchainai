@@ -6,6 +6,11 @@
 use crate::auth::guard::{require_admin, AuthError};
 use crate::models::Tool;
 use crate::server::functions::{derive_claim_state, derive_lifecycle_state, review_queue_where};
+#[cfg(feature = "ssr")]
+use crate::server::review_persistence::{
+    complete_review_run, insert_review_entry, insert_review_run, load_tool_review_timeline,
+    InsertReviewEntryInput, InsertReviewRunInput,
+};
 use crate::server::secret_redaction::redact_secrets;
 use crate::AppState;
 use axum::{
@@ -662,6 +667,166 @@ pub async fn post_operator_run(
     };
 
     (StatusCode::OK, Json(response)).into_response()
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CreateReviewRunRequest {
+    pub tool_id: Uuid,
+    pub queue: Option<String>,
+    pub runner_name: String,
+    pub prompt_version: Option<String>,
+    pub snapshot_version: Option<String>,
+    pub complete: Option<bool>,
+    pub summary: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct AppendReviewEntryRequest {
+    pub review_run_id: Uuid,
+    pub role: String,
+    pub agent_label: Option<String>,
+    pub recommended_action: Option<String>,
+    pub confidence: Option<f32>,
+    pub rationale: Option<String>,
+    pub supporting_evidence_json: Option<serde_json::Value>,
+    pub dissent_json: Option<serde_json::Value>,
+    pub missing_proofs_json: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ReviewTimelineQuery {
+    pub tool_id: Uuid,
+}
+
+/// `POST /api/admin/operator/review-run` — persist an external agent review session.
+pub async fn post_create_review_run(
+    State(state): State<AppState>,
+    req: Request<axum::body::Body>,
+) -> Response {
+    let (admin_parts, body) = req.into_parts();
+    let admin = match require_admin(
+        &admin_parts,
+        &state.pool,
+        &state.config.jwt_secret,
+        &state.config.jwt_issuer(),
+    )
+    .await
+    {
+        Ok(a) => a,
+        Err(_) => return admin_denied_response(),
+    };
+
+    let body_bytes = match axum::body::to_bytes(body, 1024 * 64).await {
+        Ok(b) => b,
+        Err(_) => return (StatusCode::BAD_REQUEST, "invalid body").into_response(),
+    };
+    let run_req: CreateReviewRunRequest = match serde_json::from_slice(&body_bytes) {
+        Ok(r) => r,
+        Err(e) => return (StatusCode::BAD_REQUEST, format!("invalid json: {e}")).into_response(),
+    };
+
+    let snapshot_version = run_req
+        .snapshot_version
+        .unwrap_or_else(|| SCHEMA_VERSION.into());
+
+    let mut run = match insert_review_run(
+        &state.pool,
+        InsertReviewRunInput {
+            tool_id: run_req.tool_id,
+            queue: run_req.queue,
+            runner_name: run_req.runner_name,
+            prompt_version: run_req.prompt_version,
+            snapshot_version,
+            created_by: Some(admin.id),
+        },
+    )
+    .await
+    {
+        Ok(r) => r,
+        Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+    };
+
+    if run_req.complete.unwrap_or(false) {
+        run = match complete_review_run(&state.pool, run.id, run_req.summary, "completed").await {
+            Ok(r) => r,
+            Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+        };
+    }
+
+    (StatusCode::OK, Json(run)).into_response()
+}
+
+/// `POST /api/admin/operator/review-entry` — append agent review to a run.
+pub async fn post_append_review_entry(
+    State(state): State<AppState>,
+    req: Request<axum::body::Body>,
+) -> Response {
+    let (admin_parts, body) = req.into_parts();
+    if require_admin(
+        &admin_parts,
+        &state.pool,
+        &state.config.jwt_secret,
+        &state.config.jwt_issuer(),
+    )
+    .await
+    .is_err()
+    {
+        return admin_denied_response();
+    }
+
+    let body_bytes = match axum::body::to_bytes(body, 1024 * 64).await {
+        Ok(b) => b,
+        Err(_) => return (StatusCode::BAD_REQUEST, "invalid body").into_response(),
+    };
+    let entry_req: AppendReviewEntryRequest = match serde_json::from_slice(&body_bytes) {
+        Ok(r) => r,
+        Err(e) => return (StatusCode::BAD_REQUEST, format!("invalid json: {e}")).into_response(),
+    };
+
+    let entry = match insert_review_entry(
+        &state.pool,
+        InsertReviewEntryInput {
+            review_run_id: entry_req.review_run_id,
+            entry_type: "agent_review".into(),
+            role: entry_req.role,
+            agent_label: entry_req.agent_label,
+            recommended_action: entry_req.recommended_action,
+            confidence: entry_req.confidence,
+            rationale: entry_req.rationale,
+            supporting_evidence_json: entry_req
+                .supporting_evidence_json
+                .unwrap_or_else(|| serde_json::json!([])),
+            dissent_json: entry_req
+                .dissent_json
+                .unwrap_or_else(|| serde_json::json!([])),
+            missing_proofs_json: entry_req
+                .missing_proofs_json
+                .unwrap_or_else(|| serde_json::json!([])),
+        },
+    )
+    .await
+    {
+        Ok(e) => e,
+        Err(err) => return (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()).into_response(),
+    };
+
+    (StatusCode::OK, Json(entry)).into_response()
+}
+
+/// `GET /api/admin/operator/review-timeline?tool_id=...`
+pub async fn get_review_timeline(
+    State(state): State<AppState>,
+    Query(query): Query<ReviewTimelineQuery>,
+    req: Request<axum::body::Body>,
+) -> Response {
+    if require_harness_admin(&state, req).await.is_err() {
+        return admin_denied_response();
+    }
+
+    match load_tool_review_timeline(&state.pool, query.tool_id).await {
+        Ok(bundle) => (StatusCode::OK, Json(bundle)).into_response(),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+    }
 }
 
 #[cfg(test)]
