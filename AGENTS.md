@@ -93,6 +93,17 @@ Read before working on a feature:
 - Run `cargo clippy` and `cargo fmt --check` before committing.
 - Add/update tests for changed code, even if not asked.
 
+## Disk hygiene (ALL coding agents — Claude, Codex, Copilot, Grok, Cursor)
+
+Rust debug builds bloat `target/` fast. This is expected, not a bug. The repo is configured to control it — follow the routine so disk never fills mid-session, with zero human babysitting:
+
+- **Already automatic (no action):** `Cargo.toml` sets `[profile.dev] debug = "line-tables-only"` and strips dependency debug info, so `target/debug` grows far slower. Do not revert these.
+- **Before any heavy/release build, run the guard first:** `./scripts/disk-guard.sh`. It auto-cleans incremental caches when free disk `< 25GB` or `target/ > 35GB`, then re-checks. Thresholds: `ONCHAINAI_MIN_FREE_GB`, `ONCHAINAI_MAX_TARGET_GB`. Override stop with `ONCHAINAI_DISK_GUARD_FORCE=1`; disable auto-clean with `ONCHAINAI_DISK_GUARD_AUTOCLEAN=0`.
+- **Between work sessions / after a batch of builds:** `./scripts/clean-build-artifacts.sh --incremental-only` (fast — drops only `incremental/` caches, keeps compiled deps so the next build stays fast).
+- **Only when disk is tight:** `./scripts/clean-build-artifacts.sh` (full `cargo clean` + `/tmp` linker snapshots) or `cargo clean`. Reserve this — the first build after is a slow full recompile.
+- **Never** commit `target/`, `.playwright-cli/`, or any build artifact (already in `.gitignore`).
+- **macOS only:** linker failures dump multi-GB `/tmp/onchainai*.ld-snapshot`; the clean script removes them. See `docs/DISK_MAINTENANCE.md`.
+
 ## Testing
 
 - `cargo test`: Unit + integration tests

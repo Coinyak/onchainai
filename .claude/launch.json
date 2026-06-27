@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "onchainai",
+      "autoPort": false,
+      "runtimeExecutable": "/bin/sh",
+      "runtimeArgs": ["-c", "RUST_MIN_STACK=33554432 exec ./target/debug/onchainai"],
+      "port": 3000
+    }
+  ]
+}

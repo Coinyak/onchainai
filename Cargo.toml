@@ -72,6 +72,16 @@ hydrate = [
     "dep:web-sys",
 ]
 
+[profile.dev]
+# Disk control: full DWARF in debug builds is the main `target/debug` bloat
+# source. Keep line-number backtraces, drop the rest.
+debug = "line-tables-only"
+
+[profile.dev.package."*"]
+# Dependencies rarely need source-level debugging — strip their debug info
+# entirely (the bulk of the debug-artifact size).
+debug = false
+
 [profile.wasm-release]
 inherits = "release"
 opt-level = "z"

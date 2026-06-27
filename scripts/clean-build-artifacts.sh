@@ -6,10 +6,12 @@ cd "$ROOT"
 
 DRY_RUN=false
 PLAYWRIGHT_DAYS=""
+INCREMENTAL_ONLY=false
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --dry-run) DRY_RUN=true; shift ;;
+    --incremental-only) INCREMENTAL_ONLY=true; shift ;;
     --playwright-days) PLAYWRIGHT_DAYS="${2:?missing days}"; shift 2 ;;
     *) echo "Unknown arg: $1" >&2; exit 2 ;;
   esac
@@ -28,7 +30,26 @@ if [[ -L target ]]; then
   exit 1
 fi
 
-if [[ -d target ]]; then
+# Fast reclaim: drop only incremental-compilation caches (the bulk of the
+# accumulating bloat) and keep compiled deps so the next build stays fast.
+# Use this between work sessions; reserve full `cargo clean` for tight disk.
+if [[ "$INCREMENTAL_ONLY" == true ]]; then
+  INC_DIRS=()
+  for d in target/debug/incremental target/release/incremental; do
+    [[ -d "$d" ]] && INC_DIRS+=("$d")
+  done
+  if [[ ${#INC_DIRS[@]} -gt 0 ]]; then
+    if [[ "$DRY_RUN" == true ]]; then
+      du -sh "${INC_DIRS[@]}" 2>/dev/null || true
+      for d in "${INC_DIRS[@]}"; do echo "[dry-run] rm -rf $d"; done
+    else
+      rm -rf "${INC_DIRS[@]}"
+      echo "removed incremental cache: ${INC_DIRS[*]}"
+    fi
+  else
+    echo "no incremental caches to remove"
+  fi
+elif [[ -d target ]]; then
   run cargo clean
 fi
 
