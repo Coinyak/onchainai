@@ -17,6 +17,7 @@ Rust single binary: Leptos SSR + Axum + rmcp + sqlx + tokio-cron-scheduler.
 - `cargo leptos build --release`: Full build (SSR binary + WASM client bundle)
 - `cargo test --features ssr`: Run all tests
 - `cargo test --features ssr -- --nocapture`: Tests with stdout
+- `ONCHAINAI_REQUIRE_DB_TESTS=1 cargo test --features ssr --test review_tool_execution -- --nocapture`: Fail if review-tool DB integration tests skip
 - `cargo clippy --features ssr -- -W clippy::all`: Lint (must pass before commit)
 - `cargo fmt --check`: Format check
 - `sqlx migrate run`: Apply DB migrations (needs DATABASE_URL)
@@ -93,6 +94,13 @@ Read before working on a feature:
 - No emojis in UI text. Lucide SVG icons only.
 - All UI text in English (global audience)
 - Comments: minimal, only for non-obvious logic
+
+## Code Review
+
+- When asked for a review, prioritize bugs, regressions, missing tests, and security or data-loss risks.
+- Put findings first, ordered by severity, and include concrete file/line references when possible.
+- Keep summaries brief and secondary to the findings.
+- If no issues are found, say that explicitly and mention any residual risks or test gaps.
 
 ## Rules
 

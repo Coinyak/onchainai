@@ -9,6 +9,7 @@
 pub mod category;
 pub mod comment;
 pub mod featured;
+pub mod review;
 pub mod submission;
 pub mod tool;
 pub mod user;
@@ -21,6 +22,10 @@ pub use category::Category;
 pub use comment::{Bookmark, Comment, Upvote};
 #[allow(unused_imports)]
 pub use featured::FeaturedCard;
+#[allow(unused_imports)]
+pub use review::{
+    official_link_display_label, OperatorVerdict, ReviewEntry, ReviewRun, ToolOfficialLink,
+};
 #[allow(unused_imports)]
 pub use submission::{
     ToolClaimRequest, ToolReport, ToolSubmission, ToolSubmissionPayload, CLAIM_STATES,

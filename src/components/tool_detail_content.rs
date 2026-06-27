@@ -2,11 +2,15 @@
 
 use crate::chains::chain_tags_show_all;
 use crate::components::copy_button::CopyButton;
+use crate::components::official_links_list::OfficialLinksList;
 use crate::components::tool_logo::ToolLogo;
+use crate::components::tool_trust_facts::ToolTrustFacts;
 use crate::install_safety::{
     blocks_structured_config, claude_mcp_config, cursor_install_note, install_warning_text,
 };
 use crate::models::Tool;
+use crate::models::ToolOfficialLink;
+use crate::trust_verification::TrustFact;
 use leptos::prelude::*;
 
 fn badge_class(status: &str) -> &'static str {
@@ -27,39 +31,9 @@ fn risk_badge_class(risk: &str) -> &'static str {
     }
 }
 
-fn relevance_badge_class(status: &str) -> &'static str {
-    match status {
-        "accepted" => "badge badge-relevance-accepted",
-        "needs_review" => "badge badge-relevance-pending",
-        "rejected" => "badge badge-relevance-rejected",
-        _ => "badge badge-neutral",
-    }
-}
-
 fn format_short_date(at: Option<chrono::DateTime<chrono::Utc>>) -> String {
     at.map(|t| t.format("%Y-%m-%d").to_string())
         .unwrap_or_else(|| "—".into())
-}
-
-fn verification_evidence(tool: &Tool) -> Vec<String> {
-    let mut evidence = Vec::new();
-    evidence.extend(tool.crypto_relevance_reasons.clone());
-    evidence.extend(tool.install_risk_reasons.clone());
-    if tool.status == "verified" {
-        evidence.push("Verified badge issued by OnchainAI operators".into());
-    } else if tool.status == "official" {
-        evidence.push("Official badge issued by OnchainAI operators".into());
-    }
-    if let Some(at) = tool.last_reviewed_at {
-        evidence.push(format!("Operator review on {}", at.format("%Y-%m-%d")));
-    }
-    if tool.requires_secret {
-        evidence.push("Install requires API key or secret environment variable".into());
-    }
-    if let Some(team) = &tool.official_team {
-        evidence.push(format!("Official team: {team}"));
-    }
-    evidence
 }
 
 fn display_install_command(tool: &Tool) -> String {
@@ -114,6 +88,8 @@ pub fn ToolDetailContent(
     tool: Tool,
     #[prop(optional)] compact: bool,
     #[prop(optional)] full_page_href: Option<String>,
+    #[prop(optional)] trust_facts: Vec<TrustFact>,
+    #[prop(optional)] official_links: Vec<ToolOfficialLink>,
 ) -> impl IntoView {
     let install = display_install_command(&tool);
     let desc = tool
@@ -139,7 +115,6 @@ pub fn ToolDetailContent(
 
     let last_commit = format_short_date(tool.last_commit_at);
     let last_crawl = format_short_date(Some(tool.updated_at));
-    let evidence = verification_evidence(&tool);
     let x402_notice = x402_payment_notice(&tool);
     let referral_notice = referral_disclosure(&tool);
     let x402_verification = x402_verification_notice(&tool).to_string();
@@ -175,6 +150,8 @@ pub fn ToolDetailContent(
                 </div>
             </header>
             <p class="detail-desc">{desc}</p>
+            <ToolTrustFacts facts=trust_facts.clone()/>
+            <OfficialLinksList links=official_links.clone()/>
             {if x402_notice.is_some() || referral_notice.is_some() {
                 view! {
                     <section class="x402-notice">
@@ -337,34 +314,20 @@ pub fn ToolDetailContent(
                 </ul>
             </section>
             <section class="trust-section">
-                <h3 class="install-heading">"Trust"</h3>
+                <h3 class="install-heading">"Activity and safety"</h3>
                 <ul class="trust-list">
-                    <li>"✓ Source: "{tool.source.clone()}</li>
-                    <li>"✓ Last crawl: "{last_crawl.clone()}</li>
-                    <li>"✓ Last commit: "{last_commit.clone()}</li>
+                    <li>{"Source: "}{tool.source.clone()}</li>
+                    <li>{"Last crawl: "}{last_crawl.clone()}</li>
+                    <li>{"Last commit: "}{last_commit.clone()}</li>
                     <li>
-                        "✓ Relevance status: "
-                        <span class=relevance_badge_class(&tool.relevance_status)>
-                            {tool.relevance_status.clone()}
-                        </span>
-                        {" ("}{tool.crypto_relevance_score}{" score)"}
-                    </li>
-                    <li>
-                        "✓ Install risk: "
+                        "Install risk: "
                         <span class=risk_badge_class(&risk_level)>{risk_level.clone()}</span>
                     </li>
-                    <li class="trust-evidence-item">
-                        "✓ Verification evidence:"
-                        {if evidence.is_empty() {
-                            view! { <span class="trust-evidence-empty">" No automated evidence recorded yet."</span> }.into_any()
-                        } else {
-                            view! {
-                                <ul class="trust-evidence-list">
-                                    {evidence.into_iter().map(|line| view! { <li>{line}</li> }).collect_view()}
-                                </ul>
-                            }.into_any()
-                        }}
-                    </li>
+                    {if tool.claim_state == "claimed" {
+                        view! { <li>"Claimed by team"</li> }.into_any()
+                    } else {
+                        ().into_any()
+                    }}
                     <li>
                         <a href="#listing-actions" class="trust-report-link">"Report listing"</a>
                     </li>
@@ -463,19 +426,6 @@ mod tests {
         let tool = tool_with_install("sh -c 'npx foo'", "high");
         assert!(blocks_structured_config(&tool.install_risk_level));
         assert!(claude_mcp_config(&tool.slug, "sh -c 'npx foo'", "high").is_none());
-    }
-
-    #[test]
-    fn verification_evidence_collects_review_signals() {
-        let mut tool = tool_with_install("npm i @safe/pkg", "low");
-        tool.crypto_relevance_reasons = vec!["repo topic crypto-mcp".into()];
-        tool.install_risk_reasons = vec!["requires API key".into()];
-        tool.status = "verified".into();
-        tool.last_reviewed_at = Some(chrono::Utc::now());
-        let evidence = verification_evidence(&tool);
-        assert!(evidence.iter().any(|e| e.contains("crypto-mcp")));
-        assert!(evidence.iter().any(|e| e.contains("Verified badge")));
-        assert!(evidence.iter().any(|e| e.contains("Operator review")));
     }
 
     #[test]

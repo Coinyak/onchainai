@@ -5,6 +5,8 @@ import path from "node:path";
 import {
   clearSidebarStorage,
   isBenignConsoleError,
+  NAV_PACE_MS,
+  sleep,
   visiblePageText,
   waitForToolCards,
 } from "./browser-test-helpers.mjs";
@@ -79,6 +81,19 @@ const routes = [
     path: "/tools?function=bridge&type=mcp",
     waitForCards: false,
   },
+  { name: "submit", path: "/submit", waitForCards: false },
+  {
+    name: "submit-claim",
+    path: "/submit",
+    waitForCards: false,
+    async postNavigate(pg) {
+      const claimBtn = pg.getByRole("button", { name: "Claim this tool" });
+      await claimBtn.waitFor({ state: "visible", timeout: 15000 });
+      await claimBtn.click();
+      await pg.waitForTimeout(300);
+    },
+  },
+  { name: "admin-tools", path: "/admin/tools", waitForCards: false },
 ];
 
 const consoleErrors = [];
@@ -125,6 +140,10 @@ try {
     const url = req.url();
     if (!url.startsWith(base)) return;
     const failure = req.failure()?.errorText ?? "";
+    // WASM often aborts during reload/navigation before hydration completes.
+    if (url.includes("/pkg/") && /ERR_ABORTED/i.test(failure)) {
+      return;
+    }
     errors.push(`requestfailed:${url}:${failure}`);
   });
 
@@ -133,10 +152,15 @@ try {
 
     for (const route of routes) {
       try {
+        await sleep(NAV_PACE_MS);
         await page.goto(`${base}${route.path}`, { waitUntil: "domcontentloaded" });
         await clearSidebarStorage(page);
         await page.reload({ waitUntil: "networkidle" });
         await stabilizePage();
+
+        if (route.postNavigate) {
+          await route.postNavigate(page);
+        }
 
         if (route.waitForCards) {
           await waitForToolCards(page).catch(() => {

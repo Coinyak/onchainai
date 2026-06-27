@@ -11,8 +11,12 @@
 use crate::auth::session::{optional_session_result, SessionUser};
 use crate::models::tool::{sanitize_tool_for_public_response, sanitize_tools_for_public_response};
 use crate::models::{
-    sanitize_site_settings_for_public, Category, Comment, FeaturedCard, SiteSettings, Source, Tool,
-    ToolClaimRequest, ToolReport, ToolSubmission, ToolSubmissionPayload, TOOL_REPORT_REASONS,
+    sanitize_site_settings_for_public, Category, Comment, FeaturedCard, OperatorVerdict,
+    ReviewEntry, ReviewRun, SiteSettings, Source, Tool, ToolClaimRequest, ToolOfficialLink,
+    ToolReport, ToolSubmission, ToolSubmissionPayload, TOOL_REPORT_REASONS,
+};
+use crate::trust_verification::{
+    official_promotion_allowed, verify_tool_trust, TrustFact, TrustVerificationResult,
 };
 use leptos::prelude::*;
 use std::collections::HashMap;
@@ -33,12 +37,24 @@ use crate::crawler::{self, default_source_registry_url};
 #[cfg(feature = "ssr")]
 use crate::install_safety::assess_install;
 #[cfg(feature = "ssr")]
+use crate::server::operator_review_transition::{
+    plan_operator_review, validate_review_approval_gate, OperatorReviewGate,
+};
+#[cfg(feature = "ssr")]
 use crate::server::queries::TOOLS_APPROVED_WHERE;
 #[cfg(feature = "ssr")]
 use crate::server::rate_limit::{check_user_rate_limit, UserRateLimitAction};
+#[cfg(feature = "ssr")]
+use crate::server::review_persistence::{
+    apply_operator_review_in_tx, compute_tool_trust, insert_candidate_official_link,
+    list_official_links, list_public_official_links, load_tool_review_timeline,
+    validate_mark_official_gate, verify_official_link, LegacyReviewEventInput,
+    VerifyOfficialLinkInput,
+};
 use crate::server::secret_redaction::redact_secrets;
 #[cfg(feature = "ssr")]
 use crate::server::secret_redaction::redact_tool_for_admin;
+use crate::workbench::{build_summary_cards, WorkbenchSummaryCard};
 #[cfg(feature = "ssr")]
 use axum::http::request::Parts;
 
@@ -1153,34 +1169,10 @@ pub(crate) fn tool_has_trustworthy_url(tool: &Tool) -> bool {
         || valid_url(&tool.mcp_endpoint)
 }
 
-/// Override reason is required when approving despite rejected relevance or critical install risk.
-pub(crate) fn review_override_required(tool: &Tool) -> bool {
-    tool.relevance_status == "rejected" || tool.install_risk_level == "critical"
-}
-
-/// Validate approval gates without touching the database.
-pub(crate) fn validate_review_approval_gate(
-    tool: &Tool,
-    override_reason: Option<&str>,
-) -> Result<(), &'static str> {
-    if !tool_has_trustworthy_url(tool) {
-        return Err("approval requires a repo, homepage, npm package, or MCP endpoint");
-    }
-    if review_override_required(tool) {
-        if override_reason.map(str::trim).is_none_or(str::is_empty) {
-            return Err("override reason required when overriding rejected relevance or critical install risk");
-        }
-        return Ok(());
-    }
-    if tool.relevance_status == "needs_review" {
-        // Human approval in admin review implies relevance acceptance.
-        return Ok(());
-    }
-    if tool.relevance_status != "accepted" {
-        return Err("approval requires relevance status accepted");
-    }
-    Ok(())
-}
+#[cfg(feature = "ssr")]
+pub use crate::server::operator_review_transition::{
+    review_audit_statuses, review_override_required,
+};
 
 /// Validate review action inputs without touching the database.
 pub(crate) fn validate_review_action(action: &str, reason: &str) -> Result<(), &'static str> {
@@ -1214,24 +1206,6 @@ pub(crate) fn validate_review_action(action: &str, reason: &str) -> Result<(), &
     Ok(())
 }
 
-/// Audit before/after labels for review events.
-pub(crate) fn review_audit_statuses(tool: &Tool, action: &str) -> (String, String) {
-    match action {
-        "mark_verified" => (tool.status.clone(), "verified".into()),
-        "mark_official" => (tool.status.clone(), "official".into()),
-        "quarantine" => (
-            if tool.quarantined_at.is_some() {
-                "quarantined".into()
-            } else {
-                "active".into()
-            },
-            "quarantined".into(),
-        ),
-        "needs_info" => (tool.approval_status.clone(), "needs_info".into()),
-        other => (tool.approval_status.clone(), other.to_string()),
-    }
-}
-
 /// Validate admin approval inputs without touching the database.
 pub(crate) fn validate_set_tool_approval_input(
     status: &str,
@@ -1248,16 +1222,81 @@ pub(crate) fn validate_set_tool_approval_input(
     )
 }
 
-/// Gated tool review — enforces publication gates, writes audit event, updates tool.
-#[server(ReviewTool, "/api")]
-pub async fn review_tool(payload: ReviewToolPayload) -> Result<(), ServerFnError> {
-    if let Err(msg) = validate_review_action(&payload.action, &payload.reason) {
-        return Err(ServerFnError::new(msg.to_string()));
+/// Core `review_tool` execution inside an open transaction (crate-internal; use `run_review_tool`).
+#[cfg(feature = "ssr")]
+pub(crate) async fn execute_review_tool_in_tx(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    admin_id: uuid::Uuid,
+    tool: &Tool,
+    payload: &ReviewToolPayload,
+) -> Result<(), ServerFnError> {
+    if let Some(expected) = payload.expected_updated_at {
+        if tool.updated_at != expected {
+            return Err(ServerFnError::new(
+                "tool was modified by another session; refresh and retry",
+            ));
+        }
     }
 
-    let (parts, pool, jwt_secret, issuer) = request_context()?;
-    let admin = require_admin(&parts, &pool, &jwt_secret, &issuer).await?;
+    let effect = plan_operator_review(
+        tool,
+        &payload.action,
+        payload.reason.trim(),
+        payload.snapshot_id,
+    );
 
+    match effect.gate {
+        OperatorReviewGate::PublicationApproval => {
+            if let Err(msg) =
+                validate_review_approval_gate(tool, payload.override_reason.as_deref())
+            {
+                return Err(ServerFnError::new(msg.to_string()));
+            }
+        }
+        OperatorReviewGate::MarkOfficial => {
+            let links = sqlx::query_as::<_, ToolOfficialLink>(
+                "SELECT * FROM tool_official_links WHERE tool_id = $1 ORDER BY link_type, created_at",
+            )
+            .bind(tool.id)
+            .fetch_all(&mut **tx)
+            .await
+            .map_err(|e| ServerFnError::new(format!("failed to load official links: {e}")))?;
+            if let Err(msg) = validate_mark_official_gate(tool, &links) {
+                return Err(ServerFnError::new(msg.to_string()));
+            }
+        }
+        OperatorReviewGate::None => {}
+    }
+
+    apply_operator_review_in_tx(
+        tx,
+        admin_id,
+        &payload.slug,
+        &effect,
+        &LegacyReviewEventInput {
+            admin_id,
+            action: payload.action.clone(),
+            reason: payload.reason.clone(),
+            override_reason: payload.override_reason.clone(),
+            before_status: effect.legacy_audit_before.clone(),
+            after_status: effect.legacy_audit_after.clone(),
+            snapshot_id: payload.snapshot_id,
+            recommendation_id: payload.recommendation_id,
+        },
+        payload.snapshot_id,
+    )
+    .await?;
+
+    Ok(())
+}
+
+/// Post-auth `review_tool` body — load tool, plan, gate, persist, commit.
+#[cfg(feature = "ssr")]
+pub async fn run_review_tool(
+    pool: &sqlx::PgPool,
+    admin_id: uuid::Uuid,
+    payload: &ReviewToolPayload,
+) -> Result<(), ServerFnError> {
     let mut tx = pool
         .begin()
         .await
@@ -1270,150 +1309,28 @@ pub async fn review_tool(payload: ReviewToolPayload) -> Result<(), ServerFnError
         .map_err(|e| ServerFnError::new(format!("failed to load tool: {e}")))?
         .ok_or_else(|| ServerFnError::new(format!("tool not found: {}", payload.slug)))?;
 
-    if let Some(expected) = payload.expected_updated_at {
-        if tool.updated_at != expected {
-            return Err(ServerFnError::new(
-                "tool was modified by another session; refresh and retry",
-            ));
-        }
-    }
-
-    if payload.action == "approved" {
-        if let Err(msg) = validate_review_approval_gate(&tool, payload.override_reason.as_deref()) {
-            return Err(ServerFnError::new(msg.to_string()));
-        }
-    }
-
-    let (before_status, after_status) = review_audit_statuses(&tool, &payload.action);
-    let rejection_reason = if payload.action == "rejected" {
-        Some(payload.reason.trim().to_string())
-    } else {
-        None
-    };
-
-    let new_relevance = if payload.action == "approved"
-        && (tool.relevance_status == "needs_review" || review_override_required(&tool))
-    {
-        "accepted"
-    } else {
-        tool.relevance_status.as_str()
-    };
-
-    sqlx::query(
-        r#"
-        INSERT INTO tool_review_events (
-            tool_id, admin_id, action, reason, override_reason,
-            before_status, after_status, snapshot_id, recommendation_id
-        )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-        "#,
-    )
-    .bind(tool.id)
-    .bind(admin.id)
-    .bind(&payload.action)
-    .bind(payload.reason.trim())
-    .bind(payload.override_reason.as_deref().map(str::trim))
-    .bind(&before_status)
-    .bind(&after_status)
-    .bind(payload.snapshot_id)
-    .bind(payload.recommendation_id)
-    .execute(&mut *tx)
-    .await
-    .map_err(|e| ServerFnError::new(format!("failed to write review event: {e}")))?;
-
-    let result = match payload.action.as_str() {
-        "approved" | "rejected" | "pending" => {
-            sqlx::query(
-                r#"
-                UPDATE tools
-                SET approval_status = $1,
-                    rejection_reason = $2,
-                    relevance_status = $3,
-                    last_reviewed_at = now(),
-                    updated_at = now()
-                WHERE slug = $4
-                "#,
-            )
-            .bind(&payload.action)
-            .bind(&rejection_reason)
-            .bind(new_relevance)
-            .bind(&payload.slug)
-            .execute(&mut *tx)
-            .await
-        }
-        "needs_info" => {
-            sqlx::query(
-                r#"
-                UPDATE tools
-                SET approval_status = 'pending',
-                    rejection_reason = NULL,
-                    last_reviewed_at = now(),
-                    updated_at = now()
-                WHERE slug = $1
-                "#,
-            )
-            .bind(&payload.slug)
-            .execute(&mut *tx)
-            .await
-        }
-        "quarantine" => {
-            sqlx::query(
-                r#"
-                UPDATE tools
-                SET quarantined_at = now(),
-                    last_reviewed_at = now(),
-                    updated_at = now()
-                WHERE slug = $1
-                "#,
-            )
-            .bind(&payload.slug)
-            .execute(&mut *tx)
-            .await
-        }
-        "mark_verified" => {
-            sqlx::query(
-                r#"
-                UPDATE tools
-                SET status = 'verified',
-                    last_reviewed_at = now(),
-                    updated_at = now()
-                WHERE slug = $1
-                "#,
-            )
-            .bind(&payload.slug)
-            .execute(&mut *tx)
-            .await
-        }
-        "mark_official" => {
-            sqlx::query(
-                r#"
-                UPDATE tools
-                SET status = 'official',
-                    last_reviewed_at = now(),
-                    updated_at = now()
-                WHERE slug = $1
-                "#,
-            )
-            .bind(&payload.slug)
-            .execute(&mut *tx)
-            .await
-        }
-        _ => unreachable!("validated above"),
-    }
-    .map_err(|e| ServerFnError::new(format!("failed to update tool: {e}")))?;
-
-    if result.rows_affected() == 0 {
-        return Err(ServerFnError::new(format!(
-            "tool not found: {}",
-            payload.slug
-        )));
-    }
+    execute_review_tool_in_tx(&mut tx, admin_id, &tool, payload).await?;
 
     tx.commit()
         .await
         .map_err(|e| ServerFnError::new(format!("failed to commit review: {e}")))?;
 
     Ok(())
+}
+
+/// Gated tool review — enforces publication gates, writes audit event, updates tool.
+///
+/// Shipped path: `validate_review_action` → `require_admin` → `run_review_tool`.
+#[server(ReviewTool, "/api")]
+pub async fn review_tool(payload: ReviewToolPayload) -> Result<(), ServerFnError> {
+    if let Err(msg) = validate_review_action(&payload.action, &payload.reason) {
+        return Err(ServerFnError::new(msg.to_string()));
+    }
+
+    let (parts, pool, jwt_secret, issuer) = request_context()?;
+    let admin = require_admin(&parts, &pool, &jwt_secret, &issuer).await?;
+
+    run_review_tool(&pool, admin.id, &payload).await
 }
 
 /// Approve or reject a tool by slug — legacy wrapper around gated `review_tool`.
@@ -2949,12 +2866,53 @@ pub struct ReportToolInput {
     pub details: Option<String>,
 }
 
-/// Payload for requesting project claim (skeleton).
+/// Payload for requesting project claim with proof-oriented fields.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ClaimToolInput {
     pub slug: String,
     pub verification_note: String,
     pub contact_email: Option<String>,
+    pub team_name: Option<String>,
+    pub github_url: Option<String>,
+    pub website_url: Option<String>,
+    pub x_url: Option<String>,
+    pub proof_links: Vec<String>,
+}
+
+/// Public trust view for tool detail — facts only, no raw scores.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ToolTrustView {
+    pub tool: Tool,
+    pub official_links: Vec<ToolOfficialLink>,
+    pub trust_facts: Vec<TrustFact>,
+}
+
+/// Operator workbench bundle for a selected tool.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct AdminToolWorkbenchView {
+    pub tool: Tool,
+    pub official_links: Vec<ToolOfficialLink>,
+    pub trust: TrustVerificationResult,
+    pub timeline: Vec<ReviewEntry>,
+    pub verdicts: Vec<OperatorVerdict>,
+    pub official_promotion_allowed: bool,
+}
+
+/// Workbench summary counts for top promotion rail.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct AdminWorkbenchSummary {
+    pub cards: Vec<WorkbenchSummaryCard>,
+}
+
+/// Payload to verify an official link independently.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct VerifyOfficialLinkPayload {
+    pub link_id: uuid::Uuid,
+    pub verification_status: String,
+    pub evidence_strength: String,
+    pub official_badge_allowed: bool,
+    pub verification_method: Option<String>,
+    pub notes: Option<String>,
 }
 
 /// Scanned intake metadata attached to a submission row.
@@ -3138,13 +3096,36 @@ pub(crate) fn validate_report_details(details: Option<&str>) -> Result<(), &'sta
     Ok(())
 }
 
-/// Validate claim request input.
+/// Validate optional proof URLs for claim flow.
+pub(crate) fn validate_claim_proof_urls(urls: &[String]) -> Result<(), &'static str> {
+    for url in urls {
+        let trimmed = url.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        if !trimmed.starts_with("https://")
+            && !trimmed.starts_with("http://localhost")
+            && !trimmed.starts_with("http://127.0.0.1")
+        {
+            return Err("proof links must use https:// (http://localhost allowed in dev)");
+        }
+        if trimmed.len() > 500 {
+            return Err("proof link must be at most 500 characters");
+        }
+    }
+    Ok(())
+}
+
+/// Validate claim request input with proof-oriented fields.
 pub(crate) fn validate_claim_tool_input(input: &ClaimToolInput) -> Result<(), &'static str> {
     let slug = input.slug.trim();
     if slug.is_empty() || slug.len() > 120 {
         return Err("tool slug is required");
     }
     let note = input.verification_note.trim();
+    if note.is_empty() {
+        return Err("verification note is required for claim requests");
+    }
     if note.len() < 20 || note.len() > 2000 {
         return Err("verification note must be 20–2000 characters");
     }
@@ -3158,7 +3139,149 @@ pub(crate) fn validate_claim_tool_input(input: &ClaimToolInput) -> Result<(), &'
             return Err("contact email is invalid");
         }
     }
+    if let Some(team) = input
+        .team_name
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        if team.len() > 200 {
+            return Err("team name must be at most 200 characters");
+        }
+    }
+    validate_optional_https_url(input.github_url.as_deref())?;
+    validate_optional_https_url(input.website_url.as_deref())?;
+    validate_optional_https_url(input.x_url.as_deref())?;
+    validate_claim_proof_urls(&input.proof_links)?;
     Ok(())
+}
+
+/// Public trust view — explainable facts without raw trust score.
+#[server(GetToolTrustView, "/api")]
+pub async fn get_tool_trust_view(slug: String) -> Result<ToolTrustView, ServerFnError> {
+    let pool = use_context::<sqlx::PgPool>()
+        .ok_or_else(|| ServerFnError::new("database pool not available"))?;
+
+    let tool = sqlx::query_as::<_, Tool>(&format!(
+        "SELECT * FROM tools WHERE slug = $1 AND {TOOLS_APPROVED_WHERE}"
+    ))
+    .bind(slug.trim())
+    .fetch_one(&pool)
+    .await
+    .map_err(|e| ServerFnError::new(format!("failed to load tool trust view: {e}")))?;
+
+    let official_links = list_public_official_links(&pool, tool.id).await?;
+    let trust = verify_tool_trust(&tool, &official_links);
+
+    Ok(ToolTrustView {
+        tool: sanitize_tool_for_public_response(tool),
+        official_links,
+        trust_facts: trust.trust_facts,
+    })
+}
+
+/// Admin workbench summary counts for top promotion rail.
+#[server(GetAdminWorkbenchSummary, "/api")]
+pub async fn get_admin_workbench_summary() -> Result<AdminWorkbenchSummary, ServerFnError> {
+    let (parts, pool, jwt_secret, issuer) = request_context()?;
+    require_admin(&parts, &pool, &jwt_secret, &issuer).await?;
+
+    let counts = sqlx::query_as::<_, (i64, i64, i64, i64)>(
+        r#"
+        SELECT
+          COUNT(*) FILTER (
+            WHERE approval_status = 'pending'
+              AND last_reviewed_at IS NULL
+              AND quarantined_at IS NULL
+          )::bigint,
+          COUNT(*) FILTER (
+            WHERE claim_state = 'claim_pending' AND quarantined_at IS NULL
+          )::bigint,
+          COUNT(*) FILTER (
+            WHERE approval_status = 'approved'
+              AND status = 'community'
+              AND claim_state = 'claimed'
+              AND quarantined_at IS NULL
+          )::bigint,
+          (SELECT COUNT(*)::bigint
+             FROM tools t
+            WHERE t.approval_status = 'approved'
+              AND t.quarantined_at IS NULL
+              AND t.status IN ('verified', 'official')
+              AND NOT EXISTS (
+                SELECT 1 FROM featured_cards fc
+                WHERE fc.tool_id = t.id AND fc.is_active = true
+              ))
+        FROM tools
+        "#,
+    )
+    .fetch_one(&pool)
+    .await
+    .map_err(|e| ServerFnError::new(format!("failed to load workbench summary: {e}")))?;
+
+    Ok(AdminWorkbenchSummary {
+        cards: build_summary_cards(counts.0, counts.1, counts.2, counts.3),
+    })
+}
+
+/// Admin workbench detail for one selected tool.
+#[server(GetAdminToolWorkbench, "/api")]
+pub async fn get_admin_tool_workbench(
+    slug: String,
+) -> Result<AdminToolWorkbenchView, ServerFnError> {
+    let (parts, pool, jwt_secret, issuer) = request_context()?;
+    require_admin(&parts, &pool, &jwt_secret, &issuer).await?;
+
+    let tool = sqlx::query_as::<_, Tool>("SELECT * FROM tools WHERE slug = $1")
+        .bind(slug.trim())
+        .fetch_one(&pool)
+        .await
+        .map_err(|e| ServerFnError::new(format!("failed to load tool workbench: {e}")))?;
+
+    let (trust, official_links) = compute_tool_trust(&pool, &tool).await?;
+    let review_timeline = load_tool_review_timeline(&pool, tool.id).await?;
+    let promotion_ok = official_promotion_allowed(&tool, &official_links, &trust);
+
+    Ok(AdminToolWorkbenchView {
+        tool: redact_tool_for_admin(tool),
+        official_links,
+        trust,
+        timeline: review_timeline.entries,
+        verdicts: review_timeline.operator_verdicts,
+        official_promotion_allowed: promotion_ok,
+    })
+}
+
+/// Verify an official link independently (admin only).
+#[server(VerifyToolOfficialLink, "/api")]
+pub async fn verify_tool_official_link(
+    payload: VerifyOfficialLinkPayload,
+) -> Result<ToolOfficialLink, ServerFnError> {
+    let (parts, pool, jwt_secret, issuer) = request_context()?;
+    let admin = require_admin(&parts, &pool, &jwt_secret, &issuer).await?;
+
+    const STATUSES: &[&str] = &["candidate", "claimed", "verified", "rejected"];
+    const STRENGTHS: &[&str] = &["weak", "medium", "strong"];
+    if !STATUSES.contains(&payload.verification_status.as_str()) {
+        return Err(ServerFnError::new("invalid verification status"));
+    }
+    if !STRENGTHS.contains(&payload.evidence_strength.as_str()) {
+        return Err(ServerFnError::new("invalid evidence strength"));
+    }
+
+    verify_official_link(
+        &pool,
+        VerifyOfficialLinkInput {
+            link_id: payload.link_id,
+            verification_status: payload.verification_status,
+            evidence_strength: payload.evidence_strength,
+            official_badge_allowed: payload.official_badge_allowed,
+            verification_method: payload.verification_method,
+            notes: payload.notes,
+            operator_id: admin.id,
+        },
+    )
+    .await
 }
 
 /// Submit a tool suggestion for operator review (authenticated, never directly public).
@@ -3391,6 +3514,26 @@ pub async fn request_tool_claim(input: ClaimToolInput) -> Result<ToolClaimReques
         .await
         .map_err(|e| ServerFnError::new(format!("transaction failed: {e}")))?;
 
+    let mut proof_note = input.verification_note.trim().to_string();
+    if !input.proof_links.is_empty() {
+        let links = input
+            .proof_links
+            .iter()
+            .map(|u| u.trim())
+            .filter(|u| !u.is_empty())
+            .collect::<Vec<_>>()
+            .join("\n");
+        proof_note = format!("{proof_note}\n\nProof links:\n{links}");
+    }
+    if let Some(team) = input
+        .team_name
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        proof_note = format!("Team: {team}\n{proof_note}");
+    }
+
     let claim = sqlx::query_as::<_, ToolClaimRequest>(
         r#"
         INSERT INTO tool_claim_requests (tool_id, requested_by, verification_note, contact_email, status)
@@ -3400,11 +3543,52 @@ pub async fn request_tool_claim(input: ClaimToolInput) -> Result<ToolClaimReques
     )
     .bind(tool.id)
     .bind(user.id)
-    .bind(input.verification_note.trim())
+    .bind(&proof_note)
     .bind(contact_email)
     .fetch_one(&mut *tx)
     .await
     .map_err(|e| ServerFnError::new(format!("failed to save claim request: {e}")))?;
+
+    if let Some(url) = input
+        .github_url
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        insert_candidate_official_link(
+            &mut tx,
+            tool.id,
+            "github",
+            url,
+            "Claimed GitHub",
+            "claim:github",
+        )
+        .await?;
+    }
+    if let Some(url) = input
+        .website_url
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        insert_candidate_official_link(
+            &mut tx,
+            tool.id,
+            "website",
+            url,
+            "Claimed Website",
+            "claim:website",
+        )
+        .await?;
+    }
+    if let Some(url) = input
+        .x_url
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        insert_candidate_official_link(&mut tx, tool.id, "x", url, "Claimed X", "claim:x").await?;
+    }
 
     sqlx::query("UPDATE tools SET claim_state = 'claim_pending', updated_at = now() WHERE id = $1")
         .bind(tool.id)
@@ -3796,14 +3980,48 @@ mod tests {
             slug: "bridge-mcp".into(),
             verification_note: "I maintain this repo and can verify via DNS TXT.".into(),
             contact_email: Some("team@example.com".into()),
+            team_name: None,
+            github_url: None,
+            website_url: None,
+            x_url: None,
+            proof_links: vec![],
         })
         .is_ok());
         assert!(validate_claim_tool_input(&ClaimToolInput {
             slug: "bridge-mcp".into(),
             verification_note: "short".into(),
             contact_email: None,
+            team_name: None,
+            github_url: None,
+            website_url: None,
+            x_url: None,
+            proof_links: vec![],
         })
         .is_err());
+    }
+
+    #[test]
+    fn validate_claim_tool_input_requires_verification_note() {
+        let input = ClaimToolInput {
+            slug: "bob-gateway-cli".into(),
+            contact_email: Some("team@gobob.xyz".into()),
+            verification_note: "".into(),
+            team_name: None,
+            github_url: None,
+            website_url: None,
+            x_url: None,
+            proof_links: vec![],
+        };
+        let err =
+            validate_claim_tool_input(&input).expect_err("empty verification note should fail");
+        assert!(err.contains("verification note"));
+    }
+
+    #[test]
+    fn validate_claim_proof_urls_reject_non_http_links() {
+        let urls = vec!["javascript:alert(1)".to_string()];
+        let err = validate_claim_proof_urls(&urls).expect_err("unsafe links should fail");
+        assert!(err.contains("https"));
     }
 
     #[test]
@@ -3828,6 +4046,10 @@ mod tests {
         assert_eq!(
             review_audit_statuses(&tool, "mark_verified"),
             ("community".into(), "verified".into())
+        );
+        assert_eq!(
+            review_audit_statuses(&tool, "mark_official"),
+            ("community".into(), "official".into())
         );
         assert_eq!(
             review_audit_statuses(&tool, "needs_info"),

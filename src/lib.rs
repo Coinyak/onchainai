@@ -15,6 +15,8 @@ pub mod install_safety;
 pub mod models;
 pub mod pages;
 pub mod server;
+pub mod trust_verification;
+pub mod workbench;
 
 pub use config::{Config, CANONICAL_DOMAIN, MCP_ENDPOINT_CMD, SITE_ORIGIN};
 
@@ -226,6 +228,18 @@ pub fn build_app(pool: sqlx::PgPool, config: Config) -> axum::Router {
         .route(
             "/api/admin/operator/run",
             axum::routing::post(server::operator_harness::post_operator_run),
+        )
+        .route(
+            "/api/admin/operator/review-run",
+            axum::routing::post(server::operator_harness::post_create_review_run),
+        )
+        .route(
+            "/api/admin/operator/review-entry",
+            axum::routing::post(server::operator_harness::post_append_review_entry),
+        )
+        .route(
+            "/api/admin/operator/review-timeline",
+            axum::routing::get(server::operator_harness::get_review_timeline),
         )
         .leptos_routes_with_context(&state, routes, provide_leptos_context, move || {
             app::shell(leptos_options_for_handler.clone())

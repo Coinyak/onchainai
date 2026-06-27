@@ -200,6 +200,11 @@ pub fn ToolListingActions(tool: Tool) -> impl IntoView {
                                                     slug: slug_claim,
                                                     verification_note: note,
                                                     contact_email: if email.trim().is_empty() { None } else { Some(email) },
+                                                    team_name: None,
+                                                    github_url: None,
+                                                    website_url: None,
+                                                    x_url: None,
+                                                    proof_links: vec![],
                                                 };
                                                 match request_tool_claim(input).await {
                                                     Ok(_) => {

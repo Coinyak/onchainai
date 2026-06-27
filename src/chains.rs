@@ -472,7 +472,10 @@ mod tests {
         let registered = bob_gateway_all_chains();
         assert!(registered.len() >= 11, "BOB supports 11+ chains");
 
-        println!("=== resolve_chain (full bob-gateway-cli chains, n={}) ===", registered.len());
+        println!(
+            "=== resolve_chain (full bob-gateway-cli chains, n={}) ===",
+            registered.len()
+        );
         let mut catalog_hits = 0usize;
         let mut pill_hits = 0usize;
         for raw in &registered {
@@ -513,17 +516,17 @@ mod tests {
         println!("visible_count={} overflow={}", visible.len(), overflow);
         for tag in &visible {
             match tag.meta {
-                Some(m) => println!(
-                    "  tag raw={} catalog_id={} logo={}",
-                    tag.raw, m.id, m.logo
-                ),
+                Some(m) => println!("  tag raw={} catalog_id={} logo={}", tag.raw, m.id, m.logo),
                 None => println!("  tag raw={} catalog_id=NONE (fallback pill)", tag.raw),
             }
         }
 
         assert_eq!(visible.len(), registered.len());
         assert_eq!(overflow, 0);
-        assert_eq!(pill_hits, 0, "all BOB chains should resolve to catalog logos");
+        assert_eq!(
+            pill_hits, 0,
+            "all BOB chains should resolve to catalog logos"
+        );
         assert_eq!(catalog_hits, registered.len());
         assert!(resolve_chain("bitcoin").unwrap().pinned);
         assert!(resolve_chain("bob").unwrap().pinned);

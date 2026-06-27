@@ -87,6 +87,17 @@ pub fn ToolCard(
                                     }}
                                 </span>
                                 <span class=type_badge_class(&tool_type)>{tool_type.to_uppercase()}</span>
+                                {if tool.claim_state == "claimed" {
+                                    view! {
+                                        <span class="badge badge-neutral">"Claimed by team"</span>
+                                    }.into_any()
+                                } else if tool.install_risk_level == "low" && !install.is_empty() {
+                                    view! {
+                                        <span class="badge badge-neutral">"Verified install"</span>
+                                    }.into_any()
+                                } else {
+                                    ().into_any()
+                                }}
                             </div>
                         </div>
                         <p class="tool-desc">{description}</p>
