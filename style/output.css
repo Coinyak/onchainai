@@ -635,6 +635,28 @@ body {
 .external-link:hover { color: #E76F00; text-decoration: underline; }
 
 @media (max-width: 1023px) {
+  /* Tablet/mobile: same side-by-side shell as desktop — 40px collapsed rail + main */
+  .site-layout,
+  .tools-layout {
+    grid-template-columns: auto 1fr;
+  }
+  .tools-sidebar,
+  .site-sidebar-chrome {
+    order: 1;
+    align-self: start;
+    height: 100vh;
+    max-height: 100vh;
+    overflow-y: auto;
+    border-right: 1px solid #E5E5E5;
+    border-bottom: 0;
+    z-index: 80;
+  }
+  .tools-main,
+  .site-main {
+    order: 2;
+    padding: 0 12px 24px;
+    min-width: 0;
+  }
   .tools-sidebar:not([data-sidebar-storage-loaded]) .sidebar-body {
     display: none;
   }
@@ -647,32 +669,15 @@ body {
   .tools-layout {
     gap: 0;
   }
-  .site-main,
-  .tools-main { padding: 0 12px 24px; }
-  .tools-sidebar,
-  .site-sidebar-chrome {
-    order: 1;
-    position: sticky;
-    top: 0;
-    width: 100%;
-    height: auto;
-    max-height: none;
-    overflow: visible;
-    border-right: 0;
-    border-bottom: 1px solid #E5E5E5;
-    padding: 12px 12px 0;
-    z-index: 100;
-  }
   .sidebar-brand-nav {
     flex-direction: row;
     flex-wrap: wrap;
     align-items: center;
     gap: 8px 12px;
   }
-  .tools-main { order: 2; }
   .sidebar-header { margin-bottom: 8px; }
   .sidebar-section { margin-bottom: 12px; padding-bottom: 8px; }
-  .sticky-toolbar { top: 48px; }
+  .sticky-toolbar { top: 0; }
   .tools-toolbar { gap: 8px; padding: 10px 0; margin-bottom: 12px; }
   .toolbar-sort { width: 100%; order: 2; overflow-x: auto; white-space: nowrap; }
   .tool-count { width: 100%; margin-left: 0; order: 3; }

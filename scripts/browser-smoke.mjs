@@ -10,6 +10,7 @@ import {
   evaluateLogoFallback,
   isBenignConsoleError,
   visiblePageText,
+  waitForSidebarStorageLoaded,
 } from "./browser-test-helpers.mjs";
 
 const base = (process.argv[2] || "http://localhost:3000").replace(/\/$/, "");
@@ -228,12 +229,35 @@ await page.setViewportSize({ width: 375, height: 812 });
 await page.goto(`${base}/tools`, { waitUntil: "domcontentloaded" });
 await clearSidebarStorage(page);
 await page.reload({ waitUntil: "networkidle" });
-const mobileSidebarCollapsed = await page.evaluate(() => {
-  const aside = document.querySelector(".tools-sidebar");
-  return aside?.classList.contains("tools-sidebar-collapsed") ?? false;
+await waitForSidebarStorageLoaded(page).catch(() => {
+  errors.push("layout:mobile-sidebar-hydration-timeout");
 });
-if (!mobileSidebarCollapsed) {
+const mobileSidebarLayout = await page.evaluate(() => {
+  const aside = document.querySelector(".tools-sidebar");
+  const main = document.querySelector(".tools-main");
+  if (!aside || !main) {
+    return { collapsed: false, asideWidth: 0, mainX: 0, mainY: 0 };
+  }
+  const asideRect = aside.getBoundingClientRect();
+  const mainRect = main.getBoundingClientRect();
+  return {
+    collapsed: aside.classList.contains("tools-sidebar-collapsed"),
+    asideWidth: asideRect.width,
+    mainX: mainRect.x,
+    mainY: mainRect.y,
+  };
+});
+if (!mobileSidebarLayout.collapsed) {
   errors.push("layout:mobile-sidebar-not-collapsed");
+}
+if (mobileSidebarLayout.asideWidth > 48) {
+  errors.push(`layout:mobile-sidebar-width:${mobileSidebarLayout.asideWidth}`);
+}
+if (mobileSidebarLayout.mainY > 8) {
+  errors.push(`layout:mobile-main-stacked:${mobileSidebarLayout.mainY}`);
+}
+if (mobileSidebarLayout.mainX < 32) {
+  errors.push(`layout:mobile-main-not-beside-rail:${mobileSidebarLayout.mainX}`);
 }
 
 await page.goto(`${base}/tools`, { waitUntil: "networkidle" });
