@@ -27,12 +27,14 @@ Rust single binary: Leptos SSR + Axum + rmcp + sqlx + tokio-cron-scheduler.
 - `./scripts/clean-build-artifacts.sh --dry-run`: Preview safe cleanup (`cargo clean`, `/tmp` linker snapshots, old Playwright artifacts)
 - `./scripts/smoke-test.sh http://localhost:3000`: Curl smoke (pages + MCP initialize)
 - `node scripts/browser-smoke.mjs http://localhost:3000`: Playwright smoke (requires `playwright` npm package)
-- `./scripts/release-build.sh`: Release build with disk guard + rustup `PATH` for wasm
-- `./scripts/verify-bundle.sh`: Check binary + `target/site/pkg/` + CSS are from one build (mtime spread)
+- `./scripts/release-build.sh`: Release build with disk guard + rustup `PATH` for wasm + macOS linker workaround
+- `./scripts/verify-bundle.sh`: Check binary + `target/site/pkg/` + served `style/output.css` are from one build (mtime spread)
 - `./scripts/restart-dev.sh`: Kill :3000 → release build → verify bundle → restart → smoke test
 - `./scripts/migrate-direct.sh`: Apply migrations (falls back if direct host unavailable; server also migrates on startup)
 - `./scripts/deploy-railway.sh`: Sync Railway env vars, deploy Dockerfile, production smoke
 - `./scripts/post-deploy-verify.sh https://www.onchain-ai.xyz`: Post-deploy curl + optional browser smoke
+
+Codex/non-interactive runner note: if `restart-dev.sh --no-build` reports ready but a follow-up browser command gets `ERR_CONNECTION_REFUSED`, the runner likely reaped the background child after the shell exited. For final visual checks in that environment, start the binary in a foreground exec session (`PORT=3000 LEPTOS_SITE_ROOT=target/site SKIP_CRAWLER=1 ./target/release/onchainai`), run smoke/browser checks from another shell, then stop that session.
 
 ## Deploy runbook (operator hardening)
 
@@ -86,6 +88,16 @@ Read before working on a feature:
 
 - Never commit `.env`. Use `.env.example` for template.
 - Never expose `SUPABASE_SERVICE_KEY` or `JWT_SECRET` to client.
+- x402 referral is metadata/attribution only. Do not build a custody proxy,
+  facilitator gateway, or code path that holds or moves user/provider funds.
+- For x402 attribution, prefer the explicit `x402_builder_code` metadata path.
+  Do not invent undocumented payment request fields named `referrer` or
+  `split`; `referral_model = 'split'` is an operator/business arrangement
+  label, not proof that the upstream x402 payment protocol will split funds.
+- x402 payment verification flags are trust signals, not visibility gates.
+  Do not add `payment_verified`, `x402_endpoint_verified`, or `price_verified`
+  to `PUBLIC_TOOL_WHERE` or the matching public RLS policy unless a future
+  operator decision explicitly says to hide unverified x402 tools.
 - All user input must be validated (validator crate).
 - All HTML output is escaped by Leptos (never use raw HTML injection).
 - Comments/upvotes/bookmarks require auth. Tool browsing is public.
@@ -102,7 +114,7 @@ Rust debug builds bloat `target/` fast. This is expected, not a bug. The repo is
 - **Between work sessions / after a batch of builds:** `./scripts/clean-build-artifacts.sh --incremental-only` (fast — drops only `incremental/` caches, keeps compiled deps so the next build stays fast).
 - **Only when disk is tight:** `./scripts/clean-build-artifacts.sh` (full `cargo clean` + `/tmp` linker snapshots) or `cargo clean`. Reserve this — the first build after is a slow full recompile.
 - **Never** commit `target/`, `.playwright-cli/`, or any build artifact (already in `.gitignore`).
-- **macOS only:** linker failures dump multi-GB `/tmp/onchainai*.ld-snapshot`; the clean script removes them. See `docs/DISK_MAINTENANCE.md`.
+- **macOS only:** linker failures dump multi-GB `/tmp/onchainai*.ld-snapshot`; the clean script removes them. `./scripts/release-build.sh` also auto-applies `RUSTFLAGS=-C symbol-mangling-version=v0` for the Apple linker `makeSymbolStringInPlace` failure. See `docs/DISK_MAINTENANCE.md`.
 
 ## Testing
 

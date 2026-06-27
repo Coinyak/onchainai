@@ -27,6 +27,9 @@ async fn load_home_header() -> HomeHeaderData {
         allow_free_registration: true,
         require_tool_approval: true,
         allow_x402_registration: false,
+        default_referral_bps: None,
+        default_referral_payout_address: None,
+        x402_builder_code: None,
         updated_at: chrono::Utc::now(),
     });
     let featured = featured.unwrap_or_default();

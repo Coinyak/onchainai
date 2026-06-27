@@ -1,8 +1,11 @@
 //! Admin tool review — split operator queues with gated review actions.
 
+use crate::models::Tool;
 use crate::pages::admin::admin_page_shell;
 use crate::server::functions::{
-    list_review_queue, review_tool, ReviewQueueItem, ReviewToolPayload, REVIEW_QUEUES,
+    get_referral_dashboard_stats, list_review_queue, review_tool, update_tool_referral,
+    ReferralDashboardStats, ReviewQueueItem, ReviewToolPayload, UpdateToolReferralPayload,
+    REVIEW_QUEUES,
 };
 use leptos::prelude::*;
 use leptos::task::spawn_local;
@@ -62,9 +65,14 @@ fn AdminToolsContent() -> impl IntoView {
     });
 
     let refresh = RwSignal::new(0u32);
+    let referral_stats_refresh = RwSignal::new(0u32);
     let queue_items = Resource::new(
         move || (active_queue.get(), refresh.get()),
         |(queue, _)| async move { list_review_queue(queue, 50).await },
+    );
+    let referral_stats = Resource::new(
+        move || referral_stats_refresh.get(),
+        |_| async move { get_referral_dashboard_stats().await },
     );
 
     let reason_modal = RwSignal::new(None::<ReasonModalState>);
@@ -101,6 +109,26 @@ fn AdminToolsContent() -> impl IntoView {
                     "Split operator queues with relevance, install safety, and audit-backed actions."
                 </p>
             </div>
+
+            <Suspense fallback=|| view! {
+                <div class="mb-6 grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <ReferralStatSkeleton/>
+                    <ReferralStatSkeleton/>
+                    <ReferralStatSkeleton/>
+                    <ReferralStatSkeleton/>
+                </div>
+            }>
+                {move || {
+                    referral_stats.get().map(|res| match res {
+                        Ok(stats) => view! { <ReferralStatsBar stats=stats/> }.into_any(),
+                        Err(e) => view! {
+                            <p class="mb-6 text-[14px] text-[#C0392B]">
+                                "Failed to load referral stats: " {e.to_string()}
+                            </p>
+                        }.into_any(),
+                    })
+                }}
+            </Suspense>
 
             <div class="flex flex-wrap gap-2 mb-6">
                 {QUEUE_TABS.iter().map(|tab| {
@@ -158,6 +186,7 @@ fn AdminToolsContent() -> impl IntoView {
                                                 run_review=run_review_for_rows.clone()
                                                 reason_modal=reason_modal
                                                 action_busy=action_busy
+                                                referral_stats_refresh=referral_stats_refresh
                                             />
                                         }
                                     })
@@ -186,6 +215,38 @@ fn AdminToolsContent() -> impl IntoView {
                     }
                 })
             }}
+        </div>
+    }
+}
+
+#[component]
+fn ReferralStatsBar(stats: ReferralDashboardStats) -> impl IntoView {
+    view! {
+        <div class="mb-6 grid grid-cols-2 md:grid-cols-4 gap-3">
+            <ReferralStatCard label="x402 tools" value=stats.x402_tools/>
+            <ReferralStatCard label="Referral enabled" value=stats.referral_enabled_tools/>
+            <ReferralStatCard label="Attribution events" value=stats.attribution_events/>
+            <ReferralStatCard label="Reported settlements" value=stats.reported_settlements/>
+        </div>
+    }
+}
+
+#[component]
+fn ReferralStatCard(label: &'static str, value: i64) -> impl IntoView {
+    view! {
+        <div class="rounded-lg border border-[#E5E5E5] bg-white px-4 py-3">
+            <p class="text-[12px] text-[#6B6B6B]">{label}</p>
+            <p class="text-[20px] font-semibold mt-1">{value}</p>
+        </div>
+    }
+}
+
+#[component]
+fn ReferralStatSkeleton() -> impl IntoView {
+    view! {
+        <div class="rounded-lg border border-[#E5E5E5] bg-[#FAFAFA] px-4 py-3">
+            <p class="text-[12px] text-[#6B6B6B]">"Loading"</p>
+            <p class="text-[20px] font-semibold mt-1">"..."</p>
         </div>
     }
 }
@@ -288,11 +349,224 @@ fn needs_override(item: &ReviewQueueItem) -> bool {
 }
 
 #[component]
+fn ReferralSettingsPanel(tool: Tool, referral_stats_refresh: RwSignal<u32>) -> impl IntoView {
+    let referral_enabled = RwSignal::new(tool.referral_enabled);
+    let referral_bps = RwSignal::new(
+        tool.referral_bps
+            .map(|value| value.to_string())
+            .unwrap_or_default(),
+    );
+    let referral_payout_address =
+        RwSignal::new(tool.referral_payout_address.clone().unwrap_or_default());
+    let referral_model = RwSignal::new(
+        tool.referral_model
+            .clone()
+            .unwrap_or_else(|| "attribution".into()),
+    );
+    let x402_pay_to_address = RwSignal::new(tool.x402_pay_to_address.clone().unwrap_or_default());
+    let x402_builder_code = RwSignal::new(tool.x402_builder_code.clone().unwrap_or_default());
+    let payment_verified = RwSignal::new(tool.payment_verified);
+    let x402_endpoint_verified = RwSignal::new(tool.x402_endpoint_verified);
+    let price_verified = RwSignal::new(tool.price_verified);
+    let save_error = RwSignal::new(None::<String>);
+    let save_ok = RwSignal::new(false);
+    let saving = RwSignal::new(false);
+    let slug = tool.slug.clone();
+
+    let save = move |_| {
+        if saving.get_untracked() {
+            return;
+        }
+        let bps_text = referral_bps.get_untracked();
+        let parsed_bps = if bps_text.trim().is_empty() {
+            None
+        } else {
+            match bps_text.trim().parse::<i32>() {
+                Ok(value) => Some(value),
+                Err(_) => {
+                    save_error.set(Some("Referral bps must be numeric.".into()));
+                    save_ok.set(false);
+                    return;
+                }
+            }
+        };
+
+        saving.set(true);
+        save_error.set(None);
+        save_ok.set(false);
+
+        let payload = UpdateToolReferralPayload {
+            slug: slug.clone(),
+            referral_enabled: referral_enabled.get_untracked(),
+            referral_bps: parsed_bps,
+            referral_payout_address: Some(referral_payout_address.get_untracked())
+                .filter(|value| !value.trim().is_empty()),
+            referral_model: Some(referral_model.get_untracked())
+                .filter(|value| !value.trim().is_empty()),
+            x402_pay_to_address: Some(x402_pay_to_address.get_untracked())
+                .filter(|value| !value.trim().is_empty()),
+            x402_builder_code: Some(x402_builder_code.get_untracked())
+                .filter(|value| !value.trim().is_empty()),
+            payment_verified: payment_verified.get_untracked(),
+            x402_endpoint_verified: x402_endpoint_verified.get_untracked(),
+            price_verified: price_verified.get_untracked(),
+        };
+
+        spawn_local(async move {
+            let result = update_tool_referral(payload).await;
+            saving.set(false);
+            match result {
+                Ok(updated) => {
+                    referral_enabled.set(updated.referral_enabled);
+                    referral_bps.set(
+                        updated
+                            .referral_bps
+                            .map(|value| value.to_string())
+                            .unwrap_or_default(),
+                    );
+                    referral_payout_address
+                        .set(updated.referral_payout_address.unwrap_or_default());
+                    referral_model.set(
+                        updated
+                            .referral_model
+                            .unwrap_or_else(|| "attribution".into()),
+                    );
+                    x402_pay_to_address.set(updated.x402_pay_to_address.unwrap_or_default());
+                    x402_builder_code.set(updated.x402_builder_code.unwrap_or_default());
+                    payment_verified.set(updated.payment_verified);
+                    x402_endpoint_verified.set(updated.x402_endpoint_verified);
+                    price_verified.set(updated.price_verified);
+                    save_ok.set(true);
+                    referral_stats_refresh.update(|n| *n = n.wrapping_add(1));
+                }
+                Err(e) => save_error.set(Some(e.to_string())),
+            }
+        });
+    };
+
+    view! {
+        <section class="mt-4 rounded-lg border border-[#E5E5E5] bg-[#FAFAFA] p-4">
+            <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-2 mb-3">
+                <div>
+                    <h3 class="text-[14px] font-medium">"x402 referral"</h3>
+                    <p class="text-[12px] text-[#6B6B6B] mt-1">
+                        "Verification flags are trust signals only; unverified x402 tools can stay public."
+                    </p>
+                </div>
+                <label class="flex items-center gap-2 text-[13px]">
+                    <input
+                        type="checkbox"
+                        prop:checked=move || referral_enabled.get()
+                        on:change=move |ev| referral_enabled.set(event_target_checked(&ev))
+                    />
+                    "Referral enabled"
+                </label>
+            </div>
+
+            <div class="grid md:grid-cols-2 gap-3">
+                <label class="block">
+                    <span class="text-[12px] text-[#6B6B6B]">"Bps"</span>
+                    <input
+                        class="mt-1 w-full rounded-lg border border-[#E5E5E5] px-3 py-2 text-[13px] font-mono bg-white"
+                        inputmode="numeric"
+                        placeholder="250"
+                        prop:value=move || referral_bps.get()
+                        on:input=move |ev| referral_bps.set(event_target_value(&ev))
+                    />
+                </label>
+                <label class="block">
+                    <span class="text-[12px] text-[#6B6B6B]">"Model"</span>
+                    <select
+                        class="mt-1 w-full rounded-lg border border-[#E5E5E5] px-3 py-2 text-[13px] bg-white"
+                        prop:value=move || referral_model.get()
+                        on:change=move |ev| referral_model.set(event_target_value(&ev))
+                    >
+                        <option value="attribution">"Attribution"</option>
+                        <option value="split">"Split"</option>
+                    </select>
+                </label>
+                <label class="block md:col-span-2">
+                    <span class="text-[12px] text-[#6B6B6B]">"Referral payout address"</span>
+                    <input
+                        class="mt-1 w-full rounded-lg border border-[#E5E5E5] px-3 py-2 text-[13px] font-mono bg-white"
+                        placeholder="0x..."
+                        prop:value=move || referral_payout_address.get()
+                        on:input=move |ev| referral_payout_address.set(event_target_value(&ev))
+                    />
+                </label>
+                <label class="block">
+                    <span class="text-[12px] text-[#6B6B6B]">"Builder code"</span>
+                    <input
+                        class="mt-1 w-full rounded-lg border border-[#E5E5E5] px-3 py-2 text-[13px] font-mono bg-white"
+                        placeholder="onchainai"
+                        prop:value=move || x402_builder_code.get()
+                        on:input=move |ev| x402_builder_code.set(event_target_value(&ev))
+                    />
+                </label>
+                <label class="block">
+                    <span class="text-[12px] text-[#6B6B6B]">"Tool pay-to address"</span>
+                    <input
+                        class="mt-1 w-full rounded-lg border border-[#E5E5E5] px-3 py-2 text-[13px] font-mono bg-white"
+                        placeholder="0x..."
+                        prop:value=move || x402_pay_to_address.get()
+                        on:input=move |ev| x402_pay_to_address.set(event_target_value(&ev))
+                    />
+                </label>
+            </div>
+
+            <div class="flex flex-wrap gap-3 mt-3">
+                <label class="flex items-center gap-2 text-[13px]">
+                    <input
+                        type="checkbox"
+                        prop:checked=move || payment_verified.get()
+                        on:change=move |ev| payment_verified.set(event_target_checked(&ev))
+                    />
+                    "Payment address"
+                </label>
+                <label class="flex items-center gap-2 text-[13px]">
+                    <input
+                        type="checkbox"
+                        prop:checked=move || x402_endpoint_verified.get()
+                        on:change=move |ev| x402_endpoint_verified.set(event_target_checked(&ev))
+                    />
+                    "Endpoint"
+                </label>
+                <label class="flex items-center gap-2 text-[13px]">
+                    <input
+                        type="checkbox"
+                        prop:checked=move || price_verified.get()
+                        on:change=move |ev| price_verified.set(event_target_checked(&ev))
+                    />
+                    "Price"
+                </label>
+            </div>
+
+            {move || save_error.get().map(|msg| view! {
+                <p class="text-[13px] text-[#C0392B] mt-3">{msg}</p>
+            })}
+            {move || save_ok.get().then(|| view! {
+                <p class="text-[13px] text-[#2D7D46] mt-3">"Referral settings saved."</p>
+            })}
+
+            <button
+                type="button"
+                class="mt-3 px-3 py-1.5 text-[13px] rounded-lg bg-[#1A1A1A] text-white hover:opacity-90 disabled:opacity-50"
+                disabled=move || saving.get()
+                on:click=save
+            >
+                {move || if saving.get() { "Saving..." } else { "Save referral" }}
+            </button>
+        </section>
+    }
+}
+
+#[component]
 fn ReviewToolRow(
     item: ReviewQueueItem,
     run_review: ReviewHandler,
     reason_modal: RwSignal<Option<ReasonModalState>>,
     action_busy: RwSignal<bool>,
+    referral_stats_refresh: RwSignal<u32>,
 ) -> impl IntoView {
     let tool = item.tool.clone();
     let slug = tool.slug.clone();
@@ -405,6 +679,11 @@ fn ReviewToolRow(
                                 "Missing trustworthy URL — add repo, homepage, npm package, or MCP endpoint before approval."
                             </p>
                         })}
+
+                        <ReferralSettingsPanel
+                            tool=tool.clone()
+                            referral_stats_refresh=referral_stats_refresh
+                        />
                     </div>
 
                     <div class="flex flex-wrap gap-2 shrink-0 max-w-[360px]">

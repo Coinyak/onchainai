@@ -144,7 +144,7 @@ pub fn build_filter_navigation_base(
 }
 
 pub fn clamp_browser_page(page: u32) -> u32 {
-    page.max(1).min(MAX_BROWSER_PAGE)
+    page.clamp(1, MAX_BROWSER_PAGE)
 }
 
 fn parse_page_param(raw: Option<String>) -> u32 {

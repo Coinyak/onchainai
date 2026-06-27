@@ -81,6 +81,9 @@ pub struct SiteSettings {
     pub allow_free_registration: bool,
     pub require_tool_approval: bool,
     pub allow_x402_registration: bool,
+    pub default_referral_bps: Option<i32>,
+    pub default_referral_payout_address: Option<String>,
+    pub x402_builder_code: Option<String>,
     pub updated_at: DateTime<Utc>,
 }
 
@@ -150,6 +153,11 @@ mod tests {
             allow_free_registration: true,
             require_tool_approval: true,
             allow_x402_registration: false,
+            default_referral_bps: Some(250),
+            default_referral_payout_address: Some(
+                "0x0000000000000000000000000000000000000000".into(),
+            ),
+            x402_builder_code: Some("onchainai".into()),
             updated_at: now,
         };
         let json = serde_json::to_string(&s).expect("serialize settings");
@@ -157,5 +165,7 @@ mod tests {
         assert_eq!(back.id, 1);
         assert!(back.allow_free_registration);
         assert_eq!(back.search_keywords, vec!["mcp-server".to_string()]);
+        assert_eq!(back.default_referral_bps, Some(250));
+        assert_eq!(back.x402_builder_code.as_deref(), Some("onchainai"));
     }
 }

@@ -27,13 +27,18 @@ cargo leptos build --release
 ln -sf onchainai.wasm target/site/pkg/onchainai_bg.wasm
 
 # /pkg/onchainai.css is served from this manual stylesheet in src/lib.rs.
-# Refresh its mtime after the full build so bundle verification can detect
-# genuinely mixed builds without failing every clean rebuild.
+# Cargo may reuse an unchanged release binary while regenerating pkg assets.
+# Refresh the served artifact mtimes only after the full build succeeds so
+# bundle verification catches real mixed builds without false-failing cache hits.
+if [[ ! -x target/release/onchainai ]]; then
+  echo "Missing release binary: target/release/onchainai" >&2
+  exit 1
+fi
 if [[ ! -s style/output.css ]]; then
   echo "Missing or empty stylesheet: style/output.css" >&2
   exit 1
 fi
-touch style/output.css
+touch target/release/onchainai style/output.css
 
 echo "Artifacts:"
 ls -la target/release/onchainai target/site/pkg/onchainai.js target/site/pkg/onchainai.wasm target/site/pkg/onchainai_bg.wasm style/output.css

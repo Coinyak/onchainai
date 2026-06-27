@@ -5,6 +5,17 @@ use leptos::prelude::*;
 
 #[component]
 pub fn PromoCards(mcp_endpoint: String) -> impl IntoView {
+    let mcp_json = format!(
+        r#"{{
+  "mcpServers": {{
+    "onchainai": {{
+      "command": "npx",
+      "args": ["mcp-remote", "{}"]
+    }}
+  }}
+}}"#,
+        "https://www.onchain-ai.xyz/mcp"
+    );
     view! {
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div class="promo-card border border-[#E5E5E5] rounded-lg p-6 bg-white">
@@ -22,13 +33,19 @@ pub fn PromoCards(mcp_endpoint: String) -> impl IntoView {
             <div class="promo-card border border-[#E5E5E5] rounded-lg p-6 bg-white">
                 <h3 class="text-[16px] font-semibold mb-2">"Connect via MCP"</h3>
                 <p class="text-[14px] text-[#6B6B6B] mb-3 leading-relaxed">
-                    "Connect your agent to OnchainAI MCP and search tools instantly."
+                    "Ask your AI: Find crypto tools on onchain-ai."
                 </p>
-                <div class="flex items-center gap-2">
+                <div class="flex items-center gap-2 mb-3">
                     <code class="font-mono text-[13px] bg-[#F5F5F0] border border-[#E5E5E5] rounded-md px-3 py-2 flex-1 overflow-x-auto">
                         <span class="text-[#999999]">"$ "</span>{mcp_endpoint.clone()}
                     </code>
                     <CopyButton text=mcp_endpoint.clone()/>
+                </div>
+                <div class="flex items-start gap-2">
+                    <pre class="font-mono text-[12px] bg-[#F5F5F0] border border-[#E5E5E5] rounded-md px-3 py-2 flex-1 overflow-x-auto whitespace-pre-wrap">
+                        {mcp_json.clone()}
+                    </pre>
+                    <CopyButton text=mcp_json/>
                 </div>
             </div>
         </div>

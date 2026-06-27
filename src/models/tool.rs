@@ -67,6 +67,15 @@ pub struct Tool {
     pub license: Option<String>,
     pub pricing: String,
     pub x402_price: Option<String>,
+    pub referral_enabled: bool,
+    pub referral_bps: Option<i32>,
+    pub referral_payout_address: Option<String>,
+    pub referral_model: Option<String>,
+    pub x402_pay_to_address: Option<String>,
+    pub x402_builder_code: Option<String>,
+    pub payment_verified: bool,
+    pub x402_endpoint_verified: bool,
+    pub price_verified: bool,
     pub stars: i32,
     pub last_commit_at: Option<DateTime<Utc>>,
 
@@ -119,13 +128,12 @@ pub fn default_review_fields() -> ToolReviewDefaults {
     ToolReviewDefaults::default()
 }
 
-/// Parse a positive page number from a raw query value (`"2"`, `"abc"` → `None`).
+/// Parse a positive page number from a raw query value (`"2"`, `"abc"` -> `None`).
 pub fn parse_page_value(raw: &str) -> Option<u32> {
-    let trimmed = raw.trim();
-    if trimmed.is_empty() {
+    if raw.is_empty() || !raw.bytes().all(|byte| byte.is_ascii_digit()) {
         return None;
     }
-    trimmed.parse::<u32>().ok().filter(|page| *page > 0)
+    raw.parse::<u32>().ok().filter(|page| *page > 0)
 }
 
 /// Whether `logo_url` is safe to render as an external image.
@@ -278,6 +286,15 @@ mod tests {
             license: None,
             pricing: "free".into(),
             x402_price: None,
+            referral_enabled: false,
+            referral_bps: None,
+            referral_payout_address: None,
+            referral_model: None,
+            x402_pay_to_address: None,
+            x402_builder_code: None,
+            payment_verified: false,
+            x402_endpoint_verified: false,
+            price_verified: false,
             stars: 0,
             last_commit_at: None,
             source: "manual".into(),
@@ -342,6 +359,7 @@ mod tests {
         assert_eq!(parse_page_value("-1"), None);
         assert_eq!(parse_page_value(""), None);
         assert_eq!(parse_page_value(" 2"), None);
+        assert_eq!(parse_page_value("2.5"), None);
         assert_eq!(parse_page_value("4294967296"), None);
     }
 

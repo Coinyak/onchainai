@@ -18,7 +18,7 @@ Never run an old `target/release/onchainai` against a freshly rebuilt `target/si
 | Server binary | `target/release/onchainai` |
 | Client JS | `target/site/pkg/onchainai.js` |
 | Client WASM | `target/site/pkg/onchainai.wasm` (+ symlink `onchainai_bg.wasm`) |
-| CSS | `style/output.css` |
+| CSS | `style/output.css` served as `/pkg/onchainai.css` |
 
 **Do not mix partial builds:**
 
@@ -33,7 +33,11 @@ Verify coherence before starting the server:
 ./scripts/verify-bundle.sh
 ```
 
-Checks `target/release/onchainai`, `target/site/pkg/*`, and `style/output.css` mtimes (default ±60s tolerance; override with `ONCHAINAI_BUNDLE_MAX_SKEW_SEC`).
+Checks `target/release/onchainai`, `target/site/pkg/*`, and the served `style/output.css` mtimes (default ±180s tolerance; override with `ONCHAINAI_BUNDLE_MAX_SKEW_SEC`).
+
+CSS note: `target/site/pkg/onchainai.css` is a cargo-leptos placeholder and may be empty. The Axum server explicitly serves `/pkg/onchainai.css` from `style/output.css` in `src/lib.rs`. `./scripts/release-build.sh` validates that stylesheet and refreshes the release binary + served CSS mtimes after the full build succeeds. This prevents false bundle failures when cargo reuses an unchanged server binary while regenerating WASM/JS/CSS artifacts, without hiding genuinely stale artifacts from separate build sessions.
+
+Slow-link note: macOS release server linking can legitimately finish more than 60 seconds after the WASM/pkg step. The default mtime tolerance is 180 seconds to avoid false positives while still catching stale artifacts from separate build sessions.
 
 ---
 
@@ -194,6 +198,7 @@ may fail at link time with `makeSymbolStringInPlace` (or similar linker errors).
 
 - Do **not** mix a partial WASM-only rebuild with an older `target/release/onchainai`.
 - Prefer full `cargo leptos build --release` / `./scripts/release-build.sh` (often succeeds when plain `cargo build` does not).
+- On Darwin, `./scripts/release-build.sh` automatically adds `RUSTFLAGS=-C symbol-mangling-version=v0` when no symbol-mangling flag is already set. This is the verified local workaround from 2026-06-27 for Apple clang linker failures while keeping the binary, WASM, JS, and served CSS in one build session.
 - If link still fails, use the **last good** `target/release/onchainai` from a successful `cargo leptos build --release` **only if** `target/site/pkg/` is from that **same** build (check with `./scripts/verify-bundle.sh`).
 - Never deploy or run locally when binary and pkg timestamps diverge by more than one intentional build session.
 

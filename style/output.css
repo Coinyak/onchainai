@@ -231,7 +231,15 @@ body {
 .tool-card-header { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 4px; }
 .tool-name {
   font-size: 16px; font-weight: 600; margin: 0;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  line-height: 1.3;
 }
 .tool-badges { display: flex; flex-wrap: wrap; gap: 4px; }
 .tool-desc {
@@ -948,6 +956,28 @@ body {
 .cursor-pointer { cursor: pointer; }
 .opacity-60 { opacity: 0.6; }
 
+.x402-notice {
+  margin: 16px 0 0;
+  padding: 14px 16px;
+  border: 1px solid #F0D7BF;
+  border-left: 4px solid #E76F00;
+  border-radius: 8px;
+  background: #FFF8F1;
+  color: #3B2A1F;
+  font-size: 14px;
+  line-height: 1.55;
+}
+.x402-notice p {
+  margin: 0 0 8px;
+}
+.x402-notice p:last-of-type {
+  margin-bottom: 10px;
+}
+.x402-verification {
+  color: #6B4F36;
+  font-weight: 500;
+}
+
 /* Mobile typography — spec: body text >=16px, line-height >=1.65 */
 @media (max-width: 767px) {
   html { font-size: 16px; }
@@ -960,6 +990,12 @@ body {
   }
   .tool-desc, .tool-meta, .detail-desc { font-size: 16px; line-height: 1.65; }
   .tool-name { font-size: 16px; }
+  .install-cmd {
+    white-space: pre-wrap;
+    overflow-x: hidden;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
   .detail-title { font-size: 26px; }
   h2.section-title, h2 { font-size: 18px; }
   h1 { font-size: 26px; }

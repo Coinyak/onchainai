@@ -69,6 +69,46 @@ fn display_install_command(tool: &Tool) -> String {
         .unwrap_or_default()
 }
 
+fn x402_payment_notice(tool: &Tool) -> Option<String> {
+    if tool.pricing != "x402" && tool.x402_price.is_none() && !tool.referral_enabled {
+        return None;
+    }
+    let price = tool
+        .x402_price
+        .as_deref()
+        .filter(|p| !p.trim().is_empty())
+        .unwrap_or("the provider's x402 price");
+    Some(format!(
+        "Calls may request x402 payment ({price}). Connect an agent wallet before use."
+    ))
+}
+
+fn x402_verification_notice(tool: &Tool) -> &'static str {
+    if tool.payment_verified && tool.x402_endpoint_verified && tool.price_verified {
+        "Payment details operator verified."
+    } else {
+        "Payment details not operator verified yet."
+    }
+}
+
+fn referral_disclosure(tool: &Tool) -> Option<String> {
+    if !tool.referral_enabled {
+        return None;
+    }
+    let bps = tool
+        .referral_bps
+        .map(|value| format!("{} bps", value))
+        .unwrap_or_else(|| "an operator-configured share".into());
+    let model = tool
+        .referral_model
+        .as_deref()
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or("attribution");
+    Some(format!(
+        "OnchainAI may receive {bps} through {model} referral attribution."
+    ))
+}
+
 #[component]
 pub fn ToolDetailContent(
     tool: Tool,
@@ -100,6 +140,9 @@ pub fn ToolDetailContent(
     let last_commit = format_short_date(tool.last_commit_at);
     let last_crawl = format_short_date(Some(tool.updated_at));
     let evidence = verification_evidence(&tool);
+    let x402_notice = x402_payment_notice(&tool);
+    let referral_notice = referral_disclosure(&tool);
+    let x402_verification = x402_verification_notice(&tool).to_string();
 
     view! {
         <div class=if compact { "detail-content compact" } else { "detail-content" }>
@@ -132,6 +175,29 @@ pub fn ToolDetailContent(
                 </div>
             </header>
             <p class="detail-desc">{desc}</p>
+            {if x402_notice.is_some() || referral_notice.is_some() {
+                view! {
+                    <section class="x402-notice">
+                        {x402_notice.clone().map(|notice| view! {
+                            <p>{notice}</p>
+                        })}
+                        {referral_notice.clone().map(|notice| view! {
+                            <p>{notice}</p>
+                        })}
+                        <p class="x402-verification">{x402_verification.clone()}</p>
+                        <a
+                            href="https://docs.cdp.coinbase.com/agentkit/docs/welcome"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            class="external-link"
+                        >
+                            "Agent wallet guide"
+                        </a>
+                    </section>
+                }.into_any()
+            } else {
+                ().into_any()
+            }}
             <div class="detail-meta detail-meta-wrap">
                 <span>{"★ "}{tool.stars}</span>
                 {if !tool.chains.is_empty() {
@@ -362,6 +428,15 @@ mod tests {
             license: None,
             pricing: "free".into(),
             x402_price: None,
+            referral_enabled: false,
+            referral_bps: None,
+            referral_payout_address: None,
+            referral_model: None,
+            x402_pay_to_address: None,
+            x402_builder_code: None,
+            payment_verified: false,
+            x402_endpoint_verified: false,
+            price_verified: false,
             stars: 0,
             last_commit_at: None,
             source: "manual".into(),
@@ -401,5 +476,25 @@ mod tests {
         assert!(evidence.iter().any(|e| e.contains("crypto-mcp")));
         assert!(evidence.iter().any(|e| e.contains("Verified badge")));
         assert!(evidence.iter().any(|e| e.contains("Operator review")));
+    }
+
+    #[test]
+    fn x402_notice_allows_unverified_payment_details() {
+        let mut tool = tool_with_install("npx mcp-remote https://example.com/mcp", "low");
+        tool.pricing = "x402".into();
+        tool.x402_price = Some("0.01 USDC".into());
+        tool.referral_enabled = true;
+        tool.referral_bps = Some(250);
+        tool.referral_model = Some("attribution".into());
+        tool.payment_verified = false;
+        tool.x402_endpoint_verified = false;
+        tool.price_verified = false;
+
+        assert!(x402_payment_notice(&tool).unwrap().contains("0.01 USDC"));
+        assert!(referral_disclosure(&tool).unwrap().contains("250 bps"));
+        assert_eq!(
+            x402_verification_notice(&tool),
+            "Payment details not operator verified yet."
+        );
     }
 }

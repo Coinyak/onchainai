@@ -118,33 +118,40 @@ pub(crate) fn parse_search_keywords(raw: &str) -> Vec<String> {
 }
 
 /// Validate admin site settings input before persisting.
+pub(crate) struct SiteSettingsValidationInput<'a> {
+    pub site_name: &'a str,
+    pub slogan: &'a str,
+    pub description: &'a str,
+    pub mcp_endpoint: &'a str,
+    pub search_keywords: &'a [String],
+    pub default_referral_bps: Option<i32>,
+    pub default_referral_payout_address: Option<&'a str>,
+    pub x402_builder_code: Option<&'a str>,
+}
+
 pub(crate) fn validate_update_site_settings_input(
-    site_name: &str,
-    slogan: &str,
-    description: &str,
-    mcp_endpoint: &str,
-    search_keywords: &[String],
+    input: SiteSettingsValidationInput<'_>,
 ) -> Result<(), &'static str> {
-    let name = site_name.trim();
+    let name = input.site_name.trim();
     if name.is_empty() || name.len() > 100 {
         return Err("site name must be 1–100 characters");
     }
-    let slogan = slogan.trim();
+    let slogan = input.slogan.trim();
     if slogan.is_empty() || slogan.len() > 200 {
         return Err("slogan must be 1–200 characters");
     }
-    let description = description.trim();
+    let description = input.description.trim();
     if description.is_empty() || description.len() > 500 {
         return Err("description must be 1–500 characters");
     }
-    let mcp_endpoint = mcp_endpoint.trim();
+    let mcp_endpoint = input.mcp_endpoint.trim();
     if mcp_endpoint.is_empty() || mcp_endpoint.len() > 200 {
         return Err("MCP endpoint must be 1–200 characters");
     }
-    if search_keywords.is_empty() || search_keywords.len() > 50 {
+    if input.search_keywords.is_empty() || input.search_keywords.len() > 50 {
         return Err("provide 1–50 search keywords");
     }
-    for kw in search_keywords {
+    for kw in input.search_keywords {
         let kw = kw.trim();
         if kw.is_empty() || kw.len() > 64 {
             return Err("each keyword must be 1–64 characters");
@@ -154,6 +161,23 @@ pub(crate) fn validate_update_site_settings_input(
             .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
         {
             return Err("keywords may only contain letters, numbers, hyphens, and underscores");
+        }
+    }
+    if let Some(bps) = input.default_referral_bps {
+        if !(0..=10_000).contains(&bps) {
+            return Err("default referral bps must be 0–10000");
+        }
+    }
+    if let Some(address) = input.default_referral_payout_address {
+        let address = address.trim();
+        if address.len() > 200 {
+            return Err("default referral payout address must be 200 characters or fewer");
+        }
+    }
+    if let Some(code) = input.x402_builder_code {
+        let code = code.trim();
+        if code.len() > 100 {
+            return Err("x402 builder code must be 100 characters or fewer");
         }
     }
     Ok(())
@@ -170,6 +194,9 @@ pub struct UpdateSiteSettingsPayload {
     pub allow_free_registration: bool,
     pub require_tool_approval: bool,
     pub allow_x402_registration: bool,
+    pub default_referral_bps: Option<i32>,
+    pub default_referral_payout_address: Option<String>,
+    pub x402_builder_code: Option<String>,
 }
 
 /// Admin-only update of the `site_settings` singleton (id = 1).
@@ -178,13 +205,16 @@ pub async fn update_site_settings(
     payload: UpdateSiteSettingsPayload,
 ) -> Result<SiteSettings, ServerFnError> {
     let keywords = parse_search_keywords(&payload.search_keywords_raw);
-    if let Err(msg) = validate_update_site_settings_input(
-        &payload.site_name,
-        &payload.slogan,
-        &payload.description,
-        &payload.mcp_endpoint,
-        &keywords,
-    ) {
+    if let Err(msg) = validate_update_site_settings_input(SiteSettingsValidationInput {
+        site_name: &payload.site_name,
+        slogan: &payload.slogan,
+        description: &payload.description,
+        mcp_endpoint: &payload.mcp_endpoint,
+        search_keywords: &keywords,
+        default_referral_bps: payload.default_referral_bps,
+        default_referral_payout_address: payload.default_referral_payout_address.as_deref(),
+        x402_builder_code: payload.x402_builder_code.as_deref(),
+    }) {
         return Err(ServerFnError::new(msg.to_string()));
     }
 
@@ -204,6 +234,9 @@ pub async fn update_site_settings(
             allow_free_registration = $6,
             require_tool_approval = $7,
             allow_x402_registration = $8,
+            default_referral_bps = $9,
+            default_referral_payout_address = $10,
+            x402_builder_code = $11,
             updated_at = now()
         WHERE id = 1
         RETURNING *
@@ -217,6 +250,14 @@ pub async fn update_site_settings(
     .bind(payload.allow_free_registration)
     .bind(payload.require_tool_approval)
     .bind(payload.allow_x402_registration)
+    .bind(payload.default_referral_bps)
+    .bind(
+        payload
+            .default_referral_payout_address
+            .as_deref()
+            .map(str::trim),
+    )
+    .bind(payload.x402_builder_code.as_deref().map(str::trim))
     .fetch_one(&pool)
     .await
     .map_err(|e| ServerFnError::new(format!("failed to update site settings: {e}")))?;
@@ -1377,6 +1418,133 @@ pub async fn set_tool_approval(
         recommendation_id: None,
     })
     .await
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "ssr", derive(sqlx::FromRow))]
+pub struct ReferralDashboardStats {
+    pub x402_tools: i64,
+    pub referral_enabled_tools: i64,
+    pub attribution_events: i64,
+    pub reported_settlements: i64,
+}
+
+#[server(GetReferralDashboardStats, "/api")]
+pub async fn get_referral_dashboard_stats() -> Result<ReferralDashboardStats, ServerFnError> {
+    let (parts, pool, jwt_secret, issuer) = request_context()?;
+    require_admin(&parts, &pool, &jwt_secret, &issuer)
+        .await
+        .map_err(ServerFnError::new)?;
+
+    sqlx::query_as::<_, ReferralDashboardStats>(
+        r#"
+        SELECT
+            (SELECT COUNT(*) FROM tools WHERE pricing = 'x402') AS x402_tools,
+            (SELECT COUNT(*) FROM tools WHERE referral_enabled = true) AS referral_enabled_tools,
+            (SELECT COUNT(*) FROM referral_events) AS attribution_events,
+            (SELECT COUNT(*) FROM referral_events WHERE event_type = 'reported_settlement') AS reported_settlements
+        "#,
+    )
+    .fetch_one(&pool)
+    .await
+    .map_err(|e| ServerFnError::new(format!("failed to load referral stats: {e}")))
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct UpdateToolReferralPayload {
+    pub slug: String,
+    pub referral_enabled: bool,
+    pub referral_bps: Option<i32>,
+    pub referral_payout_address: Option<String>,
+    pub referral_model: Option<String>,
+    pub x402_pay_to_address: Option<String>,
+    pub x402_builder_code: Option<String>,
+    pub payment_verified: bool,
+    pub x402_endpoint_verified: bool,
+    pub price_verified: bool,
+}
+
+pub(crate) fn validate_tool_referral_payload(
+    payload: &UpdateToolReferralPayload,
+) -> Result<(), &'static str> {
+    if payload.slug.trim().is_empty() {
+        return Err("tool slug is required");
+    }
+    if let Some(bps) = payload.referral_bps {
+        if !(0..=10_000).contains(&bps) {
+            return Err("referral bps must be 0–10000");
+        }
+    }
+    if let Some(model) = payload.referral_model.as_deref().map(str::trim) {
+        if !model.is_empty() && model != "split" && model != "attribution" {
+            return Err("referral model must be split or attribution");
+        }
+    }
+    for value in [
+        payload.referral_payout_address.as_deref(),
+        payload.x402_pay_to_address.as_deref(),
+    ]
+    .into_iter()
+    .flatten()
+    {
+        if value.trim().len() > 200 {
+            return Err("referral and pay-to addresses must be 200 characters or fewer");
+        }
+    }
+    if let Some(code) = payload.x402_builder_code.as_deref() {
+        if code.trim().len() > 100 {
+            return Err("x402 builder code must be 100 characters or fewer");
+        }
+    }
+    Ok(())
+}
+
+#[server(UpdateToolReferral, "/api")]
+pub async fn update_tool_referral(
+    payload: UpdateToolReferralPayload,
+) -> Result<Tool, ServerFnError> {
+    if let Err(msg) = validate_tool_referral_payload(&payload) {
+        return Err(ServerFnError::new(msg.to_string()));
+    }
+
+    let (parts, pool, jwt_secret, issuer) = request_context()?;
+    require_admin(&parts, &pool, &jwt_secret, &issuer)
+        .await
+        .map_err(ServerFnError::new)?;
+
+    let tool = sqlx::query_as::<_, Tool>(
+        r#"
+        UPDATE tools
+        SET referral_enabled = $1,
+            referral_bps = $2,
+            referral_payout_address = $3,
+            referral_model = $4,
+            x402_pay_to_address = $5,
+            x402_builder_code = $6,
+            payment_verified = $7,
+            x402_endpoint_verified = $8,
+            price_verified = $9,
+            updated_at = now()
+        WHERE slug = $10
+        RETURNING *
+        "#,
+    )
+    .bind(payload.referral_enabled)
+    .bind(payload.referral_bps)
+    .bind(normalize_optional_text(payload.referral_payout_address))
+    .bind(normalize_optional_text(payload.referral_model))
+    .bind(normalize_optional_text(payload.x402_pay_to_address))
+    .bind(normalize_optional_text(payload.x402_builder_code))
+    .bind(payload.payment_verified)
+    .bind(payload.x402_endpoint_verified)
+    .bind(payload.price_verified)
+    .bind(payload.slug.trim())
+    .fetch_optional(&pool)
+    .await
+    .map_err(|e| ServerFnError::new(format!("failed to update referral settings: {e}")))?
+    .ok_or_else(|| ServerFnError::new(format!("tool not found: {}", payload.slug)))?;
+
+    Ok(redact_tool_for_admin(tool))
 }
 
 /// Known crawler sources for the admin dashboard (merged with DB rows).
@@ -3373,6 +3541,15 @@ mod tests {
             license: None,
             pricing: "free".into(),
             x402_price: None,
+            referral_enabled: false,
+            referral_bps: None,
+            referral_payout_address: None,
+            referral_model: None,
+            x402_pay_to_address: None,
+            x402_builder_code: None,
+            payment_verified: false,
+            x402_endpoint_verified: false,
+            price_verified: false,
             stars: 0,
             last_commit_at: None,
             source: "github".into(),
@@ -3623,38 +3800,93 @@ mod tests {
 
     #[test]
     fn validate_site_settings_accepts_defaults() {
-        assert!(validate_update_site_settings_input(
-            "OnchainAI",
-            "Crypto tools, unified.",
-            "Discover tools.",
-            "npx mcp-remote www.onchain-ai.xyz/mcp",
-            &["mcp-server".into()],
-        )
-        .is_ok());
+        let keywords = vec!["mcp-server".into()];
+        assert!(
+            validate_update_site_settings_input(SiteSettingsValidationInput {
+                site_name: "OnchainAI",
+                slogan: "Crypto tools, unified.",
+                description: "Discover tools.",
+                mcp_endpoint: "npx mcp-remote www.onchain-ai.xyz/mcp",
+                search_keywords: &keywords,
+                default_referral_bps: Some(250),
+                default_referral_payout_address: Some("0x0000000000000000000000000000000000000000"),
+                x402_builder_code: Some("onchainai"),
+            })
+            .is_ok()
+        );
     }
 
     #[test]
     fn validate_site_settings_rejects_empty_keywords() {
-        assert!(validate_update_site_settings_input(
-            "OnchainAI",
-            "Slogan",
-            "Description here.",
-            "npx mcp-remote",
-            &[],
-        )
-        .is_err());
+        assert!(
+            validate_update_site_settings_input(SiteSettingsValidationInput {
+                site_name: "OnchainAI",
+                slogan: "Slogan",
+                description: "Description here.",
+                mcp_endpoint: "npx mcp-remote",
+                search_keywords: &[],
+                default_referral_bps: None,
+                default_referral_payout_address: None,
+                x402_builder_code: None,
+            })
+            .is_err()
+        );
     }
 
     #[test]
     fn validate_site_settings_rejects_invalid_keyword_chars() {
-        assert!(validate_update_site_settings_input(
-            "OnchainAI",
-            "Slogan",
-            "Description here.",
-            "npx mcp-remote",
-            &["bad keyword".into()],
-        )
-        .is_err());
+        let keywords = vec!["bad keyword".into()];
+        assert!(
+            validate_update_site_settings_input(SiteSettingsValidationInput {
+                site_name: "OnchainAI",
+                slogan: "Slogan",
+                description: "Description here.",
+                mcp_endpoint: "npx mcp-remote",
+                search_keywords: &keywords,
+                default_referral_bps: None,
+                default_referral_payout_address: None,
+                x402_builder_code: None,
+            })
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn validate_tool_referral_payload_allows_unverified_x402_referral() {
+        assert!(validate_tool_referral_payload(&UpdateToolReferralPayload {
+            slug: "paid-tool".into(),
+            referral_enabled: true,
+            referral_bps: Some(250),
+            referral_payout_address: Some("0x0000000000000000000000000000000000000000".into()),
+            referral_model: Some("attribution".into()),
+            x402_pay_to_address: Some("0x1111111111111111111111111111111111111111".into()),
+            x402_builder_code: Some("onchainai".into()),
+            payment_verified: false,
+            x402_endpoint_verified: false,
+            price_verified: false,
+        })
+        .is_ok());
+    }
+
+    #[test]
+    fn validate_tool_referral_payload_rejects_bad_bps_and_model() {
+        let mut payload = UpdateToolReferralPayload {
+            slug: "paid-tool".into(),
+            referral_enabled: true,
+            referral_bps: Some(10_001),
+            referral_payout_address: None,
+            referral_model: Some("mystery".into()),
+            x402_pay_to_address: None,
+            x402_builder_code: None,
+            payment_verified: false,
+            x402_endpoint_verified: false,
+            price_verified: false,
+        };
+        assert!(validate_tool_referral_payload(&payload).is_err());
+        payload.referral_bps = Some(100);
+        assert!(validate_tool_referral_payload(&payload).is_err());
+        payload.referral_model = Some("split".into());
+        assert!(validate_tool_referral_payload(&payload).is_ok());
     }
 
     #[test]
@@ -3703,6 +3935,15 @@ mod tests {
             license: None,
             pricing: "free".into(),
             x402_price: None,
+            referral_enabled: false,
+            referral_bps: None,
+            referral_payout_address: None,
+            referral_model: None,
+            x402_pay_to_address: None,
+            x402_builder_code: None,
+            payment_verified: false,
+            x402_endpoint_verified: false,
+            price_verified: false,
             stars: 0,
             last_commit_at: None,
             source: "manual".into(),

@@ -43,4 +43,12 @@ mod tests {
         assert!(!PUBLIC_TOOL_WHERE.contains("crypto_relevance_reasons = ARRAY["));
         assert!(!PUBLIC_TOOL_WHERE.contains("]::TEXT[]"));
     }
+
+    #[test]
+    fn public_tool_where_does_not_require_x402_payment_verification() {
+        assert!(!PUBLIC_TOOL_WHERE.contains("payment_verified"));
+        assert!(!PUBLIC_TOOL_WHERE.contains("x402_endpoint_verified"));
+        assert!(!PUBLIC_TOOL_WHERE.contains("price_verified"));
+        assert!(!PUBLIC_TOOL_WHERE.contains("referral_enabled = false"));
+    }
 }

@@ -52,6 +52,15 @@ fn AdminSettingsForm(initial: SiteSettings) -> impl IntoView {
     let allow_free_registration = RwSignal::new(initial.allow_free_registration);
     let require_tool_approval = RwSignal::new(initial.require_tool_approval);
     let allow_x402_registration = RwSignal::new(initial.allow_x402_registration);
+    let default_referral_bps = RwSignal::new(
+        initial
+            .default_referral_bps
+            .map(|v| v.to_string())
+            .unwrap_or_default(),
+    );
+    let default_referral_payout_address =
+        RwSignal::new(initial.default_referral_payout_address.unwrap_or_default());
+    let x402_builder_code = RwSignal::new(initial.x402_builder_code.unwrap_or_default());
 
     let save_error = RwSignal::new(None::<String>);
     let save_ok = RwSignal::new(false);
@@ -65,6 +74,20 @@ fn AdminSettingsForm(initial: SiteSettings) -> impl IntoView {
         save_error.set(None);
         save_ok.set(false);
 
+        let bps_text = default_referral_bps.get_untracked();
+        let default_bps = if bps_text.trim().is_empty() {
+            None
+        } else {
+            match bps_text.trim().parse::<i32>() {
+                Ok(value) => Some(value),
+                Err(_) => {
+                    saving.set(false);
+                    save_error.set(Some("Default referral bps must be numeric.".into()));
+                    return;
+                }
+            }
+        };
+
         let payload = (
             site_name.get_untracked(),
             slogan.get_untracked(),
@@ -74,6 +97,9 @@ fn AdminSettingsForm(initial: SiteSettings) -> impl IntoView {
             allow_free_registration.get_untracked(),
             require_tool_approval.get_untracked(),
             allow_x402_registration.get_untracked(),
+            default_bps,
+            default_referral_payout_address.get_untracked(),
+            x402_builder_code.get_untracked(),
         );
 
         spawn_local(async move {
@@ -86,6 +112,9 @@ fn AdminSettingsForm(initial: SiteSettings) -> impl IntoView {
                 allow_free_registration: payload.5,
                 require_tool_approval: payload.6,
                 allow_x402_registration: payload.7,
+                default_referral_bps: payload.8,
+                default_referral_payout_address: Some(payload.9).filter(|s| !s.trim().is_empty()),
+                x402_builder_code: Some(payload.10).filter(|s| !s.trim().is_empty()),
             })
             .await;
             saving.set(false);
@@ -100,6 +129,15 @@ fn AdminSettingsForm(initial: SiteSettings) -> impl IntoView {
                     allow_free_registration.set(updated.allow_free_registration);
                     require_tool_approval.set(updated.require_tool_approval);
                     allow_x402_registration.set(updated.allow_x402_registration);
+                    default_referral_bps.set(
+                        updated
+                            .default_referral_bps
+                            .map(|value| value.to_string())
+                            .unwrap_or_default(),
+                    );
+                    default_referral_payout_address
+                        .set(updated.default_referral_payout_address.unwrap_or_default());
+                    x402_builder_code.set(updated.x402_builder_code.unwrap_or_default());
                 }
                 Err(e) => save_error.set(Some(e.to_string())),
             }
@@ -191,6 +229,38 @@ fn AdminSettingsForm(initial: SiteSettings) -> impl IntoView {
                         }
                     />
                     "Allow x402 paid registration"
+                </label>
+            </fieldset>
+
+            <fieldset class="space-y-3 rounded-lg border border-[#E5E5E5] px-4 py-3">
+                <legend class="text-[14px] font-medium px-1">"x402 Referral"</legend>
+                <label class="block">
+                    <span class="text-[14px] font-medium">"Default referral bps"</span>
+                    <input
+                        class="mt-1 w-full rounded-lg border border-[#E5E5E5] px-3 py-2 text-[14px] font-mono"
+                        inputmode="numeric"
+                        placeholder="250"
+                        prop:value=move || default_referral_bps.get()
+                        on:input=move |ev| default_referral_bps.set(event_target_value(&ev))
+                    />
+                </label>
+                <label class="block">
+                    <span class="text-[14px] font-medium">"Default payout address"</span>
+                    <input
+                        class="mt-1 w-full rounded-lg border border-[#E5E5E5] px-3 py-2 text-[14px] font-mono"
+                        placeholder="0x..."
+                        prop:value=move || default_referral_payout_address.get()
+                        on:input=move |ev| default_referral_payout_address.set(event_target_value(&ev))
+                    />
+                </label>
+                <label class="block">
+                    <span class="text-[14px] font-medium">"Builder code"</span>
+                    <input
+                        class="mt-1 w-full rounded-lg border border-[#E5E5E5] px-3 py-2 text-[14px] font-mono"
+                        placeholder="onchainai"
+                        prop:value=move || x402_builder_code.get()
+                        on:input=move |ev| x402_builder_code.set(event_target_value(&ev))
+                    />
                 </label>
             </fieldset>
 

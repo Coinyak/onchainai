@@ -325,6 +325,22 @@ async fn mcp_list_categories(pool: &PgPool) -> Result<Vec<CategoryMcp>, (i32, St
 }
 
 #[derive(Serialize)]
+struct ReferralMetadata {
+    enabled: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    bps: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    payout_address: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    model: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    builder_code: Option<String>,
+    payment_verified: bool,
+    x402_endpoint_verified: bool,
+    price_verified: bool,
+}
+
+#[derive(Serialize)]
 struct InstallGuide {
     command: String,
     risk_level: String,
@@ -334,7 +350,73 @@ struct InstallGuide {
     blocked: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     config_json: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    x402_notice: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    referral: Option<ReferralMetadata>,
     steps: Vec<String>,
+}
+
+fn x402_notice_for_tool(tool: &Tool) -> Option<String> {
+    if tool.pricing != "x402" && tool.x402_price.is_none() && !tool.referral_enabled {
+        return None;
+    }
+    let price = tool
+        .x402_price
+        .as_deref()
+        .filter(|p| !p.trim().is_empty())
+        .unwrap_or("the provider's x402 price");
+    let verification =
+        if tool.payment_verified && tool.x402_endpoint_verified && tool.price_verified {
+            "Payment details are operator verified."
+        } else {
+            "Payment details are not operator verified yet."
+        };
+    Some(format!(
+        "This tool may request x402 payment ({price}). Connect an agent wallet before calling it. {verification}"
+    ))
+}
+
+fn referral_metadata_for_tool(tool: &Tool) -> Option<ReferralMetadata> {
+    if !tool.referral_enabled
+        && tool.referral_bps.is_none()
+        && tool.referral_model.is_none()
+        && tool.x402_builder_code.is_none()
+    {
+        return None;
+    }
+    Some(ReferralMetadata {
+        enabled: tool.referral_enabled,
+        bps: tool.referral_bps,
+        payout_address: tool.referral_payout_address.clone(),
+        model: tool.referral_model.clone(),
+        builder_code: tool.x402_builder_code.clone(),
+        payment_verified: tool.payment_verified,
+        x402_endpoint_verified: tool.x402_endpoint_verified,
+        price_verified: tool.price_verified,
+    })
+}
+
+async fn record_referral_event(pool: &PgPool, tool: &Tool, event_type: &str, platform: &str) {
+    if !tool.referral_enabled && tool.pricing != "x402" {
+        return;
+    }
+    let metadata = json!({
+        "platform": platform,
+        "source": "mcp_install_guide",
+        "builder_code": tool.x402_builder_code,
+    });
+    let _ = sqlx::query(
+        r#"
+        INSERT INTO referral_events (tool_id, event_type, metadata)
+        VALUES ($1, $2, $3)
+        "#,
+    )
+    .bind(tool.id)
+    .bind(event_type)
+    .bind(metadata)
+    .execute(pool)
+    .await;
 }
 
 async fn mcp_install_guide(
@@ -347,6 +429,7 @@ async fn mcp_install_guide(
     }
 
     let tool = mcp_get_tool(pool, slug).await.map_err(|m| (-32000, m))?;
+    record_referral_event(pool, &tool, "install_guide", platform).await;
 
     let risk_level = tool.install_risk_level.clone();
     let risk_reasons = tool.install_risk_reasons.clone();
@@ -360,6 +443,8 @@ async fn mcp_install_guide(
         .unwrap_or_else(|| "No install command available.".into());
 
     if blocked {
+        let x402_notice = x402_notice_for_tool(&tool);
+        let referral = referral_metadata_for_tool(&tool);
         return Ok(InstallGuide {
             command: install,
             risk_level,
@@ -369,6 +454,8 @@ async fn mcp_install_guide(
             ),
             blocked: true,
             config_json: None,
+            x402_notice,
+            referral,
             steps: vec![
                 "This tool has a critical-risk install command.".into(),
                 "Public install guidance is withheld until an operator reviews the listing.".into(),
@@ -435,6 +522,8 @@ async fn mcp_install_guide(
             vec!["Run the install command in your terminal.".into()],
         ),
     };
+    let x402_notice = x402_notice_for_tool(&tool);
+    let referral = referral_metadata_for_tool(&tool);
 
     Ok(InstallGuide {
         command,
@@ -443,6 +532,8 @@ async fn mcp_install_guide(
         warning,
         blocked: false,
         config_json,
+        x402_notice,
+        referral,
         steps,
     })
 }
@@ -468,6 +559,8 @@ mod tests {
             warning: Some("Medium-risk install command.".into()),
             blocked: false,
             config_json: None,
+            x402_notice: None,
+            referral: None,
             steps: vec!["Run install".into()],
         };
         let json = serde_json::to_value(&guide).unwrap();
@@ -486,10 +579,45 @@ mod tests {
             warning: Some("blocked".into()),
             blocked: true,
             config_json: None,
+            x402_notice: None,
+            referral: None,
             steps: vec![],
         };
         assert!(guide.blocked);
         assert_eq!(guide.risk_level, "critical");
+    }
+
+    #[test]
+    fn install_guide_includes_x402_referral_notice() {
+        let guide = InstallGuide {
+            command: "npx mcp-remote https://example.com/mcp".into(),
+            risk_level: "low".into(),
+            risk_reasons: vec![],
+            warning: None,
+            blocked: false,
+            config_json: None,
+            x402_notice: Some(
+                "This tool may request x402 payment (0.01 USDC). Connect an agent wallet before calling it. Payment details are not operator verified yet.".into(),
+            ),
+            referral: Some(ReferralMetadata {
+                enabled: true,
+                bps: Some(250),
+                payout_address: Some("0x0000000000000000000000000000000000000000".into()),
+                model: Some("attribution".into()),
+                builder_code: Some("onchainai".into()),
+                payment_verified: false,
+                x402_endpoint_verified: false,
+                price_verified: false,
+            }),
+            steps: vec!["Run install".into()],
+        };
+        let json = serde_json::to_value(&guide).unwrap();
+        assert!(json["x402_notice"]
+            .as_str()
+            .unwrap()
+            .contains("not operator verified"));
+        assert_eq!(json["referral"]["enabled"], true);
+        assert_eq!(json["referral"]["builder_code"], "onchainai");
     }
 
     #[test]
