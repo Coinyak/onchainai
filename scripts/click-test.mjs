@@ -7,7 +7,7 @@ import {
   NAV_PACE_MS,
   clearSidebarStorage,
   probeLogoFallback,
-  logoFallbackOk,
+  evaluateLogoFallback,
 } from "./browser-test-helpers.mjs";
 
 const base = (process.argv[2] || "https://www.onchain-ai.xyz").replace(/\/$/, "");
@@ -95,13 +95,8 @@ try {
 
   if (logoStats.imgs > 0) {
     const brokeFallback = await probeLogoFallback(page);
-    if (!brokeFallback.skipped) {
-      log(
-        "tool-logo-fallback",
-        logoFallbackOk(brokeFallback),
-        `imgCount=${brokeFallback.imgCount} textLen=${brokeFallback.textLen}`,
-      );
-    }
+    const logoEval = evaluateLogoFallback(brokeFallback);
+    log("tool-logo-fallback", logoEval.ok, logoEval.detail);
   }
 
   const chainLink = await page.$(".chain-strip a:visible, .chain-tile:visible");

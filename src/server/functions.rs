@@ -12,6 +12,7 @@ use crate::models::{
     ToolSubmission, ToolSubmissionPayload, TOOL_REPORT_REASONS,
 };
 use leptos::prelude::*;
+use std::collections::HashMap;
 use uuid::Uuid;
 
 #[cfg(feature = "ssr")]
@@ -583,6 +584,104 @@ pub async fn list_tools(
 pub async fn list_tools_v1(req: ToolListRequest) -> Result<Vec<Tool>, ServerFnError> {
     validate_tool_list_request(&req)?;
     list_tools(req.sort, req.offset, req.limit, req.filters, req.query).await
+}
+
+/// Tools browser page size (must match `tools_browser::TOOL_PAGE_SIZE`).
+pub const BROWSER_TOOL_PAGE_SIZE: u32 = 50;
+
+/// Clamp browser `page` query param to the UI-visible window.
+pub fn clamp_browser_page_param(page: u32) -> u32 {
+    let max_page = (MAX_LIST_TOOLS_LIMIT as u32) / BROWSER_TOOL_PAGE_SIZE;
+    page.max(1).min(max_page)
+}
+
+/// Cumulative list limit for browser pagination (`offset` always 0).
+pub fn browser_visible_limit_for_page(page: u32) -> i64 {
+    let page = clamp_browser_page_param(page);
+    let limit = page
+        .saturating_mul(BROWSER_TOOL_PAGE_SIZE)
+        .min(MAX_LIST_TOOLS_LIMIT as u32);
+    i64::from(limit)
+}
+
+/// Single RPC payload for `ToolsBrowser` — avoids client-side fan-out into 5–6 `/api` calls.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct BrowserDataPayload {
+    pub categories: Vec<(Category, i64)>,
+    pub chains: Vec<(String, i64)>,
+    pub total: i64,
+    pub tools: Vec<Tool>,
+    pub comment_counts: HashMap<String, i64>,
+    pub preview_tool: Option<Tool>,
+}
+
+/// Request for bundled browser data load.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct LoadBrowserDataRequest {
+    pub sort: String,
+    pub filters: ToolFilters,
+    pub search_q: Option<String>,
+    pub selected: Option<String>,
+    pub page: u32,
+}
+
+/// Load all data required by `ToolsBrowser` in **one** server round-trip (one DB pool checkout
+/// sequence per HTTP request; internal queries still run concurrently on the server).
+#[server(LoadBrowserData, "/api")]
+pub async fn load_browser_data(
+    req: LoadBrowserDataRequest,
+) -> Result<BrowserDataPayload, ServerFnError> {
+    validate_tool_filters(&req.filters)?;
+    let page = clamp_browser_page_param(req.page);
+    let list_req = ToolListRequest {
+        sort: req.sort.clone(),
+        offset: 0,
+        limit: browser_visible_limit_for_page(page),
+        filters: req.filters.clone(),
+        query: req.search_q.clone(),
+    };
+    validate_tool_list_request(&list_req)?;
+
+    let preview_fut = async {
+        match req.selected.filter(|s| !s.is_empty()) {
+            Some(s) => get_tool_by_slug(s).await.ok(),
+            None => None,
+        }
+    };
+
+    let (categories, chains, total, tools, preview_tool) = futures::join!(
+        get_categories(),
+        get_chain_counts(12),
+        count_tools(req.filters),
+        list_tools(
+            list_req.sort,
+            list_req.offset,
+            list_req.limit,
+            list_req.filters,
+            list_req.query,
+        ),
+        preview_fut,
+    );
+    let categories = categories?;
+    let chains = chains?;
+    let total = total?;
+    let tools = tools?;
+
+    let slugs: Vec<String> = tools.iter().map(|t| t.slug.clone()).collect();
+    let comment_counts: HashMap<String, i64> = if slugs.is_empty() {
+        HashMap::new()
+    } else {
+        get_tool_comment_counts(slugs).await?.into_iter().collect()
+    };
+
+    Ok(BrowserDataPayload {
+        categories,
+        chains,
+        total,
+        tools,
+        comment_counts,
+        preview_tool,
+    })
 }
 
 /// Batch comment counts for approved tools by slug.
@@ -3090,6 +3189,20 @@ mod tests {
         assert_eq!(clamp_list_tools_limit(500), MAX_LIST_TOOLS_LIMIT);
         assert_eq!(clamp_list_tools_limit(501), MAX_LIST_TOOLS_LIMIT);
         assert_eq!(clamp_list_tools_limit(0), 1);
+    }
+
+    #[test]
+    fn browser_visible_limit_page_two_is_cumulative_100() {
+        assert_eq!(browser_visible_limit_for_page(2), 100);
+        assert_eq!(browser_visible_limit_for_page(1), 50);
+        assert_eq!(browser_visible_limit_for_page(0), 50);
+    }
+
+    #[test]
+    fn clamp_browser_page_param_bounds_window() {
+        assert_eq!(clamp_browser_page_param(0), 1);
+        assert_eq!(clamp_browser_page_param(2), 2);
+        assert_eq!(clamp_browser_page_param(99), 10);
     }
 
     #[test]

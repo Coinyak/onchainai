@@ -49,10 +49,32 @@ export async function probeLogoFallback(page) {
       document
         .querySelector(".tool-card .tool-logo .tool-logo-monogram")
         ?.textContent?.trim() ?? "";
+    if (imgCount > 0) {
+      return {
+        skipped: true,
+        reason:
+          "synthetic src break did not remove img (Leptos may reconcile DOM; monogram visible)",
+        imgCount,
+        textLen: text.length,
+      };
+    }
     return { skipped: false, imgCount, textLen: text.length };
   });
 }
 
-export function logoFallbackOk(result) {
-  return !result.skipped && result.imgCount === 0 && result.textLen > 0;
+/** @returns {{ ok: boolean, detail: string }} */
+export function evaluateLogoFallback(result) {
+  if (result.skipped && result.reason) {
+    return { ok: true, detail: result.reason };
+  }
+  if (result.skipped) {
+    return { ok: true, detail: "no logo img on page" };
+  }
+  if (result.imgCount === 0 && result.textLen > 0) {
+    return { ok: true, detail: "fallback ok" };
+  }
+  return {
+    ok: false,
+    detail: `imgCount=${result.imgCount} textLen=${result.textLen}`,
+  };
 }

@@ -6,7 +6,7 @@ import {
   NAV_PACE_MS,
   clearSidebarStorage,
   probeLogoFallback,
-  logoFallbackOk,
+  evaluateLogoFallback,
 } from "./browser-test-helpers.mjs";
 
 const base = (process.argv[2] || "http://localhost:3000").replace(/\/$/, "");
@@ -120,10 +120,9 @@ if (toolsLogoStats.cards >= 50 && toolsLogoStats.imgs === 0) {
 }
 if (toolsLogoStats.imgs > 0) {
   const brokeFallback = await probeLogoFallback(page);
-  if (!brokeFallback.skipped && !logoFallbackOk(brokeFallback)) {
-    errors.push(
-      `layout:tools-logo-fallback-missing:imgCount=${brokeFallback.imgCount} textLen=${brokeFallback.textLen}`,
-    );
+  const logoEval = evaluateLogoFallback(brokeFallback);
+  if (!logoEval.ok) {
+    errors.push(`layout:tools-logo-fallback-missing:${logoEval.detail}`);
   }
 }
 const toolsLoadMore = await page.evaluate(() => {

@@ -8,10 +8,10 @@ use crate::components::{
 };
 use crate::filter_query::{build_tool_filters, describe_active_filters, ActiveFiltersSummary};
 use crate::models::tool::parse_page_value;
-use crate::models::{Category, Tool};
+
 use crate::server::functions::{
-    count_tools, get_categories, get_chain_counts, get_tool_by_slug, get_tool_comment_counts,
-    list_tools_v1, ToolFilters, ToolListRequest, MAX_LIST_TOOLS_LIMIT,
+    load_browser_data, BrowserDataPayload, LoadBrowserDataRequest, ToolFilters,
+    MAX_LIST_TOOLS_LIMIT,
 };
 use leptos::prelude::*;
 use leptos_router::hooks::use_query_map;
@@ -291,16 +291,6 @@ fn comment_count_for_slug(comment_counts: &HashMap<String, i64>, slug: &str) -> 
     comment_counts.get(slug).copied().unwrap_or(0)
 }
 
-#[derive(Clone, serde::Serialize, serde::Deserialize)]
-struct BrowserData {
-    categories: Vec<(Category, i64)>,
-    chains: Vec<(String, i64)>,
-    total: i64,
-    tools: Vec<Tool>,
-    comment_counts: HashMap<String, i64>,
-    preview_tool: Option<Tool>,
-}
-
 /// Cache identity for browser list data (excludes `retry_tick`).
 #[derive(Clone, PartialEq)]
 pub struct BrowserCacheKey {
@@ -314,16 +304,16 @@ pub struct BrowserCacheKey {
 #[derive(Clone)]
 struct TaggedBrowserPayload {
     deps: BrowserCacheKey,
-    data: BrowserData,
+    data: BrowserDataPayload,
 }
 
 /// Choose list payload for render: hydrated resource wins; cache only while pending.
 /// Invariant: Leptos `Resource` invalidates `Some(Ok)` when `page_cache_key` changes.
 fn browser_data_for_render(
-    page_state: &Option<Result<BrowserData, ServerFnError>>,
+    page_state: &Option<Result<BrowserDataPayload, ServerFnError>>,
     cache_key: &BrowserCacheKey,
     cached: Option<&TaggedBrowserPayload>,
-) -> Option<BrowserData> {
+) -> Option<BrowserDataPayload> {
     match page_state.as_ref() {
         Some(Ok(data)) => Some(data.clone()),
         None => cached
@@ -331,54 +321,6 @@ fn browser_data_for_render(
             .map(|tagged| tagged.data.clone()),
         Some(Err(_)) => None,
     }
-}
-
-async fn load_browser_data(
-    sort: String,
-    filters: ToolFilters,
-    search_q: Option<String>,
-    selected: Option<String>,
-    page: u32,
-) -> Result<BrowserData, ServerFnError> {
-    // Round 1: these queries are independent, so run them concurrently — one
-    // network round-trip to the DB instead of five (the DB is remote; latency,
-    // not execution time, dominates page load).
-    let preview_fut = async {
-        match selected.filter(|s| !s.is_empty()) {
-            Some(s) => get_tool_by_slug(s).await.ok(),
-            None => None,
-        }
-    };
-    let (categories, chains, total, tools, preview_tool) = futures::join!(
-        get_categories(),
-        get_chain_counts(12),
-        count_tools(filters.clone()),
-        list_tools_v1(ToolListRequest {
-            sort,
-            offset: 0,
-            limit: visible_limit_for_page(page),
-            filters,
-            query: search_q,
-        }),
-        preview_fut,
-    );
-    let categories = categories?;
-    let chains = chains?;
-    let total = total?;
-    let tools = tools?;
-
-    // Round 2: comment counts need the resolved tool slugs.
-    let slugs = tools.iter().map(|t| t.slug.clone()).collect();
-    let comment_counts: HashMap<String, i64> =
-        get_tool_comment_counts(slugs).await?.into_iter().collect();
-    Ok(BrowserData {
-        categories,
-        chains,
-        total,
-        tools,
-        comment_counts,
-        preview_tool,
-    })
 }
 
 #[component]
@@ -463,16 +405,16 @@ pub fn ToolsBrowser(
     // Stale-while-revalidate cache for in-flight refetches (not serialized on hydrate).
     let cached_browser_data = RwSignal::<Option<TaggedBrowserPayload>>::new(None);
 
-    let page: Resource<Result<BrowserData, ServerFnError>> = Resource::new_blocking(
+    let page: Resource<Result<BrowserDataPayload, ServerFnError>> = Resource::new_blocking(
         move || page_fetch_deps.get(),
         move |(cache_key, _retry_tick)| async move {
-            let data = load_browser_data(
-                cache_key.sort.clone(),
-                cache_key.filters.clone(),
-                cache_key.search_q.clone(),
-                cache_key.selected.clone(),
-                cache_key.page,
-            )
+            let data = load_browser_data(LoadBrowserDataRequest {
+                sort: cache_key.sort.clone(),
+                filters: cache_key.filters.clone(),
+                search_q: cache_key.search_q.clone(),
+                selected: cache_key.selected.clone(),
+                page: cache_key.page,
+            })
             .await?;
             if page_cache_key.get_untracked() == cache_key {
                 cached_browser_data.set(Some(TaggedBrowserPayload {
@@ -896,8 +838,8 @@ mod tests {
         }
     }
 
-    fn sample_browser_data(total: i64) -> BrowserData {
-        BrowserData {
+    fn sample_browser_data(total: i64) -> BrowserDataPayload {
+        BrowserDataPayload {
             categories: vec![],
             chains: vec![],
             total,

@@ -45,7 +45,7 @@ Rust single binary: Leptos SSR + Axum + rmcp + sqlx + tokio-cron-scheduler.
 5. **DB:** Migrations run automatically on server startup (`run_migrations` in `lib.rs`). If local `sqlx migrate run` hits Supabase session pool limits, deploy still applies pending migrations on boot. Optional: Supabase SQL editor for `006`/`007`/`008`.
 6. **Railway:** `./scripts/deploy-railway.sh` (requires `railway login`, `.env` secrets). Docker build runs on Railway (local Docker optional).
 7. **Post-deploy:** `./scripts/post-deploy-verify.sh` — hard refresh browser if UI looks stale (`docs/BUILD_DEPLOY_RULES.md` §6)
-8. **Pool sizing:** `DATABASE_MAX_CONNECTIONS` defaults to `5` for Supabase session pooler headroom. Rate limits are in-process; use a single Railway replica or add shared store before scaling out.
+8. **Pool sizing:** `DATABASE_MAX_CONNECTIONS` defaults to `10` (deploy script). `ToolsBrowser` uses one bundled `LoadBrowserData` RPC per navigation. Rate limits are in-process; use a single Railway replica or add shared store before scaling out.
 
 ## Architecture
 
