@@ -2,10 +2,10 @@
 
 use crate::chains::chain_tags_for_tool;
 use crate::components::copy_button::CopyButton;
+use crate::components::tool_logo::ToolLogo;
 use crate::install_safety::{
     blocks_structured_config, claude_mcp_config, cursor_install_note, install_warning_text,
 };
-use crate::models::tool::{display_monogram, tool_logo_img_url};
 use crate::models::Tool;
 use leptos::prelude::*;
 
@@ -80,10 +80,7 @@ pub fn ToolDetailContent(
         .description
         .clone()
         .unwrap_or_else(|| "No description.".into());
-    let mono = display_monogram(&tool);
-    let logo_img = tool_logo_img_url(&tool);
-    let show_logo_img = RwSignal::new(logo_img.is_some());
-    let tool_name = tool.name.clone();
+
     let status = tool.status.clone();
     let tool_type = tool.tool_type.clone();
     let active_tab = RwSignal::new("generic".to_string());
@@ -107,27 +104,7 @@ pub fn ToolDetailContent(
     view! {
         <div class=if compact { "detail-content compact" } else { "detail-content" }>
             <header class="detail-header">
-                <div class="detail-logo" aria-hidden="true">
-                    {move || if show_logo_img.get() {
-                        if let Some(url) = logo_img.clone() {
-                            view! {
-                                <img
-                                    class="tool-logo-img"
-                                    src=url
-                                    alt=tool_name.clone()
-                                    loading="lazy"
-                                    referrerpolicy="no-referrer"
-                                    on:error=move |_| show_logo_img.set(false)
-                                />
-                            }
-                            .into_any()
-                        } else {
-                            view! { {mono.clone()} }.into_any()
-                        }
-                    } else {
-                        view! { {mono.clone()} }.into_any()
-                    }}
-                </div>
+                <ToolLogo tool=tool.clone() class="detail-logo" img_class="tool-logo-img detail-logo-img"/>
                 <div class="detail-header-text">
                     <h2 class="detail-title">{tool.name.clone()}</h2>
                     <div class="tool-badges">

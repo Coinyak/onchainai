@@ -173,15 +173,6 @@ pub fn parse_page_from_query_string(query: &str) -> Option<u32> {
     })
 }
 
-/// Hydration fallback: reads `window.location.search` when the router has not
-/// surfaced `page` yet. Delegates to [`parse_page_from_query_string`].
-#[cfg(feature = "hydrate")]
-fn page_from_browser_url() -> Option<u32> {
-    let window = web_sys::window()?;
-    let search = window.location().search().ok()?;
-    parse_page_from_query_string(&search)
-}
-
 pub fn visible_limit_for_page(page: u32) -> i64 {
     let page = page.max(1);
     let limit = page.saturating_mul(TOOL_PAGE_SIZE).min(MAX_VISIBLE_TOOLS);
@@ -326,7 +317,23 @@ struct TaggedBrowserPayload {
     data: BrowserData,
 }
 
+/// Choose list payload for render: hydrated resource wins; cache only while pending.
+fn browser_data_for_render(
+    page_state: &Option<Result<BrowserData, ServerFnError>>,
+    cache_key: &BrowserCacheKey,
+    cached: Option<&TaggedBrowserPayload>,
+) -> Option<BrowserData> {
+    match page_state.as_ref() {
+        Some(Ok(data)) => Some(data.clone()),
+        None => cached
+            .filter(|tagged| tagged.deps == *cache_key)
+            .map(|tagged| tagged.data.clone()),
+        Some(Err(_)) => None,
+    }
+}
+
 /// Resolve which browser payload to render while a refetch is in flight.
+#[cfg(test)]
 fn resolve_browser_data(
     current: &BrowserCacheKey,
     fetch_ok: Option<&TaggedBrowserPayload>,
@@ -420,16 +427,8 @@ pub fn ToolsBrowser(
     });
     let search_q = Memo::new(move |_| query.with(|q| q.get("q").map(|s| s.to_string())));
     let selected = Memo::new(move |_| query.with(|q| q.get("selected").map(|s| s.to_string())));
-    let page_number = Memo::new(move |_| {
-        let from_router = query.with(|q| q.get("page").map(|s| s.to_string()));
-        #[cfg(feature = "hydrate")]
-        if from_router.is_none() {
-            if let Some(page) = page_from_browser_url() {
-                return clamp_browser_page(page);
-            }
-        }
-        parse_page_param(from_router)
-    });
+    let page_number =
+        Memo::new(move |_| parse_page_param(query.with(|q| q.get("page").map(|s| s.to_string()))));
 
     let query_base = Memo::new(move |_| {
         build_query_base(
@@ -575,17 +574,12 @@ pub fn ToolsBrowser(
                 {move || {
                     let cache_key = page_cache_key.get();
                     let page_state = page.get();
-                    let fetch_ok = last_ok_fetch
-                        .get()
-                        .filter(|tagged| tagged.deps == cache_key);
-                    let fetch_pending = matches!(page_state, None);
-                    let resolved = resolve_browser_data(
+                    let browser_data = browser_data_for_render(
+                        &page_state,
                         &cache_key,
-                        fetch_ok.as_ref(),
-                        fetch_pending,
                         cached_browser_data.get().as_ref(),
                     );
-                    match (page_state, resolved) {
+                    match (page_state, browser_data) {
                         (Some(Err(e)), _) => view! {
                             <aside class="tools-sidebar site-sidebar-chrome">
                                 <SidebarBrand/>
@@ -908,15 +902,6 @@ mod tests {
         assert_eq!(parse_page_param(Some("99".into())), MAX_BROWSER_PAGE);
     }
 
-    /// `page_from_browser_url` (hydrate) reads `window.location.search` and delegates
-    /// to [`parse_page_from_query_string`] — exercise the parser paths it relies on.
-    #[test]
-    fn page_from_browser_url_parser_paths() {
-        assert_eq!(parse_page_from_query_string("?page=2&sort=hot"), Some(2));
-        assert_eq!(parse_page_from_query_string("?page=%32"), Some(2));
-        assert_eq!(parse_page_from_query_string("?page=abc"), None);
-    }
-
     #[test]
     fn clamp_browser_page_bounds_visible_window() {
         assert_eq!(clamp_browser_page(0), 1);
@@ -944,6 +929,39 @@ mod tests {
             comment_counts: HashMap::new(),
             preview_tool: None,
         }
+    }
+
+    #[test]
+    fn browser_data_for_render_uses_hydrated_resource_without_cache() {
+        let current = sample_cache_key(2);
+        let data = sample_browser_data(100);
+        let page_state = Some(Ok(data.clone()));
+        let resolved = browser_data_for_render(&page_state, &current, None);
+        assert_eq!(resolved.map(|d| d.total), Some(100));
+    }
+
+    #[test]
+    fn browser_data_for_render_ignores_cache_when_resource_ready() {
+        let current = sample_cache_key(2);
+        let hydrated = sample_browser_data(100);
+        let stale = TaggedBrowserPayload {
+            deps: sample_cache_key(1),
+            data: sample_browser_data(50),
+        };
+        let page_state = Some(Ok(hydrated));
+        let resolved = browser_data_for_render(&page_state, &current, Some(&stale));
+        assert_eq!(resolved.map(|d| d.total), Some(100));
+    }
+
+    #[test]
+    fn browser_data_for_render_reuses_cache_while_pending() {
+        let current = sample_cache_key(1);
+        let cached = TaggedBrowserPayload {
+            deps: current.clone(),
+            data: sample_browser_data(50),
+        };
+        let resolved = browser_data_for_render(&None, &current, Some(&cached));
+        assert_eq!(resolved.map(|d| d.total), Some(50));
     }
 
     #[test]

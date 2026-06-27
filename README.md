@@ -48,6 +48,8 @@ cargo run
 | `docs/UI_UX_DESIGN.md` | Full UI spec (pages, components, mobile, admin panel) |
 | `DESIGN.md` | Design tokens (Stitch spec for AI UI generation) |
 | `docs/SECURITY.md` | Security rules (auth, RLS, headers, rate limiting) |
+| `docs/OPERATOR_GUIDE.md` | Operator/admin capabilities (Korean) — what each role can do without code changes |
+| `docs/BUILD_DEPLOY_RULES.md` | Build coherence, smoke gates, Railway Dockerfile deploy |
 | `AGENTS.md` | Instructions for AI coding agents |
 
 ## License

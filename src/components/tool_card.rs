@@ -3,7 +3,7 @@
 use crate::chains::chain_tags_for_tool;
 use crate::components::copy_button::CopyButton;
 use crate::components::login_modal::LoginModal;
-use crate::models::tool::{display_monogram, tool_logo_img_url};
+use crate::components::tool_logo::ToolLogo;
 use crate::models::Tool;
 use crate::server::functions::{get_current_user, toggle_bookmark};
 use leptos::prelude::*;
@@ -34,10 +34,7 @@ pub fn ToolCard(
     let slug = tool.slug.clone();
     let detail_href = format!("/tools/{slug}");
     let href = preview_href.unwrap_or(detail_href);
-    let mono = display_monogram(&tool);
-    let logo_img = tool_logo_img_url(&tool);
-    let show_logo_img = RwSignal::new(logo_img.is_some());
-    let tool_name = tool.name.clone();
+
     let status = tool.status.clone();
     let tool_type = tool.tool_type.clone();
     let chains = tool.chains.clone();
@@ -75,27 +72,7 @@ pub fn ToolCard(
         <article class=if is_selected { "tool-card is-selected" } else { "tool-card" }>
             <a href=href class="tool-card-link no-underline text-inherit">
                 <div class="tool-card-inner">
-                    <div class="tool-logo" aria-hidden="true">
-                        {move || if show_logo_img.get() {
-                            if let Some(url) = logo_img.clone() {
-                                view! {
-                                    <img
-                                        class="tool-logo-img"
-                                        src=url
-                                        alt=tool_name.clone()
-                                        loading="lazy"
-                                        referrerpolicy="no-referrer"
-                                        on:error=move |_| show_logo_img.set(false)
-                                    />
-                                }
-                                .into_any()
-                            } else {
-                                view! { {mono.clone()} }.into_any()
-                            }
-                        } else {
-                            view! { {mono.clone()} }.into_any()
-                        }}
-                    </div>
+                    <ToolLogo tool=tool.clone()/>
                     <div class="tool-card-body">
                         <div class="tool-card-header">
                             <h3 class="tool-name">{tool.name.clone()}</h3>

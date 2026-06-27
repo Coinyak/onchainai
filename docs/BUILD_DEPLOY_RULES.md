@@ -116,6 +116,18 @@ Smoke scripts encode these checks: `scripts/smoke-test.sh`, `scripts/browser-smo
 
 **Production:** Unaffected — Railway Docker image builds binary + pkg in one `cargo leptos build --release` layer.
 
+### Railway builder: Dockerfile vs RAILPACK
+
+`railway.json` pins **`dockerfilePath: Dockerfile`**. Use **`./scripts/deploy-railway.sh`** or **`railway up`** so Railway builds from the Dockerfile.
+
+| Method | Builder | Notes |
+|--------|---------|-------|
+| `./scripts/deploy-railway.sh` | Dockerfile | **Preferred** — single `cargo leptos build --release` in image |
+| `railway up` (CLI) | Dockerfile | Same as deploy script |
+| GitHub auto-deploy (default) | Often **RAILPACK** | May ignore `railway.json` or stall in BUILDING; not validated for this repo |
+
+If GitHub deploy sticks in **BUILDING**, cancel it and deploy via `./scripts/deploy-railway.sh` instead. Do not mix a RAILPACK image with a Dockerfile-built WASM/pkg bundle.
+
 > **한국어 요약:** 8시간 넘게 돌던 로컬 서버(구 바이너리)와 새로 빌드한 WASM/pkg가 어긋나 서버 함수 역직렬화 오류 및 UI 불일치 발생. 프로세스 종료 후 동일 빌드 바이너리로 재시작하여 해결. 프로덕션은 정상.
 
 ---

@@ -21,5 +21,6 @@ pub mod skeleton;
 pub mod tool_card;
 pub mod tool_detail_content;
 pub mod tool_listing_actions;
+pub mod tool_logo;
 pub mod tools_browser;
 pub mod top_nav;

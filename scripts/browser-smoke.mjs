@@ -115,10 +115,10 @@ if (toolsLogoStats.imgs > 0) {
     const img = document.querySelector(".tool-logo-img");
     if (!img) return { skipped: true };
     img.src = "https://invalid.onchainai-test.invalid/nope.png";
-    await new Promise((r) => setTimeout(r, 400));
+    await new Promise((r) => setTimeout(r, 600));
     const stillImg = !!document.querySelector(".tool-logo-img");
     const logo = document.querySelector(".tool-card .tool-logo");
-    const text = logo?.textContent?.trim() ?? "";
+    const text = logo?.querySelector(".tool-logo-monogram")?.textContent?.trim() ?? "";
     return { skipped: false, stillImg, textLen: text.length };
   });
   if (!brokeFallback.skipped && brokeFallback.stillImg && brokeFallback.textLen === 0) {
@@ -151,13 +151,18 @@ if (toolsCards >= 50) {
     errors.push("interaction:tools-missing-load-more-button");
   } else {
     await loadMore.click();
+    let navTimedOut = false;
+    await page.waitForURL(/[?&]page=2/, { timeout: 20000 }).catch(() => {
+      navTimedOut = true;
+    });
     await page.waitForLoadState("networkidle");
+    const expectedMin = before + 50;
     let timedOut = false;
     await page
       .waitForFunction(
-        (count) => document.querySelectorAll(".tool-card").length > count,
-        before,
-        { timeout: 15000 },
+        (min) => document.querySelectorAll(".tool-card").length >= min,
+        expectedMin,
+        { timeout: 20000 },
       )
       .catch(() => {
         timedOut = true;
@@ -165,17 +170,21 @@ if (toolsCards >= 50) {
     const after = await page.evaluate(
       () => document.querySelectorAll(".tool-card").length,
     );
-    if (timedOut || after <= before) {
+    if (navTimedOut || timedOut || after <= before) {
       errors.push(`interaction:load-more-not-growing:${before}->${after}`);
     }
   }
 }
 
-// Direct ?page=2 navigation should not surface deserialization errors.
+// Direct ?page=2 navigation should not surface deserialization errors and should list more cards.
 await page.goto(`${base}/tools?page=2`, { waitUntil: "networkidle" });
 const page2Text = await page.textContent("body");
+const page2Cards = await page.evaluate(() => document.querySelectorAll(".tool-card").length);
 if (/error deserializing|missing field filters/i.test(page2Text || "")) {
   errors.push("visible-error:/tools?page=2");
+}
+if (page2Cards < 50) {
+  errors.push(`layout:page-2-too-few-cards:${page2Cards}`);
 }
 
 // Mobile sidebar defaults collapsed at 375px when localStorage is cleared.
