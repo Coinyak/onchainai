@@ -246,11 +246,10 @@ pub async fn get_recent_tools(limit: i64) -> Result<Vec<Tool>, ServerFnError> {
 }
 
 /// Returns all function categories with live **approved** tool counts.
-#[server(GetCategories, "/api")]
-pub async fn get_categories() -> Result<Vec<(Category, i64)>, ServerFnError> {
-    let pool = use_context::<sqlx::PgPool>()
-        .ok_or_else(|| ServerFnError::new("database pool not available"))?;
-
+#[cfg(feature = "ssr")]
+pub(crate) async fn fetch_categories(
+    pool: &sqlx::PgPool,
+) -> Result<Vec<(Category, i64)>, ServerFnError> {
     let sql = format!(
         r#"
         SELECT c.id, c.label, c.icon, c.description, c.sort_order,
@@ -262,11 +261,19 @@ pub async fn get_categories() -> Result<Vec<(Category, i64)>, ServerFnError> {
         "#
     );
     let rows = sqlx::query_as::<_, CategoryWithCount>(&sql)
-        .fetch_all(&pool)
+        .fetch_all(pool)
         .await
         .map_err(|e| ServerFnError::new(format!("failed to load categories: {e}")))?;
 
     Ok(rows.into_iter().map(CategoryWithCount::into_pair).collect())
+}
+
+/// Returns all function categories with live **approved** tool counts.
+#[server(GetCategories, "/api")]
+pub async fn get_categories() -> Result<Vec<(Category, i64)>, ServerFnError> {
+    let pool = use_context::<sqlx::PgPool>()
+        .ok_or_else(|| ServerFnError::new("database pool not available"))?;
+    fetch_categories(&pool).await
 }
 
 /// Searches **approved** tools using Postgres full-text search.
@@ -319,20 +326,29 @@ pub async fn search_tools(
     Ok(sanitize_tools_for_public_response(tools))
 }
 
+/// Fetch a single **approved** tool by slug, if present.
+#[cfg(feature = "ssr")]
+pub(crate) async fn fetch_tool_by_slug(
+    pool: &sqlx::PgPool,
+    slug: &str,
+) -> Result<Option<Tool>, ServerFnError> {
+    let sql = format!("SELECT * FROM tools WHERE slug = $1 AND {TOOLS_APPROVED_WHERE}");
+    let tool = sqlx::query_as::<_, Tool>(&sql)
+        .bind(slug)
+        .fetch_optional(pool)
+        .await
+        .map_err(|e| ServerFnError::new(format!("failed to load tool: {e}")))?;
+
+    Ok(tool.map(sanitize_tool_for_public_response))
+}
+
 /// Fetch a single **approved** tool by slug (404-style error if missing or not approved).
 #[server(GetToolBySlug, "/api")]
 pub async fn get_tool_by_slug(slug: String) -> Result<Tool, ServerFnError> {
     let pool = use_context::<sqlx::PgPool>()
         .ok_or_else(|| ServerFnError::new("database pool not available"))?;
-
-    let sql = format!("SELECT * FROM tools WHERE slug = $1 AND {TOOLS_APPROVED_WHERE}");
-    let tool = sqlx::query_as::<_, Tool>(&sql)
-        .bind(&slug)
-        .fetch_optional(&pool)
-        .await
-        .map_err(|e| ServerFnError::new(format!("failed to load tool: {e}")))?;
-
-    tool.map(sanitize_tool_for_public_response)
+    fetch_tool_by_slug(&pool, &slug)
+        .await?
         .ok_or_else(|| ServerFnError::new(format!("tool not found: {slug}")))
 }
 
@@ -445,15 +461,14 @@ fn append_tool_filters(sql: &mut String, filters: &ToolFilters, idx: &mut i32) {
 }
 
 /// Count approved tools with optional multi-axis filters.
-#[server(CountTools, "/api")]
-pub async fn count_tools(filters: ToolFilters) -> Result<i64, ServerFnError> {
-    validate_tool_filters(&filters)?;
-    let pool = use_context::<sqlx::PgPool>()
-        .ok_or_else(|| ServerFnError::new("database pool not available"))?;
-
+#[cfg(feature = "ssr")]
+pub(crate) async fn fetch_count_tools(
+    pool: &sqlx::PgPool,
+    filters: &ToolFilters,
+) -> Result<i64, ServerFnError> {
     let mut sql = format!("SELECT COUNT(*) FROM tools WHERE {TOOLS_APPROVED_WHERE}");
     let mut idx = 1i32;
-    append_tool_filters(&mut sql, &filters, &mut idx);
+    append_tool_filters(&mut sql, filters, &mut idx);
 
     let mut q = sqlx::query_as::<_, (i64,)>(&sql);
     if !filters.function.is_empty() {
@@ -476,19 +491,28 @@ pub async fn count_tools(filters: ToolFilters) -> Result<i64, ServerFnError> {
     }
 
     let count = q
-        .fetch_one(&pool)
+        .fetch_one(pool)
         .await
         .map_err(|e| ServerFnError::new(format!("count failed: {e}")))?;
 
     Ok(count.0)
 }
 
-/// Top chains by approved-tool count for sidebar filters.
-#[server(GetChainCounts, "/api")]
-pub async fn get_chain_counts(limit: i64) -> Result<Vec<(String, i64)>, ServerFnError> {
+/// Count approved tools with optional multi-axis filters.
+#[server(CountTools, "/api")]
+pub async fn count_tools(filters: ToolFilters) -> Result<i64, ServerFnError> {
+    validate_tool_filters(&filters)?;
     let pool = use_context::<sqlx::PgPool>()
         .ok_or_else(|| ServerFnError::new("database pool not available"))?;
+    fetch_count_tools(&pool, &filters).await
+}
 
+/// Top chains by approved-tool count for sidebar filters.
+#[cfg(feature = "ssr")]
+pub(crate) async fn fetch_chain_counts(
+    pool: &sqlx::PgPool,
+    limit: i64,
+) -> Result<Vec<(String, i64)>, ServerFnError> {
     let limit = limit.clamp(1, 100);
     let sql = format!(
         r#"
@@ -502,28 +526,34 @@ pub async fn get_chain_counts(limit: i64) -> Result<Vec<(String, i64)>, ServerFn
     );
     let rows = sqlx::query_as::<_, (String, i64)>(&sql)
         .bind(limit)
-        .fetch_all(&pool)
+        .fetch_all(pool)
         .await
         .map_err(|e| ServerFnError::new(format!("chain counts failed: {e}")))?;
 
     Ok(rows)
 }
 
-/// List approved tools with sort, pagination, FTS query, and optional filters.
-#[server(ListTools, "/api")]
-pub async fn list_tools(
-    sort: String,
-    offset: i64,
-    limit: i64,
-    filters: ToolFilters,
-    query: Option<String>,
-) -> Result<Vec<Tool>, ServerFnError> {
+/// Top chains by approved-tool count for sidebar filters.
+#[server(GetChainCounts, "/api")]
+pub async fn get_chain_counts(limit: i64) -> Result<Vec<(String, i64)>, ServerFnError> {
     let pool = use_context::<sqlx::PgPool>()
         .ok_or_else(|| ServerFnError::new("database pool not available"))?;
+    fetch_chain_counts(&pool, limit).await
+}
 
+/// List approved tools with sort, pagination, FTS query, and optional filters.
+#[cfg(feature = "ssr")]
+pub(crate) async fn fetch_list_tools(
+    pool: &sqlx::PgPool,
+    sort: &str,
+    offset: i64,
+    limit: i64,
+    filters: &ToolFilters,
+    query: Option<&str>,
+) -> Result<Vec<Tool>, ServerFnError> {
     let offset = offset.max(0);
     let limit = clamp_list_tools_limit(limit);
-    let order = match sort.as_str() {
+    let order = match sort {
         "new" => "created_at DESC",
         "comments" => {
             "(SELECT COUNT(*)::bigint FROM comments cm WHERE cm.tool_id = tools.id) DESC, created_at DESC"
@@ -531,7 +561,7 @@ pub async fn list_tools(
         _ => "stars DESC, created_at DESC",
     };
 
-    let has_query = query.as_ref().is_some_and(|q| !q.trim().is_empty());
+    let has_query = query.is_some_and(|q| !q.trim().is_empty());
     let mut sql = format!("SELECT * FROM tools WHERE {TOOLS_APPROVED_WHERE}");
     let mut idx = 1i32;
 
@@ -541,14 +571,14 @@ pub async fn list_tools(
         ));
         idx += 1;
     }
-    append_tool_filters(&mut sql, &filters, &mut idx);
+    append_tool_filters(&mut sql, filters, &mut idx);
     sql.push_str(&format!(
         " ORDER BY {order} OFFSET ${idx} LIMIT ${}",
         idx + 1
     ));
 
     let mut q = sqlx::query_as::<_, Tool>(&sql);
-    if let Some(text) = query.as_ref().filter(|q| !q.trim().is_empty()) {
+    if let Some(text) = query.filter(|q| !q.trim().is_empty()) {
         q = q.bind(text);
     }
     if !filters.function.is_empty() {
@@ -572,18 +602,42 @@ pub async fn list_tools(
     q = q.bind(offset).bind(limit);
 
     let tools = q
-        .fetch_all(&pool)
+        .fetch_all(pool)
         .await
         .map_err(|e| ServerFnError::new(format!("list tools failed: {e}")))?;
 
     Ok(sanitize_tools_for_public_response(tools))
 }
 
+/// List approved tools with sort, pagination, FTS query, and optional filters.
+#[server(ListTools, "/api")]
+pub async fn list_tools(
+    sort: String,
+    offset: i64,
+    limit: i64,
+    filters: ToolFilters,
+    query: Option<String>,
+) -> Result<Vec<Tool>, ServerFnError> {
+    let pool = use_context::<sqlx::PgPool>()
+        .ok_or_else(|| ServerFnError::new("database pool not available"))?;
+    fetch_list_tools(&pool, &sort, offset, limit, &filters, query.as_deref()).await
+}
+
 /// Stable browser-facing tool list — wraps positional `list_tools` with a struct payload.
 #[server(ListToolsV1, "/api")]
 pub async fn list_tools_v1(req: ToolListRequest) -> Result<Vec<Tool>, ServerFnError> {
     validate_tool_list_request(&req)?;
-    list_tools(req.sort, req.offset, req.limit, req.filters, req.query).await
+    let pool = use_context::<sqlx::PgPool>()
+        .ok_or_else(|| ServerFnError::new("database pool not available"))?;
+    fetch_list_tools(
+        &pool,
+        &req.sort,
+        req.offset,
+        req.limit,
+        &req.filters,
+        req.query.as_deref(),
+    )
+    .await
 }
 
 /// Tools browser page size (must match `tools_browser::TOOL_PAGE_SIZE`).
@@ -632,6 +686,9 @@ pub async fn load_browser_data(
     req: LoadBrowserDataRequest,
 ) -> Result<BrowserDataPayload, ServerFnError> {
     validate_tool_filters(&req.filters)?;
+    let pool = use_context::<sqlx::PgPool>()
+        .ok_or_else(|| ServerFnError::new("database pool not available"))?;
+
     let page = clamp_browser_page_param(req.page);
     let list_req = ToolListRequest {
         sort: req.sort.clone(),
@@ -642,25 +699,26 @@ pub async fn load_browser_data(
     };
     validate_tool_list_request(&list_req)?;
 
-    let preview_fut = async {
-        match req.selected.filter(|s| !s.is_empty()) {
-            Some(s) => get_tool_by_slug(s).await.ok(),
-            None => None,
-        }
-    };
+    let preview_slug = req.selected.filter(|s| !s.is_empty());
 
     let (categories, chains, total, tools, preview_tool) = futures::join!(
-        get_categories(),
-        get_chain_counts(12),
-        count_tools(req.filters),
-        list_tools(
-            list_req.sort,
+        fetch_categories(&pool),
+        fetch_chain_counts(&pool, 12),
+        fetch_count_tools(&pool, &req.filters),
+        fetch_list_tools(
+            &pool,
+            &list_req.sort,
             list_req.offset,
             list_req.limit,
-            list_req.filters,
-            list_req.query,
+            &list_req.filters,
+            list_req.query.as_deref(),
         ),
-        preview_fut,
+        async {
+            match preview_slug.as_deref() {
+                Some(s) => fetch_tool_by_slug(&pool, s).await.ok().flatten(),
+                None => None,
+            }
+        },
     );
     let categories = categories?;
     let chains = chains?;
@@ -671,7 +729,10 @@ pub async fn load_browser_data(
     let comment_counts: HashMap<String, i64> = if slugs.is_empty() {
         HashMap::new()
     } else {
-        get_tool_comment_counts(slugs).await?.into_iter().collect()
+        fetch_tool_comment_counts(&pool, &slugs)
+            .await?
+            .into_iter()
+            .collect()
     };
 
     Ok(BrowserDataPayload {
@@ -685,16 +746,14 @@ pub async fn load_browser_data(
 }
 
 /// Batch comment counts for approved tools by slug.
-#[server(GetToolCommentCounts, "/api")]
-pub async fn get_tool_comment_counts(
-    slugs: Vec<String>,
+#[cfg(feature = "ssr")]
+pub(crate) async fn fetch_tool_comment_counts(
+    pool: &sqlx::PgPool,
+    slugs: &[String],
 ) -> Result<Vec<(String, i64)>, ServerFnError> {
     if slugs.is_empty() {
         return Ok(Vec::new());
     }
-
-    let pool = use_context::<sqlx::PgPool>()
-        .ok_or_else(|| ServerFnError::new("database pool not available"))?;
 
     let sql = format!(
         r#"
@@ -706,12 +765,22 @@ pub async fn get_tool_comment_counts(
         "#
     );
     let rows = sqlx::query_as::<_, (String, i64)>(&sql)
-        .bind(&slugs)
-        .fetch_all(&pool)
+        .bind(slugs)
+        .fetch_all(pool)
         .await
         .map_err(|e| ServerFnError::new(format!("comment counts failed: {e}")))?;
 
     Ok(rows)
+}
+
+/// Batch comment counts for approved tools by slug.
+#[server(GetToolCommentCounts, "/api")]
+pub async fn get_tool_comment_counts(
+    slugs: Vec<String>,
+) -> Result<Vec<(String, i64)>, ServerFnError> {
+    let pool = use_context::<sqlx::PgPool>()
+        .ok_or_else(|| ServerFnError::new("database pool not available"))?;
+    fetch_tool_comment_counts(&pool, &slugs).await
 }
 
 /// SQL for admin pending-tool review (AC5).
