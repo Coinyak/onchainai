@@ -276,15 +276,19 @@ async fn mcp_search_tools(
     Ok(sanitize_tools_for_public_response(tools))
 }
 
-async fn mcp_get_tool(pool: &PgPool, slug: &str) -> Result<Tool, String> {
+async fn mcp_fetch_public_tool(pool: &PgPool, slug: &str) -> Result<Tool, String> {
     let sql = format!("SELECT * FROM tools WHERE slug = $1 AND {PUBLIC_TOOL_WHERE}");
     sqlx::query_as::<_, Tool>(&sql)
         .bind(slug)
         .fetch_optional(pool)
         .await
         .map_err(|e| format!("db error: {e}"))?
-        .map(sanitize_tool_for_public_response)
         .ok_or_else(|| format!("tool not found: {slug}"))
+}
+
+async fn mcp_get_tool(pool: &PgPool, slug: &str) -> Result<Tool, String> {
+    let tool = mcp_fetch_public_tool(pool, slug).await?;
+    Ok(sanitize_tool_for_public_response(tool))
 }
 
 #[derive(Serialize)]
@@ -378,11 +382,7 @@ fn x402_notice_for_tool(tool: &Tool) -> Option<String> {
 }
 
 fn referral_metadata_for_tool(tool: &Tool) -> Option<ReferralMetadata> {
-    if !tool.referral_enabled
-        && tool.referral_bps.is_none()
-        && tool.referral_model.is_none()
-        && tool.x402_builder_code.is_none()
-    {
+    if !tool.referral_enabled {
         return None;
     }
     Some(ReferralMetadata {
@@ -406,7 +406,7 @@ async fn record_referral_event(pool: &PgPool, tool: &Tool, event_type: &str, pla
         "source": "mcp_install_guide",
         "builder_code": tool.x402_builder_code,
     });
-    let _ = sqlx::query(
+    if let Err(error) = sqlx::query(
         r#"
         INSERT INTO referral_events (tool_id, event_type, metadata)
         VALUES ($1, $2, $3)
@@ -416,7 +416,14 @@ async fn record_referral_event(pool: &PgPool, tool: &Tool, event_type: &str, pla
     .bind(event_type)
     .bind(metadata)
     .execute(pool)
-    .await;
+    .await
+    {
+        tracing::warn!(
+            tool_id = %tool.id,
+            event_type,
+            "failed to record referral event: {error}"
+        );
+    }
 }
 
 async fn mcp_install_guide(
@@ -428,7 +435,9 @@ async fn mcp_install_guide(
         return Err((-32602, format!("invalid platform: {platform}")));
     }
 
-    let tool = mcp_get_tool(pool, slug).await.map_err(|m| (-32000, m))?;
+    let tool = mcp_fetch_public_tool(pool, slug)
+        .await
+        .map_err(|m| (-32000, m))?;
     record_referral_event(pool, &tool, "install_guide", platform).await;
 
     let risk_level = tool.install_risk_level.clone();
@@ -585,6 +594,72 @@ mod tests {
         };
         assert!(guide.blocked);
         assert_eq!(guide.risk_level, "critical");
+    }
+
+    #[test]
+    fn referral_metadata_requires_enabled_flag() {
+        use crate::models::tool::default_review_fields;
+        use chrono::Utc;
+        use uuid::Uuid;
+
+        let review = default_review_fields();
+        let mut tool = crate::models::Tool {
+            id: Uuid::nil(),
+            name: "Test".into(),
+            slug: "test".into(),
+            description: None,
+            function: "dev-tool".into(),
+            asset_class: "crypto".into(),
+            actor: "human".into(),
+            tool_type: "mcp".into(),
+            repo_url: None,
+            homepage: None,
+            npm_package: None,
+            install_command: None,
+            mcp_endpoint: None,
+            chains: vec![],
+            status: "community".into(),
+            official_team: None,
+            trust_score: 0,
+            approval_status: "approved".into(),
+            submitted_by: None,
+            rejection_reason: None,
+            crypto_relevance_score: review.crypto_relevance_score,
+            crypto_relevance_reasons: review.crypto_relevance_reasons,
+            relevance_status: review.relevance_status,
+            install_risk_level: review.install_risk_level,
+            install_risk_reasons: review.install_risk_reasons,
+            requires_secret: review.requires_secret,
+            safe_copy_command: review.safe_copy_command,
+            quarantined_at: review.quarantined_at,
+            last_reviewed_at: review.last_reviewed_at,
+            review_policy_version: review.review_policy_version,
+            claim_state: "unclaimed".into(),
+            license: None,
+            pricing: "x402".into(),
+            x402_price: None,
+            referral_enabled: false,
+            referral_bps: Some(250),
+            referral_payout_address: None,
+            referral_model: Some("attribution".into()),
+            x402_pay_to_address: None,
+            x402_builder_code: Some("onchainai".into()),
+            payment_verified: false,
+            x402_endpoint_verified: false,
+            price_verified: false,
+            stars: 0,
+            last_commit_at: None,
+            source: "manual".into(),
+            source_url: None,
+            logo_url: None,
+            logo_monogram: None,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        };
+        assert!(referral_metadata_for_tool(&tool).is_none());
+
+        tool.referral_enabled = true;
+        assert!(referral_metadata_for_tool(&tool).is_some());
     }
 
     #[test]

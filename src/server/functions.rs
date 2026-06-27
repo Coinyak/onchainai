@@ -8,8 +8,8 @@
 use crate::auth::session::{optional_session_result, SessionUser};
 use crate::models::tool::{sanitize_tool_for_public_response, sanitize_tools_for_public_response};
 use crate::models::{
-    Category, Comment, FeaturedCard, SiteSettings, Source, Tool, ToolClaimRequest, ToolReport,
-    ToolSubmission, ToolSubmissionPayload, TOOL_REPORT_REASONS,
+    sanitize_site_settings_for_public, Category, Comment, FeaturedCard, SiteSettings, Source, Tool,
+    ToolClaimRequest, ToolReport, ToolSubmission, ToolSubmissionPayload, TOOL_REPORT_REASONS,
 };
 use leptos::prelude::*;
 use std::collections::HashMap;
@@ -99,6 +99,22 @@ impl CategoryWithCount {
 pub async fn get_site_settings() -> Result<SiteSettings, ServerFnError> {
     let pool = use_context::<sqlx::PgPool>()
         .ok_or_else(|| ServerFnError::new("database pool not available"))?;
+
+    let settings = sqlx::query_as::<_, SiteSettings>("SELECT * FROM site_settings WHERE id = 1")
+        .fetch_one(&pool)
+        .await
+        .map_err(|e| ServerFnError::new(format!("failed to load site settings: {e}")))?;
+
+    Ok(sanitize_site_settings_for_public(settings))
+}
+
+/// Admin-only site settings (includes referral defaults and builder code).
+#[server(GetAdminSiteSettings, "/api")]
+pub async fn get_admin_site_settings() -> Result<SiteSettings, ServerFnError> {
+    let (parts, pool, jwt_secret, issuer) = request_context()?;
+    require_admin(&parts, &pool, &jwt_secret, &issuer)
+        .await
+        .map_err(ServerFnError::new)?;
 
     let settings = sqlx::query_as::<_, SiteSettings>("SELECT * FROM site_settings WHERE id = 1")
         .fetch_one(&pool)

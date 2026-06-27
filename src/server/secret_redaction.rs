@@ -115,6 +115,9 @@ pub fn redact_tool_for_admin(mut tool: Tool) -> Tool {
         .into_iter()
         .map(|r| redact_secrets(&r))
         .collect();
+    tool.referral_payout_address = tool.referral_payout_address.map(|a| redact_secrets(&a));
+    tool.x402_pay_to_address = tool.x402_pay_to_address.map(|a| redact_secrets(&a));
+    tool.x402_builder_code = tool.x402_builder_code.map(|c| redact_secrets(&c));
     tool
 }
 

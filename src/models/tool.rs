@@ -211,9 +211,11 @@ pub fn tool_logo_img_url(tool: &Tool) -> Option<String> {
     sanitize_logo_url(tool.logo_url.clone())
 }
 
-/// Strip unsafe `logo_url` before serializing to public API/MCP consumers.
+/// Strip unsafe `logo_url` and operator payout addresses before public API/MCP list/detail.
 pub fn sanitize_tool_for_public_response(mut tool: Tool) -> Tool {
     tool.logo_url = sanitize_logo_url(tool.logo_url.take());
+    tool.referral_payout_address = None;
+    tool.x402_pay_to_address = None;
     tool
 }
 
@@ -418,6 +420,16 @@ mod tests {
             sanitize_logo_url(Some("https://avatars.githubusercontent.com/acme".into())),
             Some("https://avatars.githubusercontent.com/acme".into())
         );
+    }
+
+    #[test]
+    fn sanitize_tool_for_public_response_strips_payout_addresses() {
+        let mut tool = sample_tool();
+        tool.referral_payout_address = Some("0xabc".into());
+        tool.x402_pay_to_address = Some("0xdef".into());
+        let sanitized = sanitize_tool_for_public_response(tool);
+        assert_eq!(sanitized.referral_payout_address, None);
+        assert_eq!(sanitized.x402_pay_to_address, None);
     }
 
     #[test]

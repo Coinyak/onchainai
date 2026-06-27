@@ -3,14 +3,14 @@
 use crate::models::SiteSettings;
 use crate::pages::admin::admin_page_shell;
 use crate::server::functions::{
-    get_site_settings, update_site_settings, UpdateSiteSettingsPayload,
+    get_admin_site_settings, update_site_settings, UpdateSiteSettingsPayload,
 };
 use leptos::prelude::*;
 use leptos::task::spawn_local;
 
 #[component]
 pub fn AdminSettingsPage() -> impl IntoView {
-    let settings = Resource::new(|| (), |_| async move { get_site_settings().await });
+    let settings = Resource::new(|| (), |_| async move { get_admin_site_settings().await });
 
     admin_page_shell(move || {
         view! {

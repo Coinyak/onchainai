@@ -16,6 +16,19 @@ pub const SITE_ORIGIN: &str = "https://www.onchain-ai.xyz";
 /// Default MCP install command shown in UI and site settings.
 pub const MCP_ENDPOINT_CMD: &str = "npx mcp-remote www.onchain-ai.xyz/mcp";
 
+/// Derive the remote MCP URL from an install command like `npx mcp-remote host/mcp`.
+pub fn mcp_remote_url_from_command(cmd: &str) -> String {
+    for token in cmd.split_whitespace().rev() {
+        if token.starts_with("http://") || token.starts_with("https://") {
+            return token.to_string();
+        }
+        if token.contains('.') && !token.starts_with("mcp-remote") && token != "npx" {
+            return format!("https://{token}");
+        }
+    }
+    format!("{SITE_ORIGIN}/mcp")
+}
+
 /// Application configuration loaded from environment variables.
 #[derive(Debug, Clone)]
 pub struct Config {
@@ -165,6 +178,22 @@ mod tests {
         assert_eq!(SITE_ORIGIN, "https://www.onchain-ai.xyz");
         assert!(MCP_ENDPOINT_CMD.contains(CANONICAL_DOMAIN));
         assert!(SITE_ORIGIN.contains(CANONICAL_DOMAIN));
+    }
+
+    #[test]
+    fn mcp_remote_url_from_command_parses_host_and_https() {
+        assert_eq!(
+            mcp_remote_url_from_command("npx mcp-remote www.onchain-ai.xyz/mcp"),
+            "https://www.onchain-ai.xyz/mcp"
+        );
+        assert_eq!(
+            mcp_remote_url_from_command("npx mcp-remote https://example.com/mcp"),
+            "https://example.com/mcp"
+        );
+        assert_eq!(
+            mcp_remote_url_from_command("npx"),
+            "https://www.onchain-ai.xyz/mcp"
+        );
     }
 
     #[test]

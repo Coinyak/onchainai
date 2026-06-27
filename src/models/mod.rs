@@ -87,6 +87,14 @@ pub struct SiteSettings {
     pub updated_at: DateTime<Utc>,
 }
 
+/// Strip operator-only referral config before serializing site settings to public clients.
+pub fn sanitize_site_settings_for_public(mut settings: SiteSettings) -> SiteSettings {
+    settings.default_referral_bps = None;
+    settings.default_referral_payout_address = None;
+    settings.x402_builder_code = None;
+    settings
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -167,5 +175,33 @@ mod tests {
         assert_eq!(back.search_keywords, vec!["mcp-server".to_string()]);
         assert_eq!(back.default_referral_bps, Some(250));
         assert_eq!(back.x402_builder_code.as_deref(), Some("onchainai"));
+    }
+
+    #[test]
+    fn sanitize_site_settings_for_public_strips_referral_fields() {
+        let now = DateTime::parse_from_rfc3339("2026-01-01T00:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+        let settings = SiteSettings {
+            id: 1,
+            site_name: "OnchainAI".into(),
+            slogan: "slogan".into(),
+            description: "desc".into(),
+            mcp_endpoint: "npx mcp-remote www.onchain-ai.xyz/mcp".into(),
+            search_keywords: vec![],
+            allow_free_registration: true,
+            require_tool_approval: true,
+            allow_x402_registration: false,
+            default_referral_bps: Some(250),
+            default_referral_payout_address: Some(
+                "0x0000000000000000000000000000000000000000".into(),
+            ),
+            x402_builder_code: Some("onchainai".into()),
+            updated_at: now,
+        };
+        let public = sanitize_site_settings_for_public(settings);
+        assert_eq!(public.default_referral_bps, None);
+        assert_eq!(public.default_referral_payout_address, None);
+        assert_eq!(public.x402_builder_code, None);
     }
 }
