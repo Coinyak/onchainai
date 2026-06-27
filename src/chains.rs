@@ -223,18 +223,25 @@ mod tests {
     #[test]
     fn catalog_logos_use_official_brand_markers() {
         let markers: &[(&str, &[&str])] = &[
-            ("bitcoin", &["#f7931a", "#F7931A", "Bitcoin"]),
+            ("bitcoin", &["#f7931a", "#F7931A"]),
             ("ethereum", &["#8a92b2", "#8A92B2", "m959.8"]),
             ("solana", &["#00FFA3", "#9945FF", "linearGradient"]),
             ("base", &["#0052FF"]),
             ("arbitrum", &["#213147", "#12AAFF"]),
-            ("optimism", &["image", "Optimism"]),
-            ("polygon", &["Polygon", "image", "path"]),
+            ("optimism", &["#FF0421", "#FF0420"]),
+            ("polygon", &["path", "fill"]),
             ("bsc", &["#F0B90B", "#f0b90b"]),
             ("avalanche", &["#FF394A", "#E84142"]),
             ("sui", &["#4DA2FF", "fill-rule"]),
             ("zksync", &["#11141A", "path"]),
             ("bob", &["#F58B00", "#343536"]),
+        ];
+        let forbidden = [
+            "font-size=\"12\"",
+            "image content will be provided separately",
+            "<!DOCTYPE",
+            "404: This page",
+            "next-error-h1",
         ];
         for (id, needles) in markers {
             let entry = chain_by_id(id).unwrap_or_else(|| panic!("missing catalog id: {id}"));
@@ -245,11 +252,34 @@ mod tests {
                 "logo for {id} missing official marker; got head: {}",
                 &text[..text.len().min(200)]
             );
-            assert!(
-                !text.contains("font-size=\"12\""),
-                "logo for {id} still uses text monogram"
-            );
+            for bad in forbidden {
+                assert!(
+                    !text.contains(bad),
+                    "logo for {id} contains placeholder/error content: {bad}"
+                );
+            }
+            if text.contains("data:image/png;base64,") {
+                let payload = text
+                    .split("data:image/png;base64,")
+                    .nth(1)
+                    .and_then(|rest| rest.split('"').next())
+                    .unwrap_or("");
+                assert!(
+                    payload.len() > 500,
+                    "logo for {id} has truncated/placeholder png embed ({} bytes)",
+                    payload.len()
+                );
+            }
         }
+        let optimism = std::fs::read_to_string(logo_path_on_disk("/chains/optimism.svg")).unwrap();
+        assert!(
+            optimism.contains("circle") && optimism.contains("path"),
+            "optimism logo should be vector circle+path, not raster placeholder"
+        );
+        assert!(
+            !optimism.contains("data:image/png;base64,"),
+            "optimism logo should use official vector mark, not embedded png"
+        );
     }
 
     #[test]

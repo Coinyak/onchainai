@@ -78,10 +78,13 @@ def wrap_file(name: str, label: str, src: Path, padding: float = 4.0) -> str:
 
 
 def wrap_png(name: str, label: str, src: Path) -> str:
-    data = base64.b64encode(src.read_bytes()).decode("ascii")
+    raw = src.read_bytes()
+    if len(raw) < 200 or not raw.startswith(b"\x89PNG\r\n\x1a\n"):
+        raise ValueError(f"invalid png for {name}: {src}")
+    data = base64.b64encode(raw).decode("ascii")
     return f"""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" role="img" aria-label="{label}">
   <rect width="48" height="48" rx="8" fill="#fff"/>
-  <image href="data:image/png;base64,{data}" x="6" y="6" width="36" height="36" preserveAspectRatio="xMidYMid meet"/>
+  <image href="data:image/png;base64,{data}" xlink:href="data:image/png;base64,{data}" x="6" y="6" width="36" height="36" preserveAspectRatio="xMidYMid meet"/>
 </svg>
 """
 
@@ -127,10 +130,13 @@ def main() -> None:
     (OUT / "sui.svg").write_text(SUI_DROPLET, encoding="utf-8")
     written.append("sui")
 
-    op_png = SCRATCH / "optimism_official.png"
-    if not op_png.exists():
-        raise SystemExit(f"missing optimism png: {op_png}")
-    (OUT / "optimism.svg").write_text(wrap_png("optimism", "Optimism", op_png), encoding="utf-8")
+    op_svg = SCRATCH / "optimism_official.svg"
+    if not op_svg.exists():
+        raise SystemExit(f"missing optimism svg: {op_svg}")
+    op_body = read_svg_body(op_svg)
+    if "#FF0421" not in op_body and "#FF0420" not in op_body:
+        raise SystemExit(f"optimism svg missing brand red: {op_svg}")
+    (OUT / "optimism.svg").write_text(wrap_file("optimism", "Optimism", op_svg), encoding="utf-8")
     written.append("optimism")
 
     print("wrapped:", ", ".join(sorted(written)))
