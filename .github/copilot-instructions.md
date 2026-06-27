@@ -44,3 +44,4 @@ Rust debug builds bloat `target/` fast. Expected, not a bug. Repo is configured 
 - Put findings first, ordered by severity, and include concrete file/line references when possible.
 - Keep summaries brief and secondary to the findings.
 - If no issues are found, say that explicitly and mention any residual risks or test gaps.
+- AI PR reviews are opt-in: do not request `@copilot`, `@coderabbitai review`, or `@coderabbitai full review` unless the user explicitly asks.
