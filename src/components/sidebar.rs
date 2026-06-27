@@ -248,9 +248,9 @@ pub fn Sidebar(
     view! {
         <aside
             class=aside_class
-            attr:data-sidebar-ready=""
-            attr:data-sidebar-storage-loaded=move || sidebar_storage_loaded.get().then_some("")
-            attr:aria-busy=move || (!sidebar_storage_loaded.get()).then_some("true")
+            data-sidebar-ready=""
+            data-sidebar-storage-loaded=move || sidebar_storage_loaded.get().then_some("")
+            aria-busy=move || (!sidebar_storage_loaded.get()).then_some("true")
         >
             <SidebarBrand/>
             <div class="sidebar-header">
@@ -446,6 +446,21 @@ mod tests {
         let (href, active) = sidebar_function_link(&cat_base, &query_base, "swap", &fn_active);
         assert!(!active);
         assert_eq!(href, "/categories/swap?chain=ethereum&sort=new");
+    }
+
+    #[test]
+    fn sidebar_data_attrs_render_without_leptos_attr_prefix() {
+        let html = leptos::prelude::Owner::new().with(|| {
+            view! { <aside data-sidebar-ready="" class="tools-sidebar">"x"</aside> }.to_html()
+        });
+        assert!(
+            html.contains(r#"data-sidebar-ready=""#) || html.contains("data-sidebar-ready"),
+            "expected data-sidebar-ready in SSR HTML, got: {html}"
+        );
+        assert!(
+            !html.contains("attr:data-sidebar-ready"),
+            "Leptos must not leak attr: prefix into HTML: {html}"
+        );
     }
 
     #[test]
