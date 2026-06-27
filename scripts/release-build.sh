@@ -9,6 +9,11 @@ if [[ -x "${HOME}/.cargo/bin/cargo" ]]; then
   export PATH="${HOME}/.cargo/bin:${PATH}"
 fi
 
+if [[ "$(uname -s)" == "Darwin" && "${RUSTFLAGS:-}" != *"symbol-mangling-version"* ]]; then
+  export RUSTFLAGS="${RUSTFLAGS:+${RUSTFLAGS} }-C symbol-mangling-version=v0"
+  echo "Using macOS linker workaround: RUSTFLAGS=${RUSTFLAGS}"
+fi
+
 if ! ./scripts/disk-guard.sh; then
   echo "disk-guard failed; pruning linker snapshots in /tmp before retry..." >&2
   find /tmp -maxdepth 1 \( -name 'onchainai*.ld-snapshot' -o -name 'libonchainai*.ld-snapshot' \) -exec rm -rf {} + 2>/dev/null || true
@@ -20,6 +25,15 @@ cargo leptos build --release
 
 # wasm-bindgen JS loads onchainai_bg.wasm; cargo-leptos emits onchainai.wasm.
 ln -sf onchainai.wasm target/site/pkg/onchainai_bg.wasm
+
+# /pkg/onchainai.css is served from this manual stylesheet in src/lib.rs.
+# Refresh its mtime after the full build so bundle verification can detect
+# genuinely mixed builds without failing every clean rebuild.
+if [[ ! -s style/output.css ]]; then
+  echo "Missing or empty stylesheet: style/output.css" >&2
+  exit 1
+fi
+touch style/output.css
 
 echo "Artifacts:"
 ls -la target/release/onchainai target/site/pkg/onchainai.js target/site/pkg/onchainai.wasm target/site/pkg/onchainai_bg.wasm style/output.css

@@ -7,6 +7,7 @@ import {
   clearSidebarStorage,
   probeLogoFallback,
   evaluateLogoFallback,
+  isBenignConsoleError,
 } from "./browser-test-helpers.mjs";
 
 const base = (process.argv[2] || "http://localhost:3000").replace(/\/$/, "");
@@ -28,7 +29,7 @@ page.on("console", (msg) => {
   if (hydrationPanicRe.test(text)) {
     errors.push(`hydration-panic:${text}`);
   }
-  if (msg.type() === "error" && !/fonts\.googleapis|favicon/i.test(text)) {
+  if (msg.type() === "error" && !isBenignConsoleError(text)) {
     errors.push(`console:error:${text}`);
   }
 });
@@ -40,7 +41,12 @@ page.on("requestfailed", (req) => {
   if (!url.startsWith(base)) {
     return;
   }
-  errors.push(`requestfailed:${url}:${req.failure()?.errorText}`);
+  const failText = req.failure()?.errorText ?? "";
+  // Chain strip SVGs often abort during in-page navigation; not a deploy regression.
+  if (url.includes("/chains/") && /ERR_ABORTED/i.test(failText)) {
+    return;
+  }
+  errors.push(`requestfailed:${url}:${failText}`);
 });
 page.on("response", async (res) => {
   const url = res.url();

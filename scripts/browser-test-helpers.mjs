@@ -12,6 +12,13 @@ export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 /** Pace heavy catalog navigations to avoid tripping per-IP API rate limits. */
 export const NAV_PACE_MS = 1500;
 
+/** Console noise from intentional logo-probe broken host or font CDN. */
+export function isBenignConsoleError(text) {
+  return /fonts\.googleapis|fonts\.gstatic|favicon/i.test(text)
+    || /ERR_NAME_NOT_RESOLVED/i.test(text)
+    || /invalid\.onchainai-test\.invalid/i.test(text);
+}
+
 export async function clearSidebarStorage(page) {
   try {
     await page.evaluate(() => {

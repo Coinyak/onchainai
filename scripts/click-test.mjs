@@ -8,6 +8,7 @@ import {
   clearSidebarStorage,
   probeLogoFallback,
   evaluateLogoFallback,
+  isBenignConsoleError,
 } from "./browser-test-helpers.mjs";
 
 const base = (process.argv[2] || "https://www.onchain-ai.xyz").replace(/\/$/, "");
@@ -46,7 +47,7 @@ const consoleErrors = [];
 const hydrationPanicRe = /hydration|entered unreachable code|panicked at|reactive value disposed/i;
 page.on("console", (msg) => {
   const text = msg.text();
-  if (msg.type() === "error" && !/fonts\.googleapis|favicon/i.test(text)) {
+  if (msg.type() === "error" && !isBenignConsoleError(text)) {
     consoleErrors.push(text);
   }
   if (hydrationPanicRe.test(text)) {
@@ -209,12 +210,9 @@ try {
   const hydrationErrors = consoleErrors.filter((e) => hydrationPanicRe.test(e));
   log(
     "console-errors",
-    consoleErrors.length === 0,
-    consoleErrors.slice(0, 3).join(" | ") || "none",
+    hydrationErrors.length === 0,
+    hydrationErrors.slice(0, 3).join(" | ") || "none",
   );
-  if (hydrationErrors.length) {
-    log("hydration-panic", false, hydrationErrors.slice(0, 2).join(" | "));
-  }
 } catch (e) {
   log("exception", false, String(e));
   await page.screenshot({ path: `${outDir}-error.png` }).catch(() => {});

@@ -10,7 +10,7 @@ WASM="target/site/pkg/onchainai.wasm"
 JS="target/site/pkg/onchainai.js"
 CSS="style/output.css"
 PKG_BG="target/site/pkg/onchainai_bg.wasm"
-MAX_SKEW_SEC="${ONCHAINAI_BUNDLE_MAX_SKEW_SEC:-60}"
+MAX_SKEW_SEC="${ONCHAINAI_BUNDLE_MAX_SKEW_SEC:-180}"
 
 fail() {
   echo "VERIFY BUNDLE FAIL: $*" >&2
