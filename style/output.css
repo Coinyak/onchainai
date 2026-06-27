@@ -638,6 +638,9 @@ body {
   .tools-sidebar:not([data-sidebar-storage-loaded]) .sidebar-body {
     display: none;
   }
+  .tools-sidebar[aria-busy="true"] .sidebar-rail-toggle {
+    opacity: 0.85;
+  }
 }
 @media (max-width: 767px) {
   .site-layout,

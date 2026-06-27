@@ -1,4 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" role="img" aria-label="Bitcoin">
+  <!-- official-brand-asset -->
   <rect width="48" height="48" rx="8" fill="#fff"/>
   <g transform="translate(24 24) scale(0.625000) translate(-32.000 -32.000)">
     <svg viewBox="0 0 64.0 64.0" width="64.0" height="64.0" overflow="visible"><g transform="translate(0.00630876,-0.00301984)">

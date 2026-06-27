@@ -60,7 +60,7 @@ page.on("response", async (res) => {
       contentType.includes("javascript");
     if (isText) {
       const text = await res.text().catch(() => "");
-      if (/error deserializing|missing field filters/i.test(text)) {
+      if (/error deserializing|missing field/i.test(text)) {
         errors.push(`body-error:${url}:${text.slice(0, 200)}`);
       }
     }
@@ -85,7 +85,7 @@ if (homeLayout.hasCategoryGrid) {
 for (const path of ["/", "/tools", "/tools?function=bridge&type=mcp"]) {
   await page.goto(`${base}${path}`, { waitUntil: "networkidle" });
   const text = await visiblePageText(page);
-  if (/error deserializing|missing field filters/i.test(text || "")) {
+  if (/error deserializing|missing field/i.test(text || "")) {
     errors.push(`visible-error:${path}`);
   }
 }
@@ -154,7 +154,7 @@ if (toolsCards >= 50) {
   await page.goto(`${base}/tools?page=2`, { waitUntil: "networkidle" });
   const page2Text = await visiblePageText(page);
   const page2Cards = await countRealToolCards(page);
-  if (/error deserializing|missing field filters/i.test(page2Text || "")) {
+  if (/error deserializing|missing field/i.test(page2Text || "")) {
     errors.push("visible-error:/tools?page=2");
   }
   if (page2Cards < expectedPage2) {

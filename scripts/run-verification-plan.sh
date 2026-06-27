@@ -39,7 +39,16 @@ cp "$SCRATCH/CHANGED_FILES.txt" "$SCRATCH/CHANGED_FILES.harness.txt"
 
 echo ""
 echo "=== Step 1: cargo test --features ssr ==="
-cargo test --features ssr -- --quiet
+STEP1_OUT="$(mktemp)"
+if ! cargo test --features ssr -- --quiet 2>&1 | tee "$STEP1_OUT"; then
+  echo "STEP1 FAIL: cargo test"
+  exit 1
+fi
+if grep -E "never used|dead_code" "$STEP1_OUT" | grep -q "functions.rs"; then
+  echo "STEP1 FAIL: dead_code warnings in functions.rs"
+  exit 1
+fi
+rm -f "$STEP1_OUT"
 echo "STEP1: PASS"
 
 echo ""

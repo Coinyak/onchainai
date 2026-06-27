@@ -250,6 +250,7 @@ pub fn Sidebar(
             class=aside_class
             attr:data-sidebar-ready=""
             attr:data-sidebar-storage-loaded=move || sidebar_storage_loaded.get().then_some("")
+            attr:aria-busy=move || (!sidebar_storage_loaded.get()).then_some("true")
         >
             <SidebarBrand/>
             <div class="sidebar-header">

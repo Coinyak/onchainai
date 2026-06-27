@@ -1418,6 +1418,15 @@ Run after release build (`./scripts/release-build.sh`) against the **release** b
 | `GET /tools?page=2` (large catalog) | No deserialization errors; `.tool-card` count **≥ page1 + 50** (not merely ≥50) |
 | Logo fallback | Broken `src` → `.tool-logo-img` removed, `.tool-logo-monogram` text visible |
 
+**`scripts/visual-snapshots.mjs`** (Playwright, visual QA capture):
+
+| Mode | Expect |
+|-------|--------|
+| `node scripts/visual-snapshots.mjs http://localhost:3000 --out .playwright-cli/ui-snapshots` | Captures first-viewport PNGs for `/`, `/tools`, and `/tools?function=bridge&type=mcp` at `1280x900` and `375x812`; writes `manifest.json` |
+| `--update-baseline .visual-baselines` | Updates strict screenshot hash baselines when deliberately accepting a visual change |
+| `--baseline .visual-baselines` | Compares current captures to stored baselines and fails on missing or changed PNG hashes |
+| Visual QA use | Review captured PNGs against `DESIGN.md` and this document before calling UI work complete |
+
 **`scripts/click-test.mjs`** (Playwright, optional prod regression):
 
 | Check | Expect |

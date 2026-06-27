@@ -80,6 +80,7 @@ nohup ./target/release/onchainai > /tmp/onchainai.log 2>&1 &
 
 ./scripts/smoke-test.sh http://localhost:3000
 # Optional: node scripts/browser-smoke.mjs http://localhost:3000
+# UI changes: node scripts/visual-snapshots.mjs http://localhost:3000 --out .playwright-cli/ui-snapshots
 ```
 
 **Mandatory:** restart after every release build. A running binary does not pick up new `target/site/pkg/` or recompiled server code.

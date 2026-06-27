@@ -1,0 +1,53 @@
+{
+  "version": 1,
+  "skills": {
+    "design-tokens": {
+      "source": "dylanfeltus/skills",
+      "sourceType": "github",
+      "skillPath": "design-tokens/SKILL.md",
+      "computedHash": "a5d55ed75e8feff1c8f45fa99b0a57804e590e384c6874ff4aa45b99c587841e"
+    },
+    "playwright-best-practices": {
+      "source": "currents-dev/playwright-best-practices-skill",
+      "sourceType": "github",
+      "skillPath": "SKILL.md",
+      "computedHash": "63ce3ddf87fb796c7855f4d6b34f892b3f83b288cf11c1ea1e4503a0c1b6cc6b"
+    },
+    "responsive-design": {
+      "source": "akillness/oh-my-skills",
+      "sourceType": "github",
+      "skillPath": ".agent-skills/responsive-design/SKILL.md",
+      "computedHash": "0b7b20b66094b72e2933286643211ea94a412c20be409b0f20cd0f515cd60b2b"
+    },
+    "tailwind": {
+      "source": "tartinerlabs/skills",
+      "sourceType": "github",
+      "skillPath": "skills/tailwind/SKILL.md",
+      "computedHash": "c7aac0219c95ef546bce7078a5d591aa5c3704456da862fbf1673d2de51a1f01"
+    },
+    "ui-component-patterns": {
+      "source": "akillness/oh-my-skills",
+      "sourceType": "github",
+      "skillPath": ".agent-skills/ui-component-patterns/SKILL.md",
+      "computedHash": "0250ee5c62669b7629644d0773608c7f0534ca336d01013c6ec748e9fa5f4c34"
+    },
+    "visual-qa": {
+      "source": "dylanfeltus/skills",
+      "sourceType": "github",
+      "skillPath": "visual-qa/SKILL.md",
+      "computedHash": "1a0697c31a2bebaabbc6bb8b98c1e452e8b3112eb31014bfd98d9f9adef0ccc3"
+    },
+    "web-accessibility": {
+      "source": "akillness/oh-my-skills",
+      "sourceType": "github",
+      "skillPath": ".agent-skills/web-accessibility/SKILL.md",
+      "computedHash": "4bb4cc9a3b6577d2dfc0604cf2236b94c91e3d3e336cf6626b1165706200387e"
+    },
+    "web-design-guidelines": {
+      "source": "akillness/oh-my-skills",
+      "sourceType": "github",
+      "skillPath": ".agent-skills/web-design-guidelines/SKILL.md",
+      "computedHash": "86ba5f2a045590aa728483fe053df7007ea3c1427c5bc9448c77a240168c09a0"
+    }
+  }
+}

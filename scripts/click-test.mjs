@@ -12,6 +12,7 @@ import {
   visiblePageText,
   waitForToolCards,
   waitForSidebarFilterLinks,
+  waitForSidebarStorageLoaded,
 } from "./browser-test-helpers.mjs";
 
 const base = (process.argv[2] || "https://www.onchain-ai.xyz").replace(/\/$/, "");
@@ -243,7 +244,12 @@ try {
 
   await page.setViewportSize({ width: 375, height: 812 });
   await page.goto(`${base}/tools`, { waitUntil: "networkidle" });
-  log("mobile-tools", !/error deserializing/i.test((await visiblePageText(page)) || ""));
+  await waitForSidebarStorageLoaded(page).catch(() => {});
+  const mobileText = await visiblePageText(page);
+  log(
+    "mobile-tools",
+    !/error deserializing|missing field/i.test(mobileText || ""),
+  );
 
   const chainMoreVisible = await page.evaluate(() => {
     const pill = document.querySelector(".chain-tile-more");

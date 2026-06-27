@@ -12,6 +12,7 @@ pub fn CopyButton(text: String, #[prop(optional)] _label: Option<&'static str>) 
             type="button"
             class=move || if copied.get() { "copy-btn copied" } else { "copy-btn" }
             aria-label="Copy to clipboard"
+            aria-live="polite"
             on:click=move |ev| {
                 ev.stop_propagation();
                 ev.prevent_default();

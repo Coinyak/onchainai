@@ -1,0 +1,4 @@
+interface:
+  display_name: "OnchainAI UI Workflow"
+  short_description: "Use the repo design docs, screenshots, and smoke gates for OnchainAI UI work."
+  default_prompt: "Use the OnchainAI UI workflow for this UI change. Read DESIGN.md, docs/UI_UX_DESIGN.md, and docs/BUILD_DEPLOY_RULES.md before editing."

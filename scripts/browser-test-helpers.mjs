@@ -34,7 +34,7 @@ export async function waitForSidebarFilterLinks(page, timeout = 20000) {
   await page.waitForSelector('aside .sidebar-body a[href*="function="]', { timeout });
 }
 
-/** Wait for client localStorage to apply (mobile rail state). */
+/** Wait for client localStorage hydrate (mobile rail + section collapse). */
 export async function waitForSidebarStorageLoaded(page, timeout = 15000) {
   await page.waitForSelector("aside[data-sidebar-storage-loaded]", { timeout });
 }

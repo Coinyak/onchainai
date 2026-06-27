@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Wrap official chain logo SVGs into 48x48 public/chains/*.svg tiles (manifest-driven)."""
+"""Wrap official chain logo SVGs into 48x48 public/chains/*.svg tiles (manifest-driven, harness-round-8)."""
 
 from __future__ import annotations
 

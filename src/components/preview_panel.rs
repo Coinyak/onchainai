@@ -19,6 +19,7 @@ pub fn PreviewPanel(tool: Tool, close_href: String, full_page_href: String) -> i
             tabindex="-1"
             on:keydown=move |ev| {
                 if ev.key() == "Escape" {
+                    ev.stop_propagation();
                     #[cfg(feature = "hydrate")]
                     if let Some(win) = web_sys::window() {
                         let _ = win.location().set_href(&close_href);

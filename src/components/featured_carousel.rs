@@ -36,7 +36,7 @@ pub fn FeaturedCarousel(cards: Vec<FeaturedCardView>) -> impl IntoView {
     view! {
         <section
             class="featured-carousel"
-            aria-label="Featured tools"
+            aria-label="Featured tools carousel"
             aria-roledescription="carousel"
             on:mouseenter=move |_| paused.set(true)
             on:mouseleave=move |_| paused.set(false)

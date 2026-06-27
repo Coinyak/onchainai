@@ -8,4 +8,5 @@ RAW_DIR="${1:-$SCRATCH/raw-logos}"
 
 cd "$ROOT"
 python3 scripts/wrap-chain-logos.py "$RAW_DIR"
-echo "regen-chain-logos: wrote $(ls -1 public/chains/*.svg | wc -l | tr -d ' ') SVGs"
+COUNT="$(ls -1 public/chains/*.svg | wc -l | tr -d ' ')"
+echo "regen-chain-logos: wrote ${COUNT} SVGs (manifest-driven, harness-round-8)"

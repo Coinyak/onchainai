@@ -81,6 +81,7 @@ Railway 배포 후 회귀 확인:
 node scripts/click-test.mjs https://www.onchain-ai.xyz
 ```
 `post-deploy-verify.sh`는 curl smoke + `browser-smoke.mjs` + `click-test.mjs`를 실행합니다. load-more·`?page=2` 누적 카드 수(50→100) 실패 시 배포 롤백을 검토하세요.
+UI 변경 검수용 스크린샷은 로컬 또는 배포 URL에 대해 `node scripts/visual-snapshots.mjs <url> --out .playwright-cli/ui-snapshots`로 캡처합니다.
 
 ### 공개 카탈로그 품질 (요약)
 - 공개 목록: `approval_status=approved`, `relevance_status=accepted`, critical install risk·quarantine 제외.

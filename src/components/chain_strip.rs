@@ -93,7 +93,7 @@ fn chain_tile(
             title=label
             aria-pressed=if is_active { "true" } else { "false" }
         >
-            <img class="chain-logo" src=logo alt=entry.label/>
+            <img class="chain-logo" src=logo alt=entry.label loading="lazy" decoding="async"/>
         </a>
     }
 }

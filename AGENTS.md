@@ -27,6 +27,7 @@ Rust single binary: Leptos SSR + Axum + rmcp + sqlx + tokio-cron-scheduler.
 - `./scripts/clean-build-artifacts.sh --dry-run`: Preview safe cleanup (`cargo clean`, `/tmp` linker snapshots, old Playwright artifacts)
 - `./scripts/smoke-test.sh http://localhost:3000`: Curl smoke (pages + MCP initialize)
 - `node scripts/browser-smoke.mjs http://localhost:3000`: Playwright smoke (requires `playwright` npm package)
+- `node scripts/visual-snapshots.mjs http://localhost:3000 --out .playwright-cli/ui-snapshots`: Capture desktop/mobile UI screenshots for visual QA
 - `./scripts/release-build.sh`: Release build with disk guard + rustup `PATH` for wasm + macOS linker workaround
 - `./scripts/verify-bundle.sh`: Check binary + `target/site/pkg/` + served `style/output.css` are from one build (mtime spread)
 - `./scripts/restart-dev.sh`: Kill :3000 → release build → verify bundle → restart → smoke test
@@ -74,6 +75,15 @@ Read before working on a feature:
 - `docs/SECURITY.md` — Security rules (auth, RLS, headers, rate limiting)
 - `docs/BUILD_DEPLOY_RULES.md` — SSR/WASM bundle coherence, local restart workflow, deploy checklist
 - `docs/DISK_MAINTENANCE.md` — Disk audit log, hidden `var/folders` junk, monthly cleanup script
+
+## UI/UX Workflow
+
+- For UI/layout/component/style changes, use the repo skill `.agents/skills/onchainai-ui-workflow`.
+- Before editing UI, read `DESIGN.md`, `docs/UI_UX_DESIGN.md`, and `docs/BUILD_DEPLOY_RULES.md`.
+- After UI edits, inspect rendered screenshots at desktop (`1280x900`) and mobile (`375x812`), not just code.
+- Use `node scripts/visual-snapshots.mjs http://localhost:3000 --out .playwright-cli/ui-snapshots` to capture review images.
+- Use `visual-qa` for screenshot critique and `responsive-design`, `web-accessibility`, `ui-component-patterns`, or `tailwind` only when that specific issue is in scope.
+- Keep screenshots and Playwright artifacts out of git (`.playwright-cli/` is ignored).
 
 ## Code Style
 

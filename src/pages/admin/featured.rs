@@ -483,7 +483,6 @@ fn FeaturedCardForm(
                         on:change=move |ev| {
                             #[cfg(feature = "hydrate")]
                             {
-                                use wasm_bindgen::JsCast;
                                 let input: web_sys::HtmlInputElement = event_target(&ev);
                                 is_active.set(input.checked());
                             }
