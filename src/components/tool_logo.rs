@@ -7,6 +7,7 @@ use leptos::prelude::*;
 #[cfg(feature = "hydrate")]
 fn sync_logo_img_error_handling(img: &web_sys::HtmlImageElement, show: RwSignal<bool>) {
     use wasm_bindgen::closure::Closure;
+    use wasm_bindgen::JsCast;
     let img_for_handler = img.clone();
     let cb = Closure::wrap(Box::new(move || {
         show.set(false);
