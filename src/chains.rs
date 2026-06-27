@@ -371,4 +371,65 @@ mod tests {
         assert_eq!(ordered[0].id, "bitcoin");
         assert_eq!(ordered[1].id, "bob");
     }
+
+    /// Goal harness: badge resolution for registered BOB Gateway CLI chains slice.
+    /// Run with `--nocapture` to emit stdout captured in badges.log.
+    #[test]
+    fn bob_gateway_registered_tool_chain_badges() {
+        let registered: Vec<String> = vec![
+            "bitcoin".into(),
+            "bob".into(),
+            "base".into(),
+            "arbitrum".into(),
+            "ethereum".into(),
+        ];
+
+        println!("=== resolve_chain (registered bob-gateway-cli chains slice) ===");
+        for raw in &registered {
+            match resolve_chain(raw) {
+                Some(meta) => {
+                    let path = logo_path_on_disk(meta.logo);
+                    println!(
+                        "resolve_chain({raw}) -> id={} label={} logo={} pinned={} file_exists={}",
+                        meta.id,
+                        meta.label,
+                        meta.logo,
+                        meta.pinned,
+                        path.exists()
+                    );
+                    assert!(path.exists(), "logo file missing for {}", meta.id);
+                }
+                None => panic!("registered chain should resolve: {raw}"),
+            }
+        }
+
+        for noise in ["multi-chain", "63+ networks", "fantom"] {
+            assert!(
+                resolve_chain(noise).is_none(),
+                "noise value must not resolve: {noise}"
+            );
+            println!("resolve_chain({noise}) -> NONE (noise filtered)");
+        }
+
+        let max_visible = 3;
+        let (visible, overflow) = chain_tags_for_tool(&registered, max_visible);
+        println!("=== chain_tags_for_tool(max_visible={max_visible}) ===");
+        println!("visible_count={} overflow={}", visible.len(), overflow);
+        for tag in &visible {
+            match tag.meta {
+                Some(m) => println!(
+                    "  visible tag raw={} catalog_id={} logo={}",
+                    tag.raw, m.id, m.logo
+                ),
+                None => println!("  visible tag raw={} catalog_id=NONE (fallback pill)", tag.raw),
+            }
+        }
+
+        assert_eq!(visible.len(), 3);
+        assert_eq!(overflow, 2);
+        assert!(resolve_chain("bitcoin").unwrap().pinned);
+        assert!(resolve_chain("bob").unwrap().pinned);
+        assert_eq!(resolve_chain("ethereum").unwrap().logo, "/chains/ethereum.svg");
+        assert_eq!(resolve_chain("base").unwrap().logo, "/chains/base.svg");
+    }
 }
