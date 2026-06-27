@@ -1,0 +1,47 @@
+# Qodo (PR-Agent v2) — OnchainAI review defaults.
+# Docs: https://docs.qodo.ai/code-review/get-started/configuration-overview/configuration-file
+
+[github_app]
+# Auto-run on PR open/update (same commands as manual /agentic_*).
+pr_commands = [
+    "/agentic_describe",
+    "/agentic_review",
+]
+handle_push_trigger = true
+push_commands = ["/agentic_review"]
+
+[review_agent]
+comments_location_policy = "both"
+# 3 = action_required only (reduce noise)
+inline_comments_severity_threshold = 3
+
+issues_user_guidelines = """
+OnchainAI: Rust single binary (Leptos SSR + Axum + rmcp + sqlx + tokio-cron-scheduler).
+Read AGENTS.md and docs/SECURITY.md for project rules.
+
+Prioritize (highest first):
+1. Security: SQL injection, auth bypass, secret leakage (SUPABASE_SERVICE_KEY, JWT_SECRET), RLS gaps, XSS
+2. Data loss / correctness: migration mistakes, broken server functions, crawler regressions
+3. Missing tests for changed logic (especially src/server/, src/auth/, src/crawler/)
+4. Production unwrap()/expect() — use ? / anyhow / thiserror
+5. sqlx: parameterized queries only (query_as!, $1); never string-interpolate SQL
+6. Leptos: DB access via server functions only; escape user HTML (no raw injection)
+7. Admin routes (/admin/*): must enforce is_admin server-side
+8. x402: attribution metadata only — no custody proxy or fund-moving code paths
+9. Build/deploy: SSR + WASM bundle coherence (see docs/BUILD_DEPLOY_RULES.md)
+
+Server code requires `--features ssr` for cargo build/test/clippy.
+UI: English only, no emojis, Lucide SVG icons.
+"""
+
+compliance_user_guidelines = """
+Enforce AGENTS.md conventions:
+- Never commit .env or expose service keys to the client
+- Conventional commits; squash merge to main
+- cargo clippy --features ssr and cargo fmt --check must pass
+- Add/update tests for changed code
+- Comments/upvotes/bookmarks require auth; public tool browsing stays public
+"""
+
+[checks]
+enable_auto_checks_feedback = true
