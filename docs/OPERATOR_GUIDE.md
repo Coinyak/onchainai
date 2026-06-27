@@ -21,6 +21,7 @@
 ### `/admin/featured` — Featured Carousel (홈 추천 카드)
 - 홈 히어로 아래 노출되는 하이라이트 카드 **추가 / 수정 / 삭제**.
 - 도구 검색해서 연결, 카드 이미지 업로드, 카피 작성.
+- **로컬 개발 시드:** `seeds/dev_seed_featured.sql` (1–3장 카드). **프로덕션:** 이 패널에서 직접 추가하거나 동일 데이터를 시드.
 
 ### `/admin/settings` — Site Settings (사이트 설정)
 코딩 없이 바꿀 수 있는 **유일한 "텍스트/정책" 조정 지점**:
@@ -37,6 +38,7 @@
 ### `/admin/crawler` — Crawler Control (크롤러 제어)
 - 4개 발견 소스 상태/마지막 실행 시각 확인.
 - 소스별 **수동 크롤 즉시 실행(Trigger)**. (자동 스케줄과 별개)
+- **GitHub Stars Sync** — 별도 수동 동기화( Sync Now ) 버튼.
 
 ### `/admin/categories` — Category Management
 - 기능 카테고리 **생성 / 수정 / 삭제** (CRUD).
@@ -71,6 +73,18 @@
 | 인증 흐름 | `src/auth/` | GitHub / email / SIWX(지갑) 로그인 |
 | 레이트 리밋·보안 헤더 | `src/server/rate_limit.rs`, `docs/SECURITY.md` | |
 | 배포 | `scripts/`, `docs/BUILD_DEPLOY_RULES.md` | 빌드·Railway 배포 |
+
+### 배포 후 검증 (개발자·운영자 공통)
+Railway 배포 후 회귀 확인:
+```bash
+./scripts/post-deploy-verify.sh https://www.onchain-ai.xyz
+node scripts/click-test.mjs https://www.onchain-ai.xyz
+```
+`post-deploy-verify.sh`는 curl smoke + `browser-smoke.mjs` + `click-test.mjs`를 실행합니다. load-more·`?page=2` 누적 카드 수(50→100) 실패 시 배포 롤백을 검토하세요.
+
+### 공개 카탈로그 품질 (요약)
+- 공개 목록: `approval_status=approved`, `relevance_status=accepted`, critical install risk·quarantine 제외.
+- 상세: `docs/UI_UX_DESIGN.md` §12.1.2.
 
 핵심: **데이터(도구/카드/카테고리/유저/설정 값)는 운영자가 손댐. 동작·모양·구조는 개발자가 손댐.**
 

@@ -226,13 +226,15 @@ pub fn monogram_from_name(name: &str) -> String {
         .to_uppercase()
 }
 
-/// Display monogram: DB override when set, else computed from name.
+/// Display monogram: DB override when set, else computed from name (max 4 chars).
 pub fn display_monogram(tool: &Tool) -> String {
-    tool.logo_monogram
+    let raw = tool
+        .logo_monogram
         .as_deref()
         .filter(|m| !m.is_empty())
         .map(str::to_string)
-        .unwrap_or_else(|| monogram_from_name(&tool.name))
+        .unwrap_or_else(|| monogram_from_name(&tool.name));
+    raw.chars().take(4).collect()
 }
 
 #[cfg(test)]
@@ -416,6 +418,7 @@ mod tests {
         );
     }
 
+    #[test]
     fn tool_logo_img_url_gates_render_path() {
         let mut tool = sample_tool();
         assert_eq!(tool_logo_img_url(&tool), None);

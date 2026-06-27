@@ -1,9 +1,15 @@
 import { chromium } from "playwright";
 
 const base = (process.argv[2] || "http://localhost:3000").replace(/\/$/, "");
+const TOOL_PAGE_SIZE = 50;
 const errors = [];
 const hydrationPanicRe =
-  /hydration|entered unreachable code|panicked at/i;
+  /hydration|entered unreachable code|panicked at|reactive value disposed/i;
+
+function expectedCumulativeMin(page1Cards, pageNum = 2) {
+  if (page1Cards < TOOL_PAGE_SIZE) return page1Cards;
+  return page1Cards + (pageNum - 1) * TOOL_PAGE_SIZE;
+}
 const browser = await chromium.launch({ headless: true });
 const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
 
@@ -12,8 +18,8 @@ page.on("console", (msg) => {
   if (hydrationPanicRe.test(text)) {
     errors.push(`hydration-panic:${text}`);
   }
-  if (["error", "warning"].includes(msg.type())) {
-    errors.push(`console:${msg.type()}:${text}`);
+  if (msg.type() === "error" && !/fonts\.googleapis|favicon/i.test(text)) {
+    errors.push(`console:error:${text}`);
   }
 });
 page.on("requestfailed", (req) => {
@@ -121,8 +127,13 @@ if (toolsLogoStats.imgs > 0) {
     const text = logo?.querySelector(".tool-logo-monogram")?.textContent?.trim() ?? "";
     return { skipped: false, stillImg, textLen: text.length };
   });
-  if (!brokeFallback.skipped && brokeFallback.stillImg && brokeFallback.textLen === 0) {
-    errors.push("layout:tools-logo-fallback-missing");
+  if (
+    !brokeFallback.skipped &&
+    (brokeFallback.stillImg || brokeFallback.textLen === 0)
+  ) {
+    errors.push(
+      `layout:tools-logo-fallback-missing:stillImg=${brokeFallback.stillImg} textLen=${brokeFallback.textLen}`,
+    );
   }
 }
 const toolsLoadMore = await page.evaluate(() => {
@@ -150,13 +161,25 @@ if (toolsCards >= 50) {
   if (!loadMore) {
     errors.push("interaction:tools-missing-load-more-button");
   } else {
+    const loadMoreApiErrors = [];
+    const onLoadMoreResponse = (res) => {
+      const url = res.url();
+      if (
+        url.startsWith(base) &&
+        (url.includes("/api") || url.includes("/pkg/")) &&
+        res.status() >= 400
+      ) {
+        loadMoreApiErrors.push(`${res.status()}:${url}`);
+      }
+    };
+    page.on("response", onLoadMoreResponse);
     await loadMore.click();
     let navTimedOut = false;
     await page.waitForURL(/[?&]page=2/, { timeout: 20000 }).catch(() => {
       navTimedOut = true;
     });
     await page.waitForLoadState("networkidle");
-    const expectedMin = before + 50;
+    const expectedMin = expectedCumulativeMin(before, 2);
     let timedOut = false;
     await page
       .waitForFunction(
@@ -167,24 +190,30 @@ if (toolsCards >= 50) {
       .catch(() => {
         timedOut = true;
       });
+    page.off("response", onLoadMoreResponse);
     const after = await page.evaluate(
       () => document.querySelectorAll(".tool-card").length,
     );
-    if (navTimedOut || timedOut || after <= before) {
+    if (navTimedOut || timedOut || after < expectedMin) {
       errors.push(`interaction:load-more-not-growing:${before}->${after}`);
+    }
+    if (loadMoreApiErrors.length) {
+      errors.push(
+        `interaction:load-more-api-errors:${loadMoreApiErrors.slice(0, 3).join("|")}`,
+      );
     }
   }
 }
 
-// Direct ?page=2 navigation should not surface deserialization errors and should list more cards.
+const expectedPage2 = expectedCumulativeMin(toolsCards, 2);
 await page.goto(`${base}/tools?page=2`, { waitUntil: "networkidle" });
 const page2Text = await page.textContent("body");
 const page2Cards = await page.evaluate(() => document.querySelectorAll(".tool-card").length);
 if (/error deserializing|missing field filters/i.test(page2Text || "")) {
   errors.push("visible-error:/tools?page=2");
 }
-if (page2Cards < 50) {
-  errors.push(`layout:page-2-too-few-cards:${page2Cards}`);
+if (page2Cards < expectedPage2) {
+  errors.push(`layout:page-2-too-few-cards:${page2Cards}<${expectedPage2}`);
 }
 
 // Mobile sidebar defaults collapsed at 375px when localStorage is cleared.

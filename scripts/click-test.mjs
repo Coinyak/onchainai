@@ -6,6 +6,11 @@ const outDir = "/tmp/onchainai-browser-test";
 const TOOL_PAGE_SIZE = 50;
 const results = [];
 
+function expectedCumulativeMin(page1Cards, pageNum = 2) {
+  if (page1Cards < TOOL_PAGE_SIZE) return page1Cards;
+  return page1Cards + (pageNum - 1) * TOOL_PAGE_SIZE;
+}
+
 function log(step, ok, detail = "") {
   results.push({ step, ok, detail });
   console.log(`${ok ? "PASS" : "FAIL"} ${step}${detail ? ` — ${detail}` : ""}`);
@@ -123,13 +128,14 @@ try {
     log("chain-strip-click", false, "no chain link");
   }
 
-  // Direct page=2 navigation — cumulative list should show up to 100 cards on large catalogs.
+  const page1Cards = cardCount;
+  const expectedPage2 = expectedCumulativeMin(page1Cards, 2);
   await page.goto(`${base}/tools?page=2`, { waitUntil: "networkidle" });
   const page2Cards = (await page.$$(".tool-card")).length;
   const page2Ok =
     !/error deserializing/i.test((await page.textContent("body")) || "") &&
-    page2Cards >= TOOL_PAGE_SIZE;
-  log("page-2-load", page2Ok, `count=${page2Cards}`);
+    page2Cards >= expectedPage2;
+  log("page-2-load", page2Ok, `count=${page2Cards} expected>=${expectedPage2}`);
 
   // Load more: full-page navigation to ?page=2
   await page.goto(`${base}/tools`, { waitUntil: "networkidle" });
@@ -163,13 +169,16 @@ try {
       });
     page.off("response", onLoadMoreResponse);
     const after = (await page.$$(".tool-card")).length;
-    const grew = after > beforeLoadMore;
     const detail = navTimedOut
       ? `nav timeout url=${page.url()}`
       : waitTimedOut
         ? `card wait timeout ${beforeLoadMore} -> ${after} (expected >= ${expectedMin})`
         : `${beforeLoadMore} -> ${after}`;
-    log("load-more-click", !navTimedOut && !waitTimedOut && grew, detail);
+    log(
+      "load-more-click",
+      !navTimedOut && !waitTimedOut && after >= expectedMin,
+      detail,
+    );
     log(
       "load-more-api-errors",
       loadMoreApiErrors.length === 0,

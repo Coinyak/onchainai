@@ -13,6 +13,11 @@
 - [[UI_UX_DESIGN]] — Full UI spec: pages, components, sidebar, preview panel, bottom sheet, mobile, admin dashboard
 - [[../DESIGN]] — Stitch DESIGN.md: design tokens (colors, typography, components) for AI UI generation
 
+## Operations & Deploy
+
+- [[OPERATOR_GUIDE]] — Operator/admin capabilities (Korean): what each role can do without code changes
+- [[BUILD_DEPLOY_RULES]] — Build coherence, smoke gates, Railway Dockerfile deploy
+
 ## Agent Configuration
 
 - [[../AGENTS.md]] — Instructions for all coding agents (30+ tools supported)

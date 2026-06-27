@@ -318,6 +318,7 @@ struct TaggedBrowserPayload {
 }
 
 /// Choose list payload for render: hydrated resource wins; cache only while pending.
+/// Invariant: Leptos `Resource` invalidates `Some(Ok)` when `page_cache_key` changes.
 fn browser_data_for_render(
     page_state: &Option<Result<BrowserData, ServerFnError>>,
     cache_key: &BrowserCacheKey,
@@ -330,28 +331,6 @@ fn browser_data_for_render(
             .map(|tagged| tagged.data.clone()),
         Some(Err(_)) => None,
     }
-}
-
-/// Resolve which browser payload to render while a refetch is in flight.
-#[cfg(test)]
-fn resolve_browser_data(
-    current: &BrowserCacheKey,
-    fetch_ok: Option<&TaggedBrowserPayload>,
-    fetch_pending: bool,
-    cached: Option<&TaggedBrowserPayload>,
-) -> Option<BrowserData> {
-    if let Some(tagged) = fetch_ok {
-        if tagged.deps == *current {
-            return Some(tagged.data.clone());
-        }
-        return None;
-    }
-    if fetch_pending {
-        return cached
-            .filter(|tagged| tagged.deps == *current)
-            .map(|tagged| tagged.data.clone());
-    }
-    None
 }
 
 async fn load_browser_data(
@@ -427,6 +406,7 @@ pub fn ToolsBrowser(
     });
     let search_q = Memo::new(move |_| query.with(|q| q.get("q").map(|s| s.to_string())));
     let selected = Memo::new(move |_| query.with(|q| q.get("selected").map(|s| s.to_string())));
+    // Router query only — do not read window.location (SSR/hydration divergence).
     let page_number =
         Memo::new(move |_| parse_page_param(query.with(|q| q.get("page").map(|s| s.to_string()))));
 
@@ -480,7 +460,8 @@ pub fn ToolsBrowser(
     });
     let page_fetch_deps = Memo::new(move |_| (page_cache_key.get(), retry_tick.get()));
 
-    let last_ok_fetch = RwSignal::<Option<TaggedBrowserPayload>>::new(None);
+    // Stale-while-revalidate cache for in-flight refetches (not serialized on hydrate).
+    let cached_browser_data = RwSignal::<Option<TaggedBrowserPayload>>::new(None);
 
     let page: Resource<Result<BrowserData, ServerFnError>> = Resource::new_blocking(
         move || page_fetch_deps.get(),
@@ -494,7 +475,7 @@ pub fn ToolsBrowser(
             )
             .await?;
             if page_cache_key.get_untracked() == cache_key {
-                last_ok_fetch.set(Some(TaggedBrowserPayload {
+                cached_browser_data.set(Some(TaggedBrowserPayload {
                     deps: cache_key,
                     data: data.clone(),
                 }));
@@ -503,16 +484,11 @@ pub fn ToolsBrowser(
         },
     );
 
-    // Keep the last successful payload visible while the resource refetches so full-page
-    // `?page=N` navigation does not flash an empty/partial list during hydration.
-    // Only reuse cache when deps still match — back-nav with changed sort/filters/page
-    // must not show a stale list from the previous query.
-    let cached_browser_data = RwSignal::<Option<TaggedBrowserPayload>>::new(None);
     Effect::new(move || {
         let current = page_cache_key.get();
-        if let Some(tagged) = last_ok_fetch.get() {
-            if tagged.deps == current {
-                cached_browser_data.set(Some(tagged));
+        if let Some(tagged) = cached_browser_data.get() {
+            if tagged.deps != current {
+                cached_browser_data.set(None);
             }
         }
     });
@@ -965,93 +941,54 @@ mod tests {
     }
 
     #[test]
-    fn resolve_browser_data_uses_matching_fetch_payload() {
-        let current = sample_cache_key(1);
-        let tagged = TaggedBrowserPayload {
-            deps: current.clone(),
-            data: sample_browser_data(50),
-        };
-        let resolved = resolve_browser_data(&current, Some(&tagged), false, None);
-        assert_eq!(resolved.map(|d| d.total), Some(50));
-    }
-
-    #[test]
-    fn resolve_browser_data_rejects_stale_fetch_when_deps_differ() {
-        let current = sample_cache_key(1);
-        let tagged = TaggedBrowserPayload {
-            deps: sample_cache_key(2),
-            data: sample_browser_data(100),
-        };
-        assert!(resolve_browser_data(&current, Some(&tagged), false, None).is_none());
-    }
-
-    #[test]
-    fn resolve_browser_data_reuses_cache_while_pending() {
+    fn browser_data_for_render_returns_none_on_error() {
         let current = sample_cache_key(1);
         let cached = TaggedBrowserPayload {
             deps: current.clone(),
             data: sample_browser_data(50),
         };
-        let resolved = resolve_browser_data(&current, None, true, Some(&cached));
-        assert_eq!(resolved.map(|d| d.total), Some(50));
+        let page_state = Some(Err(ServerFnError::ServerError("boom".into())));
+        assert!(browser_data_for_render(&page_state, &current, Some(&cached)).is_none());
     }
 
     #[test]
-    fn resolve_browser_data_skips_cache_when_deps_mismatch_during_pending() {
+    fn browser_data_for_render_ignores_cache_when_deps_mismatch_and_pending() {
         let current = sample_cache_key(1);
-        let cached = TaggedBrowserPayload {
+        let stale = TaggedBrowserPayload {
             deps: sample_cache_key(2),
             data: sample_browser_data(100),
         };
-        assert!(resolve_browser_data(&current, None, true, Some(&cached)).is_none());
+        assert!(browser_data_for_render(&None, &current, Some(&stale)).is_none());
     }
 
     #[test]
-    fn resolve_browser_data_rejects_sort_mismatch() {
+    fn browser_data_for_render_returns_none_when_pending_without_cache() {
         let current = sample_cache_key(1);
-        let mut stale = sample_cache_key(1);
-        stale.sort = "new".into();
-        let tagged = TaggedBrowserPayload {
-            deps: stale,
-            data: sample_browser_data(50),
-        };
-        assert!(resolve_browser_data(&current, Some(&tagged), false, None).is_none());
+        assert!(browser_data_for_render(&None, &current, None).is_none());
     }
 
     #[test]
-    fn resolve_browser_data_rejects_search_q_mismatch() {
+    fn browser_data_for_render_rejects_stale_cache_on_sort_mismatch() {
         let current = sample_cache_key(1);
-        let mut stale = sample_cache_key(1);
-        stale.search_q = Some("wallet".into());
-        let tagged = TaggedBrowserPayload {
-            deps: stale,
+        let mut stale_key = sample_cache_key(1);
+        stale_key.sort = "new".into();
+        let stale = TaggedBrowserPayload {
+            deps: stale_key,
             data: sample_browser_data(50),
         };
-        assert!(resolve_browser_data(&current, Some(&tagged), false, None).is_none());
+        assert!(browser_data_for_render(&None, &current, Some(&stale)).is_none());
     }
 
     #[test]
-    fn resolve_browser_data_rejects_selected_mismatch() {
+    fn browser_data_for_render_rejects_stale_cache_on_filter_mismatch() {
         let current = sample_cache_key(1);
-        let mut stale = sample_cache_key(1);
-        stale.selected = Some("zapper".into());
-        let tagged = TaggedBrowserPayload {
-            deps: stale,
+        let mut stale_key = sample_cache_key(1);
+        stale_key.filters.function = vec!["bridge".into()];
+        let stale = TaggedBrowserPayload {
+            deps: stale_key,
             data: sample_browser_data(50),
         };
-        assert!(resolve_browser_data(&current, Some(&tagged), false, None).is_none());
-    }
-
-    #[test]
-    fn resolve_browser_data_rejects_filter_mismatch() {
-        let current = sample_cache_key(1);
-        let mut stale = sample_cache_key(1);
-        stale.filters.function = vec!["bridge".into()];
-        let tagged = TaggedBrowserPayload {
-            deps: stale,
-            data: sample_browser_data(50),
-        };
-        assert!(resolve_browser_data(&current, Some(&tagged), false, None).is_none());
+        assert!(browser_data_for_render(&None, &current, Some(&stale)).is_none());
     }
 
     #[test]

@@ -1355,7 +1355,9 @@ ALTER TABLE tools ADD COLUMN logo_monogram TEXT; -- 로고 없을 때 첫 글자
 - Filter / chain / search changes reset `page` to 1.
 - **Sort change** also omits `selected` from sort toolbar links (`build_sort_href` passes `None` for preview slug).
 - Invalid `page` (`abc`, `0`) → 1; URL-encoded `page=%32` → 2; `page` clamped to **10** (`MAX_BROWSER_PAGE = 500 ÷ 50`).
-- **Browser cache:** single-slot `TaggedBrowserPayload` keyed by `BrowserCacheKey` (sort/filters/q/selected/page — `retry_tick` 제외). `resolve_browser_data`는 fetch `Ok`도 deps 일치 시에만 렌더. Back-nav에서 이전 deps와 불일치하면 skeleton (LRU 미구현 — 의도적 trade-off).
+- **Browser cache:** single-slot `TaggedBrowserPayload` keyed by `BrowserCacheKey` (sort/filters/q/selected/page — `retry_tick` 제외). `browser_data_for_render`는 hydrated `Resource` `Some(Ok)`를 우선 렌더 (SSR/hydration DOM 일치). `page_state == None`일 때만 deps 일치 cache 재사용; deps 불일치 시 cache 클리어 후 skeleton.
+- **Logo:** stacked monogram span + overlay `<img>`; native `onerror` + `show_logo_img` signal로 깨진 이미지 제거. Monogram은 항상 DOM에 존재.
+- **Hydration note (wontfix v1):** `ToolCard` `time_ago`는 `Utc::now()` 기준 — SSR/클라이언트 시각 경계에서 텍스트 불일치 가능. 구조적 hydration panic과 별개.
 
 Trade-off: simpler SSR/hydration correctness vs. extra DB rows on deep pages. Acceptable while public catalog stays bounded.
 
@@ -1412,16 +1414,19 @@ Run after release build (`./scripts/release-build.sh`) against the **release** b
 | Home H1 | `font-size` differs between 1280px and 375px viewports |
 | `GET /pkg/onchainai.css` | Non-empty served bundle |
 | Mobile `/tools` | `.chain-tile-more` pill not hidden when chain strip overflows |
-| Large `/tools` catalog | Click load-more → `.tool-card` count strictly increases; `GET /tools?page=2` no deserialization errors |
+| Large `/tools` catalog (≥50 cards page 1) | Click load-more → `waitForURL(/page=2/)` + `.tool-card` count **≥ page1 + 50** (cumulative 100); same-origin `/api` HTTP ≥400 없음 |
+| `GET /tools?page=2` (large catalog) | No deserialization errors; `.tool-card` count **≥ page1 + 50** (not merely ≥50) |
+| Logo fallback | Broken `src` → `.tool-logo-img` removed, `.tool-logo-monogram` text visible |
 
 **`scripts/click-test.mjs`** (Playwright, optional prod regression):
 
 | Check | Expect |
 |-------|--------|
-| Load more | `after > before`; logs `waitForFunction timeout` on slow refetch; no same-origin `/api` HTTP ≥400 during click |
+| Load more | `waitForURL(/page=2/)` + `after >= before + 50`; logs timeout detail; no same-origin `/api` HTTP ≥400 during click |
 | Load more absent | FAIL when card count = 50 and button missing |
-| Logos | When catalog ≥50 cards, at least one `.tool-logo-img`; broken `src` → monogram fallback |
-| Pagination | `GET /tools?page=2` loads without deserialization errors |
+| Logos | When catalog ≥50 cards, at least one `.tool-logo-img`; broken `src` → `!stillImg && .tool-logo-monogram` text |
+| Pagination | `GET /tools?page=2` loads without deserialization errors; **≥ page1 + 50** cards when page1 = 50 |
+| Sidebar filter | `/tools` + `ensureSidebarFiltersVisible()` (not home — function section collapsed) |
 | Mobile | `.chain-tile-more` visible when chain strip overflows |
 
 Failed smoke **blocks deploy** (see `post-deploy-verify.sh`, `deploy-railway.sh`). Run `click-test.mjs` post-deploy against production for load-more regression.
