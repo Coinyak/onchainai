@@ -2,6 +2,7 @@
 # Manual commands such as `@coderabbitai review` or `@coderabbitai full review`
 # remain available.
 reviews:
+  review_status: false
   auto_review:
     enabled: false
     auto_incremental_review: false
