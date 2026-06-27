@@ -1,4 +1,5 @@
 {
+  "goal": "official chain logos from brand sites (optimism.io Token.svg)",
   "raw_logos_dir": "raw-logos",
   "forbidden": [
     "font-size=\"12\"",

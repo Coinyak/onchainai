@@ -26,7 +26,7 @@ const gating = new Set([
   "no-deser-error-home",
   "sidebar-brand",
   "sidebar-filter-nav",
-  "sidebar-filter-ui-click",
+  "sidebar-filter-click",
   "tools-load",
   "tool-cards-present",
   "tool-logos-present",
@@ -104,7 +104,7 @@ try {
     page.url(),
   );
 
-  // Gating: click a visible sidebar filter link (real UI path).
+  // Gating: click a visible sidebar filter link (plan step 5 — real UI path).
   await page.goto(`${base}/tools`, { waitUntil: "networkidle" });
   await waitForSidebarFilterLinks(page);
   await ensureSidebarFiltersVisible(page);
@@ -114,12 +114,12 @@ try {
     await page.waitForLoadState("networkidle");
     const after = await visiblePageText(page);
     log(
-      "sidebar-filter-ui-click",
+      "sidebar-filter-click",
       !/error deserializing|missing field/i.test(after || ""),
       page.url(),
     );
   } else {
-    log("sidebar-filter-ui-click", false, "no visible filter link");
+    log("sidebar-filter-click", false, "no visible filter link");
   }
 
   await page.goto(`${base}/tools`, { waitUntil: "networkidle" });

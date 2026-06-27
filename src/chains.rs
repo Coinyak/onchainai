@@ -1,4 +1,5 @@
 //! Chain catalog — allowlist for logo strip and tool-card tags.
+//! Logo markers validated against scripts/chain-logo-manifest.json.
 
 /// Metadata for a supported blockchain in the UI.
 #[derive(Debug, Clone, Copy)]

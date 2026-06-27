@@ -18,7 +18,7 @@ pub fn PreviewPanel(tool: Tool, close_href: String, full_page_href: String) -> i
             aria-label="Tool preview"
             tabindex="-1"
             on:keydown={
-                let close = close_href.clone();
+                let _close = close_href.clone();
                 move |ev| {
                     if ev.key() == "Escape" {
                         #[cfg(feature = "hydrate")]
