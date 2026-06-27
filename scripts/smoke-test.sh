@@ -1,4 +1,10 @@
 #!/usr/bin/env bash
+# Curl smoke: public pages, chain markup, MCP initialize.
+#
+# Usage:
+#   ./scripts/smoke-test.sh
+#   ./scripts/smoke-test.sh http://localhost:3000
+#   ./scripts/smoke-test.sh https://www.onchain-ai.xyz
 set -euo pipefail
 
 BASE="${1:-http://localhost:3000}"

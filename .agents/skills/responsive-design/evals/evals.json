@@ -44,7 +44,7 @@
     {
       "id": 5,
       "prompt": "Review this pricing page before launch. Cards feel cramped on mobile, but I also want hierarchy, CTA, and polish feedback.",
-      "expected_output": "Keeps responsive-design on the layout-adaptation packet, names the responsive surface clearly, and routes broad UI-review work to web-design-guidelines instead of absorbing the full launch critique.",
+      "expected_output": "Keeps responsive-design on the page-layout packet, names the responsive surface clearly, and routes broad UI-review work to web-design-guidelines instead of absorbing the full launch critique.",
       "assertions": [
         "Output keeps the main ownership on responsive layout strategy rather than broad UI critique",
         "Output routes hierarchy, CTA, or polish review to web-design-guidelines",

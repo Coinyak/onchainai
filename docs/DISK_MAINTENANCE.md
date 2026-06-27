@@ -73,6 +73,27 @@ du -sh ~/ /System/Volumes/Data/private/var/folders/k7/_r0bjtp12dngr0ncryvtt4mc00
 
 ---
 
+## OnchainAI build scripts (reference)
+
+`disk-guard.sh` runs before heavy builds (`release-build.sh`). Defaults: **≥25GB free** and **`target/` ≤35GB** (integer GB, floored). Tune without editing scripts:
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `ONCHAINAI_MIN_FREE_GB` | 25 | Minimum free disk before build |
+| `ONCHAINAI_MAX_TARGET_GB` | 35 | Maximum `target/` size |
+| `ONCHAINAI_DISK_GUARD_AUTOCLEAN` | 1 | Auto-run `--incremental-only` when over threshold |
+| `ONCHAINAI_DISK_GUARD_FORCE` | 0 | Skip checks (emergency only) |
+
+**Cleanup ladder (fast → slow):**
+
+1. `./scripts/clean-build-artifacts.sh --incremental-only` — drops `target/*/incremental/` only; keeps compiled deps.
+2. `./scripts/clean-build-artifacts.sh --dry-run` — preview full clean + `/tmp` linker snapshots.
+3. `./scripts/clean-build-artifacts.sh` — full `cargo clean` + linker snapshots (slow next build).
+
+`Cargo.toml` already limits debug bloat: `[profile.dev] debug = "line-tables-only"` and `[profile.dev.package."*"] debug = false`.
+
+---
+
 ## Quick audit (monthly)
 
 ```bash

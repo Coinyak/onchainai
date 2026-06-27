@@ -1,5 +1,5 @@
 # OnchainAI — multi-stage Docker build (SSR server + WASM hydration bundle).
-# Cache-bust: 2026-06-25T16:30Z
+# Cache-bust: 2026-06-26T00:00Z
 
 FROM rust:1.90-slim AS builder
 WORKDIR /app
@@ -14,6 +14,7 @@ COPY src/ ./src/
 COPY migrations/ ./migrations/
 COPY style/ ./style/
 COPY public/ ./public/
+COPY scripts/verify-wasm-bundle.sh ./scripts/verify-wasm-bundle.sh
 
 RUN rustup target add wasm32-unknown-unknown
 
@@ -25,6 +26,7 @@ RUN cargo install cargo-leptos --version "${CARGO_LEPTOS_VERSION}" --locked
 RUN cargo leptos build --release 2>&1 | tee /tmp/leptos-build.log
 
 RUN ln -sf onchainai.wasm /app/target/site/pkg/onchainai_bg.wasm
+RUN bash scripts/verify-wasm-bundle.sh target/site/pkg
 
 RUN test -s /app/target/release/onchainai \
     && test -s /app/target/site/pkg/onchainai.js \
@@ -42,7 +44,7 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /app/target/release/onchainai /app/onchainai
-COPY --from=builder /app/target/site /app/target/site
+COPY --from=builder /app/target/site/pkg /app/target/site/pkg
 COPY --from=builder /app/Cargo.toml /app/Cargo.toml
 COPY --from=builder /app/migrations /app/migrations
 COPY --from=builder /app/style /app/style
@@ -53,6 +55,7 @@ ENV RUST_LOG=info
 # Leptos SSR + deep view trees need a larger tokio worker stack on Linux containers.
 ENV RUST_MIN_STACK=8388608
 ENV SKIP_CRAWLER=1
+ENV LEPTOS_HYDRATION=1
 EXPOSE 3000
 
 CMD ["/app/onchainai"]

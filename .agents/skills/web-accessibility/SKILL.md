@@ -10,11 +10,6 @@ description: >
   component API architecture to `ui-component-patterns`, responsive layout
   strategy to `responsive-design`, and system governance to `design-system`.
 allowed-tools: Read Write Bash Grep Glob
-compatibility: >
-  Best for frontend and fullstack web work where the primary task is
-  accessibility remediation or manual-vs-automated verification. Not for broad
-  UI polish reviews, reusable component API architecture, or viewport-first
-  layout strategy as the main owner.
 license: MIT
 metadata:
   tags: accessibility, a11y, wcag, aria, keyboard-navigation, focus-management, screen-reader, frontend

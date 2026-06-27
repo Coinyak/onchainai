@@ -28,6 +28,7 @@
       "expected_output": "Chooses an alternate-root-composition packet, makes ref forwarding / prop spreading / semantic constraints explicit, and avoids collapsing the answer into generic styling advice.",
       "assertions": [
         "Output covers alternate-root, asChild, component, wrapper-root, or equivalent composition behavior",
+        "Output addresses type-safe polymorphic props or explicit typing constraints",
         "Output mentions semantics, accessibility responsibility, refs, or prop spreading",
         "Output keeps the work in ui-component-patterns unless accessibility remediation becomes primary"
       ]

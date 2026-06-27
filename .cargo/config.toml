@@ -1,0 +1,10 @@
+# Cargo build settings for OnchainAI.
+#
+# incremental = false disables rustc incremental compilation caches.
+# Tradeoff: rebuilds are slower (no reuse of prior incremental artifacts), but
+# debug builds consume far less disk — important during heavy agent sessions
+# that run many partial `cargo` / `cargo leptos` builds and would otherwise
+# balloon target/ toward tens of GB.
+
+[build]
+incremental = false

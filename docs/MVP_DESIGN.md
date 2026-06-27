@@ -57,7 +57,7 @@
 | 크롤링 | `reqwest` + `scraper` + `tokio` | 비동기 병렬 HTTP |
 | DB | `sqlx` (Postgres) | 컴파일타임 SQL 검증 |
 | 스케줄링 | `tokio-cron-scheduler` | 크롤 주기 실행 |
-| 배포 | Docker → **Railway** | 상시 실행, git push 자동 배포, ~$5/월 |
+| 배포 | Docker → **Railway** | `main` 브랜치, Dockerfile 빌드 (`railway.json`), 상시 실행, ~$5/월 |
 - 검색: Postgres FTS (MVP는 테이블이 작으므로 충분, 나중에 Typesense로)
 
 ---
@@ -1073,7 +1073,7 @@ CMD ["/app/onchainai"]
 
 ### Railway
 
-Railway = "Vercel인데 Rust/Docker/상시실행도 되는 버전". git push 하면 자동 빌드/배포, 상시 실행, 자동 HTTPS.
+Railway = "Vercel인데 Rust/Docker/상시실행도 되는 버전". **`main`** 브랜치 push 시 자동 빌드/배포(또는 `./scripts/deploy-railway.sh`), 상시 실행, 자동 HTTPS.
 
 ```dockerfile
 # Dockerfile (동일)
@@ -1092,9 +1092,9 @@ CMD ["/app/onchainai"]
 ```
 
 ```
-# Railway 설정 (nixpacks 자동 감지 또는 Dockerfile)
+# Railway 설정 (Dockerfile — railway.json)
 # 1. Railway 프로젝트 생성
-# 2. GitHub 저장소 연결 → 자동 빌드
+# 2. GitHub 저장소 연결 → `main` 브랜치 자동 빌드/배포
 # 3. 환경변수 설정: DATABASE_URL, PORT=3000
 # 4. 도메인 연결: www.onchain-ai.xyz (Railway 자동 HTTPS)
 ```

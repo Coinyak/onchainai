@@ -85,21 +85,13 @@ const consoleErrors = [];
 const errors = [];
 const results = [];
 
-const browser = await chromium.launch({ headless: true });
-const page = await browser.newPage();
+let browser;
+let page;
 
-page.on("console", (msg) => {
-  const text = msg.text();
-  if (msg.type() === "error" && !isBenignConsoleError(text)) {
-    consoleErrors.push(text);
-  }
-});
-page.on("requestfailed", (req) => {
-  const url = req.url();
-  if (!url.startsWith(base)) return;
-  const failure = req.failure()?.errorText ?? "";
-  errors.push(`requestfailed:${url}:${failure}`);
-});
+function formatError(error) {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.replace(/\s+/g, " ").slice(0, 500);
+}
 
 async function stabilizePage() {
   await page.addStyleTag({
@@ -119,78 +111,106 @@ function hashFile(filePath) {
   return createHash("sha256").update(readFileSync(filePath)).digest("hex");
 }
 
-for (const viewport of viewports) {
-  await page.setViewportSize({ width: viewport.width, height: viewport.height });
+try {
+  browser = await chromium.launch({ headless: true });
+  page = await browser.newPage();
 
-  for (const route of routes) {
-    await page.goto(`${base}${route.path}`, { waitUntil: "domcontentloaded" });
-    await clearSidebarStorage(page);
-    await page.reload({ waitUntil: "networkidle" });
-    await stabilizePage();
-
-    if (route.waitForCards) {
-      await waitForToolCards(page).catch(() => {
-        errors.push(`cards-timeout:${route.path}:${viewport.name}`);
-      });
+  page.on("console", (msg) => {
+    const text = msg.text();
+    if (msg.type() === "error" && !isBenignConsoleError(text)) {
+      consoleErrors.push(text);
     }
+  });
+  page.on("requestfailed", (req) => {
+    const url = req.url();
+    if (!url.startsWith(base)) return;
+    const failure = req.failure()?.errorText ?? "";
+    errors.push(`requestfailed:${url}:${failure}`);
+  });
 
-    const text = await visiblePageText(page);
-    if (/error deserializing|missing field filters/i.test(text || "")) {
-      errors.push(`visible-error:${route.path}:${viewport.name}`);
-    }
+  for (const viewport of viewports) {
+    await page.setViewportSize({ width: viewport.width, height: viewport.height });
 
-    const fileName = `${route.name}-${viewport.name}.png`;
-    const filePath = path.join(targetDir, fileName);
-    await page.screenshot({ path: filePath, fullPage: false });
+    for (const route of routes) {
+      try {
+        await page.goto(`${base}${route.path}`, { waitUntil: "domcontentloaded" });
+        await clearSidebarStorage(page);
+        await page.reload({ waitUntil: "networkidle" });
+        await stabilizePage();
 
-    const hash = hashFile(filePath);
-    const size = statSync(filePath).size;
-    const result = {
-      route: route.path,
-      viewport: viewport.name,
-      width: viewport.width,
-      height: viewport.height,
-      file: filePath,
-      size,
-      sha256: hash,
-    };
-
-    if (baselineDir) {
-      const baselinePath = path.join(baselineDir, fileName);
-      if (!existsSync(baselinePath)) {
-        result.baseline = "missing";
-        errors.push(`baseline-missing:${fileName}`);
-      } else {
-        const baselineHash = hashFile(baselinePath);
-        result.baseline = baselineHash === hash ? "match" : "changed";
-        result.baselineFile = baselinePath;
-        if (baselineHash !== hash) {
-          errors.push(`baseline-changed:${fileName}`);
+        if (route.waitForCards) {
+          await waitForToolCards(page).catch(() => {
+            errors.push(`cards-timeout:${route.path}:${viewport.name}`);
+          });
         }
+
+        const text = await visiblePageText(page);
+        if (/error deserializing|missing field/i.test(text || "")) {
+          errors.push(`visible-error:${route.path}:${viewport.name}`);
+        }
+
+        const fileName = `${route.name}-${viewport.name}.png`;
+        const filePath = path.join(targetDir, fileName);
+        await page.screenshot({ path: filePath, fullPage: false });
+
+        const hash = hashFile(filePath);
+        const size = statSync(filePath).size;
+        const result = {
+          route: route.path,
+          viewport: viewport.name,
+          width: viewport.width,
+          height: viewport.height,
+          file: filePath,
+          size,
+          sha256: hash,
+        };
+
+        if (baselineDir) {
+          const baselinePath = path.join(baselineDir, fileName);
+          if (!existsSync(baselinePath)) {
+            result.baseline = "missing";
+            errors.push(`baseline-missing:${fileName}`);
+          } else {
+            const baselineHash = hashFile(baselinePath);
+            result.baseline = baselineHash === hash ? "match" : "changed";
+            result.baselineFile = baselinePath;
+            if (baselineHash !== hash) {
+              errors.push(`baseline-changed:${fileName}`);
+            }
+          }
+        }
+
+        results.push(result);
+      } catch (error) {
+        errors.push(`capture-error:${route.path}:${viewport.name}:${formatError(error)}`);
       }
     }
-
-    results.push(result);
   }
+} catch (error) {
+  errors.push(`fatal:${formatError(error)}`);
+} finally {
+  if (browser) {
+    await browser.close().catch((error) => {
+      errors.push(`browser-close:${formatError(error)}`);
+    });
+  }
+
+  if (consoleErrors.length) {
+    errors.push(...consoleErrors.slice(0, 5).map((text) => `console:error:${text}`));
+  }
+
+  const manifest = {
+    base,
+    generatedAt: new Date().toISOString(),
+    mode: updateBaselineDir ? "update-baseline" : baselineDir ? "compare-baseline" : "capture",
+    outputDir: targetDir,
+    baselineDir: baselineDir || updateBaselineDir || null,
+    results,
+    errors,
+  };
+
+  writeFileSync(path.join(targetDir, "manifest.json"), JSON.stringify(manifest, null, 2));
 }
-
-await browser.close();
-
-if (consoleErrors.length) {
-  errors.push(...consoleErrors.slice(0, 5).map((text) => `console:error:${text}`));
-}
-
-const manifest = {
-  base,
-  generatedAt: new Date().toISOString(),
-  mode: updateBaselineDir ? "update-baseline" : baselineDir ? "compare-baseline" : "capture",
-  outputDir: targetDir,
-  baselineDir: baselineDir || updateBaselineDir || null,
-  results,
-  errors,
-};
-
-writeFileSync(path.join(targetDir, "manifest.json"), JSON.stringify(manifest, null, 2));
 
 if (errors.length) {
   console.error(`VISUAL SNAPSHOTS FAIL (${errors.length})`);

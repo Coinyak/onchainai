@@ -4,6 +4,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
+# Integer GB (floored) — 24.9GB reports as 24 and fails the 25GB default.
 MIN_FREE_GB="${ONCHAINAI_MIN_FREE_GB:-25}"
 MAX_TARGET_GB="${ONCHAINAI_MAX_TARGET_GB:-35}"
 
@@ -45,13 +46,15 @@ fi
 
 if (( free_gb < MIN_FREE_GB )); then
   echo "ERROR: free disk ${free_gb}GB is below ${MIN_FREE_GB}GB" >&2
-  echo "Run: ./scripts/clean-build-artifacts.sh --dry-run" >&2
+  echo "Try: ./scripts/clean-build-artifacts.sh --incremental-only" >&2
+  echo "Then: ./scripts/clean-build-artifacts.sh --dry-run" >&2
   echo "Also check /tmp/onchainai*.ld-snapshot (multi-GB linker failures on macOS)" >&2
   exit 1
 fi
 
 if (( target_gb > MAX_TARGET_GB )); then
   echo "ERROR: target ${target_gb}GB exceeds ${MAX_TARGET_GB}GB" >&2
-  echo "Run: ./scripts/clean-build-artifacts.sh --dry-run" >&2
+  echo "Try: ./scripts/clean-build-artifacts.sh --incremental-only" >&2
+  echo "Then: ./scripts/clean-build-artifacts.sh --dry-run" >&2
   exit 1
 fi

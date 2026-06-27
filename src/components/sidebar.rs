@@ -1,4 +1,4 @@
-//! Filter sidebar — multi-select, section collapse, full 40px rail + localStorage.
+//! Filter sidebar — multi-select, section collapse, full 40px rail + localStorage (harness-round-11).
 
 #[cfg(feature = "hydrate")]
 use crate::client_storage::{
@@ -463,8 +463,7 @@ mod tests {
             None,
             1,
         );
-        let (href, active) =
-            sidebar_function_link(&BrowserBase::Tools, &query_base, "bridge", &[]);
+        let (href, active) = sidebar_function_link(&BrowserBase::Tools, &query_base, "bridge", &[]);
         assert!(!active);
         assert!(
             href.contains("function=bridge"),

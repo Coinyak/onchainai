@@ -1,4 +1,9 @@
 #!/usr/bin/env bash
+# Safe local cleanup. Usage:
+#   --incremental-only   drop target/*/incremental/ only (fast; keeps deps)
+#   --dry-run            print actions without deleting
+#   --playwright-days N  prune .playwright-cli files older than N days
+# Default (no flags): cargo clean + /tmp linker snapshots.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"

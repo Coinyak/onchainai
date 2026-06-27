@@ -1,10 +1,10 @@
 ---
-title: Spacing Direction — Bottom Only
+title: Spacing Direction — Prefer Bottom Flow
 impact: HIGH
 tags: spacing, margin, padding, gap
 ---
 
-**Rule**: Never use `mt-*` or `pt-*` classes. Use `mb-*`, `pb-*`, or `gap` instead. Consistent bottom-only spacing prevents margin collapse issues and creates predictable vertical rhythm.
+**Rule**: Prefer `mb-*`, `pb-*`, or `gap` for vertical spacing when they fit the component structure. Use `mt-*` or `pt-*` when top spacing is the correct semantic choice, such as first-child offsets, hero sections, or inset cards.
 
 ### Incorrect
 

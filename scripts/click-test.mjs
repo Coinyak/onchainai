@@ -1,3 +1,4 @@
+// harness-round-11: gating click-test (sidebar-filter-click, mobile-tools)
 import { chromium } from "playwright";
 import { writeFileSync } from "fs";
 import {
@@ -244,11 +245,18 @@ try {
 
   await page.setViewportSize({ width: 375, height: 812 });
   await page.goto(`${base}/tools`, { waitUntil: "networkidle" });
-  await waitForSidebarStorageLoaded(page).catch(() => {});
+  let sidebarHydrationError = "";
+  const sidebarStorageLoaded = await waitForSidebarStorageLoaded(page)
+    .then(() => true)
+    .catch((error) => {
+      sidebarHydrationError = error instanceof Error ? error.message : String(error);
+      return false;
+    });
   const mobileText = await visiblePageText(page);
   log(
     "mobile-tools",
-    !/error deserializing|missing field/i.test(mobileText || ""),
+    sidebarStorageLoaded && !/error deserializing|missing field/i.test(mobileText || ""),
+    sidebarStorageLoaded ? "" : `sidebar-hydration:${sidebarHydrationError}`,
   );
 
   const chainMoreVisible = await page.evaluate(() => {

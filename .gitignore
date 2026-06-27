@@ -1,5 +1,6 @@
 # Dependencies
 /target
+target/
 node_modules/
 style/node_modules/
 
@@ -16,6 +17,9 @@ credentials.json
 
 # Rust
 *.rs.bk
+/*.wasm
+*.wasm
+tmp/
 # Cargo.lock is committed: this is a binary/app, so pinned deps give
 # reproducible builds (an unpinned rebuild pulled mio into the wasm bundle).
 

@@ -28,7 +28,7 @@ Always check what automated tools cannot fully prove:
 - zoom/reflow and reduced-motion behavior still work for the task
 
 ## 4. Fix order
-1. Blockers: keyboard trap, inaccessible primary controls, broken form submission paths
+1. Blockers: keyboard trap, inaccessible primary controls, broken form submission paths, routed-navigation feedback that fails to announce the page change or move focus
 2. Meaning: missing labels, unclear instructions, bad announcements, poor error text
 3. Robustness: semantic cleanup, ARIA simplification, consistency across widgets
 4. Visual follow-up: contrast, motion, visible states, zoom/reflow edge cases

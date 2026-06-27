@@ -13,7 +13,7 @@ Two related homepage features, built together.
 Related docs: [UI_UX_DESIGN.md](../../UI_UX_DESIGN.md), [DESIGN.md](../../../DESIGN.md),
 [SECURITY.md](../../SECURITY.md), [MVP_DESIGN.md](../../MVP_DESIGN.md).
 
-## Current state (updated 2026-06-27 — implemented / operator hardening branch)
+## Current state (updated 2026-06-27 — implemented on `main`)
 
 - **Chain strip (A)**: shipped — `src/chains.rs`, `public/chains/*.svg`,
   `ServeDir` at `/chains`, `ChainStrip` in `ToolsBrowser` (home, `/tools`,

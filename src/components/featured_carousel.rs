@@ -1,4 +1,4 @@
-//! Featured tool carousel — SSR first card + client auto-advance.
+//! Featured tool carousel — SSR first card + client auto-advance (harness-round-11).
 
 use crate::server::functions::FeaturedCardView;
 use leptos::prelude::*;

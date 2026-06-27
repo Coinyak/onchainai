@@ -7,8 +7,7 @@ pub async fn siwx_connect_evm() -> Result<String, String> {
     use gloo_net::http::Request;
     use js_sys::{Array, Object, Reflect};
     use serde::Deserialize;
-    use wasm_bindgen::JsCast;
-    use wasm_bindgen::JsValue;
+    use wasm_bindgen::{JsCast, JsValue};
     use wasm_bindgen_futures::JsFuture;
 
     #[derive(Debug, Deserialize)]

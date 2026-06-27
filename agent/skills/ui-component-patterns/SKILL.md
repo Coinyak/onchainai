@@ -1,8 +1,27 @@
 ---
-description: "Routing-first reusable component architecture for shared frontend primitives, slots, controlled ownership, alternate-root composition, and docs/verification packets. Use when the user needs to decide what should become a shared primitive, how a component API should expose variants or subcomponents, when parent state should control the component, how to compose a button/link/dialog onto alternate element types, or what Storybook/example coverage is required. Route design-token or cross-product governance to `design-system`, accessibility-heavy remediation to `web-accessibility`, layout adaptation to `responsive-design`, app-level state ownership to `state-management`, and React performance work to `react-best-practices`.\n"
-license: "MIT"
-metadata: {"tags":"ui-components, react, typescript, composition, variants, slots, reusable, frontend","platforms":"Claude, ChatGPT, Gemini, Codex","version":"2.1.0","source":"akillness/jeo-skills","modernization":"2026-04-13","hardening":"2026-04-19"}
+name: ui-component-patterns
+description: >
+  Routing-first reusable component architecture for shared frontend primitives,
+  slots, controlled ownership, alternate-root composition, and docs/verification
+  packets. Use when the user needs to decide what should become a shared
+  primitive, how a component API should expose variants or subcomponents, when
+  parent state should control the component, how to compose a button/link/dialog
+  onto alternate element types, or what Storybook/example coverage is required.
+  Route design-token or cross-product governance to `design-system`,
+  accessibility-heavy remediation to `web-accessibility`, layout adaptation to
+  `responsive-design`, app-level state ownership to `state-management`, and
+  React performance work to `react-best-practices`.
+allowed-tools: Read Write Bash Grep Glob
+license: MIT
+metadata:
+  tags: ui-components, react, typescript, composition, variants, slots, reusable, frontend
+  platforms: Claude, ChatGPT, Gemini, Codex
+  version: "2.1.0"
+  source: akillness/jeo-skills
+  modernization: 2026-04-13
+  hardening: 2026-04-19
 ---
+
 # UI Component Patterns
 
 Use this skill when the job is to **classify the reusable component problem, choose one primary component packet, and leave behind a short component-architecture brief instead of a giant React-pattern dump**.

@@ -1,6 +1,8 @@
 ---
-description: "Generate type scales, color palettes, spacing systems, WCAG contrast checks, and dark mode derivations with math. Use when setting up a design system, creating tokens, or building a Tailwind/CSS theme. Outputs CSS custom properties, Tailwind config, or JSON tokens."
+name: design-tokens
+description: Generate type scales, color palettes, spacing systems, WCAG contrast checks, and dark mode derivations with math. Use when setting up a design system, creating tokens, or building a Tailwind/CSS theme. Outputs CSS custom properties, Tailwind config, or JSON tokens.
 ---
+
 # Design Tokens
 
 Generate type scales, color palettes, spacing systems, and dark mode derivations with math — not guessing. Includes WCAG contrast checking, systematic spacing grids, and production-ready CSS/Tailwind output.
@@ -196,8 +198,8 @@ L = 0.2126 × R_linear + 0.7152 × G_linear + 0.0722 × B_linear
 
 | Level | Ratio | Applies to |
 |-------|-------|-----------|
-| AA Normal Text | ≥ 4.5:1 | Body text (< 18px or < 14px bold) |
-| AA Large Text | ≥ 3:1 | ≥ 18px regular or ≥ 14px bold |
+| AA Normal Text | ≥ 4.5:1 | Body text (< 24px regular or < 18.5px bold) |
+| AA Large Text | ≥ 3:1 | ≥ 24px regular or ≥ 18.5px bold |
 | AAA Normal Text | ≥ 7:1 | Enhanced accessibility |
 | AA UI Components | ≥ 3:1 | Borders, icons, focus rings |
 
@@ -226,9 +228,9 @@ If a combo fails, adjust the darker color one step darker until it passes.
 
 ## Spacing System
 
-### Base-4 Scale (Recommended)
+### 4px-Based Scale with Micro-Steps (Recommended)
 
-Everything is a multiple of 4px. Predictable, consistent, works with most font sizes.
+The core scale is 4px-based, with 2px micro-steps for finer control.
 
 ```css
 :root {
@@ -251,7 +253,7 @@ Everything is a multiple of 4px. Predictable, consistent, works with most font s
 }
 ```
 
-This matches Tailwind's default scale exactly.
+This uses Tailwind-inspired spacing names while preserving a 4px-based rhythm with micro-steps.
 
 ### Spacing Usage Guide
 

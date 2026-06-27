@@ -1,6 +1,6 @@
 //! Leptos server functions — public API used by pages and components.
 // Goal harness deliverable AC2/AC5 — partial ToolFilters deserialize-safe
-// harness-round-8: 2026-06-27T08:00:00Z-functions
+// harness-round-11: 2026-06-27T11:00:00Z-functions
 //!
 //! These functions are auto-registered by the Leptos runtime and are
 //! available to both server-rendered and hydrated components.

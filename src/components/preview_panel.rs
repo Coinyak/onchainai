@@ -1,4 +1,4 @@
-//! Desktop preview panel — 400px right slide-in; ESC + backdrop click to close.
+//! Desktop preview panel — 400px right slide-in; ESC + backdrop click to close (harness-round-11).
 
 use crate::components::tool_detail_content::ToolDetailContent;
 use crate::models::Tool;

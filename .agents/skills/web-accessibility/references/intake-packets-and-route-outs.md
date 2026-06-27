@@ -57,7 +57,7 @@ Use when controls are technically present but meaning is unclear.
 
 ### Route-outs
 - broad content/copy hierarchy review → `web-design-guidelines`
-- form/system architecture beyond accessibility messaging → neighboring product/frontend skill
+- reusable form primitive architecture beyond accessibility messaging → `ui-component-patterns`
 
 ## 4. visual-perception-reflow
 Use when visual access or layout adaptation blocks real task completion.
@@ -94,8 +94,8 @@ Use when images, audio, or video lack useful alternatives.
 - manual review needed because usefulness is contextual
 
 ### Route-outs
-- editorial/content-strategy ownership → content/documentation skill
-- broader media-production workflow → media-specific skill
+- editorial/content-strategy ownership → `web-design-guidelines`
+- image review or replacement asset creation → `visual-qa` or `imagegen`
 
 ## 6. routed-navigation-feedback
 Use when client-routed apps lose browser navigation cues.
@@ -113,7 +113,7 @@ Use when client-routed apps lose browser navigation cues.
 - honest boundary between accessibility remediation and broader router/runtime design
 
 ### Route-outs
-- generic routing/data-flow architecture without accessibility failure evidence → router/framework skill
+- generic React routing/data-flow architecture without accessibility failure evidence → `react-best-practices`
 - pure React/Next performance issues → `react-best-practices`
 
 ## Quick routing heuristic

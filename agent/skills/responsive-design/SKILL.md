@@ -1,8 +1,25 @@
 ---
-description: "Routing-first responsive layout strategy and verification for web interfaces. Use when the main job is classifying whether the failure is page-shell adaptation, reusable component/container behavior, dense-data or toolbar pressure, responsive media, or reflow verification — then turning vague “breaks on mobile” requests into one concrete strategy packet. Route component API design to `ui-component-patterns`, accessibility remediation to `web-accessibility`, system-wide breakpoint/token governance to `design-system`, and broad UI audit work to `web-design-guidelines`.\n"
-license: "MIT"
-metadata: {"tags":"responsive, mobile-first, layout, container-queries, breakpoints, frontend, css, reflow","platforms":"Claude, ChatGPT, Gemini, Codex","version":"2.1.0","source":"akillness/jeo-skills","modernization":"2026-04-13","hardening":"2026-04-19"}
+name: responsive-design
+description: >
+  Routing-first responsive layout strategy and verification for web interfaces. Use
+  when the main job is classifying whether the failure is page-shell adaptation,
+  reusable component/container behavior, dense-data or toolbar pressure,
+  responsive media, or reflow verification — then turning vague “breaks on
+  mobile” requests into one concrete strategy packet. Route component API design
+  to `ui-component-patterns`, accessibility remediation to `web-accessibility`,
+  system-wide breakpoint/token governance to `design-system`, and broad UI audit
+  work to `web-design-guidelines`.
+allowed-tools: Read Write Bash Grep Glob
+license: MIT
+metadata:
+  tags: responsive, mobile-first, layout, container-queries, breakpoints, frontend, css, reflow
+  platforms: Claude, ChatGPT, Gemini, Codex
+  version: "2.1.0"
+  source: akillness/jeo-skills
+  modernization: 2026-04-13
+  hardening: 2026-04-19
 ---
+
 # Responsive Design
 
 Use this skill when the job is to **name the failing responsive surface, choose the smallest viable adaptation packet, and leave behind a short strategy + verification brief**.
