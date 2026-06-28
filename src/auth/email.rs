@@ -2,8 +2,7 @@
 
 use crate::auth::session::{
     cookie_secure_for_domain, ensure_profile, post_auth_redirect_path, set_session_hint_cookie,
-    ACCESS_TOKEN_COOKIE,
-    PKCE_VERIFIER_COOKIE,
+    ACCESS_TOKEN_COOKIE, PKCE_VERIFIER_COOKIE,
 };
 use crate::config::Config;
 use crate::AppState;

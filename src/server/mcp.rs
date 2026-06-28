@@ -327,9 +327,9 @@ async fn mcp_list_categories(pool: &PgPool) -> Result<Vec<CategoryMcp>, (i32, St
     let rows = sqlx::query_as::<_, crate::server::functions::CategoryWithCount>(
         CATEGORIES_WITH_COUNTS_SQL,
     )
-        .fetch_all(pool)
-        .await
-        .map_err(|e| (-32603, format!("db error: {e}")))?;
+    .fetch_all(pool)
+    .await
+    .map_err(|e| (-32603, format!("db error: {e}")))?;
 
     Ok(rows
         .into_iter()

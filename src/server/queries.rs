@@ -40,7 +40,8 @@ pub const APPROVED_TOOL_ID_BY_SLUG_SQL: &str = concat!(
 pub const COUNT_APPROVED_TOOLS_SQL: &str =
     concat!("SELECT COUNT(*) FROM tools WHERE ", public_tool_where!());
 
-pub const LIST_APPROVED_TOOLS_SQL: &str = concat!("SELECT * FROM tools WHERE ", public_tool_where!());
+pub const LIST_APPROVED_TOOLS_SQL: &str =
+    concat!("SELECT * FROM tools WHERE ", public_tool_where!());
 
 pub const CHAIN_COUNTS_SQL: &str = concat!(
     "SELECT chain, COUNT(*) AS count FROM tools, UNNEST(chains) AS chain WHERE ",
@@ -313,7 +314,11 @@ pub fn push_fts_filter(sql: &mut String, idx: &mut i32) {
 
 /// Append ORDER BY / OFFSET / LIMIT with generated bind indices.
 pub fn push_order_offset_limit(sql: &mut String, order: &str, idx: &mut i32) {
-    let _ = write!(sql, " ORDER BY {order} OFFSET ${idx} LIMIT ${limit_idx}", limit_idx = *idx + 1);
+    let _ = write!(
+        sql,
+        " ORDER BY {order} OFFSET ${idx} LIMIT ${limit_idx}",
+        limit_idx = *idx + 1
+    );
     *idx += 2;
 }
 
@@ -380,7 +385,10 @@ mod tests {
         assert!(DASHBOARD_STATUS_COUNTS_SQL.contains("GROUP BY status"));
         assert!(DASHBOARD_PRICING_COUNTS_SQL.contains("GROUP BY pricing"));
         assert_eq!(DashboardCountAxis::Type.bucket_axis(), "type");
-        assert_eq!(DashboardCountAxis::Pricing.count_sql(), DASHBOARD_PRICING_COUNTS_SQL);
+        assert_eq!(
+            DashboardCountAxis::Pricing.count_sql(),
+            DASHBOARD_PRICING_COUNTS_SQL
+        );
     }
 
     #[test]
