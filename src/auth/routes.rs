@@ -1,8 +1,9 @@
 //! Axum auth routes — direct GitHub OAuth, email magic links, and logout.
 
 use crate::auth::session::{
-    cookie_secure_for_domain, cookie_value, ensure_github_profile, issue_access_token,
-    local_dev_host, post_auth_redirect_path, ACCESS_TOKEN_COOKIE, GITHUB_STATE_COOKIE,
+    clear_session_hint_cookie, cookie_secure_for_domain, cookie_value, ensure_github_profile,
+    issue_access_token, local_dev_host, post_auth_redirect_path, set_session_hint_cookie,
+    ACCESS_TOKEN_COOKIE, GITHUB_STATE_COOKIE,
 };
 use crate::config::Config;
 use crate::AppState;
@@ -246,6 +247,12 @@ pub async fn oauth_callback(
     );
     headers.append(
         header::SET_COOKIE,
+        set_session_hint_cookie(config.siwx_session_ttl, secure_cookie)
+            .parse()
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?,
+    );
+    headers.append(
+        header::SET_COOKIE,
         clear_cookie(GITHUB_STATE_COOKIE, secure_cookie, "Lax")
             .parse()
             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?,
@@ -260,11 +267,17 @@ pub async fn oauth_callback(
 pub async fn logout(State(state): State<AppState>) -> Response {
     let secure_cookie = cookie_secure_for_domain(&state.config.siwx_domain);
     let mut headers = HeaderMap::new();
-    headers.insert(
+    headers.append(
         header::SET_COOKIE,
         clear_cookie(ACCESS_TOKEN_COOKIE, secure_cookie, "Strict")
             .parse()
             .unwrap_or_else(|_| "onchainai_access_token=; Path=/".parse().unwrap()),
+    );
+    headers.append(
+        header::SET_COOKIE,
+        clear_session_hint_cookie(secure_cookie)
+            .parse()
+            .unwrap_or_else(|_| "onchainai_session=; Path=/".parse().unwrap()),
     );
     (headers, Redirect::to("/")).into_response()
 }

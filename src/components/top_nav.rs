@@ -147,7 +147,6 @@ pub fn TopNav() -> impl IntoView {
     // Blocking SSR keeps auth markup in the initial HTML so hydration matches WASM.
     // Login flows land via full-page redirects, so one auth fetch per shell load is enough.
     let user = ArcOnceResource::new_blocking(async move { get_current_user().await });
-    let user_ready = user.ready();
 
     view! {
         <LoginModal show=show_login/>
@@ -175,19 +174,16 @@ pub fn TopNav() -> impl IntoView {
                     >
                         "GitHub"
                     </a>
-                    <Suspense fallback=move || {
+                    {move || {
+                        let user_res = user
+                            .read_untracked()
+                            .as_ref()
+                            .cloned()
+                            .unwrap_or(Ok(None));
                         view! {
-                            <AuthNav user_res=Ok(None) show_login=show_login/>
+                            <AuthNav user_res=user_res show_login=show_login/>
                         }
-                    }>
-                        {Suspend::new(async move {
-                            user_ready.await;
-                            let user_res = user.read_untracked().as_ref().cloned().unwrap_or(Ok(None));
-                            view! {
-                                <AuthNav user_res=user_res show_login=show_login/>
-                            }
-                        })}
-                    </Suspense>
+                    }}
                 </nav>
             </div>
         </header>

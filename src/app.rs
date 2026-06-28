@@ -70,16 +70,19 @@ fn hydration_bundle_version(options: &LeptosOptions) -> Option<u64> {
         .max()
 }
 
+/// Hydration bootstrap with `?v=` cache busting. Keep `module_or_path` / `hydrate()`
+/// aligned with Leptos `HydrationScripts` when upgrading cargo-leptos.
 #[component]
 fn CacheBustedHydrationScripts(options: LeptosOptions, version: Option<u64>) -> impl IntoView {
     let urls = hydration_asset_urls(&options.site_pkg_dir, &options.output_name, version);
+    let js_href = urls.js.clone();
     let script = format!(
         "import({:?}).then((mod) => mod.default({{ module_or_path: {:?} }}).then(() => {{ mod.hydrate(); }})).catch((err) => {{ const message = err && (err.message || String(err)); if (!/aborted/i.test(message)) {{ console.error('OnchainAI hydration failed', err); }} }});",
         urls.js, urls.wasm
     );
 
     view! {
-        <link rel="modulepreload" href=urls.js.clone()/>
+        <link rel="modulepreload" href=js_href/>
         <link
             rel="preload"
             href=urls.wasm

@@ -2,7 +2,7 @@
 
 use crate::auth::session::{
     cookie_secure_for_domain, ensure_siwx_profile, issue_access_token, local_dev_host,
-    post_auth_redirect_path, ACCESS_TOKEN_COOKIE,
+    post_auth_redirect_path, set_session_hint_cookie, ACCESS_TOKEN_COOKIE,
 };
 use crate::config::Config;
 use crate::AppState;
@@ -275,7 +275,7 @@ pub async fn verify(
 
     let secure_cookie = cookie_secure_for_domain(&config.siwx_domain);
     let mut headers = HeaderMap::new();
-    headers.insert(
+    headers.append(
         header::SET_COOKIE,
         set_session_cookie(
             ACCESS_TOKEN_COOKIE,
@@ -285,6 +285,12 @@ pub async fn verify(
         )
         .parse()
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?,
+    );
+    headers.append(
+        header::SET_COOKIE,
+        set_session_hint_cookie(config.siwx_session_ttl, secure_cookie)
+            .parse()
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?,
     );
 
     let redirect = post_auth_redirect_path(&state.pool, user_id).await;

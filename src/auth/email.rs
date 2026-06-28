@@ -1,7 +1,8 @@
 //! Email magic-link authentication via Supabase Auth.
 
 use crate::auth::session::{
-    cookie_secure_for_domain, ensure_profile, post_auth_redirect_path, ACCESS_TOKEN_COOKIE,
+    cookie_secure_for_domain, ensure_profile, post_auth_redirect_path, set_session_hint_cookie,
+    ACCESS_TOKEN_COOKIE,
     PKCE_VERIFIER_COOKIE,
 };
 use crate::config::Config;
@@ -117,6 +118,12 @@ pub async fn complete_magic_link(
         )
         .parse()
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?,
+    );
+    headers.append(
+        header::SET_COOKIE,
+        set_session_hint_cookie(max_age, secure_cookie)
+            .parse()
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?,
     );
     headers.append(
         header::SET_COOKIE,

@@ -4,8 +4,28 @@ use leptos::server_fn::ServerFnError;
 use uuid::Uuid;
 
 pub const ACCESS_TOKEN_COOKIE: &str = "onchainai_access_token";
+/// Non-HttpOnly hint so hydrated UI can skip anonymous server-fn bursts without
+/// reading the JWT cookie (which stays HttpOnly per SECURITY.md).
+pub const SESSION_HINT_COOKIE: &str = "onchainai_session";
+pub const SESSION_HINT_VALUE: &str = "1";
 pub const PKCE_VERIFIER_COOKIE: &str = "onchainai_pkce_verifier";
 pub const GITHUB_STATE_COOKIE: &str = "onchainai_github_state";
+
+/// Set the client-readable session hint alongside the HttpOnly access token.
+pub fn set_session_hint_cookie(max_age_secs: i64, secure: bool) -> String {
+    let secure_flag = if secure { "; Secure" } else { "" };
+    format!(
+        "{SESSION_HINT_COOKIE}={SESSION_HINT_VALUE}; Path=/; SameSite=Strict; Max-Age={max_age_secs}{secure_flag}"
+    )
+}
+
+/// Clear the client-readable session hint on logout.
+pub fn clear_session_hint_cookie(secure: bool) -> String {
+    let secure_flag = if secure { "; Secure" } else { "" };
+    format!(
+        "{SESSION_HINT_COOKIE}=; Path=/; SameSite=Strict; Max-Age=0{secure_flag}"
+    )
+}
 
 /// True when `siwx_domain` points at local dev (localhost or 127.0.0.1).
 pub fn is_local_dev_domain(siwx_domain: &str) -> bool {
@@ -58,7 +78,7 @@ pub struct SessionUser {
     pub auth_method: String,
 }
 
-/// Client-only: whether the session cookie is present (sticky nav during refetch).
+/// Client-only: whether a session hint cookie is present (sticky nav / bookmark gates).
 #[cfg(feature = "hydrate")]
 pub fn has_access_token_cookie() -> bool {
     use wasm_bindgen::JsCast;
@@ -75,7 +95,7 @@ pub fn has_access_token_cookie() -> bool {
     let Ok(cookie) = html_document.cookie() else {
         return false;
     };
-    cookie_value(&cookie, ACCESS_TOKEN_COOKIE).is_some()
+    cookie_value(&cookie, SESSION_HINT_COOKIE) == Some(SESSION_HINT_VALUE)
 }
 
 /// SSR/build without hydrate: defer to the blocking session resource.
@@ -150,6 +170,16 @@ mod tests {
         let header = "foo=bar; onchainai_access_token=abc123; baz=qux";
         assert_eq!(cookie_value(header, ACCESS_TOKEN_COOKIE), Some("abc123"));
         assert_eq!(cookie_value(header, "missing"), None);
+    }
+
+    #[test]
+    fn session_hint_cookie_is_non_httponly_marker() {
+        let cookie = set_session_hint_cookie(86_400, true);
+        assert!(cookie.contains(SESSION_HINT_COOKIE));
+        assert!(cookie.contains(SESSION_HINT_VALUE));
+        assert!(!cookie.contains("HttpOnly"));
+        assert!(cookie.contains("SameSite=Strict"));
+        assert!(cookie.contains("; Secure"));
     }
 
     #[test]
