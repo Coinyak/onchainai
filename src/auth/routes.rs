@@ -64,6 +64,11 @@ fn generate_oauth_state() -> String {
     URL_SAFE_NO_PAD.encode(bytes)
 }
 
+/// Production HTTPS must set `Secure` on OAuth state cookies or browsers drop them.
+fn cookie_secure(config: &Config) -> bool {
+    !config.siwx_domain.contains("localhost")
+}
+
 /// `GET /auth/github` — redirect to GitHub OAuth (callback stays on this app).
 pub async fn github_login(State(state): State<AppState>) -> Result<Response, StatusCode> {
     let config = &state.config;
@@ -83,7 +88,13 @@ pub async fn github_login(State(state): State<AppState>) -> Result<Response, Sta
         // OAuth state cookie must survive the cross-site redirect back from
         // GitHub, so it stays SameSite=Lax (Strict would drop it on the
         // top-level navigation and break the callback).
-        set_cookie(GITHUB_STATE_COOKIE, &oauth_state, 600, false, "Lax")
+        set_cookie(
+            GITHUB_STATE_COOKIE,
+            &oauth_state,
+            600,
+            cookie_secure(config),
+            "Lax",
+        )
             .parse()
             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?,
     );
@@ -212,7 +223,7 @@ pub async fn oauth_callback(
     )
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    let secure_cookie = !config.siwx_domain.contains("localhost");
+    let secure_cookie = cookie_secure(config);
 
     let mut headers = HeaderMap::new();
     headers.append(
@@ -230,7 +241,7 @@ pub async fn oauth_callback(
     );
     headers.append(
         header::SET_COOKIE,
-        clear_cookie(GITHUB_STATE_COOKIE, false, "Lax")
+        clear_cookie(GITHUB_STATE_COOKIE, secure_cookie, "Lax")
             .parse()
             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?,
     );
@@ -242,7 +253,7 @@ pub async fn oauth_callback(
 
 /// `POST /auth/logout` — clear session cookie.
 pub async fn logout(State(state): State<AppState>) -> Response {
-    let secure_cookie = !state.config.siwx_domain.contains("localhost");
+    let secure_cookie = cookie_secure(&state.config);
     let mut headers = HeaderMap::new();
     headers.insert(
         header::SET_COOKIE,
@@ -251,4 +262,43 @@ pub async fn logout(State(state): State<AppState>) -> Response {
             .unwrap_or_else(|_| "onchainai_access_token=; Path=/".parse().unwrap()),
     );
     (headers, Redirect::to("/")).into_response()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{cookie_secure, set_cookie};
+    use crate::config::Config;
+
+    fn prod_config() -> Config {
+        Config {
+            database_url: "postgres://localhost/x".into(),
+            supabase_url: "https://proj.supabase.co".into(),
+            supabase_anon_key: "anon".into(),
+            supabase_service_key: "service".into(),
+            github_client_id: "gid".into(),
+            github_client_secret: "gsecret".into(),
+            siwx_domain: "www.onchain-ai.xyz".into(),
+            siwx_session_ttl: 86_400,
+            jwt_secret: "secret".into(),
+            github_api_token: None,
+            port: 3000,
+        }
+    }
+
+    #[test]
+    fn oauth_state_cookie_is_secure_in_production() {
+        let cfg = prod_config();
+        assert!(cookie_secure(&cfg));
+        let cookie = set_cookie("onchainai_github_state", "abc", 600, true, "Lax");
+        assert!(cookie.contains("; Secure"));
+    }
+
+    #[test]
+    fn oauth_state_cookie_omits_secure_on_localhost() {
+        let mut cfg = prod_config();
+        cfg.siwx_domain = "localhost:3000".into();
+        assert!(!cookie_secure(&cfg));
+        let cookie = set_cookie("onchainai_github_state", "abc", 600, false, "Lax");
+        assert!(!cookie.contains("; Secure"));
+    }
 }

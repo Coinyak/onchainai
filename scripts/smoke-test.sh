@@ -41,7 +41,7 @@ home_body="$(check_get "/")"
 grep -q 'site-top-nav' "$home_body" || fail "GET / missing site-top-nav markup"
 grep -q 'auth-sign-in' "$home_body" || fail "GET / missing auth-sign-in markup"
 grep -q '/auth/github' "$home_body" || fail "GET / missing GitHub sign-in link"
-grep -q 'Connect Wallet' "$home_body" || fail "GET / missing wallet sign-in control"
+grep -qE 'Connect Wallet|>Wallet<' "$home_body" || fail "GET / missing wallet sign-in control"
 grep -q 'category-grid' "$home_body" && fail "GET / unexpected category-grid markup"
 
 tools_body="$(check_get "/tools")"

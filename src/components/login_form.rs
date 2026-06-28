@@ -73,7 +73,7 @@ pub fn WalletConnectButton(
                 {move || if siwx_busy.get() { "Connecting wallet..." } else { label }}
             </button>
             {move || siwx_error.get().map(|e| view! {
-                <p class="mt-1 text-[13px] text-[#C0392B]">{e}</p>
+                <p class="wallet-connect-error mt-1 text-[13px] text-[#C0392B]">{e}</p>
             })}
         </>
     }
