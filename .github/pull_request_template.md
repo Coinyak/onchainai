@@ -16,6 +16,13 @@ If this PR touches `src/pages`, `src/components`, `style`, `src/app.rs`, auth sh
 - [ ] `./scripts/ui-change-gate.sh --tier smoke` minimum; `--tier full` when feasible
 - [ ] `./scripts/install-agent-hooks.sh` run once on the machine (pre-commit staleness guard)
 
+## AI review (optional, manual)
+
+Do **not** expect automatic Qodo/Copilot reviews. When you want AI feedback:
+
+- CodeRabbit: `@coderabbitai review` in a PR comment
+- Qodo: `/review` in a PR comment (after `.pr_agent.toml` is on the base branch)
+
 ## Notes
 
 <!-- Blockers, env requirements, screenshots -->

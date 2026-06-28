@@ -34,6 +34,8 @@ for path in \
   scripts/agent-readiness-report.sh \
   scripts/agent-readiness-report.mjs \
   scripts/configure-branch-protection.sh \
+  .pr_agent.toml \
+  .coderabbit.yaml \
   scripts/git-hooks/pre-commit \
   scripts/git-hooks/pre-push \
   scripts/agent-start.sh \
@@ -88,6 +90,10 @@ bash -n scripts/ui-change-gate.sh
 bash -n scripts/verify-dev-watch.sh
 bash -n scripts/configure-branch-protection.sh
 node scripts/sync-ui-watch-paths.mjs --check
+grep -Fq 'disable_auto_feedback = true' .pr_agent.toml || \
+  fail ".pr_agent.toml must disable Qodo auto feedback (disable_auto_feedback = true)"
+grep -Fq 'auto_review:' .coderabbit.yaml && grep -Fq 'enabled: false' .coderabbit.yaml || \
+  fail ".coderabbit.yaml must keep auto_review.enabled false"
 hooks_path="$(git config --local --get core.hooksPath 2>/dev/null || true)"
 if [[ "$hooks_path" != "scripts/git-hooks" ]]; then
   ./scripts/install-agent-hooks.sh >/dev/null

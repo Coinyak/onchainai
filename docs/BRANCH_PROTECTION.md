@@ -35,3 +35,23 @@ Repeat with pattern `feat/*` if you want the same gate on long-lived feature bra
 ```
 
 Without admin rights, use the manual steps above or ask a repo admin to run `--apply`.
+
+## PR review bots (manual only)
+
+This repo does **not** use automatic Qodo or Copilot PR reviews (saves quota).
+
+| Bot | Auto review | How to request |
+|-----|-------------|----------------|
+| **Qodo** | Off — `.pr_agent.toml` sets `disable_auto_feedback = true` | PR comment: `/review` (after config is on default branch) |
+| **CodeRabbit** | Off — `.coderabbit.yaml` | PR comment: `@coderabbitai review` |
+| **GitHub Copilot** | Must be off in GitHub UI (not repo-file configurable) | See below |
+
+### Disable Copilot automatic PR review
+
+Repo admin or owner:
+
+1. **Settings → Copilot → Code review** — turn off automatic review for this repository, **or**
+2. **Settings → Rules → Rulesets** — remove **Automatically request Copilot code review** from any active ruleset, **or**
+3. **Profile → Copilot settings** — disable **Automatic Copilot code review** for your own PRs if enabled personally.
+
+Copilot coding instructions (`.github/copilot-instructions.md`) are for in-IDE assistance only, not PR auto-review.
