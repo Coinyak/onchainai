@@ -19,12 +19,15 @@ pub fn set_session_hint_cookie(max_age_secs: i64, secure: bool) -> String {
     )
 }
 
+/// True when the request already carries the non-HttpOnly session hint.
+pub fn session_hint_present(cookie_header: &str) -> bool {
+    cookie_value(cookie_header, SESSION_HINT_COOKIE) == Some(SESSION_HINT_VALUE)
+}
+
 /// Clear the client-readable session hint on logout.
 pub fn clear_session_hint_cookie(secure: bool) -> String {
     let secure_flag = if secure { "; Secure" } else { "" };
-    format!(
-        "{SESSION_HINT_COOKIE}=; Path=/; SameSite=Strict; Max-Age=0{secure_flag}"
-    )
+    format!("{SESSION_HINT_COOKIE}=; Path=/; SameSite=Strict; Max-Age=0{secure_flag}")
 }
 
 /// True when `siwx_domain` points at local dev (localhost or 127.0.0.1).
@@ -78,7 +81,8 @@ pub struct SessionUser {
     pub auth_method: String,
 }
 
-/// Client-only: whether a session hint cookie is present (sticky nav / bookmark gates).
+/// Client-only: whether the non-authoritative session hint is present.
+/// The HttpOnly JWT is never readable here; this only skips anonymous server-fn bursts.
 #[cfg(feature = "hydrate")]
 pub fn has_access_token_cookie() -> bool {
     use wasm_bindgen::JsCast;
@@ -180,6 +184,30 @@ mod tests {
         assert!(!cookie.contains("HttpOnly"));
         assert!(cookie.contains("SameSite=Strict"));
         assert!(cookie.contains("; Secure"));
+    }
+
+    #[test]
+    fn session_hint_cookie_omits_secure_on_local_dev() {
+        let cookie = set_session_hint_cookie(86_400, false);
+        assert!(cookie.contains(SESSION_HINT_COOKIE));
+        assert!(!cookie.contains("; Secure"));
+    }
+
+    #[test]
+    fn clear_session_hint_cookie_expires_hint() {
+        let cookie = clear_session_hint_cookie(true);
+        assert!(cookie.contains(SESSION_HINT_COOKIE));
+        assert!(cookie.contains("Max-Age=0"));
+        assert!(cookie.contains("SameSite=Strict"));
+        assert!(cookie.contains("; Secure"));
+    }
+
+    #[test]
+    fn session_hint_present_detects_marker_cookie() {
+        let header = format!("foo=bar; {SESSION_HINT_COOKIE}={SESSION_HINT_VALUE}");
+        assert!(session_hint_present(&header));
+        assert!(!session_hint_present("foo=bar"));
+        assert!(!session_hint_present(&format!("{SESSION_HINT_COOKIE}=0")));
     }
 
     #[test]

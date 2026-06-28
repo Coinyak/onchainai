@@ -145,7 +145,10 @@ fn AuthNav(
 pub fn TopNav() -> impl IntoView {
     let show_login = RwSignal::new(false);
     // Blocking SSR keeps auth markup in the initial HTML so hydration matches WASM.
-    // Login flows land via full-page redirects, so one auth fetch per shell load is enough.
+    // ArcOnceResource never re-fetches on client-side router navigations; auth is
+    // assumed to change only via full-page redirects (GitHub OAuth, email magic link,
+    // SIWX verify, POST /auth/logout). Do not expect sign-in/out to update TopNav
+    // until the next document load.
     let user = ArcOnceResource::new_blocking(async move { get_current_user().await });
 
     view! {

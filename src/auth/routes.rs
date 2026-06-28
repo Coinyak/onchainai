@@ -378,4 +378,15 @@ mod tests {
         assert!(cookie.contains("SameSite=Strict"));
         assert!(cookie.contains("Max-Age=0"));
     }
+
+    #[test]
+    fn logout_clears_session_hint_cookie_with_matching_flags() {
+        use crate::auth::session::{clear_session_hint_cookie, SESSION_HINT_COOKIE};
+
+        let cookie = clear_session_hint_cookie(true);
+        assert!(cookie.contains(SESSION_HINT_COOKIE));
+        assert!(cookie.contains("; Secure"));
+        assert!(cookie.contains("SameSite=Strict"));
+        assert!(cookie.contains("Max-Age=0"));
+    }
 }

@@ -42,14 +42,13 @@ use crate::server::operator_review_transition::{
 };
 #[cfg(feature = "ssr")]
 use crate::server::queries::{
-    push_bind_clause, push_fts_filter, push_order_offset_limit, list_tools_order_clause,
+    list_tools_order_clause, push_bind_clause, push_fts_filter, push_order_offset_limit,
     DashboardCountAxis, APPROVED_TOOL_BY_SLUG_SQL, APPROVED_TOOL_ID_BY_SLUG_SQL,
     CATEGORIES_WITH_COUNTS_SQL, CHAIN_COUNTS_SQL, COUNT_APPROVED_TOOLS_SQL,
     DASHBOARD_FUNCTION_COUNTS_SQL, DASHBOARD_METRICS_SQL, DASHBOARD_X402_TOOLS_SQL,
     IS_BOOKMARKED_SQL, LIST_APPROVED_TOOLS_SQL, RECENT_APPROVED_TOOLS_SQL,
-    SEARCH_APPROVED_TOOLS_BASE_SQL, TOOL_COMMENT_COUNT_BY_SLUG_SQL,
-    TOOL_COMMENT_COUNTS_BY_SLUGS_SQL, TOOL_COMMENTS_NEW_SORT_SQL, TOOL_COMMENTS_TOP_SORT_SQL,
-    USER_TOOLKIT_SQL,
+    SEARCH_APPROVED_TOOLS_BASE_SQL, TOOL_COMMENTS_NEW_SORT_SQL, TOOL_COMMENTS_TOP_SORT_SQL,
+    TOOL_COMMENT_COUNTS_BY_SLUGS_SQL, TOOL_COMMENT_COUNT_BY_SLUG_SQL, USER_TOOLKIT_SQL,
 };
 #[cfg(feature = "ssr")]
 use crate::server::rate_limit::{check_user_rate_limit, UserRateLimitAction};
@@ -79,13 +78,50 @@ fn request_context() -> Result<(Parts, sqlx::PgPool, Config), ServerFnError> {
     Ok((parts, pool, config))
 }
 
+/// Backfill the non-HttpOnly session hint for users who logged in before PR #10.
+#[cfg(feature = "ssr")]
+fn append_session_hint_if_missing(parts: &Parts, config: &Config) {
+    use crate::auth::session::{
+        cookie_secure_for_domain, session_hint_present, set_session_hint_cookie,
+    };
+    use axum::http::header;
+    use leptos::prelude::*;
+    use leptos_axum::ResponseOptions;
+
+    let cookie_header = parts
+        .headers
+        .get(header::COOKIE)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("");
+    if session_hint_present(cookie_header) {
+        return;
+    }
+
+    let secure = cookie_secure_for_domain(&config.siwx_domain);
+    let hint = set_session_hint_cookie(config.siwx_session_ttl, secure);
+    let Ok(value) = hint.parse::<axum::http::HeaderValue>() else {
+        tracing::warn!("session hint cookie rejected by header parser");
+        return;
+    };
+    let Some(opts) = use_context::<ResponseOptions>() else {
+        tracing::warn!("session hint backfill skipped: ResponseOptions missing");
+        return;
+    };
+    opts.append_header(header::SET_COOKIE, value);
+}
+
 /// Current signed-in user, if any (from session cookie).
 #[server(GetCurrentUser, "/api")]
 pub async fn get_current_user() -> Result<Option<SessionUser>, ServerFnError> {
     let (parts, pool, config) = request_context()?;
-    optional_session_result(
+    let user = optional_session_result(
         session_from_parts(&parts, &pool, &config.jwt_secret, &config.jwt_issuer()).await,
-    )
+    )?;
+    #[cfg(feature = "ssr")]
+    if user.is_some() {
+        append_session_hint_if_missing(&parts, &config);
+    }
+    Ok(user)
 }
 
 /// Admin gate — returns the admin session or a generic "not found" error.
@@ -1039,10 +1075,11 @@ async fn fetch_dashboard_x402_tools(
 
 #[cfg(feature = "ssr")]
 async fn fetch_dashboard_metrics(pool: &sqlx::PgPool) -> Result<DashboardMetrics, ServerFnError> {
-    let row = sqlx::query_as::<_, (i64, i64, i64, i64, i64, i64, i64, i64, i64)>(DASHBOARD_METRICS_SQL)
-        .fetch_one(pool)
-        .await
-        .map_err(|e| ServerFnError::new(format!("dashboard metrics failed: {e}")))?;
+    let row =
+        sqlx::query_as::<_, (i64, i64, i64, i64, i64, i64, i64, i64, i64)>(DASHBOARD_METRICS_SQL)
+            .fetch_one(pool)
+            .await
+            .map_err(|e| ServerFnError::new(format!("dashboard metrics failed: {e}")))?;
 
     Ok(DashboardMetrics {
         public_tools: row.0,
@@ -1168,8 +1205,7 @@ fn toolkit_markdown_for_tools(tools: &[Tool]) -> String {
 pub fn build_toolkit_payload(tools: Vec<Tool>) -> Result<MyToolkitPayload, ServerFnError> {
     let tools = sanitize_toolkit_tools(tools);
     let markdown_body = toolkit_markdown_for_tools(&tools);
-    let export_tools: Vec<ToolkitExportTool> =
-        tools.iter().map(tool_to_toolkit_export).collect();
+    let export_tools: Vec<ToolkitExportTool> = tools.iter().map(tool_to_toolkit_export).collect();
     let json_body = serde_json::to_string_pretty(&export_tools)
         .map_err(|e| ServerFnError::new(format!("failed to serialize toolkit: {e}")))?;
 
@@ -2007,11 +2043,11 @@ pub async fn get_tool_comments(
         .flatten();
 
     let tool_id = sqlx::query_scalar::<_, Uuid>(APPROVED_TOOL_ID_BY_SLUG_SQL)
-    .bind(&slug)
-    .fetch_optional(&pool)
-    .await
-    .map_err(|e| ServerFnError::new(format!("failed to resolve tool: {e}")))?
-    .ok_or_else(|| ServerFnError::new(format!("tool not found: {slug}")))?;
+        .bind(&slug)
+        .fetch_optional(&pool)
+        .await
+        .map_err(|e| ServerFnError::new(format!("failed to resolve tool: {e}")))?
+        .ok_or_else(|| ServerFnError::new(format!("tool not found: {slug}")))?;
 
     let sql = match sort.as_str() {
         "top" => TOOL_COMMENTS_TOP_SORT_SQL,
@@ -2070,10 +2106,10 @@ pub async fn get_tool_comment_count(slug: String) -> Result<i64, ServerFnError> 
         .ok_or_else(|| ServerFnError::new("database pool not available"))?;
 
     let count = sqlx::query_scalar::<_, i64>(TOOL_COMMENT_COUNT_BY_SLUG_SQL)
-    .bind(slug)
-    .fetch_one(&pool)
-    .await
-    .map_err(|e| ServerFnError::new(format!("comment count failed: {e}")))?;
+        .bind(slug)
+        .fetch_one(&pool)
+        .await
+        .map_err(|e| ServerFnError::new(format!("comment count failed: {e}")))?;
 
     Ok(count)
 }
@@ -2096,11 +2132,11 @@ pub async fn create_comment(
     }
 
     let tool_id = sqlx::query_scalar::<_, Uuid>(APPROVED_TOOL_ID_BY_SLUG_SQL)
-    .bind(&slug)
-    .fetch_optional(&pool)
-    .await
-    .map_err(|e| ServerFnError::new(format!("failed to resolve tool: {e}")))?
-    .ok_or_else(|| ServerFnError::new(format!("tool not found: {slug}")))?;
+        .bind(&slug)
+        .fetch_optional(&pool)
+        .await
+        .map_err(|e| ServerFnError::new(format!("failed to resolve tool: {e}")))?
+        .ok_or_else(|| ServerFnError::new(format!("tool not found: {slug}")))?;
 
     if let Some(parent) = parent_id {
         let parent_row = sqlx::query_as::<_, (Option<Uuid>,)>(
@@ -2185,11 +2221,11 @@ pub async fn is_bookmarked(slug: String) -> Result<bool, ServerFnError> {
     };
 
     let bookmarked = sqlx::query_scalar::<_, i64>(IS_BOOKMARKED_SQL)
-    .bind(slug)
-    .bind(user.id)
-    .fetch_one(&pool)
-    .await
-    .map_err(|e| ServerFnError::new(format!("bookmark lookup failed: {e}")))?;
+        .bind(slug)
+        .bind(user.id)
+        .fetch_one(&pool)
+        .await
+        .map_err(|e| ServerFnError::new(format!("bookmark lookup failed: {e}")))?;
 
     Ok(bookmarked > 0)
 }
@@ -2204,11 +2240,11 @@ pub async fn set_bookmark(slug: String, starred: bool) -> Result<bool, ServerFnE
     }
 
     let tool_id = sqlx::query_scalar::<_, Uuid>(APPROVED_TOOL_ID_BY_SLUG_SQL)
-    .bind(&slug)
-    .fetch_optional(&pool)
-    .await
-    .map_err(|e| ServerFnError::new(format!("failed to resolve tool: {e}")))?
-    .ok_or_else(|| ServerFnError::new(format!("tool not found: {slug}")))?;
+        .bind(&slug)
+        .fetch_optional(&pool)
+        .await
+        .map_err(|e| ServerFnError::new(format!("failed to resolve tool: {e}")))?
+        .ok_or_else(|| ServerFnError::new(format!("tool not found: {slug}")))?;
 
     let exists = sqlx::query_scalar::<_, i64>(
         "SELECT COUNT(*) FROM bookmarks WHERE tool_id = $1 AND user_id = $2",
@@ -2252,11 +2288,11 @@ pub async fn toggle_bookmark(slug: String) -> Result<bool, ServerFnError> {
     }
 
     let tool_id = sqlx::query_scalar::<_, Uuid>(APPROVED_TOOL_ID_BY_SLUG_SQL)
-    .bind(&slug)
-    .fetch_optional(&pool)
-    .await
-    .map_err(|e| ServerFnError::new(format!("failed to resolve tool: {e}")))?
-    .ok_or_else(|| ServerFnError::new(format!("tool not found: {slug}")))?;
+        .bind(&slug)
+        .fetch_optional(&pool)
+        .await
+        .map_err(|e| ServerFnError::new(format!("failed to resolve tool: {e}")))?
+        .ok_or_else(|| ServerFnError::new(format!("tool not found: {slug}")))?;
 
     let exists = sqlx::query_scalar::<_, i64>(
         "SELECT COUNT(*) FROM bookmarks WHERE tool_id = $1 AND user_id = $2",
@@ -3583,10 +3619,10 @@ pub async fn get_tool_trust_view(slug: String) -> Result<ToolTrustView, ServerFn
         .ok_or_else(|| ServerFnError::new("database pool not available"))?;
 
     let tool = sqlx::query_as::<_, Tool>(APPROVED_TOOL_BY_SLUG_SQL)
-    .bind(slug.trim())
-    .fetch_one(&pool)
-    .await
-    .map_err(|e| ServerFnError::new(format!("failed to load tool trust view: {e}")))?;
+        .bind(slug.trim())
+        .fetch_one(&pool)
+        .await
+        .map_err(|e| ServerFnError::new(format!("failed to load tool trust view: {e}")))?;
 
     let official_links = list_public_official_links(&pool, tool.id).await?;
     let trust = verify_tool_trust(&tool, &official_links);
@@ -3859,11 +3895,11 @@ pub async fn report_tool(input: ReportToolInput) -> Result<ToolReport, ServerFnE
     let user = require_user(&parts, &pool, &config.jwt_secret, &config.jwt_issuer()).await?;
 
     let tool_id = sqlx::query_scalar::<_, Uuid>(APPROVED_TOOL_ID_BY_SLUG_SQL)
-    .bind(slug)
-    .fetch_optional(&pool)
-    .await
-    .map_err(|e| ServerFnError::new(format!("failed to resolve tool: {e}")))?
-    .ok_or_else(|| ServerFnError::new("tool not found"))?;
+        .bind(slug)
+        .fetch_optional(&pool)
+        .await
+        .map_err(|e| ServerFnError::new(format!("failed to resolve tool: {e}")))?
+        .ok_or_else(|| ServerFnError::new("tool not found"))?;
 
     let details = input
         .details
@@ -3901,11 +3937,11 @@ pub async fn request_tool_claim(input: ClaimToolInput) -> Result<ToolClaimReques
     let user = require_user(&parts, &pool, &config.jwt_secret, &config.jwt_issuer()).await?;
 
     let tool = sqlx::query_as::<_, Tool>(APPROVED_TOOL_BY_SLUG_SQL)
-    .bind(input.slug.trim())
-    .fetch_optional(&pool)
-    .await
-    .map_err(|e| ServerFnError::new(format!("failed to resolve tool: {e}")))?
-    .ok_or_else(|| ServerFnError::new("tool not found"))?;
+        .bind(input.slug.trim())
+        .fetch_optional(&pool)
+        .await
+        .map_err(|e| ServerFnError::new(format!("failed to resolve tool: {e}")))?
+        .ok_or_else(|| ServerFnError::new("tool not found"))?;
 
     if tool.claim_state == "claimed" {
         return Err(ServerFnError::new("this listing is already claimed"));

@@ -234,7 +234,30 @@ fn NotFoundPage() -> impl IntoView {
 
 #[cfg(test)]
 mod tests {
-    use super::hydration_asset_urls;
+    use super::{file_mtime_secs, hydration_asset_urls, hydration_bundle_version};
+    use leptos::config::LeptosOptions;
+    use std::fs;
+    use std::path::PathBuf;
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    static HYDRATION_TEST_COUNTER: AtomicU64 = AtomicU64::new(0);
+
+    fn hydration_test_root() -> PathBuf {
+        let id = HYDRATION_TEST_COUNTER.fetch_add(1, Ordering::Relaxed);
+        std::env::temp_dir().join(format!(
+            "onchainai-hydration-test-{}-{}",
+            std::process::id(),
+            id
+        ))
+    }
+
+    fn test_leptos_options(site_root: &std::path::Path) -> LeptosOptions {
+        LeptosOptions::builder()
+            .output_name("onchainai")
+            .site_root(site_root.to_string_lossy().into_owned())
+            .site_pkg_dir("pkg")
+            .build()
+    }
 
     #[test]
     fn hydration_assets_include_cache_buster_query() {
@@ -242,6 +265,55 @@ mod tests {
 
         assert_eq!(urls.js, "/pkg/onchainai.js?v=12345");
         assert_eq!(urls.wasm, "/pkg/onchainai.wasm?v=12345");
+    }
+
+    #[test]
+    fn hydration_bundle_version_none_when_assets_missing() {
+        let root = hydration_test_root();
+        let pkg = root.join("pkg");
+        fs::create_dir_all(&pkg).expect("create pkg dir");
+
+        let version = hydration_bundle_version(&test_leptos_options(&root));
+        assert_eq!(version, None);
+
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn hydration_bundle_version_uses_max_mtime_when_both_exist() {
+        let root = hydration_test_root();
+        let pkg = root.join("pkg");
+        fs::create_dir_all(&pkg).expect("create pkg dir");
+
+        let js_path = pkg.join("onchainai.js");
+        let wasm_path = pkg.join("onchainai.wasm");
+        fs::write(&js_path, "js").expect("write js");
+        fs::write(&wasm_path, "wasm").expect("write wasm");
+
+        let js_mtime = file_mtime_secs(&js_path).expect("js mtime");
+        let wasm_mtime = file_mtime_secs(&wasm_path).expect("wasm mtime");
+        assert!(wasm_mtime >= js_mtime);
+
+        let version = hydration_bundle_version(&test_leptos_options(&root));
+        assert_eq!(version, Some(wasm_mtime.max(js_mtime)));
+
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn hydration_bundle_version_returns_single_asset_mtime() {
+        let root = hydration_test_root();
+        let pkg = root.join("pkg");
+        fs::create_dir_all(&pkg).expect("create pkg dir");
+
+        let js_path = pkg.join("onchainai.js");
+        fs::write(&js_path, "js").expect("write js");
+
+        let js_mtime = file_mtime_secs(&js_path).expect("js mtime");
+        let version = hydration_bundle_version(&test_leptos_options(&root));
+        assert_eq!(version, Some(js_mtime));
+
+        let _ = fs::remove_dir_all(&root);
     }
 
     #[test]
