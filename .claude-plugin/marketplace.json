@@ -1,0 +1,14 @@
+{
+  "name": "onchainai",
+  "owner": {
+    "name": "OnchainAI",
+    "url": "https://www.onchain-ai.xyz"
+  },
+  "plugins": [
+    {
+      "name": "onchainai",
+      "source": "./",
+      "description": "Crypto tool directory: find, vet, and install MCP/CLI/SDK/API/x402 tools."
+    }
+  ]
+}

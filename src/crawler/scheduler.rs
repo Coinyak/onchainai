@@ -5,6 +5,7 @@
 //! - CryptoSkill: every 6h (`0 0 */6 * * *`)
 //! - web3-mcp-hub: every 12h (`0 0 */12 * * *`)
 //! - GitHub topics: every hour at 30min offset (`0 30 * * * *`)
+//! - official MCP Registry: every 12h, offset 15min (`0 15 */12 * * *`)
 //! - GitHub star sync: every 30min (`0 */30 * * * *`)
 //!
 //! The actual source crawl logic is added in a later milestone; this module
@@ -14,7 +15,7 @@ use anyhow::Result;
 use tokio_cron_scheduler::{Job, JobScheduler};
 
 /// Number of cron jobs registered by the crawler scheduler.
-pub const SCHEDULER_JOB_COUNT: usize = 5;
+pub const SCHEDULER_JOB_COUNT: usize = 6;
 
 /// Start the scheduler with all cron jobs registered.
 pub async fn start(pool: sqlx::PgPool) -> Result<()> {
@@ -67,6 +68,17 @@ pub async fn start(pool: sqlx::PgPool) -> Result<()> {
         })
     })?;
     scheduler.add(gh_job).await?;
+
+    // Official MCP Registry: every 12h, offset so it does not collide with web3-mcp-hub.
+    let mcp_registry_pool = pool.clone();
+    let mcp_registry_job = Job::new_async("0 15 */12 * * *", move |_uuid, _l| {
+        let pool = mcp_registry_pool.clone();
+        Box::pin(async move {
+            tracing::info!("scheduled crawl: official MCP Registry");
+            crate::crawler::sources::mcp_registry::run_once(&pool).await;
+        })
+    })?;
+    scheduler.add(mcp_registry_job).await?;
 
     // GitHub star sync: every 30min.
     let star_pool = pool.clone();

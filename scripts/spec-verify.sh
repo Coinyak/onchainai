@@ -133,11 +133,15 @@ absent C3 "About 카피·개인핸들 정리" 'MVP does not include self-service
 
 echo "[3] 트랙2 발견 커버리지"
 absent B1 "SourceCrawler dead-code 해킹 제거" '_SourceCrawlerSealed' src/crawler/sources/mod.rs
-if want B2; then n=$(ls src/crawler/sources/*.rs 2>/dev/null | grep -vc '/mod.rs'); [ "${n:-0}" -gt 4 ] && ok B2 "신규 크롤러 소스 추가 (소스 $n개)" || no B2 "신규 소스 미추가 (소스 ${n:-0}개, >4 필요)"; fi
+if want B2; then
+  n=$(ls src/crawler/sources/*.rs 2>/dev/null | grep -vc '/mod.rs')
+  [ "${n:-0}" -gt 4 ] && ok B2 "신규 크롤러 소스 추가 (소스 ${n}개)" || no B2 "신규 소스 미추가 (소스 ${n:-0}개, >4 필요)"
+fi
 
 echo "[4] 트랙3 검색 품질 Tier0"
-curl_has A4-params "search_tools에 sort/cursor 파라미터" "$PROD_URL/mcp" 'cursor|"sort"' || true
-manual A4-params2 "(위 SKIP 시) MCP tools/list POST로 search_tools inputSchema 확인"
+present A4-desc "search_tools description 보강" 'bridge USDC to Base|Uniswap MCP server' src/server/mcp.rs
+present A4-params "search_tools에 sort/cursor 파라미터" '"sort"|cursor' src/server/mcp.rs
+manual A4-params2 "MCP tools/list POST로 search_tools inputSchema 확인"
 absent A4-rank "MCP 검색 정렬이 stars 고정 아님" 'ORDER BY stars DESC LIMIT 50' src/server/mcp.rs
 
 echo "[5] 트랙4 채택 동선"

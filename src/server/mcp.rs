@@ -1,13 +1,13 @@
 //! MCP server — JSON-RPC 2.0 handler with 4 public tools at POST /mcp.
 
 use crate::install_safety::{blocks_structured_config, claude_mcp_config, install_warning_text};
-use crate::models::tool::{sanitize_tool_for_public_response, sanitize_tools_for_public_response};
+use crate::models::tool::sanitize_tool_for_public_response;
 use crate::models::Tool;
 use crate::server::functions::{clamp_dashboard_list_limit, fetch_public_dashboard_snapshot};
-use crate::server::queries::{
-    push_bind_clause, APPROVED_TOOL_BY_SLUG_SQL, CATEGORIES_WITH_COUNTS_SQL,
-    MCP_SEARCH_TOOLS_BASE_SQL,
+use crate::server::mcp_search::{
+    mcp_search_tools, parse_search_cursor, parse_search_limit, McpSearchSort,
 };
+use crate::server::queries::{APPROVED_TOOL_BY_SLUG_SQL, CATEGORIES_WITH_COUNTS_SQL};
 use crate::server::rate_limit::{check_mcp_ip_rate_limit, client_ip_from_parts};
 use crate::AppState;
 use axum::{
@@ -133,13 +133,37 @@ async fn tools_list() -> Result<Value, (i32, String)> {
         "tools": [
             {
                 "name": "search_tools",
-                "description": "Search crypto MCP/CLI/SDK/API tools",
+                "description": "Search OnchainAI for crypto/onchain MCP, CLI, SDK, API, x402, and AI-agent tools by capability. Examples: bridge USDC to Base, Uniswap MCP server, Solana wallet SDK.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
-                        "query": { "type": "string" },
-                        "category": { "type": "string" },
-                        "chain": { "type": "string" }
+                        "query": {
+                            "type": "string",
+                            "description": "Natural-language capability, package, protocol, or tool name to search for"
+                        },
+                        "category": {
+                            "type": "string",
+                            "description": "Optional OnchainAI function filter, such as bridge, swap, wallet, payments, data, dev-tool, or ai-agent"
+                        },
+                        "chain": {
+                            "type": "string",
+                            "description": "Optional chain filter, such as base, ethereum, solana, arbitrum, or bitcoin"
+                        },
+                        "sort": {
+                            "type": "string",
+                            "enum": ["relevance", "trust", "stars", "recent"],
+                            "description": "Ranking strategy. Defaults to relevance, which combines text relevance, trust, stars, and freshness"
+                        },
+                        "limit": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 25,
+                            "description": "Maximum number of tools to return; defaults to 10"
+                        },
+                        "cursor": {
+                            "type": "string",
+                            "description": "Opaque pagination cursor returned by the previous search_tools call"
+                        }
                     },
                     "required": ["query"]
                 }
@@ -214,8 +238,15 @@ async fn tools_call(pool: &PgPool, params: Option<Value>) -> Result<Value, (i32,
                 .get("chain")
                 .and_then(|v| v.as_str())
                 .map(str::to_string);
-            let tools = mcp_search_tools(pool, query, category, chain).await?;
-            serde_json::to_string_pretty(&tools)
+            let sort = McpSearchSort::parse(
+                args.get("sort")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or(McpSearchSort::Relevance.as_str()),
+            )?;
+            let limit = parse_search_limit(args.get("limit"));
+            let cursor = parse_search_cursor(args.get("cursor"))?;
+            let page = mcp_search_tools(pool, query, category, chain, sort, limit, cursor).await?;
+            serde_json::to_string_pretty(&page)
                 .map_err(|e| (-32603, format!("serialize error: {e}")))?
         }
         "get_tool_detail" => {
@@ -265,39 +296,6 @@ async fn tools_call(pool: &PgPool, params: Option<Value>) -> Result<Value, (i32,
         "content": [{ "type": "text", "text": content }],
         "isError": false
     }))
-}
-
-async fn mcp_search_tools(
-    pool: &PgPool,
-    query: &str,
-    category: Option<String>,
-    chain: Option<String>,
-) -> Result<Vec<Tool>, (i32, String)> {
-    let mut sql = MCP_SEARCH_TOOLS_BASE_SQL.to_string();
-    let mut idx = 2;
-    if category.is_some() {
-        push_bind_clause(&mut sql, "AND function =", idx);
-        idx += 1;
-    }
-    if chain.is_some() {
-        push_bind_clause(&mut sql, "AND", idx);
-        sql.push_str(" = ANY(chains)");
-    }
-    sql.push_str(" ORDER BY stars DESC LIMIT 50");
-
-    let mut q = sqlx::query_as::<_, Tool>(&sql).bind(query);
-    if let Some(c) = &category {
-        q = q.bind(c);
-    }
-    if let Some(ch) = &chain {
-        q = q.bind(ch);
-    }
-
-    let tools = q
-        .fetch_all(pool)
-        .await
-        .map_err(|e| (-32603, format!("db error: {e}")))?;
-    Ok(sanitize_tools_for_public_response(tools))
 }
 
 async fn mcp_fetch_public_tool(pool: &PgPool, slug: &str) -> Result<Tool, String> {
@@ -565,6 +563,7 @@ async fn mcp_install_guide(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::server::queries::MCP_SEARCH_TOOLS_BASE_SQL;
 
     #[test]
     fn tools_list_has_five_tools() {

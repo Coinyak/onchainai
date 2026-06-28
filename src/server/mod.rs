@@ -5,6 +5,8 @@ pub mod functions;
 #[cfg(feature = "ssr")]
 pub mod mcp;
 #[cfg(feature = "ssr")]
+pub mod mcp_search;
+#[cfg(feature = "ssr")]
 pub mod operator_harness;
 #[cfg(feature = "ssr")]
 pub mod operator_review_transition;

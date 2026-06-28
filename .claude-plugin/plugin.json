@@ -1,0 +1,11 @@
+{
+  "name": "onchainai",
+  "version": "0.1.0",
+  "description": "Discover, vet, and install crypto MCP/CLI/SDK/API/x402/AI-agent tools via the OnchainAI directory.",
+  "author": {
+    "name": "OnchainAI",
+    "url": "https://www.onchain-ai.xyz"
+  },
+  "homepage": "https://www.onchain-ai.xyz",
+  "keywords": ["crypto", "web3", "mcp", "x402", "onchain", "agent-tools"]
+}
