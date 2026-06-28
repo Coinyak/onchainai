@@ -95,7 +95,7 @@ pub fn CommentsSection(slug: Memo<String>, tool_name: String) -> impl IntoView {
                                         .filter(|r| r.parent_id == Some(c.id))
                                         .cloned()
                                         .collect();
-                                    replies.sort_by(|a, b| a.created_at.cmp(&b.created_at));
+                                    replies.sort_by_key(|a| a.created_at);
                                     view! {
                                         <CommentItem
                                             slug=slug

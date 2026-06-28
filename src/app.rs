@@ -7,8 +7,9 @@ use crate::components::site_shell::SiteShell;
 use crate::components::top_nav::TopNav;
 use crate::pages::{
     AdminCategoriesPage, AdminCommentsPage, AdminCrawlerPage, AdminDashboardPage,
-    AdminFeaturedPage, AdminSettingsPage, AdminToolsPage, AdminUsersPage, CategoryPage, HomePage,
-    LoginPage, OnboardingProfilePage, SubmitPage, ToolDetailPage, ToolsListPage,
+    AdminFeaturedPage, AdminSettingsPage, AdminToolsPage, AdminUsersPage, CategoryPage,
+    DashboardPage, HomePage, LoginPage, OnboardingProfilePage, SubmitPage, ToolDetailPage,
+    ToolkitPage, ToolsListPage,
 };
 use leptos::prelude::*;
 use leptos_meta::{provide_meta_context, Link, Meta, MetaTags, Stylesheet, Title};
@@ -36,6 +37,13 @@ pub fn shell(options: LeptosOptions) -> impl IntoView {
         .unwrap_or(false);
     let options_reload = options.clone();
     let options_hydrate = options.clone();
+    // Safari aggressively caches /pkg/*; bust CSS when the served stylesheet changes.
+    let css_href = std::fs::metadata("style/output.css")
+        .ok()
+        .and_then(|m| m.modified().ok())
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| format!("/pkg/onchainai.css?v={}", d.as_secs()))
+        .unwrap_or_else(|| "/pkg/onchainai.css".to_string());
 
     view! {
         <!DOCTYPE html>
@@ -46,7 +54,7 @@ pub fn shell(options: LeptosOptions) -> impl IntoView {
                 <MetaTags/>
                 {enable_reload.then(|| view! { <AutoReload options=options_reload.clone()/> })}
                 {enable_hydration.then(|| view! { <HydrationScripts options=options_hydrate.clone()/> })}
-                <Stylesheet id="leptos" href="/pkg/onchainai.css"/>
+                <Stylesheet id="leptos" href=css_href/>
                 <Link rel="preconnect" href="https://fonts.googleapis.com"/>
                 <Link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous"/>
                 <Link
@@ -78,6 +86,8 @@ pub fn App() -> impl IntoView {
                 <FlatRoutes fallback=|| view! { <NotFoundPage/> }.into_view()>
                     <Route path=StaticSegment("") view=HomePage/>
                     <Route path=StaticSegment("tools") view=ToolsListPage/>
+                    <Route path=StaticSegment("dashboard") view=DashboardPage/>
+                    <Route path=StaticSegment("toolkit") view=ToolkitPage/>
                     <Route path=(StaticSegment("tools"), ParamSegment("slug")) view=ToolDetailPage/>
                     <Route path=(StaticSegment("categories"), ParamSegment("id")) view=CategoryPage/>
                     <Route path=StaticSegment("about") view=AboutPage/>

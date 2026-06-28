@@ -460,14 +460,7 @@ async fn require_harness_admin(
     req: Request<axum::body::Body>,
 ) -> Result<(), Response> {
     let (parts, _) = req.into_parts();
-    match require_admin(
-        &parts,
-        &state.pool,
-        &state.config.jwt_secret,
-        &state.config.jwt_issuer(),
-    )
-    .await
-    {
+    match require_admin(&parts, &state.pool, &state.config).await {
         Ok(_) => Ok(()),
         Err(AuthError::Unauthorized) | Err(AuthError::Forbidden) => Err(admin_denied_response()),
     }
@@ -593,14 +586,9 @@ pub async fn post_operator_run(
     req: Request<axum::body::Body>,
 ) -> Response {
     let (admin_parts, body) = req.into_parts();
-    if require_admin(
-        &admin_parts,
-        &state.pool,
-        &state.config.jwt_secret,
-        &state.config.jwt_issuer(),
-    )
-    .await
-    .is_err()
+    if require_admin(&admin_parts, &state.pool, &state.config)
+        .await
+        .is_err()
     {
         return admin_denied_response();
     }
@@ -704,14 +692,7 @@ pub async fn post_create_review_run(
     req: Request<axum::body::Body>,
 ) -> Response {
     let (admin_parts, body) = req.into_parts();
-    let admin = match require_admin(
-        &admin_parts,
-        &state.pool,
-        &state.config.jwt_secret,
-        &state.config.jwt_issuer(),
-    )
-    .await
-    {
+    let admin = match require_admin(&admin_parts, &state.pool, &state.config).await {
         Ok(a) => a,
         Err(_) => return admin_denied_response(),
     };
@@ -762,14 +743,9 @@ pub async fn post_append_review_entry(
     req: Request<axum::body::Body>,
 ) -> Response {
     let (admin_parts, body) = req.into_parts();
-    if require_admin(
-        &admin_parts,
-        &state.pool,
-        &state.config.jwt_secret,
-        &state.config.jwt_issuer(),
-    )
-    .await
-    .is_err()
+    if require_admin(&admin_parts, &state.pool, &state.config)
+        .await
+        .is_err()
     {
         return admin_denied_response();
     }

@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "hooks": {
+    "stop": [
+      {
+        "command": ".cursor/hooks/ui-staleness-stop.sh"
+      }
+    ],
+    "subagentStop": [
+      {
+        "command": ".cursor/hooks/ui-staleness-stop.sh"
+      }
+    ]
+  }
+}

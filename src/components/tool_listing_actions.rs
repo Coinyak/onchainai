@@ -86,7 +86,7 @@ pub fn ToolListingActions(tool: Tool) -> impl IntoView {
         {move || show_report.get().then(|| {
             let slug_report = slug_report.clone();
             view! {
-                <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40" on:click=move |_| show_report.set(false)>
+                <div class="modal-overlay" on:click=move |_| show_report.set(false)>
                     <div
                         class="w-full max-w-md rounded-xl bg-white border border-[#E5E5E5] shadow-lg p-6"
                         role="dialog"
@@ -157,7 +157,7 @@ pub fn ToolListingActions(tool: Tool) -> impl IntoView {
         {move || show_claim.get().then(|| {
             let slug_claim = slug_claim.clone();
             view! {
-                <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40" on:click=move |_| show_claim.set(false)>
+                <div class="modal-overlay" on:click=move |_| show_claim.set(false)>
                     <div
                         class="w-full max-w-md rounded-xl bg-white border border-[#E5E5E5] shadow-lg p-6"
                         role="dialog"

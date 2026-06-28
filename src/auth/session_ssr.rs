@@ -90,7 +90,7 @@ pub async fn load_session_user(
 ) -> Result<SessionUser, AuthSessionError> {
     let row = sqlx::query_as::<_, ProfileRow>(
         r#"
-        SELECT id, nickname, is_admin, is_banned, auth_method
+        SELECT id, nickname, avatar_url, is_admin, is_banned, auth_method
         FROM profiles
         WHERE id = $1
         "#,
@@ -111,6 +111,7 @@ pub async fn load_session_user(
     Ok(SessionUser {
         id: row.id,
         nickname: row.nickname,
+        avatar_url: row.avatar_url,
         is_admin: row.is_admin,
         auth_method: row.auth_method,
     })
@@ -237,7 +238,7 @@ struct AdminUserResponse {
     id: Uuid,
 }
 
-/// Upsert a GitHub profile keyed by sanitized login (reuses existing row when present).
+/// Upsert a GitHub profile keyed by `github_id` (nickname is display-only).
 pub async fn ensure_github_profile(
     pool: &PgPool,
     config: &Config,
@@ -269,30 +270,55 @@ pub async fn ensure_github_profile(
     let existing = sqlx::query_scalar::<_, Uuid>(
         r#"
         SELECT id FROM profiles
-        WHERE auth_method = 'github' AND nickname = $1
+        WHERE auth_method = 'github' AND github_id = $1
         LIMIT 1
         "#,
     )
-    .bind(&nickname)
+    .bind(github_id)
     .fetch_optional(pool)
     .await
     .map_err(ProfileSetupError::Database)?;
 
+    let existing = if existing.is_some() {
+        existing
+    } else {
+        // Backfill github_id on legacy rows that were keyed only by sanitized nickname.
+        sqlx::query_scalar::<_, Uuid>(
+            r#"
+            SELECT id FROM profiles
+            WHERE auth_method = 'github' AND github_id IS NULL AND nickname = $1
+            LIMIT 1
+            "#,
+        )
+        .bind(&nickname)
+        .fetch_optional(pool)
+        .await
+        .map_err(ProfileSetupError::Database)?
+    };
+
+    let grant_admin = config.is_admin_github_login(login);
+
     if let Some(id) = existing {
-        if avatar_url.is_some() {
-            sqlx::query(
-                r#"
-                UPDATE profiles
-                SET avatar_url = COALESCE($2, avatar_url), updated_at = now()
-                WHERE id = $1
-                "#,
-            )
-            .bind(id)
-            .bind(avatar_url)
-            .execute(pool)
-            .await
-            .map_err(ProfileSetupError::Database)?;
-        }
+        sqlx::query(
+            r#"
+            UPDATE profiles
+            SET
+                github_id = $2,
+                nickname = $3,
+                avatar_url = COALESCE($4, avatar_url),
+                is_admin = CASE WHEN $5 THEN true ELSE is_admin END,
+                updated_at = now()
+            WHERE id = $1
+            "#,
+        )
+        .bind(id)
+        .bind(github_id)
+        .bind(&nickname)
+        .bind(avatar_url)
+        .bind(grant_admin)
+        .execute(pool)
+        .await
+        .map_err(ProfileSetupError::Database)?;
         return Ok(id);
     }
 
@@ -302,13 +328,15 @@ pub async fn ensure_github_profile(
 
     sqlx::query(
         r#"
-        INSERT INTO profiles (id, nickname, avatar_url, auth_method)
-        VALUES ($1, $2, $3, 'github')
+        INSERT INTO profiles (id, nickname, avatar_url, auth_method, github_id, is_admin)
+        VALUES ($1, $2, $3, 'github', $4, $5)
         "#,
     )
     .bind(id)
     .bind(&nickname)
     .bind(avatar_url)
+    .bind(github_id)
+    .bind(grant_admin)
     .execute(pool)
     .await
     .map_err(ProfileSetupError::Database)?;
@@ -582,6 +610,7 @@ pub async fn ensure_profile(
 struct ProfileRow {
     id: Uuid,
     nickname: Option<String>,
+    avatar_url: Option<String>,
     is_admin: bool,
     is_banned: bool,
     auth_method: String,

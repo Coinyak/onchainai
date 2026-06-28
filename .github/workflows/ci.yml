@@ -1,0 +1,203 @@
+# OnchainAI CI — rust baseline, agent harness contract, UI coherence on UI-touched PRs.
+#
+# Merge gate: ci-success (requires rust + agent-harness; ui-coherence when UI paths change).
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  rust:
+    name: rust
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.90
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Format check
+        run: cargo fmt --check
+
+      - name: Clippy
+        run: cargo clippy --features ssr -- -W clippy::all
+
+      - name: Unit tests (lib)
+        run: cargo test --features ssr --lib
+
+  agent-harness:
+    name: agent-harness
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Make scripts executable
+        run: |
+          chmod +x scripts/*.sh scripts/git-hooks/pre-commit .cursor/hooks/*.sh 2>/dev/null || true
+
+      - name: Agent harness contract
+        run: ./scripts/agent-harness-check.sh
+
+      - name: Readiness (CI strict L1–L4)
+        run: ./scripts/agent-readiness-report.sh --strict-ci
+
+  ui-changes:
+    name: ui-changes
+    runs-on: ubuntu-latest
+    outputs:
+      ui: ${{ steps.filter.outputs.ui }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            ui:
+              - 'src/components/**'
+              - 'src/pages/**'
+              - 'src/models/**'
+              - 'src/lib.rs'
+              - 'src/app.rs'
+              - 'src/filter_query.rs'
+              - 'src/client_storage.rs'
+              - 'src/config.rs'
+              - 'src/chains.rs'
+              - 'src/trust_verification.rs'
+              - 'src/install_safety.rs'
+              - 'src/workbench.rs'
+              - 'public/chains/**'
+              - 'src/auth/session.rs'
+              - 'src/auth/siwx_client.rs'
+              - 'src/server/functions.rs'
+              - 'src/server/secret_redaction.rs'
+              - 'style/**'
+
+  ui-coherence:
+    name: ui-coherence
+    needs: ui-changes
+    if: needs.ui-changes.outputs.ui == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: onchainai
+          POSTGRES_PASSWORD: onchainai
+          POSTGRES_DB: onchainai
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U onchainai -d onchainai"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      ONCHAINAI_DISK_GUARD_FORCE: "1"
+      SKIP_CRAWLER: "1"
+      DATABASE_URL: postgresql://onchainai:onchainai@localhost:5432/onchainai
+      SUPABASE_URL: https://placeholder.supabase.co
+      SUPABASE_ANON_KEY: placeholder-anon-key-for-ci-only
+      SUPABASE_SERVICE_KEY: placeholder-service-key-for-ci-only
+      GITHUB_CLIENT_ID: placeholder-github-client-id
+      GITHUB_CLIENT_SECRET: placeholder-github-client-secret
+      SIWX_DOMAIN: localhost:3000
+      JWT_SECRET: ci-jwt-secret-at-least-32-bytes-long
+      PORT: "3000"
+      RUST_LOG: info
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.90
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: WASM target + cargo-leptos
+        run: |
+          rustup target add wasm32-unknown-unknown
+          cargo install cargo-leptos --version 0.3.6 --locked
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Make scripts executable
+        run: chmod +x scripts/*.sh
+
+      - name: Coherent release build
+        run: cargo leptos build --release
+
+      - name: Bundle symlinks and verify
+        run: |
+          ln -sf onchainai.wasm target/site/pkg/onchainai_bg.wasm
+          touch target/release/onchainai style/output.css
+          ./scripts/verify-bundle.sh
+          ./scripts/ui-staleness-check.sh --worktree
+
+      - name: Install Playwright
+        run: npm install --no-save playwright && npx playwright install --with-deps chromium
+
+      - name: Start server and smoke
+        run: |
+          ./target/release/onchainai > /tmp/onchainai-ci.log 2>&1 &
+          echo $! > /tmp/onchainai-ci.pid
+          for i in $(seq 1 90); do
+            if curl -sf http://127.0.0.1:3000/ >/dev/null; then
+              break
+            fi
+            sleep 2
+          done
+          curl -sf http://127.0.0.1:3000/ >/dev/null || (tail -50 /tmp/onchainai-ci.log && exit 1)
+          ./scripts/smoke-test.sh http://127.0.0.1:3000
+          node scripts/ui-browser-gate.mjs http://127.0.0.1:3000
+
+      - name: Stop server
+        if: always()
+        run: |
+          if [[ -f /tmp/onchainai-ci.pid ]]; then
+            kill "$(cat /tmp/onchainai-ci.pid)" 2>/dev/null || true
+          fi
+
+  ci-success:
+    name: ci-success
+    needs: [rust, agent-harness, ui-coherence]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require passing jobs
+        run: |
+          echo "rust: ${{ needs.rust.result }}"
+          echo "agent-harness: ${{ needs.agent-harness.result }}"
+          echo "ui-coherence: ${{ needs.ui-coherence.result }}"
+          if [[ "${{ needs.rust.result }}" != "success" ]]; then
+            echo "rust job failed" >&2
+            exit 1
+          fi
+          if [[ "${{ needs.agent-harness.result }}" != "success" ]]; then
+            echo "agent-harness job failed" >&2
+            exit 1
+          fi
+          if [[ "${{ needs.ui-coherence.result }}" == "failure" ]]; then
+            echo "ui-coherence job failed" >&2
+            exit 1
+          fi
+          echo "CI SUCCESS"

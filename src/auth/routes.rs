@@ -2,7 +2,7 @@
 
 use crate::auth::session::{
     cookie_secure_for_domain, cookie_value, ensure_github_profile, issue_access_token,
-    post_auth_redirect_path, ACCESS_TOKEN_COOKIE, GITHUB_STATE_COOKIE,
+    local_dev_host, post_auth_redirect_path, ACCESS_TOKEN_COOKIE, GITHUB_STATE_COOKIE,
 };
 use crate::config::Config;
 use crate::AppState;
@@ -39,8 +39,16 @@ struct GithubUser {
 }
 
 fn callback_url(config: &Config) -> String {
-    if config.siwx_domain.contains("localhost") {
-        format!("http://localhost:{}/auth/callback", config.port)
+    if let Some(uri) = config
+        .github_redirect_uri
+        .as_deref()
+        .map(str::trim)
+        .filter(|uri| !uri.is_empty())
+    {
+        return uri.to_string();
+    }
+    if let Some(host) = local_dev_host(&config.siwx_domain) {
+        format!("http://{host}:{}/auth/callback", config.port)
     } else {
         format!("https://{}/auth/callback", config.siwx_domain)
     }
@@ -263,10 +271,60 @@ pub async fn logout(State(state): State<AppState>) -> Response {
 
 #[cfg(test)]
 mod tests {
-    use super::{clear_cookie, set_cookie};
+    use super::{callback_url, clear_cookie, set_cookie};
     use crate::auth::session::{
         cookie_secure_for_domain, ACCESS_TOKEN_COOKIE, GITHUB_STATE_COOKIE,
     };
+    use crate::config::Config;
+
+    fn sample_config(siwx_domain: &str, port: u16, github_redirect_uri: Option<&str>) -> Config {
+        Config {
+            database_url: String::new(),
+            supabase_url: "https://example.supabase.co".into(),
+            supabase_anon_key: String::new(),
+            supabase_service_key: String::new(),
+            github_client_id: String::new(),
+            github_client_secret: String::new(),
+            github_redirect_uri: github_redirect_uri.map(str::to_string),
+            siwx_domain: siwx_domain.into(),
+            siwx_session_ttl: 86_400,
+            jwt_secret: String::new(),
+            github_api_token: None,
+            admin_github_logins: Vec::new(),
+            port,
+        }
+    }
+
+    #[test]
+    fn callback_url_uses_localhost_port_for_dev() {
+        let config = sample_config("localhost:3000", 3000, None);
+        assert_eq!(callback_url(&config), "http://localhost:3000/auth/callback");
+    }
+
+    #[test]
+    fn callback_url_uses_loopback_ip_for_127_dev() {
+        let config = sample_config("127.0.0.1:3000", 3000, None);
+        assert_eq!(callback_url(&config), "http://127.0.0.1:3000/auth/callback");
+    }
+
+    #[test]
+    fn callback_url_uses_https_siwx_domain_for_production() {
+        let config = sample_config("www.onchain-ai.xyz", 3000, None);
+        assert_eq!(
+            callback_url(&config),
+            "https://www.onchain-ai.xyz/auth/callback"
+        );
+    }
+
+    #[test]
+    fn callback_url_honors_github_redirect_uri_override() {
+        let config = sample_config(
+            "localhost:3000",
+            3000,
+            Some("http://127.0.0.1:3000/auth/callback"),
+        );
+        assert_eq!(callback_url(&config), "http://127.0.0.1:3000/auth/callback");
+    }
 
     #[test]
     fn oauth_state_cookie_is_secure_in_production() {
@@ -279,6 +337,7 @@ mod tests {
     #[test]
     fn oauth_state_cookie_omits_secure_on_localhost() {
         assert!(!cookie_secure_for_domain("localhost:3000"));
+        assert!(!cookie_secure_for_domain("127.0.0.1:3000"));
         let cookie = set_cookie(GITHUB_STATE_COOKIE, "abc", 600, false, "Lax");
         assert!(!cookie.contains("; Secure"));
     }

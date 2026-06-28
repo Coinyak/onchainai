@@ -14,9 +14,14 @@ fn auth_error_message(code: &str) -> Option<&'static str> {
         "github_state_mismatch" => {
             Some("GitHub sign-in session expired. Clear cookies and try again.")
         }
-        "github_token_exchange" | "github_user_fetch" => {
-            Some("GitHub sign-in failed. Check OAuth app settings and try again.")
-        }
+        "github_token_exchange" => Some(
+            "GitHub sign-in failed. If GitHub showed \"redirect_uri is not associated with this application\", \
+             register this app's callback URL on your OAuth app (local dev: http://localhost:3000/auth/callback). \
+             Run ./scripts/local-auth-check.sh to compare .env and the running server.",
+        ),
+        "github_user_fetch" => Some(
+            "GitHub authorized sign-in, but we could not load your profile. Try again in a moment.",
+        ),
         "github_profile_exists" => {
             Some("This GitHub account is already linked. Try signing in again.")
         }
@@ -40,6 +45,13 @@ mod tests {
         assert!(auth_error_message("github_profile_exists")
             .unwrap()
             .contains("linked"));
+    }
+
+    #[test]
+    fn token_exchange_error_mentions_redirect_uri() {
+        let msg = auth_error_message("github_token_exchange").unwrap();
+        assert!(msg.contains("redirect_uri"));
+        assert!(msg.contains("local-auth-check"));
     }
 }
 

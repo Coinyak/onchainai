@@ -115,6 +115,8 @@ fi
 export PORT
 export LEPTOS_SITE_ROOT="${LEPTOS_SITE_ROOT:-target/site}"
 export SKIP_CRAWLER="${SKIP_CRAWLER:-1}"
+# Safari caches /pkg/* aggressively on localhost — disable for local dev.
+export ONCHAINAI_PKG_NO_CACHE="${ONCHAINAI_PKG_NO_CACHE:-1}"
 
 mkdir -p target
 

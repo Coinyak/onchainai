@@ -43,6 +43,33 @@ Slow-link note: macOS release server linking can legitimately finish more than 6
 
 ## 2. Local dev workflow
 
+> **Agent 3-command model:** once `./scripts/install-agent-hooks.sh`, iterate `./scripts/dev-watch.sh`, finish `./scripts/ui-change-gate.sh`. Details: `docs/AGENT_HARNESS.md`.
+
+### Iterating on UI — use the watch loop (fastest coherent path)
+
+While actively changing UI/Leptos code, run:
+
+```bash
+./scripts/dev-watch.sh
+```
+
+This wraps `cargo leptos watch`: every save rebuilds the **SSR binary and the
+WASM/JS bundle together** and live-reloads the browser on `http://127.0.0.1:3000`
+(reload-port 3001). Because both artifacts always come from one build, you never
+hit the bundle-mismatch failures in §3. `style/output.css` is hand-authored and
+served live (`ServeFile`), so CSS edits just need a browser refresh.
+
+> Do **not** reach for `cargo build --features ssr` to "preview" UI — it rebuilds
+> the server only, so the browser hydrates a stale WASM bundle. Use the watch loop.
+
+Universal enforcement: `./scripts/install-agent-hooks.sh` wires Git pre-commit
+(`scripts/git-hooks/pre-commit` → `ui-staleness-check.sh --staged`) so **any**
+coding tool is blocked from committing stale UI. Optional IDE stop hooks
+(`.cursor/hooks.json`, `.claude/settings.json`) give earlier feedback. The watch
+loop keeps the bundle fresh; the final gate rebuilds it.
+
+### Before handoff / commit — run the final gate
+
 After **any** change that affects UI, server functions, or routing:
 
 1. **Stop** the old server on port 3000 (stale processes are the #1 cause of "changes not showing").
@@ -56,6 +83,18 @@ One-shot helper (build + restart + smoke):
 ```bash
 ./scripts/restart-dev.sh
 ```
+
+For UI, auth shell, route, or Leptos server-function changes, prefer the stricter
+agent gate:
+
+```bash
+./scripts/ui-change-gate.sh
+```
+
+It runs `agent-harness-check.sh`, `restart-dev.sh`, `verify-bundle.sh`, browser
+smoke, local auth smoke when available, and desktop/mobile visual snapshots. If
+an agent cannot run this gate, it must report the missing command or failure
+explicitly instead of claiming UI QA passed.
 
 Skip rebuild if artifacts are already fresh:
 
@@ -98,8 +137,10 @@ nohup ./target/release/onchainai > /tmp/onchainai.log 2>&1 &
 | `not found: /pkg/...` in page or smoke | pkg not built or wrong `site-root` | Full `cargo leptos build --release`; check `target/site/pkg/` |
 | Code "fixed" in repo but site unchanged | Server never restarted after build | Always restart after build (see §2) |
 | Production OK, localhost broken | Local-only stale process or mixed artifacts | `verify-bundle.sh` + restart; production Docker build is self-contained |
+| **Sidebar missing**, **buttons dead** (Sign in, filters, ☰), console `entered unreachable code` / hydration panic | **Bundle mismatch** (SSR binary ≠ WASM) **or** browser cached old `/pkg/onchainai.js` | `./scripts/restart-dev.sh` (never `cargo build --features ssr` alone for UI) → `verify-bundle.sh` → **`Cmd+Shift+R` hard refresh** → `node scripts/browser-smoke.mjs` |
+| OAuth/login works once then nav still shows **Sign in** after SPA navigation | Non-blocking auth fetch in shell (SSR HTML ≠ hydrated DOM) | `TopNav` must use `Resource::new_blocking` keyed on pathname (see §4.1) |
 
-Smoke scripts encode these checks: `scripts/smoke-test.sh`, `scripts/browser-smoke.mjs`.
+Smoke scripts encode these checks: `scripts/smoke-test.sh`, `scripts/browser-smoke.mjs`, `scripts/local-auth-smoke.mjs`.
 
 ---
 
@@ -120,6 +161,33 @@ Smoke scripts encode these checks: `scripts/smoke-test.sh`, `scripts/browser-smo
 **Fix:** Kill process on port 3000 → start `target/release/onchainai` from the **same** build as `target/site/pkg/` → `./scripts/smoke-test.sh http://localhost:3000` passed.
 
 **Production:** Unaffected — Railway Docker image builds binary + pkg in one `cargo leptos build --release` layer.
+
+---
+
+## 4.1 Debug history — 2026-06-28 (local hydration / sidebar)
+
+**Incident:** After sign-in UI and profile-menu work, localhost repeatedly showed **no sidebar interactivity**, **Sign in / filter buttons not clickable**, and Playwright logged `entered unreachable code` (tachys hydration).
+
+**Root causes (two):**
+
+1. **Partial server rebuild** — Agents ran `cargo build --release --features ssr` without `cargo leptos build --release`, so `target/release/onchainai` and `target/site/pkg/*` diverged by minutes. SSR markup and WASM handlers no longer matched.
+2. **TopNav auth fetch** — A pathname-keyed `Resource::new` inside `Suspense` with an empty fallback let SSR and client disagree on shell markup. Fixed by `Resource::new_blocking` in `src/components/top_nav.rs` so auth HTML is in the initial SSR stream.
+
+**Fix checklist (agents — run in order, do not skip):**
+
+```bash
+./scripts/ui-change-gate.sh
+```
+
+Then **hard refresh** the browser (`Cmd+Shift+R`) so cached WASM is dropped.
+
+**Never for UI / Leptos component / auth shell changes:**
+
+- ❌ `cargo build --features ssr`, `cargo build --release --features ssr`, or `cargo run --features ssr` as the final step
+- ❌ Restarting the server without `./scripts/verify-bundle.sh`
+- ❌ Assuming smoke PASS in CI means the user's tab does not need a hard refresh
+
+**Code invariant:** Site shell auth (`TopNav`) uses **blocking** server-fn resolution for SSR/hydration parity; use pathname only as a refetch key, not as a reason to defer SSR output.
 
 ### Railway builder: Dockerfile vs RAILPACK
 
@@ -221,6 +289,8 @@ cargo test --features ssr
 ./scripts/release-build.sh
 ./scripts/verify-bundle.sh
 ./scripts/restart-dev.sh
+./scripts/agent-harness-check.sh
+./scripts/ui-change-gate.sh
 ./scripts/smoke-test.sh http://localhost:3000
 ./scripts/deploy-railway.sh
 ./scripts/post-deploy-verify.sh https://www.onchain-ai.xyz

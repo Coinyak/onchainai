@@ -41,7 +41,16 @@ use crate::server::operator_review_transition::{
     plan_operator_review, validate_review_approval_gate, OperatorReviewGate,
 };
 #[cfg(feature = "ssr")]
-use crate::server::queries::TOOLS_APPROVED_WHERE;
+use crate::server::queries::{
+    push_bind_clause, push_fts_filter, push_order_offset_limit, list_tools_order_clause,
+    DashboardCountAxis, APPROVED_TOOL_BY_SLUG_SQL, APPROVED_TOOL_ID_BY_SLUG_SQL,
+    CATEGORIES_WITH_COUNTS_SQL, CHAIN_COUNTS_SQL, COUNT_APPROVED_TOOLS_SQL,
+    DASHBOARD_FUNCTION_COUNTS_SQL, DASHBOARD_METRICS_SQL, DASHBOARD_X402_TOOLS_SQL,
+    IS_BOOKMARKED_SQL, LIST_APPROVED_TOOLS_SQL, RECENT_APPROVED_TOOLS_SQL,
+    SEARCH_APPROVED_TOOLS_BASE_SQL, TOOL_COMMENT_COUNT_BY_SLUG_SQL,
+    TOOL_COMMENT_COUNTS_BY_SLUGS_SQL, TOOL_COMMENTS_NEW_SORT_SQL, TOOL_COMMENTS_TOP_SORT_SQL,
+    USER_TOOLKIT_SQL,
+};
 #[cfg(feature = "ssr")]
 use crate::server::rate_limit::{check_user_rate_limit, UserRateLimitAction};
 #[cfg(feature = "ssr")]
@@ -57,31 +66,33 @@ use crate::server::secret_redaction::redact_tool_for_admin;
 use crate::workbench::{build_summary_cards, WorkbenchSummaryCard};
 #[cfg(feature = "ssr")]
 use axum::http::request::Parts;
+use std::fmt::Write as _;
 
 #[cfg(feature = "ssr")]
-fn request_context() -> Result<(Parts, sqlx::PgPool, String, String), ServerFnError> {
+fn request_context() -> Result<(Parts, sqlx::PgPool, Config), ServerFnError> {
     let parts = use_context::<Parts>()
         .ok_or_else(|| ServerFnError::new("request context not available"))?;
     let pool = use_context::<sqlx::PgPool>()
         .ok_or_else(|| ServerFnError::new("database pool not available"))?;
     let config =
         use_context::<Config>().ok_or_else(|| ServerFnError::new("configuration not available"))?;
-    let issuer = config.jwt_issuer();
-    Ok((parts, pool, config.jwt_secret, issuer))
+    Ok((parts, pool, config))
 }
 
 /// Current signed-in user, if any (from session cookie).
 #[server(GetCurrentUser, "/api")]
 pub async fn get_current_user() -> Result<Option<SessionUser>, ServerFnError> {
-    let (parts, pool, jwt_secret, issuer) = request_context()?;
-    optional_session_result(session_from_parts(&parts, &pool, &jwt_secret, &issuer).await)
+    let (parts, pool, config) = request_context()?;
+    optional_session_result(
+        session_from_parts(&parts, &pool, &config.jwt_secret, &config.jwt_issuer()).await,
+    )
 }
 
 /// Admin gate — returns the admin session or a generic "not found" error.
 #[server(CheckAdminAccess, "/api")]
 pub async fn check_admin_access() -> Result<SessionUser, ServerFnError> {
-    let (parts, pool, jwt_secret, issuer) = request_context()?;
-    require_admin(&parts, &pool, &jwt_secret, &issuer)
+    let (parts, pool, config) = request_context()?;
+    require_admin(&parts, &pool, &config)
         .await
         .map_err(ServerFnError::new)
 }
@@ -130,8 +141,8 @@ pub async fn get_site_settings() -> Result<SiteSettings, ServerFnError> {
 /// Admin-only site settings (includes referral defaults and builder code).
 #[server(GetAdminSiteSettings, "/api")]
 pub async fn get_admin_site_settings() -> Result<SiteSettings, ServerFnError> {
-    let (parts, pool, jwt_secret, issuer) = request_context()?;
-    require_admin(&parts, &pool, &jwt_secret, &issuer)
+    let (parts, pool, config) = request_context()?;
+    require_admin(&parts, &pool, &config)
         .await
         .map_err(ServerFnError::new)?;
 
@@ -253,8 +264,8 @@ pub async fn update_site_settings(
         return Err(ServerFnError::new(msg.to_string()));
     }
 
-    let (parts, pool, jwt_secret, issuer) = request_context()?;
-    require_admin(&parts, &pool, &jwt_secret, &issuer)
+    let (parts, pool, config) = request_context()?;
+    require_admin(&parts, &pool, &config)
         .await
         .map_err(ServerFnError::new)?;
 
@@ -309,10 +320,7 @@ pub async fn get_recent_tools(limit: i64) -> Result<Vec<Tool>, ServerFnError> {
         .ok_or_else(|| ServerFnError::new("database pool not available"))?;
 
     let limit = limit.clamp(1, 100);
-    let sql = format!(
-        "SELECT * FROM tools WHERE {TOOLS_APPROVED_WHERE} ORDER BY stars DESC, created_at DESC LIMIT $1"
-    );
-    let tools = sqlx::query_as::<_, Tool>(&sql)
+    let tools = sqlx::query_as::<_, Tool>(RECENT_APPROVED_TOOLS_SQL)
         .bind(limit)
         .fetch_all(&pool)
         .await
@@ -326,17 +334,7 @@ pub async fn get_recent_tools(limit: i64) -> Result<Vec<Tool>, ServerFnError> {
 pub(crate) async fn fetch_categories(
     pool: &sqlx::PgPool,
 ) -> Result<Vec<(Category, i64)>, ServerFnError> {
-    let sql = format!(
-        r#"
-        SELECT c.id, c.label, c.icon, c.description, c.sort_order,
-               COUNT(t.id) AS count
-        FROM categories c
-        LEFT JOIN tools t ON t.function = c.id AND t.{TOOLS_APPROVED_WHERE}
-        GROUP BY c.id, c.label, c.icon, c.description, c.sort_order
-        ORDER BY c.sort_order ASC
-        "#
-    );
-    let rows = sqlx::query_as::<_, CategoryWithCount>(&sql)
+    let rows = sqlx::query_as::<_, CategoryWithCount>(CATEGORIES_WITH_COUNTS_SQL)
         .fetch_all(pool)
         .await
         .map_err(|e| ServerFnError::new(format!("failed to load categories: {e}")))?;
@@ -364,25 +362,16 @@ pub async fn search_tools(
     let pool = use_context::<sqlx::PgPool>()
         .ok_or_else(|| ServerFnError::new("database pool not available"))?;
 
-    let mut sql = format!(
-        r#"
-        SELECT *
-        FROM tools
-        WHERE {TOOLS_APPROVED_WHERE}
-          AND (
-            to_tsvector('english', coalesce(name, '') || ' ' || coalesce(description, ''))
-            @@ plainto_tsquery('english', $1)
-          )
-        "#
-    );
+    let mut sql = SEARCH_APPROVED_TOOLS_BASE_SQL.to_string();
 
     let mut idx = 2;
     if function.is_some() {
-        sql.push_str(&format!(" AND function = ${idx}"));
+        push_bind_clause(&mut sql, "AND function =", idx);
         idx += 1;
     }
     if chain.is_some() {
-        sql.push_str(&format!(" AND ${idx} = ANY(chains)"));
+        push_bind_clause(&mut sql, "AND", idx);
+        sql.push_str(" = ANY(chains)");
     }
     sql.push_str(" ORDER BY stars DESC, created_at DESC LIMIT 50");
 
@@ -408,8 +397,7 @@ pub(crate) async fn fetch_tool_by_slug(
     pool: &sqlx::PgPool,
     slug: &str,
 ) -> Result<Option<Tool>, ServerFnError> {
-    let sql = format!("SELECT * FROM tools WHERE slug = $1 AND {TOOLS_APPROVED_WHERE}");
-    let tool = sqlx::query_as::<_, Tool>(&sql)
+    let tool = sqlx::query_as::<_, Tool>(APPROVED_TOOL_BY_SLUG_SQL)
         .bind(slug)
         .fetch_optional(pool)
         .await
@@ -463,6 +451,7 @@ pub fn validate_tool_filters(filters: &ToolFilters) -> Result<(), ServerFnError>
     validate_tool_filter_values("actor", &filters.actor)?;
     validate_tool_filter_values("tool_type", &filters.tool_type)?;
     validate_tool_filter_values("status", &filters.status)?;
+    validate_tool_filter_values("pricing", &filters.pricing)?;
     validate_tool_filter_values("chain", &filters.chain)?;
     Ok(())
 }
@@ -512,32 +501,40 @@ pub struct ToolFilters {
     #[serde(default)]
     pub status: Vec<String>,
     #[serde(default)]
+    pub pricing: Vec<String>,
+    #[serde(default)]
     pub chain: Vec<String>,
 }
 
 fn append_tool_filters(sql: &mut String, filters: &ToolFilters, idx: &mut i32) {
+    use std::fmt::Write;
+
     if !filters.function.is_empty() {
-        sql.push_str(&format!(" AND function = ANY(${idx})"));
+        let _ = write!(sql, " AND function = ANY(${idx})");
         *idx += 1;
     }
     if !filters.asset_class.is_empty() {
-        sql.push_str(&format!(" AND asset_class = ANY(${idx})"));
+        let _ = write!(sql, " AND asset_class = ANY(${idx})");
         *idx += 1;
     }
     if !filters.actor.is_empty() {
-        sql.push_str(&format!(" AND actor = ANY(${idx})"));
+        let _ = write!(sql, " AND actor = ANY(${idx})");
         *idx += 1;
     }
     if !filters.tool_type.is_empty() {
-        sql.push_str(&format!(" AND type = ANY(${idx})"));
+        let _ = write!(sql, " AND type = ANY(${idx})");
         *idx += 1;
     }
     if !filters.status.is_empty() {
-        sql.push_str(&format!(" AND status = ANY(${idx})"));
+        let _ = write!(sql, " AND status = ANY(${idx})");
+        *idx += 1;
+    }
+    if !filters.pricing.is_empty() {
+        let _ = write!(sql, " AND pricing = ANY(${idx})");
         *idx += 1;
     }
     if !filters.chain.is_empty() {
-        sql.push_str(&format!(" AND chains && ${idx}"));
+        let _ = write!(sql, " AND chains && ${idx}");
         *idx += 1;
     }
 }
@@ -548,7 +545,7 @@ pub(crate) async fn fetch_count_tools(
     pool: &sqlx::PgPool,
     filters: &ToolFilters,
 ) -> Result<i64, ServerFnError> {
-    let mut sql = format!("SELECT COUNT(*) FROM tools WHERE {TOOLS_APPROVED_WHERE}");
+    let mut sql = COUNT_APPROVED_TOOLS_SQL.to_string();
     let mut idx = 1i32;
     append_tool_filters(&mut sql, filters, &mut idx);
 
@@ -567,6 +564,9 @@ pub(crate) async fn fetch_count_tools(
     }
     if !filters.status.is_empty() {
         q = q.bind(&filters.status);
+    }
+    if !filters.pricing.is_empty() {
+        q = q.bind(&filters.pricing);
     }
     if !filters.chain.is_empty() {
         q = q.bind(&filters.chain);
@@ -596,17 +596,7 @@ pub(crate) async fn fetch_chain_counts(
     limit: i64,
 ) -> Result<Vec<(String, i64)>, ServerFnError> {
     let limit = limit.clamp(1, 100);
-    let sql = format!(
-        r#"
-        SELECT chain, COUNT(*) AS count
-        FROM tools, UNNEST(chains) AS chain
-        WHERE {TOOLS_APPROVED_WHERE}
-        GROUP BY chain
-        ORDER BY count DESC, chain ASC
-        LIMIT $1
-        "#
-    );
-    let rows = sqlx::query_as::<_, (String, i64)>(&sql)
+    let rows = sqlx::query_as::<_, (String, i64)>(CHAIN_COUNTS_SQL)
         .bind(limit)
         .fetch_all(pool)
         .await
@@ -635,29 +625,16 @@ pub(crate) async fn fetch_list_tools(
 ) -> Result<Vec<Tool>, ServerFnError> {
     let offset = offset.max(0);
     let limit = clamp_list_tools_limit(limit);
-    let order = match sort {
-        "new" => "created_at DESC",
-        "comments" => {
-            "(SELECT COUNT(*)::bigint FROM comments cm WHERE cm.tool_id = tools.id) DESC, created_at DESC"
-        }
-        _ => "stars DESC, created_at DESC",
-    };
-
+    let order = list_tools_order_clause(sort);
     let has_query = query.is_some_and(|q| !q.trim().is_empty());
-    let mut sql = format!("SELECT * FROM tools WHERE {TOOLS_APPROVED_WHERE}");
+    let mut sql = LIST_APPROVED_TOOLS_SQL.to_string();
     let mut idx = 1i32;
 
     if has_query {
-        sql.push_str(&format!(
-            " AND to_tsvector('english', coalesce(name, '') || ' ' || coalesce(description, '')) @@ plainto_tsquery('english', ${idx})"
-        ));
-        idx += 1;
+        push_fts_filter(&mut sql, &mut idx);
     }
     append_tool_filters(&mut sql, filters, &mut idx);
-    sql.push_str(&format!(
-        " ORDER BY {order} OFFSET ${idx} LIMIT ${}",
-        idx + 1
-    ));
+    push_order_offset_limit(&mut sql, order, &mut idx);
 
     let mut q = sqlx::query_as::<_, Tool>(&sql);
     if let Some(text) = query.filter(|q| !q.trim().is_empty()) {
@@ -677,6 +654,9 @@ pub(crate) async fn fetch_list_tools(
     }
     if !filters.status.is_empty() {
         q = q.bind(&filters.status);
+    }
+    if !filters.pricing.is_empty() {
+        q = q.bind(&filters.pricing);
     }
     if !filters.chain.is_empty() {
         q = q.bind(&filters.chain);
@@ -749,6 +729,167 @@ pub struct BrowserDataPayload {
     pub tools: Vec<Tool>,
     pub comment_counts: HashMap<String, i64>,
     pub preview_tool: Option<Tool>,
+}
+
+pub const MAX_DASHBOARD_LIST_LIMIT: i64 = 12;
+
+pub fn clamp_dashboard_list_limit(limit: i64) -> i64 {
+    limit.clamp(1, MAX_DASHBOARD_LIST_LIMIT)
+}
+
+fn encoded_query_value(value: &str) -> String {
+    urlencoding::encode(value).into_owned()
+}
+
+pub fn dashboard_filter_href(axis: &str, value: &str) -> String {
+    let value = encoded_query_value(value);
+    match axis {
+        "function" => format!("/tools?function={value}"),
+        "type" => format!("/tools?type={value}"),
+        "chain" => format!("/tools?chain={value}"),
+        "status" => format!("/tools?status={value}"),
+        "pricing" => format!("/tools?pricing={value}"),
+        _ => "/tools".into(),
+    }
+}
+
+fn dashboard_label(axis: &str, value: &str) -> String {
+    match axis {
+        "type" if value.eq_ignore_ascii_case("mcp") => "MCP".into(),
+        "type" if value.eq_ignore_ascii_case("cli") => "CLI".into(),
+        "type" if value.eq_ignore_ascii_case("sdk") => "SDK".into(),
+        "type" if value.eq_ignore_ascii_case("api") => "API".into(),
+        "type" if value.eq_ignore_ascii_case("x402") => "x402".into(),
+        "status" if value.eq_ignore_ascii_case("official") => "Official".into(),
+        "status" if value.eq_ignore_ascii_case("verified") => "Verified".into(),
+        "status" if value.eq_ignore_ascii_case("community") => "Community".into(),
+        "pricing" if value.eq_ignore_ascii_case("x402") => "x402".into(),
+        _ => value
+            .split(['-', '_'])
+            .filter(|part| !part.is_empty())
+            .map(|part| {
+                let mut chars = part.chars();
+                match chars.next() {
+                    Some(first) => format!("{}{}", first.to_uppercase(), chars.as_str()),
+                    None => String::new(),
+                }
+            })
+            .collect::<Vec<_>>()
+            .join(" "),
+    }
+}
+
+fn dashboard_bucket(axis: &str, id: String, label: Option<String>, count: i64) -> DashboardBucket {
+    let label = label.unwrap_or_else(|| dashboard_label(axis, &id));
+    let href = dashboard_filter_href(axis, &id);
+    DashboardBucket {
+        id,
+        label,
+        count,
+        href,
+    }
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+pub struct DashboardBucket {
+    pub id: String,
+    pub label: String,
+    pub count: i64,
+    pub href: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct DashboardMetrics {
+    pub public_tools: i64,
+    pub mcp_tools: i64,
+    pub cli_tools: i64,
+    pub sdk_tools: i64,
+    pub api_tools: i64,
+    pub x402_tools: i64,
+    pub official_tools: i64,
+    pub verified_tools: i64,
+    pub updated_recently: i64,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct PublicDashboardSnapshot {
+    pub metrics: DashboardMetrics,
+    pub type_counts: Vec<DashboardBucket>,
+    pub function_counts: Vec<DashboardBucket>,
+    pub chain_counts: Vec<DashboardBucket>,
+    pub trust_counts: Vec<DashboardBucket>,
+    pub pricing_counts: Vec<DashboardBucket>,
+    pub new_tools: Vec<Tool>,
+    pub popular_tools: Vec<Tool>,
+    pub x402_tools: Vec<Tool>,
+    pub high_trust_tools: Vec<Tool>,
+    pub as_of: chrono::DateTime<chrono::Utc>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ToolkitExportPayload {
+    pub format: String,
+    pub filename: String,
+    pub body: String,
+}
+
+/// Public-safe tool shape for JSON export — omits internal ids and operator fields.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct ToolkitExportTool {
+    pub slug: String,
+    pub name: String,
+    pub description: Option<String>,
+    pub function: String,
+    #[serde(rename = "type")]
+    pub tool_type: String,
+    pub chains: Vec<String>,
+    pub status: String,
+    pub official_team: Option<String>,
+    pub pricing: String,
+    pub x402_price: Option<String>,
+    pub install_command: Option<String>,
+    pub safe_copy_command: Option<String>,
+    pub mcp_endpoint: Option<String>,
+    pub repo_url: Option<String>,
+    pub homepage: Option<String>,
+    pub npm_package: Option<String>,
+    pub license: Option<String>,
+    pub stars: i32,
+    pub claim_state: String,
+    pub install_risk_level: String,
+}
+
+fn tool_to_toolkit_export(tool: &Tool) -> ToolkitExportTool {
+    ToolkitExportTool {
+        slug: tool.slug.clone(),
+        name: tool.name.clone(),
+        description: tool.description.clone(),
+        function: tool.function.clone(),
+        tool_type: tool.tool_type.clone(),
+        chains: tool.chains.clone(),
+        status: tool.status.clone(),
+        official_team: tool.official_team.clone(),
+        pricing: tool.pricing.clone(),
+        x402_price: tool.x402_price.clone(),
+        install_command: tool.install_command.clone(),
+        safe_copy_command: tool.safe_copy_command.clone(),
+        mcp_endpoint: tool.mcp_endpoint.clone(),
+        repo_url: tool.repo_url.clone(),
+        homepage: tool.homepage.clone(),
+        npm_package: tool.npm_package.clone(),
+        license: tool.license.clone(),
+        stars: tool.stars,
+        claim_state: tool.claim_state.clone(),
+        install_risk_level: tool.install_risk_level.clone(),
+    }
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct MyToolkitPayload {
+    pub total: i64,
+    pub tools: Vec<Tool>,
+    pub markdown_export: ToolkitExportPayload,
+    pub json_export: ToolkitExportPayload,
 }
 
 /// Request for bundled browser data load.
@@ -830,6 +971,245 @@ pub async fn load_browser_data(
     })
 }
 
+#[cfg_attr(feature = "ssr", derive(sqlx::FromRow))]
+struct DashboardValueCountRow {
+    id: String,
+    count: i64,
+}
+
+#[cfg_attr(feature = "ssr", derive(sqlx::FromRow))]
+struct DashboardCategoryCountRow {
+    id: String,
+    label: String,
+    count: i64,
+}
+
+#[cfg(feature = "ssr")]
+async fn fetch_dashboard_value_counts(
+    pool: &sqlx::PgPool,
+    axis: DashboardCountAxis,
+    limit: i64,
+) -> Result<Vec<DashboardBucket>, ServerFnError> {
+    let rows = sqlx::query_as::<_, DashboardValueCountRow>(axis.count_sql())
+        .bind(limit)
+        .fetch_all(pool)
+        .await
+        .map_err(|e| {
+            ServerFnError::new(format!(
+                "{} dashboard counts failed: {e}",
+                axis.bucket_axis()
+            ))
+        })?;
+
+    Ok(rows
+        .into_iter()
+        .map(|row| dashboard_bucket(axis.bucket_axis(), row.id, None, row.count))
+        .collect())
+}
+
+#[cfg(feature = "ssr")]
+async fn fetch_dashboard_function_counts(
+    pool: &sqlx::PgPool,
+    limit: i64,
+) -> Result<Vec<DashboardBucket>, ServerFnError> {
+    let rows = sqlx::query_as::<_, DashboardCategoryCountRow>(DASHBOARD_FUNCTION_COUNTS_SQL)
+        .bind(limit)
+        .fetch_all(pool)
+        .await
+        .map_err(|e| ServerFnError::new(format!("function dashboard counts failed: {e}")))?;
+
+    Ok(rows
+        .into_iter()
+        .map(|row| dashboard_bucket("function", row.id, Some(row.label), row.count))
+        .collect())
+}
+
+#[cfg(feature = "ssr")]
+async fn fetch_dashboard_x402_tools(
+    pool: &sqlx::PgPool,
+    limit: i64,
+) -> Result<Vec<Tool>, ServerFnError> {
+    let tools = sqlx::query_as::<_, Tool>(DASHBOARD_X402_TOOLS_SQL)
+        .bind(limit)
+        .fetch_all(pool)
+        .await
+        .map_err(|e| ServerFnError::new(format!("x402 dashboard tools failed: {e}")))?;
+    Ok(sanitize_tools_for_public_response(tools))
+}
+
+#[cfg(feature = "ssr")]
+async fn fetch_dashboard_metrics(pool: &sqlx::PgPool) -> Result<DashboardMetrics, ServerFnError> {
+    let row = sqlx::query_as::<_, (i64, i64, i64, i64, i64, i64, i64, i64, i64)>(DASHBOARD_METRICS_SQL)
+        .fetch_one(pool)
+        .await
+        .map_err(|e| ServerFnError::new(format!("dashboard metrics failed: {e}")))?;
+
+    Ok(DashboardMetrics {
+        public_tools: row.0,
+        mcp_tools: row.1,
+        cli_tools: row.2,
+        sdk_tools: row.3,
+        api_tools: row.4,
+        x402_tools: row.5,
+        official_tools: row.6,
+        verified_tools: row.7,
+        updated_recently: row.8,
+    })
+}
+
+#[cfg(feature = "ssr")]
+pub(crate) async fn fetch_public_dashboard_snapshot(
+    pool: &sqlx::PgPool,
+    list_limit: i64,
+) -> Result<PublicDashboardSnapshot, ServerFnError> {
+    let limit = clamp_dashboard_list_limit(list_limit);
+    let empty_filters = ToolFilters::default();
+    let high_trust_filters = ToolFilters {
+        status: vec!["official".into(), "verified".into()],
+        ..Default::default()
+    };
+
+    let (metrics, type_counts, function_counts, chain_counts, trust_counts, pricing_counts) = futures::join!(
+        fetch_dashboard_metrics(pool),
+        fetch_dashboard_value_counts(pool, DashboardCountAxis::Type, limit),
+        fetch_dashboard_function_counts(pool, limit),
+        fetch_chain_counts(pool, limit),
+        fetch_dashboard_value_counts(pool, DashboardCountAxis::Status, limit),
+        fetch_dashboard_value_counts(pool, DashboardCountAxis::Pricing, limit),
+    );
+    let (new_tools, popular_tools, x402_tools, high_trust_tools) = futures::join!(
+        fetch_list_tools(pool, "new", 0, limit, &empty_filters, None),
+        fetch_list_tools(pool, "hot", 0, limit, &empty_filters, None),
+        fetch_dashboard_x402_tools(pool, limit),
+        fetch_list_tools(pool, "hot", 0, limit, &high_trust_filters, None),
+    );
+
+    Ok(PublicDashboardSnapshot {
+        metrics: metrics?,
+        type_counts: type_counts?,
+        function_counts: function_counts?,
+        chain_counts: chain_counts?
+            .into_iter()
+            .map(|(id, count)| dashboard_bucket("chain", id, None, count))
+            .collect(),
+        trust_counts: trust_counts?,
+        pricing_counts: pricing_counts?,
+        new_tools: new_tools?,
+        popular_tools: popular_tools?,
+        x402_tools: x402_tools?,
+        high_trust_tools: high_trust_tools?,
+        as_of: chrono::Utc::now(),
+    })
+}
+
+#[server(GetPublicDashboardSnapshot, "/api")]
+pub async fn get_public_dashboard_snapshot(
+    list_limit: i64,
+) -> Result<PublicDashboardSnapshot, ServerFnError> {
+    let pool = use_context::<sqlx::PgPool>()
+        .ok_or_else(|| ServerFnError::new("database pool not available"))?;
+    fetch_public_dashboard_snapshot(&pool, list_limit).await
+}
+
+fn sanitize_toolkit_tools(tools: Vec<Tool>) -> Vec<Tool> {
+    sanitize_tools_for_public_response(tools)
+        .into_iter()
+        .map(|mut tool| {
+            tool.name = redact_secrets(&tool.name);
+            tool.description = tool.description.map(|value| redact_secrets(&value));
+            tool.install_command = tool.install_command.map(|value| redact_secrets(&value));
+            tool.safe_copy_command = tool.safe_copy_command.map(|value| redact_secrets(&value));
+            tool.mcp_endpoint = tool.mcp_endpoint.map(|value| redact_secrets(&value));
+            tool
+        })
+        .collect()
+}
+
+fn toolkit_markdown_for_tools(tools: &[Tool]) -> String {
+    let mut body = String::from("# My OnchainAI Toolkit\n\n");
+    if tools.is_empty() {
+        body.push_str("No saved tools yet.\n");
+        return body;
+    }
+
+    body.push_str("Saved tools exported from OnchainAI.\n\n");
+    for tool in tools {
+        let chains = if tool.chains.is_empty() {
+            "Not listed".into()
+        } else {
+            tool.chains.join(", ")
+        };
+        let install = tool
+            .safe_copy_command
+            .as_deref()
+            .or(tool.install_command.as_deref())
+            .unwrap_or("No install command listed");
+        let endpoint = tool
+            .mcp_endpoint
+            .as_deref()
+            .unwrap_or("No MCP endpoint listed");
+        let _ = writeln!(body, "## {}", tool.name);
+        let _ = writeln!(body, "- Slug: {}", tool.slug);
+        let _ = writeln!(body, "- Type: {}", tool.tool_type);
+        let _ = writeln!(body, "- Function: {}", tool.function);
+        let _ = writeln!(body, "- Chains: {chains}");
+        let _ = writeln!(body, "- Trust: {}", tool.status);
+        let _ = writeln!(body, "- Pricing: {}", tool.pricing);
+        if let Some(price) = tool.x402_price.as_deref().filter(|value| !value.is_empty()) {
+            let _ = writeln!(body, "- x402 price: {price}");
+        }
+        let _ = writeln!(body, "- Install: `{install}`");
+        let _ = writeln!(body, "- MCP endpoint: {endpoint}");
+        let _ = writeln!(body, "- OnchainAI: /tools/{}\n", tool.slug);
+    }
+    body
+}
+
+pub fn build_toolkit_payload(tools: Vec<Tool>) -> Result<MyToolkitPayload, ServerFnError> {
+    let tools = sanitize_toolkit_tools(tools);
+    let markdown_body = toolkit_markdown_for_tools(&tools);
+    let export_tools: Vec<ToolkitExportTool> =
+        tools.iter().map(tool_to_toolkit_export).collect();
+    let json_body = serde_json::to_string_pretty(&export_tools)
+        .map_err(|e| ServerFnError::new(format!("failed to serialize toolkit: {e}")))?;
+
+    Ok(MyToolkitPayload {
+        total: tools.len() as i64,
+        tools,
+        markdown_export: ToolkitExportPayload {
+            format: "markdown".into(),
+            filename: "onchainai-toolkit.md".into(),
+            body: markdown_body,
+        },
+        json_export: ToolkitExportPayload {
+            format: "json".into(),
+            filename: "onchainai-toolkit.json".into(),
+            body: json_body,
+        },
+    })
+}
+
+#[cfg(feature = "ssr")]
+async fn fetch_user_toolkit(
+    pool: &sqlx::PgPool,
+    user_id: uuid::Uuid,
+) -> Result<MyToolkitPayload, ServerFnError> {
+    let tools = sqlx::query_as::<_, Tool>(USER_TOOLKIT_SQL)
+        .bind(user_id)
+        .fetch_all(pool)
+        .await
+        .map_err(|e| ServerFnError::new(format!("failed to load toolkit: {e}")))?;
+
+    build_toolkit_payload(tools)
+}
+
+#[server(ListMyToolkit, "/api")]
+pub async fn list_my_toolkit() -> Result<MyToolkitPayload, ServerFnError> {
+    let (parts, pool, config) = request_context()?;
+    let user = require_user(&parts, &pool, &config.jwt_secret, &config.jwt_issuer()).await?;
+    fetch_user_toolkit(&pool, user.id).await
+}
+
 /// Batch comment counts for approved tools by slug.
 #[cfg(feature = "ssr")]
 pub(crate) async fn fetch_tool_comment_counts(
@@ -840,16 +1220,7 @@ pub(crate) async fn fetch_tool_comment_counts(
         return Ok(Vec::new());
     }
 
-    let sql = format!(
-        r#"
-        SELECT t.slug, COUNT(c.id)::bigint AS comment_count
-        FROM tools t
-        LEFT JOIN comments c ON c.tool_id = t.id
-        WHERE t.slug = ANY($1) AND {TOOLS_APPROVED_WHERE}
-        GROUP BY t.slug
-        "#
-    );
-    let rows = sqlx::query_as::<_, (String, i64)>(&sql)
+    let rows = sqlx::query_as::<_, (String, i64)>(TOOL_COMMENT_COUNTS_BY_SLUGS_SQL)
         .bind(slugs)
         .fetch_all(pool)
         .await
@@ -875,8 +1246,8 @@ pub(crate) const LIST_PENDING_TOOLS_SQL: &str =
 /// List tools awaiting admin review (`approval_status = 'pending'`).
 #[server(ListPendingTools, "/api")]
 pub async fn list_pending_tools(limit: i64) -> Result<Vec<Tool>, ServerFnError> {
-    let (parts, pool, jwt_secret, issuer) = request_context()?;
-    require_admin(&parts, &pool, &jwt_secret, &issuer).await?;
+    let (parts, pool, config) = request_context()?;
+    require_admin(&parts, &pool, &config).await?;
 
     let tools = sqlx::query_as::<_, Tool>(LIST_PENDING_TOOLS_SQL)
         .bind(limit)
@@ -992,8 +1363,8 @@ async fn count_open_reports(pool: &sqlx::PgPool) -> i64 {
 /// Operator dashboard stats — queue counts, public tools, crawler source health.
 #[server(GetAdminDashboardStats, "/api")]
 pub async fn get_admin_dashboard_stats() -> Result<AdminDashboardStats, ServerFnError> {
-    let (parts, pool, jwt_secret, issuer) = request_context()?;
-    require_admin(&parts, &pool, &jwt_secret, &issuer).await?;
+    let (parts, pool, config) = request_context()?;
+    require_admin(&parts, &pool, &config).await?;
 
     let counts = sqlx::query_as::<_, (i64, i64, i64, i64, i64, i64, i64)>(
         r#"
@@ -1068,8 +1439,8 @@ pub async fn list_review_queue(
         return Err(ServerFnError::new(msg.to_string()));
     }
 
-    let (parts, pool, jwt_secret, issuer) = request_context()?;
-    require_admin(&parts, &pool, &jwt_secret, &issuer).await?;
+    let (parts, pool, config) = request_context()?;
+    require_admin(&parts, &pool, &config).await?;
 
     let where_clause = review_queue_where(&queue).expect("validated above");
     let sql = format!("SELECT * FROM tools WHERE {where_clause} ORDER BY updated_at DESC LIMIT $1");
@@ -1327,8 +1698,8 @@ pub async fn review_tool(payload: ReviewToolPayload) -> Result<(), ServerFnError
         return Err(ServerFnError::new(msg.to_string()));
     }
 
-    let (parts, pool, jwt_secret, issuer) = request_context()?;
-    let admin = require_admin(&parts, &pool, &jwt_secret, &issuer).await?;
+    let (parts, pool, config) = request_context()?;
+    let admin = require_admin(&parts, &pool, &config).await?;
 
     run_review_tool(&pool, admin.id, &payload).await
 }
@@ -1373,8 +1744,8 @@ pub struct ReferralDashboardStats {
 
 #[server(GetReferralDashboardStats, "/api")]
 pub async fn get_referral_dashboard_stats() -> Result<ReferralDashboardStats, ServerFnError> {
-    let (parts, pool, jwt_secret, issuer) = request_context()?;
-    require_admin(&parts, &pool, &jwt_secret, &issuer)
+    let (parts, pool, config) = request_context()?;
+    require_admin(&parts, &pool, &config)
         .await
         .map_err(ServerFnError::new)?;
 
@@ -1449,8 +1820,8 @@ pub async fn update_tool_referral(
         return Err(ServerFnError::new(msg.to_string()));
     }
 
-    let (parts, pool, jwt_secret, issuer) = request_context()?;
-    require_admin(&parts, &pool, &jwt_secret, &issuer)
+    let (parts, pool, config) = request_context()?;
+    require_admin(&parts, &pool, &config)
         .await
         .map_err(ServerFnError::new)?;
 
@@ -1566,8 +1937,8 @@ async fn list_crawler_sources_inner(
 /// List crawler source status (admin).
 #[server(ListCrawlerSources, "/api")]
 pub async fn list_crawler_sources() -> Result<Vec<CrawlerSourceView>, ServerFnError> {
-    let (parts, pool, jwt_secret, issuer) = request_context()?;
-    require_admin(&parts, &pool, &jwt_secret, &issuer).await?;
+    let (parts, pool, config) = request_context()?;
+    require_admin(&parts, &pool, &config).await?;
     list_crawler_sources_inner(&pool).await
 }
 
@@ -1586,8 +1957,8 @@ pub async fn trigger_crawler_source(source: String) -> Result<(), ServerFnError>
         return Err(ServerFnError::new(msg.to_string()));
     }
 
-    let (parts, pool, jwt_secret, issuer) = request_context()?;
-    require_admin(&parts, &pool, &jwt_secret, &issuer).await?;
+    let (parts, pool, config) = request_context()?;
+    require_admin(&parts, &pool, &config).await?;
 
     let pool_bg = pool.clone();
     let source_bg = source.clone();
@@ -1629,44 +2000,25 @@ pub async fn get_tool_comments(
     slug: String,
     sort: String,
 ) -> Result<Vec<CommentView>, ServerFnError> {
-    let (parts, pool, jwt_secret, issuer) = request_context()?;
-    let viewer = session_from_parts(&parts, &pool, &jwt_secret, &issuer)
+    let (parts, pool, config) = request_context()?;
+    let viewer = session_from_parts(&parts, &pool, &config.jwt_secret, &config.jwt_issuer())
         .await
         .ok()
         .flatten();
 
-    let tool_id = sqlx::query_scalar::<_, Uuid>(&format!(
-        "SELECT id FROM tools WHERE slug = $1 AND {TOOLS_APPROVED_WHERE}"
-    ))
+    let tool_id = sqlx::query_scalar::<_, Uuid>(APPROVED_TOOL_ID_BY_SLUG_SQL)
     .bind(&slug)
     .fetch_optional(&pool)
     .await
     .map_err(|e| ServerFnError::new(format!("failed to resolve tool: {e}")))?
     .ok_or_else(|| ServerFnError::new(format!("tool not found: {slug}")))?;
 
-    let order = match sort.as_str() {
-        "top" => "COUNT(u.id) DESC, c.created_at DESC",
-        "new" => "c.created_at DESC",
+    let sql = match sort.as_str() {
+        "top" => TOOL_COMMENTS_TOP_SORT_SQL,
+        "new" => TOOL_COMMENTS_NEW_SORT_SQL,
         _ => return Err(ServerFnError::new("sort must be 'new' or 'top'")),
     };
-    let sql = format!(
-        r#"
-        SELECT
-            c.id, c.tool_id, c.parent_id, c.user_id, c.content, c.created_at,
-            p.nickname AS author_nickname,
-            p.auth_method AS author_auth_method,
-            p.is_admin AS author_is_admin,
-            COUNT(u.id) AS upvote_count,
-            BOOL_OR(u.user_id = $2) AS viewer_upvoted
-        FROM comments c
-        JOIN profiles p ON p.id = c.user_id
-        LEFT JOIN upvotes u ON u.comment_id = c.id
-        WHERE c.tool_id = $1
-        GROUP BY c.id, p.nickname, p.auth_method, p.is_admin
-        ORDER BY {order}
-        "#
-    );
-    let rows = sqlx::query_as::<_, CommentRow>(&sql)
+    let rows = sqlx::query_as::<_, CommentRow>(sql)
         .bind(tool_id)
         .bind(viewer.as_ref().map(|v| v.id))
         .fetch_all(&pool)
@@ -1717,14 +2069,7 @@ pub async fn get_tool_comment_count(slug: String) -> Result<i64, ServerFnError> 
     let pool = use_context::<sqlx::PgPool>()
         .ok_or_else(|| ServerFnError::new("database pool not available"))?;
 
-    let count = sqlx::query_scalar::<_, i64>(&format!(
-        r#"
-        SELECT COUNT(*)::bigint
-        FROM comments c
-        JOIN tools t ON t.id = c.tool_id
-        WHERE t.slug = $1 AND {TOOLS_APPROVED_WHERE}
-        "#
-    ))
+    let count = sqlx::query_scalar::<_, i64>(TOOL_COMMENT_COUNT_BY_SLUG_SQL)
     .bind(slug)
     .fetch_one(&pool)
     .await
@@ -1744,15 +2089,13 @@ pub async fn create_comment(
         return Err(ServerFnError::new(msg.to_string()));
     }
 
-    let (parts, pool, jwt_secret, issuer) = request_context()?;
-    let user = require_user(&parts, &pool, &jwt_secret, &issuer).await?;
+    let (parts, pool, config) = request_context()?;
+    let user = require_user(&parts, &pool, &config.jwt_secret, &config.jwt_issuer()).await?;
     if let Err(limit) = check_user_rate_limit(user.id, UserRateLimitAction::CreateComment) {
         return Err(ServerFnError::new(limit.to_string()));
     }
 
-    let tool_id = sqlx::query_scalar::<_, Uuid>(&format!(
-        "SELECT id FROM tools WHERE slug = $1 AND {TOOLS_APPROVED_WHERE}"
-    ))
+    let tool_id = sqlx::query_scalar::<_, Uuid>(APPROVED_TOOL_ID_BY_SLUG_SQL)
     .bind(&slug)
     .fetch_optional(&pool)
     .await
@@ -1799,8 +2142,8 @@ pub async fn create_comment(
 /// Toggle upvote on a comment (authenticated).
 #[server(ToggleUpvote, "/api")]
 pub async fn toggle_upvote(comment_id: Uuid) -> Result<bool, ServerFnError> {
-    let (parts, pool, jwt_secret, issuer) = request_context()?;
-    let user = require_user(&parts, &pool, &jwt_secret, &issuer).await?;
+    let (parts, pool, config) = request_context()?;
+    let user = require_user(&parts, &pool, &config.jwt_secret, &config.jwt_issuer()).await?;
 
     let exists = sqlx::query_scalar::<_, i64>(
         "SELECT COUNT(*) FROM upvotes WHERE comment_id = $1 AND user_id = $2",
@@ -1833,21 +2176,15 @@ pub async fn toggle_upvote(comment_id: Uuid) -> Result<bool, ServerFnError> {
 /// Whether the current user bookmarked a tool (false when signed out).
 #[server(IsBookmarked, "/api")]
 pub async fn is_bookmarked(slug: String) -> Result<bool, ServerFnError> {
-    let (parts, pool, jwt_secret, issuer) = request_context()?;
-    let Some(user) =
-        optional_session_result(session_from_parts(&parts, &pool, &jwt_secret, &issuer).await)?
+    let (parts, pool, config) = request_context()?;
+    let Some(user) = optional_session_result(
+        session_from_parts(&parts, &pool, &config.jwt_secret, &config.jwt_issuer()).await,
+    )?
     else {
         return Ok(false);
     };
 
-    let bookmarked = sqlx::query_scalar::<_, i64>(&format!(
-        r#"
-        SELECT COUNT(*)::bigint
-        FROM bookmarks b
-        JOIN tools t ON t.id = b.tool_id
-        WHERE t.slug = $1 AND b.user_id = $2 AND {TOOLS_APPROVED_WHERE}
-        "#
-    ))
+    let bookmarked = sqlx::query_scalar::<_, i64>(IS_BOOKMARKED_SQL)
     .bind(slug)
     .bind(user.id)
     .fetch_one(&pool)
@@ -1857,18 +2194,64 @@ pub async fn is_bookmarked(slug: String) -> Result<bool, ServerFnError> {
     Ok(bookmarked > 0)
 }
 
-/// Toggle bookmark on a tool (authenticated).
-#[server(ToggleBookmark, "/api")]
-pub async fn toggle_bookmark(slug: String) -> Result<bool, ServerFnError> {
-    let (parts, pool, jwt_secret, issuer) = request_context()?;
-    let user = require_user(&parts, &pool, &jwt_secret, &issuer).await?;
+/// Set bookmark state on a tool (authenticated, idempotent).
+#[server(SetBookmark, "/api")]
+pub async fn set_bookmark(slug: String, starred: bool) -> Result<bool, ServerFnError> {
+    let (parts, pool, config) = request_context()?;
+    let user = require_user(&parts, &pool, &config.jwt_secret, &config.jwt_issuer()).await?;
     if let Err(limit) = check_user_rate_limit(user.id, UserRateLimitAction::ToggleBookmark) {
         return Err(ServerFnError::new(limit.to_string()));
     }
 
-    let tool_id = sqlx::query_scalar::<_, Uuid>(&format!(
-        "SELECT id FROM tools WHERE slug = $1 AND {TOOLS_APPROVED_WHERE}"
-    ))
+    let tool_id = sqlx::query_scalar::<_, Uuid>(APPROVED_TOOL_ID_BY_SLUG_SQL)
+    .bind(&slug)
+    .fetch_optional(&pool)
+    .await
+    .map_err(|e| ServerFnError::new(format!("failed to resolve tool: {e}")))?
+    .ok_or_else(|| ServerFnError::new(format!("tool not found: {slug}")))?;
+
+    let exists = sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) FROM bookmarks WHERE tool_id = $1 AND user_id = $2",
+    )
+    .bind(tool_id)
+    .bind(user.id)
+    .fetch_one(&pool)
+    .await
+    .map_err(|e| ServerFnError::new(format!("bookmark lookup failed: {e}")))?;
+
+    if starred {
+        if exists == 0 {
+            sqlx::query("INSERT INTO bookmarks (tool_id, user_id) VALUES ($1, $2)")
+                .bind(tool_id)
+                .bind(user.id)
+                .execute(&pool)
+                .await
+                .map_err(|e| ServerFnError::new(format!("failed to add bookmark: {e}")))?;
+        }
+        Ok(true)
+    } else if exists > 0 {
+        sqlx::query("DELETE FROM bookmarks WHERE tool_id = $1 AND user_id = $2")
+            .bind(tool_id)
+            .bind(user.id)
+            .execute(&pool)
+            .await
+            .map_err(|e| ServerFnError::new(format!("failed to remove bookmark: {e}")))?;
+        Ok(false)
+    } else {
+        Ok(false)
+    }
+}
+
+/// Toggle bookmark on a tool (authenticated).
+#[server(ToggleBookmark, "/api")]
+pub async fn toggle_bookmark(slug: String) -> Result<bool, ServerFnError> {
+    let (parts, pool, config) = request_context()?;
+    let user = require_user(&parts, &pool, &config.jwt_secret, &config.jwt_issuer()).await?;
+    if let Err(limit) = check_user_rate_limit(user.id, UserRateLimitAction::ToggleBookmark) {
+        return Err(ServerFnError::new(limit.to_string()));
+    }
+
+    let tool_id = sqlx::query_scalar::<_, Uuid>(APPROVED_TOOL_ID_BY_SLUG_SQL)
     .bind(&slug)
     .fetch_optional(&pool)
     .await
@@ -1956,8 +2339,8 @@ pub(crate) fn validate_category_input(
 /// List all categories with tool counts (admin).
 #[server(ListAdminCategories, "/api")]
 pub async fn list_admin_categories() -> Result<Vec<AdminCategoryView>, ServerFnError> {
-    let (parts, pool, jwt_secret, issuer) = request_context()?;
-    require_admin(&parts, &pool, &jwt_secret, &issuer).await?;
+    let (parts, pool, config) = request_context()?;
+    require_admin(&parts, &pool, &config).await?;
 
     let rows = sqlx::query_as::<_, (String, String, String, String, i32, i64)>(
         r#"
@@ -2001,8 +2384,8 @@ pub async fn create_category(
         return Err(ServerFnError::new(msg.to_string()));
     }
 
-    let (parts, pool, jwt_secret, issuer) = request_context()?;
-    require_admin(&parts, &pool, &jwt_secret, &issuer).await?;
+    let (parts, pool, config) = request_context()?;
+    require_admin(&parts, &pool, &config).await?;
 
     let category = sqlx::query_as::<_, Category>(
         r#"
@@ -2036,8 +2419,8 @@ pub async fn update_category(
         return Err(ServerFnError::new(msg.to_string()));
     }
 
-    let (parts, pool, jwt_secret, issuer) = request_context()?;
-    require_admin(&parts, &pool, &jwt_secret, &issuer).await?;
+    let (parts, pool, config) = request_context()?;
+    require_admin(&parts, &pool, &config).await?;
 
     let category = sqlx::query_as::<_, Category>(
         r#"
@@ -2068,8 +2451,8 @@ pub async fn delete_category(id: String) -> Result<(), ServerFnError> {
         return Err(ServerFnError::new("category id required"));
     }
 
-    let (parts, pool, jwt_secret, issuer) = request_context()?;
-    require_admin(&parts, &pool, &jwt_secret, &issuer).await?;
+    let (parts, pool, config) = request_context()?;
+    require_admin(&parts, &pool, &config).await?;
 
     let tool_count = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM tools WHERE function = $1")
         .bind(&id)
@@ -2170,8 +2553,8 @@ pub async fn get_featured_cards() -> Result<Vec<FeaturedCardView>, ServerFnError
 /// List all featured cards for admin management.
 #[server(ListFeaturedCards, "/api")]
 pub async fn list_featured_cards() -> Result<Vec<AdminFeaturedCardView>, ServerFnError> {
-    let (parts, pool, jwt_secret, issuer) = request_context()?;
-    require_admin(&parts, &pool, &jwt_secret, &issuer).await?;
+    let (parts, pool, config) = request_context()?;
+    require_admin(&parts, &pool, &config).await?;
 
     let rows = sqlx::query_as::<_, AdminFeaturedCardView>(
         r#"
@@ -2238,8 +2621,8 @@ pub async fn create_featured_card(input: FeaturedCardInput) -> Result<FeaturedCa
         return Err(ServerFnError::new(msg.to_string()));
     }
 
-    let (parts, pool, jwt_secret, issuer) = request_context()?;
-    require_admin(&parts, &pool, &jwt_secret, &issuer).await?;
+    let (parts, pool, config) = request_context()?;
+    require_admin(&parts, &pool, &config).await?;
 
     ensure_featured_tool_exists(&pool, input.tool_id).await?;
 
@@ -2276,8 +2659,8 @@ pub async fn update_featured_card(
         return Err(ServerFnError::new(msg.to_string()));
     }
 
-    let (parts, pool, jwt_secret, issuer) = request_context()?;
-    require_admin(&parts, &pool, &jwt_secret, &issuer).await?;
+    let (parts, pool, config) = request_context()?;
+    require_admin(&parts, &pool, &config).await?;
 
     ensure_featured_tool_exists(&pool, input.tool_id).await?;
 
@@ -2311,8 +2694,8 @@ pub async fn update_featured_card(
 /// Delete a featured carousel card (admin).
 #[server(DeleteFeaturedCard, "/api")]
 pub async fn delete_featured_card(id: Uuid) -> Result<(), ServerFnError> {
-    let (parts, pool, jwt_secret, issuer) = request_context()?;
-    require_admin(&parts, &pool, &jwt_secret, &issuer).await?;
+    let (parts, pool, config) = request_context()?;
+    require_admin(&parts, &pool, &config).await?;
 
     let result = sqlx::query("DELETE FROM featured_cards WHERE id = $1")
         .bind(id)
@@ -2332,8 +2715,8 @@ pub async fn delete_featured_card(id: Uuid) -> Result<(), ServerFnError> {
 pub async fn upload_featured_image(
     input: UploadFeaturedImageInput,
 ) -> Result<String, ServerFnError> {
-    let (parts, pool, jwt_secret, issuer) = request_context()?;
-    require_admin(&parts, &pool, &jwt_secret, &issuer).await?;
+    let (parts, pool, config) = request_context()?;
+    require_admin(&parts, &pool, &config).await?;
 
     let config =
         use_context::<Config>().ok_or_else(|| ServerFnError::new("configuration not available"))?;
@@ -2394,8 +2777,8 @@ pub async fn search_tools_for_picker(
     query: String,
     limit: i64,
 ) -> Result<Vec<ToolPickerItem>, ServerFnError> {
-    let (parts, pool, jwt_secret, issuer) = request_context()?;
-    require_admin(&parts, &pool, &jwt_secret, &issuer).await?;
+    let (parts, pool, config) = request_context()?;
+    require_admin(&parts, &pool, &config).await?;
 
     let q = query.trim();
     if q.is_empty() {
@@ -2540,8 +2923,8 @@ pub async fn list_admin_users(
     query: Option<String>,
     limit: i64,
 ) -> Result<Vec<AdminUserView>, ServerFnError> {
-    let (parts, pool, jwt_secret, issuer) = request_context()?;
-    require_admin(&parts, &pool, &jwt_secret, &issuer).await?;
+    let (parts, pool, config) = request_context()?;
+    require_admin(&parts, &pool, &config).await?;
 
     let limit = limit.clamp(1, 100);
     let pattern = query
@@ -2620,8 +3003,8 @@ impl AdminUserRow {
 /// Ban or unban a user (admin).
 #[server(SetUserBanned, "/api")]
 pub async fn set_user_banned(user_id: Uuid, banned: bool) -> Result<(), ServerFnError> {
-    let (parts, pool, jwt_secret, issuer) = request_context()?;
-    let admin = require_admin(&parts, &pool, &jwt_secret, &issuer).await?;
+    let (parts, pool, config) = request_context()?;
+    let admin = require_admin(&parts, &pool, &config).await?;
 
     if admin.id == user_id {
         return Err(ServerFnError::new("cannot change your own ban status"));
@@ -2645,8 +3028,8 @@ pub async fn set_user_banned(user_id: Uuid, banned: bool) -> Result<(), ServerFn
 /// Grant or revoke admin role (admin).
 #[server(SetUserAdmin, "/api")]
 pub async fn set_user_admin(user_id: Uuid, is_admin: bool) -> Result<(), ServerFnError> {
-    let (parts, pool, jwt_secret, issuer) = request_context()?;
-    let admin = require_admin(&parts, &pool, &jwt_secret, &issuer).await?;
+    let (parts, pool, config) = request_context()?;
+    let admin = require_admin(&parts, &pool, &config).await?;
 
     if admin.id == user_id && !is_admin {
         return Err(ServerFnError::new("cannot remove your own admin role"));
@@ -2669,8 +3052,8 @@ pub async fn set_user_admin(user_id: Uuid, is_admin: bool) -> Result<(), ServerF
 /// Delete a user profile and cascaded social data (admin).
 #[server(DeleteUser, "/api")]
 pub async fn delete_user(user_id: Uuid) -> Result<(), ServerFnError> {
-    let (parts, pool, jwt_secret, issuer) = request_context()?;
-    let admin = require_admin(&parts, &pool, &jwt_secret, &issuer).await?;
+    let (parts, pool, config) = request_context()?;
+    let admin = require_admin(&parts, &pool, &config).await?;
 
     if admin.id == user_id {
         return Err(ServerFnError::new("cannot delete your own account"));
@@ -2708,8 +3091,8 @@ pub async fn list_admin_comments(
     query: Option<String>,
     limit: i64,
 ) -> Result<Vec<AdminCommentView>, ServerFnError> {
-    let (parts, pool, jwt_secret, issuer) = request_context()?;
-    require_admin(&parts, &pool, &jwt_secret, &issuer).await?;
+    let (parts, pool, config) = request_context()?;
+    require_admin(&parts, &pool, &config).await?;
 
     let limit = limit.clamp(1, 100);
     let pattern = query
@@ -2792,8 +3175,8 @@ impl AdminCommentRow {
 /// Delete a comment (admin).
 #[server(DeleteAdminComment, "/api")]
 pub async fn delete_admin_comment(comment_id: Uuid) -> Result<(), ServerFnError> {
-    let (parts, pool, jwt_secret, issuer) = request_context()?;
-    require_admin(&parts, &pool, &jwt_secret, &issuer).await?;
+    let (parts, pool, config) = request_context()?;
+    require_admin(&parts, &pool, &config).await?;
 
     let result = sqlx::query("DELETE FROM comments WHERE id = $1")
         .bind(comment_id)
@@ -2811,8 +3194,8 @@ pub async fn delete_admin_comment(comment_id: Uuid) -> Result<(), ServerFnError>
 /// Delete a comment and ban its author (admin).
 #[server(DeleteCommentAndBanUser, "/api")]
 pub async fn delete_comment_and_ban_user(comment_id: Uuid) -> Result<(), ServerFnError> {
-    let (parts, pool, jwt_secret, issuer) = request_context()?;
-    let admin = require_admin(&parts, &pool, &jwt_secret, &issuer).await?;
+    let (parts, pool, config) = request_context()?;
+    let admin = require_admin(&parts, &pool, &config).await?;
 
     let author_id = sqlx::query_scalar::<_, Uuid>("SELECT user_id FROM comments WHERE id = $1")
         .bind(comment_id)
@@ -3199,9 +3582,7 @@ pub async fn get_tool_trust_view(slug: String) -> Result<ToolTrustView, ServerFn
     let pool = use_context::<sqlx::PgPool>()
         .ok_or_else(|| ServerFnError::new("database pool not available"))?;
 
-    let tool = sqlx::query_as::<_, Tool>(&format!(
-        "SELECT * FROM tools WHERE slug = $1 AND {TOOLS_APPROVED_WHERE}"
-    ))
+    let tool = sqlx::query_as::<_, Tool>(APPROVED_TOOL_BY_SLUG_SQL)
     .bind(slug.trim())
     .fetch_one(&pool)
     .await
@@ -3220,8 +3601,8 @@ pub async fn get_tool_trust_view(slug: String) -> Result<ToolTrustView, ServerFn
 /// Admin workbench summary counts for top promotion rail.
 #[server(GetAdminWorkbenchSummary, "/api")]
 pub async fn get_admin_workbench_summary() -> Result<AdminWorkbenchSummary, ServerFnError> {
-    let (parts, pool, jwt_secret, issuer) = request_context()?;
-    require_admin(&parts, &pool, &jwt_secret, &issuer).await?;
+    let (parts, pool, config) = request_context()?;
+    require_admin(&parts, &pool, &config).await?;
 
     let counts = sqlx::query_as::<_, (i64, i64, i64, i64)>(
         r#"
@@ -3266,8 +3647,8 @@ pub async fn get_admin_workbench_summary() -> Result<AdminWorkbenchSummary, Serv
 pub async fn get_admin_tool_workbench(
     slug: String,
 ) -> Result<AdminToolWorkbenchView, ServerFnError> {
-    let (parts, pool, jwt_secret, issuer) = request_context()?;
-    require_admin(&parts, &pool, &jwt_secret, &issuer).await?;
+    let (parts, pool, config) = request_context()?;
+    require_admin(&parts, &pool, &config).await?;
 
     let tool = sqlx::query_as::<_, Tool>("SELECT * FROM tools WHERE slug = $1")
         .bind(slug.trim())
@@ -3294,8 +3675,8 @@ pub async fn get_admin_tool_workbench(
 pub async fn verify_tool_official_link(
     payload: VerifyOfficialLinkPayload,
 ) -> Result<ToolOfficialLink, ServerFnError> {
-    let (parts, pool, jwt_secret, issuer) = request_context()?;
-    let admin = require_admin(&parts, &pool, &jwt_secret, &issuer).await?;
+    let (parts, pool, config) = request_context()?;
+    let admin = require_admin(&parts, &pool, &config).await?;
 
     const STATUSES: &[&str] = &["candidate", "claimed", "verified", "rejected"];
     const STRENGTHS: &[&str] = &["weak", "medium", "strong"];
@@ -3328,8 +3709,8 @@ pub async fn submit_tool(input: SubmitToolInput) -> Result<ToolSubmission, Serve
         return Err(ServerFnError::new(msg.to_string()));
     }
 
-    let (parts, pool, jwt_secret, issuer) = request_context()?;
-    let user = require_user(&parts, &pool, &jwt_secret, &issuer).await?;
+    let (parts, pool, config) = request_context()?;
+    let user = require_user(&parts, &pool, &config.jwt_secret, &config.jwt_issuer()).await?;
     if let Err(limit) = check_user_rate_limit(user.id, UserRateLimitAction::SubmitTool) {
         return Err(ServerFnError::new(limit.to_string()));
     }
@@ -3440,8 +3821,8 @@ pub async fn submit_tool(input: SubmitToolInput) -> Result<ToolSubmission, Serve
 /// List the current user's tool submissions.
 #[server(ListMySubmissions, "/api")]
 pub async fn list_my_submissions() -> Result<Vec<ToolSubmission>, ServerFnError> {
-    let (parts, pool, jwt_secret, issuer) = request_context()?;
-    let user = require_user(&parts, &pool, &jwt_secret, &issuer).await?;
+    let (parts, pool, config) = request_context()?;
+    let user = require_user(&parts, &pool, &config.jwt_secret, &config.jwt_issuer()).await?;
 
     let rows = sqlx::query_as::<_, ToolSubmission>(
         r#"
@@ -3474,12 +3855,10 @@ pub async fn report_tool(input: ReportToolInput) -> Result<ToolReport, ServerFnE
         return Err(ServerFnError::new("tool slug is required"));
     }
 
-    let (parts, pool, jwt_secret, issuer) = request_context()?;
-    let user = require_user(&parts, &pool, &jwt_secret, &issuer).await?;
+    let (parts, pool, config) = request_context()?;
+    let user = require_user(&parts, &pool, &config.jwt_secret, &config.jwt_issuer()).await?;
 
-    let tool_id = sqlx::query_scalar::<_, Uuid>(&format!(
-        "SELECT id FROM tools WHERE slug = $1 AND {TOOLS_APPROVED_WHERE}"
-    ))
+    let tool_id = sqlx::query_scalar::<_, Uuid>(APPROVED_TOOL_ID_BY_SLUG_SQL)
     .bind(slug)
     .fetch_optional(&pool)
     .await
@@ -3518,12 +3897,10 @@ pub async fn request_tool_claim(input: ClaimToolInput) -> Result<ToolClaimReques
         return Err(ServerFnError::new(msg.to_string()));
     }
 
-    let (parts, pool, jwt_secret, issuer) = request_context()?;
-    let user = require_user(&parts, &pool, &jwt_secret, &issuer).await?;
+    let (parts, pool, config) = request_context()?;
+    let user = require_user(&parts, &pool, &config.jwt_secret, &config.jwt_issuer()).await?;
 
-    let tool = sqlx::query_as::<_, Tool>(&format!(
-        "SELECT * FROM tools WHERE slug = $1 AND {TOOLS_APPROVED_WHERE}"
-    ))
+    let tool = sqlx::query_as::<_, Tool>(APPROVED_TOOL_BY_SLUG_SQL)
     .bind(input.slug.trim())
     .fetch_optional(&pool)
     .await
@@ -3551,8 +3928,8 @@ pub async fn request_tool_claim(input: ClaimToolInput) -> Result<ToolClaimReques
         .await
         .map_err(|e| ServerFnError::new(format!("transaction failed: {e}")))?;
 
-    let proof_note = build_claim_proof_note(&input)
-        .map_err(|msg| ServerFnError::new(msg.to_string()))?;
+    let proof_note =
+        build_claim_proof_note(&input).map_err(|msg| ServerFnError::new(msg.to_string()))?;
 
     let claim = sqlx::query_as::<_, ToolClaimRequest>(
         r#"
@@ -3659,6 +4036,7 @@ mod tests {
         let filters: ToolFilters = serde_json::from_value(json).expect("partial filters");
         assert_eq!(filters.function, vec!["bridge"]);
         assert!(filters.asset_class.is_empty());
+        assert!(filters.pricing.is_empty());
         assert!(filters.chain.is_empty());
     }
 
@@ -3729,32 +4107,76 @@ mod tests {
         let mut idx = 1;
         let filters = ToolFilters {
             function: vec!["bridge".into(), "swap".into()],
+            pricing: vec!["x402".into()],
             ..Default::default()
         };
         append_tool_filters(&mut sql, &filters, &mut idx);
         assert!(sql.contains("function = ANY($1)"));
+        assert!(sql.contains("pricing = ANY($2)"));
     }
 
     #[test]
     fn list_tools_comments_sort_uses_comment_count() {
-        let order = "(SELECT COUNT(*)::bigint FROM comments cm WHERE cm.tool_id = tools.id) DESC, created_at DESC";
+        let order = list_tools_order_clause("comments");
         assert!(order.contains("comments cm"));
         assert!(order.contains("COUNT(*)"));
     }
 
     #[test]
-    fn public_tool_where_used_in_public_queries() {
-        let recent = format!(
-            "SELECT * FROM tools WHERE {TOOLS_APPROVED_WHERE} ORDER BY stars DESC, created_at DESC LIMIT $1"
-        );
-        assert!(recent.contains("approval_status = 'approved'"));
-        assert!(recent.contains("relevance_status = 'accepted'"));
-        assert!(recent.contains("install_risk_level <> 'critical'"));
-        assert!(recent.contains("quarantined_at IS NULL"));
+    fn dashboard_snapshot_limit_is_bounded_for_public_surfaces() {
+        assert_eq!(clamp_dashboard_list_limit(0), 1);
+        assert_eq!(clamp_dashboard_list_limit(6), 6);
+        assert_eq!(clamp_dashboard_list_limit(99), MAX_DASHBOARD_LIST_LIMIT);
+    }
 
-        let categories =
-            format!("LEFT JOIN tools t ON t.function = c.id AND t.{TOOLS_APPROVED_WHERE}");
-        assert!(categories.contains("relevance_status = 'accepted'"));
+    #[test]
+    fn dashboard_bucket_links_target_existing_public_filters() {
+        assert_eq!(
+            dashboard_filter_href("function", "payments"),
+            "/tools?function=payments"
+        );
+        assert_eq!(dashboard_filter_href("type", "mcp"), "/tools?type=mcp");
+        assert_eq!(dashboard_filter_href("chain", "base"), "/tools?chain=base");
+        assert_eq!(
+            dashboard_filter_href("status", "official"),
+            "/tools?status=official"
+        );
+        assert_eq!(
+            dashboard_filter_href("pricing", "x402"),
+            "/tools?pricing=x402"
+        );
+    }
+
+    #[test]
+    fn toolkit_export_payload_redacts_sensitive_payment_addresses() {
+        let mut tool = sample_review_tool();
+        tool.approval_status = "approved".into();
+        tool.relevance_status = "accepted".into();
+        tool.status = "official".into();
+        tool.pricing = "x402".into();
+        tool.x402_price = Some("$0.01".into());
+        tool.install_command = Some("npx bridge-mcp".into());
+        tool.referral_payout_address = Some("0xoperatorpayout".into());
+        tool.x402_pay_to_address = Some("0xproviderpayto".into());
+        tool.submitted_by = Some(Uuid::new_v4());
+
+        let payload = build_toolkit_payload(vec![tool]).expect("toolkit payload");
+
+        assert_eq!(payload.total, 1);
+        assert_eq!(payload.tools[0].referral_payout_address, None);
+        assert_eq!(payload.tools[0].x402_pay_to_address, None);
+        assert!(payload.markdown_export.body.contains("Bridge MCP"));
+        assert!(payload.markdown_export.body.contains("npx bridge-mcp"));
+        assert!(!payload.markdown_export.body.contains("0xoperatorpayout"));
+        assert!(!payload.json_export.body.contains("0xproviderpayto"));
+        assert!(
+            !payload.json_export.body.contains("submitted_by"),
+            "JSON export must omit internal fields"
+        );
+        assert!(
+            !payload.json_export.body.contains("approval_status"),
+            "JSON export must omit operator fields"
+        );
     }
 
     fn sample_review_tool() -> Tool {
@@ -4046,7 +4468,9 @@ mod tests {
 
     #[test]
     fn validate_claim_tool_input_rejects_too_many_proof_links() {
-        let links: Vec<String> = (0..11).map(|i| format!("https://example.com/{i}")).collect();
+        let links: Vec<String> = (0..11)
+            .map(|i| format!("https://example.com/{i}"))
+            .collect();
         let err = validate_claim_tool_input(&ClaimToolInput {
             slug: "bridge-mcp".into(),
             verification_note: "I maintain this repo and can verify via DNS TXT.".into(),

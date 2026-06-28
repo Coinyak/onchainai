@@ -5,6 +5,7 @@ pub mod admin_review_timeline;
 pub mod admin_shell;
 pub mod bottom_sheet;
 pub mod category_grid;
+pub mod chain_logo;
 pub mod chain_strip;
 pub mod claim_status_timeline;
 pub mod comments_section;

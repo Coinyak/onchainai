@@ -32,7 +32,10 @@ export async function waitForToolCards(page, timeout = 20000) {
 
 /** Wait until sidebar filter links are present (SSR HTML or post-hydrate). */
 export async function waitForSidebarFilterLinks(page, timeout = 20000) {
-  await page.waitForSelector('aside .sidebar-body a[href*="function="]', { timeout });
+  await page.waitForSelector('aside .sidebar-body a[href*="function="]', {
+    state: "attached",
+    timeout,
+  });
 }
 
 /** Wait for client localStorage hydrate (mobile rail + section collapse). */

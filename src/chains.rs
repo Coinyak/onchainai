@@ -168,7 +168,7 @@ pub const CHAIN_CATALOG: &[ChainMeta] = &[
 ];
 
 /// Primary-row chain tiles (excluding the All tile).
-pub const STRIP_PRIMARY_VISIBLE: usize = 6;
+pub const STRIP_PRIMARY_VISIBLE: usize = 10;
 
 /// DB noise values — not real chains; hidden from card tags and strip counts.
 const CHAIN_NOISE: &[&str] = &[
@@ -192,7 +192,7 @@ const CHAIN_SUFFIXES: &[&str] = &["-mainnet", "-testnet", "-network", "-one", "-
 /// Normalize a raw DB chain string for catalog lookup.
 pub fn normalize_chain_key(raw: &str) -> String {
     let mut key = raw.trim().to_lowercase();
-    key = key.replace('_', "-").replace(' ', "-");
+    key = key.replace(['_', ' '], "-");
     while key.contains("--") {
         key = key.replace("--", "-");
     }
@@ -346,11 +346,7 @@ pub fn chain_tags_for_tool(chains: &[String], max_visible: usize) -> (Vec<ChainT
 
 /// Abbreviated label for unknown chains shown as text pills.
 pub fn chain_fallback_label(raw: &str) -> String {
-    let token = raw
-        .split(|c: char| c == '-' || c == ' ' || c == '_')
-        .next()
-        .unwrap_or(raw)
-        .trim();
+    let token = raw.split(['-', ' ', '_']).next().unwrap_or(raw).trim();
     if token.is_empty() {
         return "?".into();
     }
@@ -599,6 +595,32 @@ mod tests {
         assert_eq!(ordered.len(), 2);
         assert_eq!(ordered[0].id, "bitcoin");
         assert_eq!(ordered[1].id, "bob");
+    }
+
+    #[test]
+    fn strip_primary_visible_leaves_overflow_for_expand_control() {
+        assert_eq!(STRIP_PRIMARY_VISIBLE, 10);
+        assert_eq!(CHAIN_CATALOG.len(), 20);
+
+        let counts: Vec<(String, i64)> = CHAIN_CATALOG
+            .iter()
+            .map(|entry| (entry.id.to_string(), 1))
+            .collect();
+        let ordered = strip_chains(&counts);
+        assert_eq!(ordered.len(), CHAIN_CATALOG.len());
+
+        let primary: Vec<_> = ordered
+            .iter()
+            .take(STRIP_PRIMARY_VISIBLE)
+            .copied()
+            .collect();
+        let overflow: Vec<_> = ordered
+            .iter()
+            .skip(STRIP_PRIMARY_VISIBLE)
+            .copied()
+            .collect();
+        assert_eq!(primary.len(), STRIP_PRIMARY_VISIBLE);
+        assert_eq!(overflow.len(), CHAIN_CATALOG.len() - STRIP_PRIMARY_VISIBLE);
     }
 
     /// Full BOB Gateway CLI chain union (SDK + live routes); kept in sync with

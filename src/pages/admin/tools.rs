@@ -409,7 +409,7 @@ fn ReasonModal(
     let action = state.action.clone();
 
     view! {
-        <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
+        <div class="modal-overlay">
             <div class="w-full max-w-md rounded-xl bg-white border border-[#E5E5E5] shadow-lg p-5" role="dialog">
                 <h3 class="text-[16px] font-semibold mb-2">{state.title.clone()}</h3>
                 <p class="text-[14px] text-[#6B6B6B] mb-4 font-mono">{slug.clone()}</p>

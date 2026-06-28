@@ -70,6 +70,7 @@ pub fn build_query_base(
     actor: Option<String>,
     tool_type: Option<String>,
     status: Option<String>,
+    pricing: Option<String>,
     chain: Option<String>,
     sort: String,
     search_q: Option<String>,
@@ -93,6 +94,9 @@ pub fn build_query_base(
     }
     if let Some(v) = status {
         parts.push(format!("status={}", urlencoding::encode(&v)));
+    }
+    if let Some(v) = pricing {
+        parts.push(format!("pricing={}", urlencoding::encode(&v)));
     }
     if let Some(v) = chain {
         parts.push(format!("chain={}", urlencoding::encode(&v)));
@@ -124,6 +128,7 @@ pub fn build_filter_navigation_base(
     actor: Option<String>,
     tool_type: Option<String>,
     status: Option<String>,
+    pricing: Option<String>,
     chain: Option<String>,
     sort: String,
     search_q: Option<String>,
@@ -135,6 +140,7 @@ pub fn build_filter_navigation_base(
         actor,
         tool_type,
         status,
+        pricing,
         chain,
         sort,
         search_q,
@@ -218,6 +224,7 @@ pub fn build_sort_href(
     actor: Option<String>,
     tool_type: Option<String>,
     status: Option<String>,
+    pricing: Option<String>,
     chain: Option<String>,
     sort: &str,
     search_q: Option<String>,
@@ -229,6 +236,7 @@ pub fn build_sort_href(
         actor,
         tool_type,
         status,
+        pricing,
         chain,
         sort.to_string(),
         search_q,
@@ -245,6 +253,7 @@ pub fn build_load_more_href(
     actor: Option<String>,
     tool_type: Option<String>,
     status: Option<String>,
+    pricing: Option<String>,
     chain: Option<String>,
     sort: String,
     search_q: Option<String>,
@@ -258,6 +267,7 @@ pub fn build_load_more_href(
         actor,
         tool_type,
         status,
+        pricing,
         chain,
         sort,
         search_q,
@@ -340,6 +350,7 @@ pub fn ToolsBrowser(
     let actor = Memo::new(move |_| query.with(|q| q.get("actor").map(|s| s.to_string())));
     let tool_type = Memo::new(move |_| query.with(|q| q.get("type").map(|s| s.to_string())));
     let status = Memo::new(move |_| query.with(|q| q.get("status").map(|s| s.to_string())));
+    let pricing = Memo::new(move |_| query.with(|q| q.get("pricing").map(|s| s.to_string())));
     let chain = Memo::new(move |_| query.with(|q| q.get("chain").map(|s| s.to_string())));
     let sort = Memo::new(move |_| {
         query
@@ -360,11 +371,24 @@ pub fn ToolsBrowser(
             actor.get(),
             tool_type.get(),
             status.get(),
+            pricing.get(),
             chain.get(),
             sort.get(),
             search_q.get(),
             selected.get(),
             page_number.get(),
+        )
+    });
+    let filter_revision = Memo::new(move |_| {
+        format!(
+            "f={}|ac={}|a={}|t={}|st={}|p={}|c={}",
+            function.get().unwrap_or_default(),
+            asset_class.get().unwrap_or_default(),
+            actor.get().unwrap_or_default(),
+            tool_type.get().unwrap_or_default(),
+            status.get().unwrap_or_default(),
+            pricing.get().unwrap_or_default(),
+            chain.get().unwrap_or_default(),
         )
     });
     let filter_query_base = Memo::new(move |_| {
@@ -375,6 +399,7 @@ pub fn ToolsBrowser(
             actor.get(),
             tool_type.get(),
             status.get(),
+            pricing.get(),
             chain.get(),
             sort.get(),
             search_q.get(),
@@ -388,6 +413,7 @@ pub fn ToolsBrowser(
             actor.get(),
             tool_type.get(),
             status.get(),
+            pricing.get(),
             chain.get(),
         )
     });
@@ -443,6 +469,7 @@ pub fn ToolsBrowser(
             actor.get(),
             tool_type.get(),
             status.get(),
+            pricing.get(),
             chain.get(),
             "hot",
             search_q.get(),
@@ -456,6 +483,7 @@ pub fn ToolsBrowser(
             actor.get(),
             tool_type.get(),
             status.get(),
+            pricing.get(),
             chain.get(),
             "new",
             search_q.get(),
@@ -469,6 +497,7 @@ pub fn ToolsBrowser(
             actor.get(),
             tool_type.get(),
             status.get(),
+            pricing.get(),
             chain.get(),
             "comments",
             search_q.get(),
@@ -479,14 +508,27 @@ pub fn ToolsBrowser(
 
     view! {
         <div class="tools-layout" data-tools-browser="">
-            <Suspense fallback=move || view! {
-                <aside class="tools-sidebar site-sidebar-chrome">
-                    <p class="sidebar-empty">"Loading filters…"</p>
-                </aside>
-                <div class="tools-main">
-                    {children_fallback.as_ref().map(|content| view! { <div class="tools-prepend">{content()}</div> })}
-                    <ToolListSkeleton count=6/>
-                </div>
+            <Suspense fallback=move || {
+                let browser_base = base.get_value();
+                view! {
+                    <Sidebar
+                        base=browser_base.clone()
+                        categories=vec![]
+                        query_base=filter_query_base.get()
+                        filter_revision=filter_revision
+                        active_function=function.get()
+                        active_asset_class=asset_class.get()
+                        active_actor=actor.get()
+                        active_type=tool_type.get()
+                        active_status=status.get()
+                        active_pricing=pricing.get()
+                        default_function_open=matches!(browser_base, BrowserBase::Tools)
+                    />
+                    <div class="tools-main">
+                        {children_fallback.as_ref().map(|content| view! { <div class="tools-prepend">{content()}</div> })}
+                        <ToolListSkeleton count=6/>
+                    </div>
+                }
             }>
                 {move || {
                     let cache_key = page_cache_key.get();
@@ -497,18 +539,31 @@ pub fn ToolsBrowser(
                         cached_browser_data.get().as_ref(),
                     );
                     match (page_state, browser_data) {
-                        (Some(Err(e)), _) => view! {
-                            <aside class="tools-sidebar site-sidebar-chrome">
-                                <p class="sidebar-empty">"Loading filters…"</p>
-                            </aside>
-                            <div class="tools-main">
-                                {children.as_ref().map(|content| view! { <div class="tools-prepend">{content()}</div> })}
-                                <ErrorState
-                                    message=e.to_string()
-                                    on_retry=move || retry_tick.update(|n| *n = n.wrapping_add(1))
+                        (Some(Err(e)), _) => {
+                            let browser_base = base.get_value();
+                            view! {
+                                <Sidebar
+                                    base=browser_base.clone()
+                                    categories=vec![]
+                                    query_base=filter_query_base.get()
+                                    filter_revision=filter_revision
+                                    active_function=function.get()
+                                    active_asset_class=asset_class.get()
+                                    active_actor=actor.get()
+                                    active_type=tool_type.get()
+                                    active_status=status.get()
+                                    active_pricing=pricing.get()
+                                    default_function_open=matches!(browser_base, BrowserBase::Tools)
                                 />
-                            </div>
-                        }.into_any(),
+                                <div class="tools-main">
+                                    {children.as_ref().map(|content| view! { <div class="tools-prepend">{content()}</div> })}
+                                    <ErrorState
+                                        message=e.to_string()
+                                        on_retry=move || retry_tick.update(|n| *n = n.wrapping_add(1))
+                                    />
+                                </div>
+                            }.into_any()
+                        }
                         (_, Some(data)) => {
                             let qb = query_base.get();
                             let filter_qb = filter_query_base.get();
@@ -518,11 +573,13 @@ pub fn ToolsBrowser(
                                     base=browser_base.clone()
                                     categories=data.categories.clone()
                                     query_base=filter_qb.clone()
+                                    filter_revision=filter_revision
                                     active_function=function.get()
                                     active_asset_class=asset_class.get()
                                     active_actor=actor.get()
                                     active_type=tool_type.get()
                                     active_status=status.get()
+                                    active_pricing=pricing.get()
                                     default_function_open=matches!(browser_base, BrowserBase::Tools)
                                 />
                                 <div class="tools-main">
@@ -553,6 +610,7 @@ pub fn ToolsBrowser(
                                             actor.get(),
                                             tool_type.get(),
                                             status.get(),
+                                            pricing.get(),
                                             chain.get(),
                                             search_q.get(),
                                             Some(sort.get()),
@@ -603,6 +661,7 @@ pub fn ToolsBrowser(
                                                     actor.get(),
                                                     tool_type.get(),
                                                     status.get(),
+                                                    pricing.get(),
                                                     chain.get(),
                                                     sort.get(),
                                                     search_q.get(),
@@ -639,15 +698,28 @@ pub fn ToolsBrowser(
                                 </div>
                             }.into_any()
                         }
-                        _ => view! {
-                            <aside class="tools-sidebar site-sidebar-chrome">
-                                <p class="sidebar-empty">"Loading filters…"</p>
-                            </aside>
-                            <div class="tools-main">
-                                {children.as_ref().map(|content| view! { <div class="tools-prepend">{content()}</div> })}
-                                <ToolListSkeleton count=6/>
-                            </div>
-                        }.into_any(),
+                        _ => {
+                            let browser_base = base.get_value();
+                            view! {
+                                <Sidebar
+                                    base=browser_base.clone()
+                                    categories=vec![]
+                                    query_base=filter_query_base.get()
+                                    filter_revision=filter_revision
+                                    active_function=function.get()
+                                    active_asset_class=asset_class.get()
+                                    active_actor=actor.get()
+                                    active_type=tool_type.get()
+                                    active_status=status.get()
+                                    active_pricing=pricing.get()
+                                    default_function_open=matches!(browser_base, BrowserBase::Tools)
+                                />
+                                <div class="tools-main">
+                                    {children.as_ref().map(|content| view! { <div class="tools-prepend">{content()}</div> })}
+                                    <ToolListSkeleton count=6/>
+                                </div>
+                            }.into_any()
+                        }
                     }
                 }}
             </Suspense>
@@ -664,6 +736,7 @@ mod tests {
         let q = build_query_base(
             &BrowserBase::Category("bridge".into()),
             Some("bridge".into()),
+            None,
             None,
             None,
             None,
@@ -696,6 +769,7 @@ mod tests {
             Some("mcp".into()),
             None,
             None,
+            None,
             "hot".into(),
             None,
             Some("zapper".into()),
@@ -716,6 +790,7 @@ mod tests {
             None,
             None,
             None,
+            None,
             Some("base".into()),
             "hot".into(),
             Some("wallet".into()),
@@ -726,6 +801,7 @@ mod tests {
 
         let second = build_query_base(
             &BrowserBase::Tools,
+            None,
             None,
             None,
             None,
@@ -749,6 +825,7 @@ mod tests {
             None,
             Some("mcp".into()),
             None,
+            Some("x402".into()),
             Some("base".into()),
             "comments".into(),
             Some("agent".into()),
@@ -757,7 +834,7 @@ mod tests {
         );
         assert_eq!(
             href,
-            "/tools?function=bridge&type=mcp&chain=base&sort=comments&q=agent&page=3"
+            "/tools?function=bridge&type=mcp&pricing=x402&chain=base&sort=comments&q=agent&page=3"
         );
     }
 
@@ -769,6 +846,7 @@ mod tests {
             None,
             None,
             Some("mcp".into()),
+            None,
             None,
             Some("base".into()),
             "comments".into(),
@@ -949,11 +1027,12 @@ mod tests {
     fn sort_href_rebuilds_without_duplicate_sort_param() {
         let filters = (
             Some("bridge,swap".into()),
-            None,
-            None,
+            None::<String>,
+            None::<String>,
             Some("mcp".into()),
-            None,
-            None,
+            None::<String>,
+            None::<String>,
+            None::<String>,
         );
         let from_new = build_sort_href(
             &BrowserBase::Tools,
@@ -963,6 +1042,7 @@ mod tests {
             filters.3.clone(),
             filters.4.clone(),
             filters.5.clone(),
+            None,
             "new",
             None,
         );
@@ -981,6 +1061,7 @@ mod tests {
             filters.3,
             filters.4,
             filters.5,
+            None,
             "hot",
             None,
         );
@@ -995,6 +1076,7 @@ mod tests {
     fn sort_href_omits_selected_preview() {
         let href = build_sort_href(
             &BrowserBase::Tools,
+            None,
             None,
             None,
             None,

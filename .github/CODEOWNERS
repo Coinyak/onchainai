@@ -1,0 +1,25 @@
+# Default owner for unmatched paths
+* @hoyeon
+
+# Agent harness, CI, and gate scripts
+AGENTS.md @hoyeon
+docs/AGENT_HARNESS.md @hoyeon
+docs/AGENT_READINESS_REPORT.md @hoyeon
+docs/BRANCH_PROTECTION.md @hoyeon
+scripts/agent-*.sh @hoyeon
+scripts/ui-*.sh @hoyeon
+scripts/dev-watch.sh @hoyeon
+scripts/verify-dev-watch.sh @hoyeon
+scripts/configure-branch-protection.sh @hoyeon
+scripts/git-hooks/ @hoyeon
+.github/workflows/ @hoyeon
+.github/pull_request_template.md @hoyeon
+.cursor/ @hoyeon
+.claude/ @hoyeon
+.agents/ @hoyeon
+
+# Auth and session (security-sensitive)
+src/auth/ @hoyeon
+
+# Database migrations
+migrations/ @hoyeon

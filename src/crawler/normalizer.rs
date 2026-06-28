@@ -285,36 +285,10 @@ pub fn is_valid_github_owner(owner: &str) -> bool {
     owner.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
 }
 
-/// Parse `owner/repo` from a GitHub repository URL.
-fn parse_github_owner_repo(url: &str) -> Option<(String, String)> {
-    let url = url.trim().trim_end_matches('/');
-    let rest = url
-        .strip_prefix("https://github.com/")
-        .or_else(|| url.strip_prefix("http://github.com/"))?;
-    let mut parts = rest.split('/');
-    let owner = parts.next()?.trim();
-    let repo = parts.next()?.trim();
-    let repo = repo.strip_suffix(".git").unwrap_or(repo);
-    if owner.is_empty() || repo.is_empty() {
-        return None;
-    }
-    Some((owner.to_string(), repo.to_string()))
-}
-
-/// Infer a remote logo URL from repo/homepage metadata (GitHub owner avatar).
-///
-/// v1: GitHub `repo_url` only — homepage favicon inference is intentionally omitted.
-pub fn infer_logo_url(repo_url: Option<&str>, _homepage: Option<&str>) -> Option<String> {
-    if let Some(url) = repo_url {
-        if let Some((owner, _repo)) = parse_github_owner_repo(url) {
-            if is_valid_github_owner(&owner) {
-                return crate::models::tool::sanitize_logo_url(Some(format!(
-                    "https://avatars.githubusercontent.com/{owner}"
-                )));
-            }
-        }
-    }
-    None
+/// Infer a remote logo URL from repo/homepage metadata.
+pub fn infer_logo_url(repo_url: Option<&str>, homepage: Option<&str>) -> Option<String> {
+    crate::models::tool::github_owner_avatar_url(repo_url)
+        .or_else(|| crate::models::tool::homepage_favicon_url(homepage))
 }
 
 /// Generate a base slug from a tool name (kebab-case, trimmed).
@@ -824,7 +798,10 @@ mod tests {
             infer_logo_url(Some("http://github.com/org/repo"), None),
             Some("https://avatars.githubusercontent.com/org".into())
         );
-        assert_eq!(infer_logo_url(None, Some("https://gobob.xyz")), None);
+        assert_eq!(
+            infer_logo_url(None, Some("https://gobob.xyz")),
+            Some("https://gobob.xyz/favicon.ico".into())
+        );
         assert_eq!(
             infer_logo_url(Some("https://gitlab.com/foo/bar"), None),
             None

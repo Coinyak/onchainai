@@ -3,6 +3,10 @@
 > Crypto tools, unified. Discover, install, and share MCP, CLI, SDK, API, x402, RWA, and AI agent tools — all in one place.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Rust](https://img.shields.io/badge/Rust-Leptos%20SSR-orange.svg)](https://leptos.dev)
+[![Live](https://img.shields.io/badge/Live-onchain--ai.xyz-2ea44f.svg)](https://www.onchain-ai.xyz)
+
+**Live: [onchain-ai.xyz](https://www.onchain-ai.xyz)**
 
 ## Why?
 
@@ -25,10 +29,12 @@ Rust single binary: Leptos SSR + Axum + rmcp + sqlx + tokio-cron-scheduler. Depl
 ## Quick Start
 
 ```bash
-git clone https://github.com/love/onchainai
+git clone https://github.com/hoyeon4315-cpu/onchainai
 cd onchainai
 cp .env.example .env
 # Fill in .env (Supabase URL, keys, GitHub OAuth, JWT secret)
+./scripts/install-agent-hooks.sh
+# Optional session bootstrap: ./scripts/agent-start.sh   # once: Git pre-commit blocks stale UI commits
 docker build -t onchainai .
 docker run -p 3000:3000 onchainai
 ```
@@ -36,9 +42,14 @@ docker run -p 3000:3000 onchainai
 Or run directly:
 
 ```bash
-cargo run
+cargo run --features ssr
 # Server at http://localhost:3000
 ```
+
+> Note: the crate's default feature set is empty so the server deps don't leak
+> into the WASM client build. Plain `cargo` commands that touch server code need
+> `--features ssr`. `cargo leptos build` reads features from `Cargo.toml` and is
+> unaffected.
 
 ## Design Docs
 

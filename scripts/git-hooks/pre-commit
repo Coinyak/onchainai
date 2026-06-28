@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# Universal enforcement: any editor/agent (Codex, Copilot, Droid, Cursor, …).
+# Blocks commit when staged UI sources are newer than the built WASM bundle.
+set -euo pipefail
+
+ROOT="$(git rev-parse --show-toplevel)"
+cd "$ROOT"
+exec ./scripts/ui-staleness-check.sh --staged
