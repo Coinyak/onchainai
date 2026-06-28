@@ -38,7 +38,7 @@ check_chain_markup() {
 }
 
 home_body="$(check_get "/")"
-grep -q 'sidebar-brand' "$home_body" || fail "GET / missing sidebar-brand markup"
+grep -q 'site-top-nav' "$home_body" || fail "GET / missing site-top-nav markup"
 grep -q 'auth-sign-in' "$home_body" || fail "GET / missing auth-sign-in markup"
 grep -q '/auth/github' "$home_body" || fail "GET / missing GitHub sign-in link"
 grep -q 'Connect Wallet' "$home_body" || fail "GET / missing wallet sign-in control"

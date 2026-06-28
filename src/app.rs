@@ -4,6 +4,7 @@
 //! components for all routes required by the website-core milestone.
 
 use crate::components::site_shell::SiteShell;
+use crate::components::top_nav::TopNav;
 use crate::pages::{
     AdminCategoriesPage, AdminCommentsPage, AdminCrawlerPage, AdminDashboardPage,
     AdminFeaturedPage, AdminSettingsPage, AdminToolsPage, AdminUsersPage, CategoryPage, HomePage,
@@ -71,7 +72,9 @@ pub fn App() -> impl IntoView {
         <Meta name="color-scheme" content="light only"/>
 
         <Router>
-            <main class="min-h-screen">
+            <div class="site-app-shell min-h-screen flex flex-col">
+                <TopNav/>
+                <main class="site-page-body flex-1 min-h-0 flex flex-col">
                 <FlatRoutes fallback=|| view! { <NotFoundPage/> }.into_view()>
                     <Route path=StaticSegment("") view=HomePage/>
                     <Route path=StaticSegment("tools") view=ToolsListPage/>
@@ -90,7 +93,8 @@ pub fn App() -> impl IntoView {
                     <Route path=(StaticSegment("admin"), StaticSegment("users")) view=AdminUsersPage/>
                     <Route path=(StaticSegment("admin"), StaticSegment("comments")) view=AdminCommentsPage/>
                 </FlatRoutes>
-            </main>
+                </main>
+            </div>
         </Router>
     }
 }

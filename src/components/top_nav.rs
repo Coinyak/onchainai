@@ -1,4 +1,4 @@
-//! Sticky top navigation — UI spec: Logo + Submit + GitHub (+ auth session).
+//! Sticky top navigation — logo left, Submit + GitHub + auth on the right.
 
 use crate::auth::session::SessionUser;
 use crate::components::login_form::WalletConnectButton;
@@ -12,7 +12,7 @@ const AUTH_BTN_CLASS: &str = "inline-flex items-center justify-center h-8 px-3 r
 #[component]
 fn AuthNav(
     user_res: Result<Option<SessionUser>, leptos::server_fn::ServerFnError>,
-    #[prop(default = false)] inline: bool,
+    #[prop(default = true)] inline: bool,
 ) -> impl IntoView {
     let layout_class = if inline {
         "flex items-center gap-2"
@@ -56,7 +56,8 @@ fn AuthNav(
         Ok(None) | Err(_) => view! {
             <div class=layout_class data-testid="auth-sign-in">
                 <a href="/auth/github" class=AUTH_BTN_CLASS>
-                    "Continue with GitHub"
+                    <span class="sm:hidden">"GitHub"</span>
+                    <span class="hidden sm:inline">"Continue with GitHub"</span>
                 </a>
                 <WalletConnectButton
                     label="Connect Wallet"
@@ -68,48 +69,12 @@ fn AuthNav(
     }
 }
 
-/// Site logo + primary actions — rendered at the top of the left sidebar.
-#[component]
-pub fn SidebarBrand() -> impl IntoView {
-    view! {
-        <div class="sidebar-brand">
-            <a
-                href="/"
-                class="sidebar-brand-logo text-[16px] font-semibold tracking-tight text-[#1A1A1A] no-underline"
-            >
-                "OnchainAI"
-            </a>
-            <nav class="sidebar-brand-nav">
-                <a
-                    href="/submit"
-                    class="sidebar-brand-submit inline-flex items-center justify-center h-8 px-3 rounded-lg bg-[#E76F00] text-white text-[13px] font-medium no-underline hover:bg-[#D96400]"
-                >
-                    "Submit"
-                </a>
-                <a
-                    href=GITHUB_REPO
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    class="sidebar-brand-link text-[#6B6B6B] hover:text-[#1A1A1A] no-underline text-[13px]"
-                >
-                    "GitHub"
-                </a>
-                <Await future=async move { get_current_user().await } let:user_res blocking=true>
-                    <div class="sidebar-brand-auth">
-                        <AuthNav user_res=user_res.clone() inline=false/>
-                    </div>
-                </Await>
-            </nav>
-        </div>
-    }
-}
-
-/// Legacy horizontal header — unused; site uses `SidebarBrand` in the left sidebar.
+/// Site-wide sticky header — logo left, primary actions + auth on the right.
 #[component]
 pub fn TopNav() -> impl IntoView {
     view! {
-        <header class="sticky top-0 z-50 bg-white border-b border-[#E5E5E5]">
-            <div class="max-w-[1200px] mx-auto px-4 md:px-6 h-12 md:h-14 flex items-center justify-between">
+        <header class="site-top-nav bg-white border-b border-[#E5E5E5]">
+            <div class="site-top-nav-inner max-w-[1200px] mx-auto px-4 md:px-6 h-12 md:h-14 flex items-center justify-between">
                 <a href="/" class="text-[16px] font-semibold tracking-tight text-[#1A1A1A] no-underline">
                     "OnchainAI"
                 </a>
@@ -124,7 +89,7 @@ pub fn TopNav() -> impl IntoView {
                         href=GITHUB_REPO
                         target="_blank"
                         rel="noopener noreferrer"
-                        class="hidden sm:inline text-[#6B6B6B] hover:text-[#1A1A1A] no-underline"
+                        class="hidden sm:inline text-[#6B6B6B] hover:text-[#1A1A1A] no-underline text-[13px]"
                     >
                         "GitHub"
                     </a>

@@ -155,7 +155,7 @@ pub async fn oauth_callback(
     headers_in: HeaderMap,
 ) -> Result<Response, StatusCode> {
     if query.error.is_some() {
-        return Ok(Redirect::to("/?auth=error").into_response());
+        return Ok(Redirect::to("/login?auth=github_denied").into_response());
     }
 
     if let Some(token_hash) = query.token_hash.filter(|t| !t.is_empty()) {
@@ -163,23 +163,33 @@ pub async fn oauth_callback(
             .await;
     }
 
-    let code = query.code.ok_or(StatusCode::BAD_REQUEST)?;
-    let state_param = query.state.ok_or(StatusCode::BAD_REQUEST)?;
+    let Some(code) = query.code.filter(|c| !c.is_empty()) else {
+        return Ok(Redirect::to("/login?auth=github_missing_code").into_response());
+    };
+    let Some(state_param) = query.state.filter(|s| !s.is_empty()) else {
+        return Ok(Redirect::to("/login?auth=github_missing_state").into_response());
+    };
     let config = &state.config;
 
-    let cookie_header = headers_in
-        .get(header::COOKIE)
-        .and_then(|v| v.to_str().ok())
-        .ok_or(StatusCode::BAD_REQUEST)?;
-    let cookie_state =
-        cookie_value(cookie_header, GITHUB_STATE_COOKIE).ok_or(StatusCode::BAD_REQUEST)?;
-    if cookie_state != state_param {
-        return Err(StatusCode::BAD_REQUEST);
+    let cookie_header = headers_in.get(header::COOKIE).and_then(|v| v.to_str().ok());
+    let cookie_state = cookie_header.and_then(|h| cookie_value(h, GITHUB_STATE_COOKIE));
+    if cookie_state != Some(state_param.as_str()) {
+        return Ok(Redirect::to("/login?auth=github_state_mismatch").into_response());
     }
 
-    let token = exchange_github_code(config, &code).await?;
-    let github_user = fetch_github_user(&token.access_token).await?;
-    let user_id = ensure_github_profile(
+    let token = match exchange_github_code(config, &code).await {
+        Ok(token) => token,
+        Err(_) => {
+            return Ok(Redirect::to("/login?auth=github_token_exchange").into_response());
+        }
+    };
+    let github_user = match fetch_github_user(&token.access_token).await {
+        Ok(user) => user,
+        Err(_) => {
+            return Ok(Redirect::to("/login?auth=github_user_fetch").into_response());
+        }
+    };
+    let user_id = match ensure_github_profile(
         &state.pool,
         &state.config,
         github_user.id,
@@ -187,7 +197,12 @@ pub async fn oauth_callback(
         github_user.avatar_url.as_deref(),
     )
     .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    {
+        Ok(id) => id,
+        Err(_) => {
+            return Ok(Redirect::to("/login?auth=github_profile").into_response());
+        }
+    };
 
     let access_token = issue_access_token(
         user_id,

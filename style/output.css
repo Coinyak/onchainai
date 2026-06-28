@@ -133,6 +133,8 @@ body {
 .h-14 { height: 56px; }
 .w-full { width: 100%; }
 .flex { display: flex; }
+.flex-col { flex-direction: column; }
+.min-h-0 { min-height: 0; }
 .hidden { display: none; }
 .grid { display: grid; }
 .gap-2 { gap: 8px; }
@@ -430,12 +432,22 @@ body {
 
 .search-input:focus { border-color: #E76F00; outline: 2px solid #E76F00; outline-offset: 0; }
 
-/* Site + tools layout — full-height left sidebar */
+/* Site shell — header full width, sidebar + main directly below */
+:root {
+  --site-header-height: 48px;
+}
+@media (min-width: 768px) {
+  :root {
+    --site-header-height: 56px;
+  }
+}
+
 .site-layout,
 .tools-layout {
   display: grid;
   grid-template-columns: 1fr;
-  min-height: 100vh;
+  min-height: 0;
+  flex: 1;
   gap: 0;
 }
 .site-main,
@@ -458,10 +470,10 @@ body {
 .site-sidebar-chrome {
   background: #FFFFFF;
   position: sticky;
-  top: 0;
+  top: var(--site-header-height);
   align-self: start;
-  height: 100vh;
-  max-height: 100vh;
+  height: calc(100vh - var(--site-header-height));
+  max-height: calc(100vh - var(--site-header-height));
   overflow-y: auto;
   width: 240px;
   flex-shrink: 0;
@@ -470,39 +482,46 @@ body {
   padding: 16px 12px;
   z-index: 80;
 }
-.sidebar-brand {
-  margin-bottom: 16px;
-  padding-bottom: 16px;
-  border-bottom: 1px solid #E5E5E5;
-}
-.sidebar-brand-logo {
-  display: block;
-  margin-bottom: 12px;
-}
-.sidebar-brand-nav {
+.site-app-shell {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
-  gap: 8px;
+  min-height: 100vh;
 }
-.sidebar-brand-auth {
-  font-size: 13px;
+.site-page-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.site-top-nav {
+  flex-shrink: 0;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  width: 100%;
+}
+.site-content-shell {
+  min-height: 0;
+}
+.site-main-full {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 24px 16px 32px;
+}
+@media (min-width: 768px) {
+  .site-main-full {
+    padding: 32px 24px 48px;
+  }
 }
 .tools-sidebar-collapsed {
   width: 40px;
   padding: 8px 4px;
   overflow: hidden;
 }
-.tools-sidebar-collapsed .sidebar-brand-nav,
 .tools-sidebar-collapsed .sidebar-title-text,
 .tools-sidebar-collapsed .sidebar-clear,
 .tools-sidebar-collapsed .sidebar-body {
   display: none;
-}
-.tools-sidebar-collapsed .sidebar-brand {
-  margin-bottom: 8px;
-  padding-bottom: 8px;
-  border-bottom: 0;
 }
 .sidebar-rail-icons {
   display: none;
@@ -578,7 +597,7 @@ body {
   display: flex; flex-wrap: wrap; gap: 12px; align-items: center;
   padding: 12px 0; border-bottom: 1px solid #E5E5E5; margin-bottom: 16px;
 }
-.sticky-toolbar { position: sticky; top: 0; background: #FFFFFF; z-index: 90; }
+.sticky-toolbar { position: sticky; top: var(--site-header-height); background: #FFFFFF; z-index: 90; }
 .toolbar-search input {
   height: 40px; padding: 0 12px; border: 1px solid #E5E5E5; border-radius: 8px;
   font-size: 14px; min-width: 200px;
@@ -644,8 +663,9 @@ body {
   .site-sidebar-chrome {
     order: 1;
     align-self: start;
-    height: 100vh;
-    max-height: 100vh;
+    top: var(--site-header-height);
+    height: calc(100vh - var(--site-header-height));
+    max-height: calc(100vh - var(--site-header-height));
     overflow-y: auto;
     border-right: 1px solid #E5E5E5;
     border-bottom: 0;
@@ -675,9 +695,9 @@ body {
     align-items: center;
     gap: 8px 12px;
   }
-  .sidebar-header { margin-bottom: 8px; }
+  .sidebar-controls { margin-bottom: 8px; }
   .sidebar-section { margin-bottom: 12px; padding-bottom: 8px; }
-  .sticky-toolbar { top: 0; }
+  .sticky-toolbar { top: var(--site-header-height); }
   .tools-toolbar { gap: 8px; padding: 10px 0; margin-bottom: 12px; }
   .toolbar-sort { width: 100%; order: 2; overflow-x: auto; white-space: nowrap; }
   .tool-count { width: 100%; margin-left: 0; order: 3; }
@@ -691,8 +711,13 @@ body {
 }
 
 /* Sidebar extensions */
-.sidebar-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
-.sidebar-heading { font-size: 14px; font-weight: 600; }
+.sidebar-controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
 .sidebar-clear { font-size: 12px; color: #E76F00; text-decoration: none; }
 .sidebar-section { margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid #E5E5E5; }
 .sidebar-dot { width: 6px; height: 6px; border-radius: 50%; background: #E76F00; }

@@ -1,6 +1,5 @@
 //! Admin layout — left sidebar with brand + operator navigation.
 
-use crate::components::top_nav::SidebarBrand;
 use leptos::prelude::*;
 use leptos_router::hooks::use_location;
 
@@ -72,7 +71,6 @@ pub fn AdminShell(children: Children) -> impl IntoView {
     view! {
         <div class="site-layout">
             <aside class="tools-sidebar site-sidebar-chrome">
-                <SidebarBrand/>
                 <nav class="admin-nav" aria-label="Admin navigation">
                     <div class="admin-nav-heading">"Admin"</div>
                     <ul class="sidebar-list admin-nav-list">

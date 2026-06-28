@@ -74,14 +74,14 @@ await clearSidebarStorage(page);
 
 await page.goto(`${base}/`, { waitUntil: "networkidle" });
 const homeLayout = await page.evaluate(() => ({
-  hasSidebarBrand: !!document.querySelector(".sidebar-brand"),
+  hasTopNav: !!document.querySelector(".site-top-nav"),
   hasCategoryGrid: !!document.querySelector(".category-grid"),
   hasAuthSignIn: !!document.querySelector('[data-testid="auth-sign-in"]'),
   hasGitHubSignIn: !!document.querySelector('a[href="/auth/github"]'),
   hasWalletSignIn: !!document.querySelector('[data-testid="auth-sign-in"] button'),
 }));
-if (!homeLayout.hasSidebarBrand) {
-  errors.push("layout:home-missing-sidebar-brand");
+if (!homeLayout.hasTopNav) {
+  errors.push("layout:home-missing-top-nav");
 }
 if (homeLayout.hasCategoryGrid) {
   errors.push("layout:home-unexpected-category-grid");

@@ -26,7 +26,7 @@ const results = [];
 const gating = new Set([
   "home-load",
   "no-deser-error-home",
-  "sidebar-brand",
+  "site-top-nav",
   "sidebar-filter-nav",
   "sidebar-filter-click",
   "tools-load",
@@ -94,7 +94,7 @@ try {
 
   const bodyText = await visiblePageText(page);
   log("no-deser-error-home", !/error deserializing|missing field filters/i.test(bodyText || ""));
-  log("sidebar-brand", !!(await page.$(".sidebar-brand")));
+  log("site-top-nav", !!(await page.$(".site-top-nav")));
 
   // Gating: direct navigation tests filter outcome without sidebar visibility races.
   await page.goto(`${base}/tools?function=bridge`, { waitUntil: "networkidle" });

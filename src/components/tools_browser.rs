@@ -4,7 +4,7 @@
 use crate::components::{
     bottom_sheet::BottomSheet, chain_strip::ChainStrip, empty_state::EmptyState,
     error_state::ErrorState, preview_panel::PreviewPanel, search_bar::ToolbarSearch,
-    sidebar::Sidebar, skeleton::ToolListSkeleton, tool_card::ToolCard, top_nav::SidebarBrand,
+    sidebar::Sidebar, skeleton::ToolListSkeleton, tool_card::ToolCard,
 };
 use crate::filter_query::{build_tool_filters, describe_active_filters, ActiveFiltersSummary};
 use crate::models::tool::parse_page_value;
@@ -481,7 +481,6 @@ pub fn ToolsBrowser(
         <div class="tools-layout" data-tools-browser="">
             <Suspense fallback=move || view! {
                 <aside class="tools-sidebar site-sidebar-chrome">
-                    <SidebarBrand/>
                     <p class="sidebar-empty">"Loading filters…"</p>
                 </aside>
                 <div class="tools-main">
@@ -500,7 +499,6 @@ pub fn ToolsBrowser(
                     match (page_state, browser_data) {
                         (Some(Err(e)), _) => view! {
                             <aside class="tools-sidebar site-sidebar-chrome">
-                                <SidebarBrand/>
                                 <p class="sidebar-empty">"Loading filters…"</p>
                             </aside>
                             <div class="tools-main">
@@ -643,7 +641,6 @@ pub fn ToolsBrowser(
                         }
                         _ => view! {
                             <aside class="tools-sidebar site-sidebar-chrome">
-                                <SidebarBrand/>
                                 <p class="sidebar-empty">"Loading filters…"</p>
                             </aside>
                             <div class="tools-main">

@@ -7,7 +7,6 @@ use crate::client_storage::{
 };
 use crate::client_storage::{write_sidebar_collapsed, write_sidebar_sections};
 use crate::components::tools_browser::BrowserBase;
-use crate::components::top_nav::SidebarBrand;
 use crate::filter_query::{clear_axis, parse_multi, toggle_multi};
 use crate::models::Category;
 use leptos::prelude::*;
@@ -252,8 +251,7 @@ pub fn Sidebar(
             data-sidebar-storage-loaded=move || sidebar_storage_loaded.get().then_some("")
             aria-busy=move || (!sidebar_storage_loaded.get()).then_some("true")
         >
-            <SidebarBrand/>
-            <div class="sidebar-header">
+            <div class="sidebar-controls">
                 <button
                     type="button"
                     class="sidebar-rail-toggle"
@@ -263,7 +261,6 @@ pub fn Sidebar(
                 >
                     "☰"
                 </button>
-                <span class="sidebar-heading sidebar-title-text">"Filters"</span>
                 <a href=clear_href.clone() class="sidebar-clear sidebar-title-text">"Clear"</a>
             </div>
 
