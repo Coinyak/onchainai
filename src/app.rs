@@ -17,6 +17,79 @@ use leptos_router::{
     components::{FlatRoutes, Route, Router},
     ParamSegment, StaticSegment,
 };
+use std::path::Path;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct HydrationAssetUrls {
+    js: String,
+    wasm: String,
+}
+
+fn file_mtime_secs(path: impl AsRef<Path>) -> Option<u64> {
+    std::fs::metadata(path)
+        .ok()
+        .and_then(|m| m.modified().ok())
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| d.as_secs())
+}
+
+fn versioned_url(path: String, version: Option<u64>) -> String {
+    match version {
+        Some(v) => format!("{path}?v={v}"),
+        None => path,
+    }
+}
+
+fn hydration_asset_urls(
+    pkg_path: &str,
+    output_name: &str,
+    version: Option<u64>,
+) -> HydrationAssetUrls {
+    let pkg_path = pkg_path.trim_end_matches('/');
+    let base = if pkg_path.starts_with('/') {
+        pkg_path.to_string()
+    } else {
+        format!("/{pkg_path}")
+    };
+
+    HydrationAssetUrls {
+        js: versioned_url(format!("{base}/{output_name}.js"), version),
+        wasm: versioned_url(format!("{base}/{output_name}.wasm"), version),
+    }
+}
+
+fn hydration_bundle_version(options: &LeptosOptions) -> Option<u64> {
+    let site_root = Path::new(&*options.site_root);
+    let pkg_dir = site_root.join(&*options.site_pkg_dir);
+    let js = pkg_dir.join(format!("{}.js", options.output_name));
+    let wasm = pkg_dir.join(format!("{}.wasm", options.output_name));
+
+    [file_mtime_secs(js), file_mtime_secs(wasm)]
+        .into_iter()
+        .flatten()
+        .max()
+}
+
+#[component]
+fn CacheBustedHydrationScripts(options: LeptosOptions, version: Option<u64>) -> impl IntoView {
+    let urls = hydration_asset_urls(&options.site_pkg_dir, &options.output_name, version);
+    let script = format!(
+        "import({:?}).then((mod) => mod.default({{ module_or_path: {:?} }}).then(() => {{ mod.hydrate(); }})).catch((err) => {{ const message = err && (err.message || String(err)); if (!/aborted/i.test(message)) {{ console.error('OnchainAI hydration failed', err); }} }});",
+        urls.js, urls.wasm
+    );
+
+    view! {
+        <link rel="modulepreload" href=urls.js.clone()/>
+        <link
+            rel="preload"
+            href=urls.wasm
+            r#as="fetch"
+            r#type="application/wasm"
+            crossorigin=""
+        />
+        <script type="module">{script}</script>
+    }
+}
 
 /// Renders the application shell including `<html>`, `<head>`, and `<body>`.
 ///
@@ -37,12 +110,10 @@ pub fn shell(options: LeptosOptions) -> impl IntoView {
         .unwrap_or(false);
     let options_reload = options.clone();
     let options_hydrate = options.clone();
+    let hydration_version = hydration_bundle_version(&options);
     // Safari aggressively caches /pkg/*; bust CSS when the served stylesheet changes.
-    let css_href = std::fs::metadata("style/output.css")
-        .ok()
-        .and_then(|m| m.modified().ok())
-        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-        .map(|d| format!("/pkg/onchainai.css?v={}", d.as_secs()))
+    let css_href = file_mtime_secs("style/output.css")
+        .map(|d| format!("/pkg/onchainai.css?v={d}"))
         .unwrap_or_else(|| "/pkg/onchainai.css".to_string());
 
     view! {
@@ -53,7 +124,12 @@ pub fn shell(options: LeptosOptions) -> impl IntoView {
                 <meta name="viewport" content="width=device-width, initial-scale=1"/>
                 <MetaTags/>
                 {enable_reload.then(|| view! { <AutoReload options=options_reload.clone()/> })}
-                {enable_hydration.then(|| view! { <HydrationScripts options=options_hydrate.clone()/> })}
+                {enable_hydration.then(|| view! {
+                    <CacheBustedHydrationScripts
+                        options=options_hydrate.clone()
+                        version=hydration_version
+                    />
+                })}
                 <Stylesheet id="leptos" href=css_href/>
                 <Link rel="preconnect" href="https://fonts.googleapis.com"/>
                 <Link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous"/>
@@ -146,5 +222,18 @@ fn NotFoundPage() -> impl IntoView {
             <p class="text-[#6B6B6B]">"Page not found."</p>
         </div>
         </SiteShell>
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::hydration_asset_urls;
+
+    #[test]
+    fn hydration_assets_include_cache_buster_query() {
+        let urls = hydration_asset_urls("pkg", "onchainai", Some(12345));
+
+        assert_eq!(urls.js, "/pkg/onchainai.js?v=12345");
+        assert_eq!(urls.wasm, "/pkg/onchainai.wasm?v=12345");
     }
 }

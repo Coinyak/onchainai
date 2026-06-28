@@ -1,12 +1,13 @@
 //! Stripe-style tool card for list views — badges, bookmark, upvote.
 
+use crate::auth::session::has_access_token_cookie;
 use crate::chains::{chain_fallback_label, chain_tags_for_tool, ChainTagView};
 use crate::components::chain_logo::ChainLogo;
 use crate::components::copy_button::CopyButton;
 use crate::components::login_modal::LoginModal;
 use crate::components::tool_logo::ToolLogo;
 use crate::models::Tool;
-use crate::server::functions::{get_current_user, is_bookmarked, set_bookmark};
+use crate::server::functions::{is_bookmarked, set_bookmark};
 use leptos::prelude::*;
 use leptos::task::spawn_local;
 
@@ -124,12 +125,13 @@ pub fn ToolCard(
     let starred = RwSignal::new(initially_starred);
 
     Effect::new(move |_| {
+        if !has_access_token_cookie() {
+            return;
+        }
         let slug_sync = slug_for_bookmark_sync.clone();
         spawn_local(async move {
-            if let Ok(Some(_)) = get_current_user().await {
-                if let Ok(bookmarked) = is_bookmarked(slug_sync).await {
-                    starred.set(bookmarked);
-                }
+            if let Ok(bookmarked) = is_bookmarked(slug_sync).await {
+                starred.set(bookmarked);
             }
         });
     });
@@ -214,20 +216,20 @@ pub fn ToolCard(
                     on:click=move |ev| {
                         ev.stop_propagation();
                         let slug_toggle = slug.clone();
+                        if !has_access_token_cookie() {
+                            show_login.set(true);
+                            return;
+                        }
                         spawn_local(async move {
-                            match get_current_user().await {
-                                Ok(Some(_)) => {
-                                    let want_starred = !starred.get_untracked();
-                                    if let Ok(now_starred) =
-                                        set_bookmark(slug_toggle, want_starred).await
-                                    {
-                                        starred.set(now_starred);
-                                        if let Some(callback) = on_bookmark_changed {
-                                            callback.run(now_starred);
-                                        }
+                            let want_starred = !starred.get_untracked();
+                            match set_bookmark(slug_toggle, want_starred).await {
+                                Ok(now_starred) => {
+                                    starred.set(now_starred);
+                                    if let Some(callback) = on_bookmark_changed {
+                                        callback.run(now_starred);
                                     }
                                 }
-                                _ => show_login.set(true),
+                                Err(_) => show_login.set(true),
                             }
                         });
                     }

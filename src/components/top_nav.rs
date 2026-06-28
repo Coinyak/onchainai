@@ -1,11 +1,10 @@
 //! Sticky top navigation — logo left, Submit + GitHub + auth on the right.
 
-use crate::auth::session::{has_access_token_cookie, SessionUser};
+use crate::auth::session::SessionUser;
 use crate::components::login_modal::LoginModal;
 use crate::models::tool::monogram_from_name;
 use crate::server::functions::get_current_user;
 use leptos::prelude::*;
-use leptos_router::hooks::use_location;
 
 const GITHUB_REPO: &str = "https://github.com/hoyeon4315-cpu/onchainai";
 
@@ -145,26 +144,10 @@ fn AuthNav(
 #[component]
 pub fn TopNav() -> impl IntoView {
     let show_login = RwSignal::new(false);
-    // TopNav lives above FlatRoutes and does not remount on client navigations.
-    // Re-fetch session when the pathname changes so OAuth redirects and SPA
-    // route changes reflect the current cookie-backed login state.
-    let location = use_location();
     // Blocking SSR keeps auth markup in the initial HTML so hydration matches WASM.
-    // Pathname in the source re-fetches after OAuth redirects and SPA navigations.
-    let user = Resource::new_blocking(
-        move || location.pathname.get(),
-        |_| async move { get_current_user().await },
-    );
-    // Sticky auth for pathname refetches — updated in Effect, not during render.
-    let cached_auth = RwSignal::<
-        Option<Result<Option<SessionUser>, leptos::server_fn::ServerFnError>>,
-    >::new(None);
-
-    Effect::new(move |_| {
-        if let Some(current) = user.get() {
-            cached_auth.set(Some(current));
-        }
-    });
+    // Login flows land via full-page redirects, so one auth fetch per shell load is enough.
+    let user = ArcOnceResource::new_blocking(async move { get_current_user().await });
+    let user_ready = user.ready();
 
     view! {
         <LoginModal show=show_login/>
@@ -185,18 +168,19 @@ pub fn TopNav() -> impl IntoView {
                     >
                         "GitHub"
                     </a>
-                    {move || {
-                        let user_res = match user.get() {
-                            Some(res) => res,
-                            None if has_access_token_cookie() => {
-                                cached_auth.get().unwrap_or(Ok(None))
-                            }
-                            None => Ok(None),
-                        };
+                    <Suspense fallback=move || {
                         view! {
-                            <AuthNav user_res=user_res show_login=show_login/>
+                            <AuthNav user_res=Ok(None) show_login=show_login/>
                         }
-                    }}
+                    }>
+                        {Suspend::new(async move {
+                            user_ready.await;
+                            let user_res = user.read_untracked().as_ref().cloned().unwrap_or(Ok(None));
+                            view! {
+                                <AuthNav user_res=user_res show_login=show_login/>
+                            }
+                        })}
+                    </Suspense>
                 </nav>
             </div>
         </header>
