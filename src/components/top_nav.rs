@@ -153,8 +153,15 @@ pub fn TopNav() -> impl IntoView {
         <LoginModal show=show_login/>
         <header class="site-top-nav">
             <div class="site-top-nav-inner">
-                <a href="/" class="site-top-nav-logo">
-                    "OnchainAI"
+                <a href="/" class="site-top-nav-logo" aria-label="OnchainAI home">
+                    <img
+                        class="site-top-nav-mark"
+                        src="/brand/onchainai-logo.png"
+                        alt=""
+                        width="34"
+                        height="34"
+                    />
+                    <span>"OnchainAI"</span>
                 </a>
                 <nav class="site-top-nav-actions" aria-label="Site actions">
                     <a href="/submit" class="site-top-nav-btn site-top-nav-btn-primary">

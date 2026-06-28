@@ -130,6 +130,10 @@ pub fn shell(options: LeptosOptions) -> impl IntoView {
                         version=hydration_version
                     />
                 })}
+                <Link rel="icon" href="/favicon.ico" sizes="any"/>
+                <Link rel="icon" type_="image/png" href="/brand/onchainai-icon-32.png" sizes="32x32"/>
+                <Link rel="apple-touch-icon" href="/brand/onchainai-icon-180.png" sizes="180x180"/>
+                <Link rel="manifest" href="/site.webmanifest"/>
                 <Stylesheet id="leptos" href=css_href/>
                 <Link rel="preconnect" href="https://fonts.googleapis.com"/>
                 <Link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous"/>
@@ -235,5 +239,17 @@ mod tests {
 
         assert_eq!(urls.js, "/pkg/onchainai.js?v=12345");
         assert_eq!(urls.wasm, "/pkg/onchainai.wasm?v=12345");
+    }
+
+    #[test]
+    fn official_brand_assets_exist() {
+        for path in [
+            "public/brand/onchainai-logo.svg",
+            "public/brand/onchainai-logo.png",
+            "public/brand/onchainai-icon-32.png",
+            "public/favicon.ico",
+        ] {
+            assert!(std::path::Path::new(path).exists(), "missing {path}");
+        }
     }
 }

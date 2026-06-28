@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="public/brand/onchainai-logo.png" alt="OnchainAI logo" width="96" />
+</p>
+
 # OnchainAI
 
 > Crypto tools, unified. Discover, install, and share MCP, CLI, SDK, API, x402, RWA, and AI agent tools — all in one place.

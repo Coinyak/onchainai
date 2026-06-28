@@ -232,6 +232,24 @@ pub fn build_app(pool: sqlx::PgPool, config: Config) -> axum::Router {
 
     let app_routes = Router::new()
         .route_service("/pkg/onchainai.css", css_service)
+        .route_service("/favicon.ico", ServeFile::new("public/favicon.ico"))
+        .route_service(
+            "/apple-touch-icon.png",
+            ServeFile::new("public/brand/onchainai-icon-180.png"),
+        )
+        .route_service(
+            "/site.webmanifest",
+            ServeFile::new("public/site.webmanifest"),
+        )
+        .nest_service(
+            "/brand",
+            ServiceBuilder::new()
+                .layer(SetResponseHeaderLayer::if_not_present(
+                    axum::http::header::CACHE_CONTROL,
+                    axum::http::HeaderValue::from_static("public, max-age=31536000, immutable"),
+                ))
+                .service(ServeDir::new("public/brand").append_index_html_on_directories(false)),
+        )
         .nest_service(
             "/chains",
             ServiceBuilder::new()

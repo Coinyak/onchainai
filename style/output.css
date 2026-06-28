@@ -620,11 +620,21 @@ body {
 }
 .site-top-nav-logo {
   flex-shrink: 0;
-  font-size: 16px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
   color: #1A1A1A;
   text-decoration: none;
+}
+.site-top-nav-mark {
+  width: 34px;
+  height: 34px;
+  display: block;
+  border-radius: 10px;
+  image-rendering: auto;
 }
 .site-top-nav-actions {
   display: flex;
@@ -1013,7 +1023,13 @@ body {
     gap: 8px;
   }
   .site-top-nav-logo {
-    font-size: 15px;
+    gap: 8px;
+    font-size: 18px;
+  }
+  .site-top-nav-mark {
+    width: 30px;
+    height: 30px;
+    border-radius: 9px;
   }
   .site-top-nav-actions {
     gap: 4px;
