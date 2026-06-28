@@ -140,7 +140,7 @@ fi
 
 echo "[4] 트랙3 검색 품질 Tier0"
 present A4-desc "search_tools description 보강" 'bridge USDC to Base|Uniswap MCP server' src/server/mcp.rs
-present A4-params "search_tools에 sort/cursor 파라미터" '"sort"|cursor' src/server/mcp.rs
+present A4-params "search_tools inputSchema에 sort/cursor 키" '"(sort|cursor|next_cursor)"[[:space:]]*:' src/server/mcp.rs
 manual A4-params2 "MCP tools/list POST로 search_tools inputSchema 확인"
 absent A4-rank "MCP 검색 정렬이 stars 고정 아님" 'ORDER BY stars DESC LIMIT 50' src/server/mcp.rs
 
