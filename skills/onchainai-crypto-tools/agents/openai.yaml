@@ -1,0 +1,4 @@
+interface:
+  display_name: "OnchainAI Crypto Tools"
+  short_description: "Find and vet crypto tools with OnchainAI."
+  default_prompt: "Find a safe crypto tool for this onchain task and explain install risk."

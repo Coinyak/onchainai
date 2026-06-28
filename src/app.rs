@@ -204,15 +204,13 @@ fn AboutPage() -> impl IntoView {
             <section id="submit" class="scroll-mt-20 border-t border-[#E5E5E5] pt-8">
                 <h2 class="text-[20px] font-semibold mb-3">"Submit a tool"</h2>
                 <p class="text-[#6B6B6B] text-[14px] leading-relaxed mb-4">
-                    "MVP does not include self-service registration yet. To list a tool, open a GitHub issue with the repo URL, install command, and supported chains."
+                    "Use the self-service submission flow to suggest a tool for operator review. Add the repo, install command, supported chains, and ownership context before it appears publicly."
                 </p>
                 <a
-                    href="https://github.com/hoyeon4315-cpu/onchainai/issues/new"
-                    target="_blank"
-                    rel="noopener noreferrer"
+                    href="/submit"
                     class="inline-flex items-center justify-center h-10 px-4 rounded-lg bg-[#E76F00] text-white text-[14px] font-medium no-underline hover:bg-[#D96400]"
                 >
-                    "Open GitHub issue →"
+                    "Go to Submit →"
                 </a>
             </section>
         </div>

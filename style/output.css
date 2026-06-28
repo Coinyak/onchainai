@@ -1322,8 +1322,17 @@ body {
   background: #FFFFFF; border: 1px solid #E5E5E5; border-radius: 6px;
   width: 32px; height: 32px; font-size: 16px; cursor: pointer;
   display: inline-flex; align-items: center; justify-content: center;
+  color: #1A1A1A;
 }
 .card-action-btn:hover { background: #FAFAFA; }
+.bookmark-icon {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+}
+.bookmark-icon.is-filled {
+  color: #E76F00;
+}
 @media (max-width: 767px) {
   .card-action-btn {
     min-width: 44px;
