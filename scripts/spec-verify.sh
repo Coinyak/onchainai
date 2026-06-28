@@ -71,8 +71,13 @@ manual() { local id="$1" d="$2"; want "$id" || return; man "$id" "$d"; }
 # curl_has ID "desc" URL PATTERN  (-L follow; SKIP on no network)
 curl_has() { local id="$1" d="$2" url="$3" pat="$4"; want "$id" || return
   command -v curl >/dev/null || { skip "$id" "$d (no curl)"; return; }
-  local body; body="$(curl -fsS -L --max-time 15 "$url" 2>/dev/null)"
-  [ -z "$body" ] && { skip "$id" "$d (무응답/네트워크)"; return; }
+  local resp rc status body
+  resp="$(curl -sS -L --max-time 15 -w '\n%{http_code}' "$url" 2>/dev/null)"; rc=$?
+  [ $rc -ne 0 ] && { skip "$id" "$d (무응답/네트워크)"; return; }
+  status="${resp##*$'\n'}"
+  body="${resp%$'\n'*}"
+  [[ "$status" =~ ^2[0-9][0-9]$ ]] || { no "$id" "$d (HTTP ${status:-unknown})"; return; }
+  [ -z "$body" ] && { no "$id" "$d (빈 응답)"; return; }
   printf '%s' "$body" | grep -Eq -- "$pat" && ok "$id" "$d" || no "$id" "$d"
 }
 # curl_loc_has ID "desc" URL PATTERN  -> PASS if the redirect Location header matches (no -L)
