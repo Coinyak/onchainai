@@ -92,7 +92,7 @@ fn DashboardContent(snapshot: PublicDashboardSnapshot) -> impl IntoView {
                 <MetricTile label="CLI" value=metrics.cli_tools href="/tools?type=cli"/>
                 <MetricTile label="SDK" value=metrics.sdk_tools href="/tools?type=sdk"/>
                 <MetricTile label="API" value=metrics.api_tools href="/tools?type=api"/>
-                <MetricTile label="x402" value=metrics.x402_tools href="/tools?q=x402"/>
+                <MetricTile label="x402" value=metrics.x402_tools href="/tools?pricing=x402"/>
                 <MetricTile label="Official" value=metrics.official_tools href="/tools?status=official"/>
                 <MetricTile label="Verified" value=metrics.verified_tools href="/tools?status=verified"/>
                 <MetricTile label="Updated 30d" value=metrics.updated_recently href="/tools?sort=new"/>

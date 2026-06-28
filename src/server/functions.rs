@@ -868,6 +868,57 @@ pub struct ToolkitExportPayload {
     pub body: String,
 }
 
+/// Public-safe tool shape for JSON export — omits internal ids and operator fields.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct ToolkitExportTool {
+    pub slug: String,
+    pub name: String,
+    pub description: Option<String>,
+    pub function: String,
+    #[serde(rename = "type")]
+    pub tool_type: String,
+    pub chains: Vec<String>,
+    pub status: String,
+    pub official_team: Option<String>,
+    pub pricing: String,
+    pub x402_price: Option<String>,
+    pub install_command: Option<String>,
+    pub safe_copy_command: Option<String>,
+    pub mcp_endpoint: Option<String>,
+    pub repo_url: Option<String>,
+    pub homepage: Option<String>,
+    pub npm_package: Option<String>,
+    pub license: Option<String>,
+    pub stars: i32,
+    pub claim_state: String,
+    pub install_risk_level: String,
+}
+
+fn tool_to_toolkit_export(tool: &Tool) -> ToolkitExportTool {
+    ToolkitExportTool {
+        slug: tool.slug.clone(),
+        name: tool.name.clone(),
+        description: tool.description.clone(),
+        function: tool.function.clone(),
+        tool_type: tool.tool_type.clone(),
+        chains: tool.chains.clone(),
+        status: tool.status.clone(),
+        official_team: tool.official_team.clone(),
+        pricing: tool.pricing.clone(),
+        x402_price: tool.x402_price.clone(),
+        install_command: tool.install_command.clone(),
+        safe_copy_command: tool.safe_copy_command.clone(),
+        mcp_endpoint: tool.mcp_endpoint.clone(),
+        repo_url: tool.repo_url.clone(),
+        homepage: tool.homepage.clone(),
+        npm_package: tool.npm_package.clone(),
+        license: tool.license.clone(),
+        stars: tool.stars,
+        claim_state: tool.claim_state.clone(),
+        install_risk_level: tool.install_risk_level.clone(),
+    }
+}
+
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct MyToolkitPayload {
     pub total: i64,
@@ -1069,7 +1120,7 @@ async fn fetch_dashboard_metrics(pool: &sqlx::PgPool) -> Result<DashboardMetrics
             WHERE type = 'x402' OR pricing = 'x402' OR x402_price IS NOT NULL
           )::bigint,
           COUNT(*) FILTER (WHERE status = 'official')::bigint,
-          COUNT(*) FILTER (WHERE status IN ('verified', 'official'))::bigint,
+          COUNT(*) FILTER (WHERE status = 'verified')::bigint,
           COUNT(*) FILTER (WHERE updated_at >= now() - interval '30 days')::bigint
         FROM tools
         WHERE {TOOLS_APPROVED_WHERE}
@@ -1204,7 +1255,9 @@ fn toolkit_markdown_for_tools(tools: &[Tool]) -> String {
 pub fn build_toolkit_payload(tools: Vec<Tool>) -> Result<MyToolkitPayload, ServerFnError> {
     let tools = sanitize_toolkit_tools(tools);
     let markdown_body = toolkit_markdown_for_tools(&tools);
-    let json_body = serde_json::to_string_pretty(&tools)
+    let export_tools: Vec<ToolkitExportTool> =
+        tools.iter().map(tool_to_toolkit_export).collect();
+    let json_body = serde_json::to_string_pretty(&export_tools)
         .map_err(|e| ServerFnError::new(format!("failed to serialize toolkit: {e}")))?;
 
     Ok(MyToolkitPayload {
@@ -2280,6 +2333,56 @@ pub async fn is_bookmarked(slug: String) -> Result<bool, ServerFnError> {
     .map_err(|e| ServerFnError::new(format!("bookmark lookup failed: {e}")))?;
 
     Ok(bookmarked > 0)
+}
+
+/// Set bookmark state on a tool (authenticated, idempotent).
+#[server(SetBookmark, "/api")]
+pub async fn set_bookmark(slug: String, starred: bool) -> Result<bool, ServerFnError> {
+    let (parts, pool, config) = request_context()?;
+    let user = require_user(&parts, &pool, &config.jwt_secret, &config.jwt_issuer()).await?;
+    if let Err(limit) = check_user_rate_limit(user.id, UserRateLimitAction::ToggleBookmark) {
+        return Err(ServerFnError::new(limit.to_string()));
+    }
+
+    let tool_id = sqlx::query_scalar::<_, Uuid>(&format!(
+        "SELECT id FROM tools WHERE slug = $1 AND {TOOLS_APPROVED_WHERE}"
+    ))
+    .bind(&slug)
+    .fetch_optional(&pool)
+    .await
+    .map_err(|e| ServerFnError::new(format!("failed to resolve tool: {e}")))?
+    .ok_or_else(|| ServerFnError::new(format!("tool not found: {slug}")))?;
+
+    let exists = sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) FROM bookmarks WHERE tool_id = $1 AND user_id = $2",
+    )
+    .bind(tool_id)
+    .bind(user.id)
+    .fetch_one(&pool)
+    .await
+    .map_err(|e| ServerFnError::new(format!("bookmark lookup failed: {e}")))?;
+
+    if starred {
+        if exists == 0 {
+            sqlx::query("INSERT INTO bookmarks (tool_id, user_id) VALUES ($1, $2)")
+                .bind(tool_id)
+                .bind(user.id)
+                .execute(&pool)
+                .await
+                .map_err(|e| ServerFnError::new(format!("failed to add bookmark: {e}")))?;
+        }
+        Ok(true)
+    } else if exists > 0 {
+        sqlx::query("DELETE FROM bookmarks WHERE tool_id = $1 AND user_id = $2")
+            .bind(tool_id)
+            .bind(user.id)
+            .execute(&pool)
+            .await
+            .map_err(|e| ServerFnError::new(format!("failed to remove bookmark: {e}")))?;
+        Ok(false)
+    } else {
+        Ok(false)
+    }
 }
 
 /// Toggle bookmark on a tool (authenticated).
@@ -4221,6 +4324,7 @@ mod tests {
         tool.install_command = Some("npx bridge-mcp".into());
         tool.referral_payout_address = Some("0xoperatorpayout".into());
         tool.x402_pay_to_address = Some("0xproviderpayto".into());
+        tool.submitted_by = Some(Uuid::new_v4());
 
         let payload = build_toolkit_payload(vec![tool]).expect("toolkit payload");
 
@@ -4231,6 +4335,14 @@ mod tests {
         assert!(payload.markdown_export.body.contains("npx bridge-mcp"));
         assert!(!payload.markdown_export.body.contains("0xoperatorpayout"));
         assert!(!payload.json_export.body.contains("0xproviderpayto"));
+        assert!(
+            !payload.json_export.body.contains("submitted_by"),
+            "JSON export must omit internal fields"
+        );
+        assert!(
+            !payload.json_export.body.contains("approval_status"),
+            "JSON export must omit operator fields"
+        );
     }
 
     fn sample_review_tool() -> Tool {
