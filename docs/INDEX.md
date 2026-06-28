@@ -7,6 +7,10 @@
 
 - [[MVP_DESIGN]] — Full architecture: Rust single binary, DB schema, crawler, MCP server, auth, admin panel, build order
 - [[SECURITY]] — Security design: 3-way auth, SIWX, RLS policies, web security headers, rate limiting, admin access control
+- [[PRODUCT_ENHANCEMENT_SPEC]] — Phased enhancement spec: MCP/plugin/feature growth, UI/UX + accessibility, code hardening, repo hygiene (P0–P2 roadmap; dark mode out of scope)
+- [[TOOL_DISCOVERY]] — Auto-discovery strategy: why manual finding happens (narrow crawler sources), AI discovery pipeline design, and ~50 curated crypto MCP seed candidates (incl. Base MCP, Coinbase AgentKit)
+- [[SKILL_PLUGIN_SPEC]] — Packaging OnchainAI as an Agent Skill + Claude Code Plugin (SKILL.md draft, plugin.json, .mcp.json, slash command, marketplace) + collection→plugin export
+- [[VERIFICATION]] — Acceptance matrix for the enhancement spec + runnable `scripts/spec-verify.sh` (per-item PASS/FAIL/MANUAL checks for the implementing agent)
 
 ## Design
 
