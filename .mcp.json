@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "onchainai": {
+      "command": "npx",
+      "args": ["mcp-remote", "https://www.onchain-ai.xyz/mcp"]
+    }
+  }
+}

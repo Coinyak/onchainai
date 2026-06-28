@@ -4,6 +4,7 @@ use crate::auth::session::has_access_token_cookie;
 use crate::chains::{chain_fallback_label, chain_tags_for_tool, ChainTagView};
 use crate::components::chain_logo::ChainLogo;
 use crate::components::copy_button::CopyButton;
+use crate::components::icons::LucideIcon;
 use crate::components::login_modal::LoginModal;
 use crate::components::tool_logo::ToolLogo;
 use crate::models::Tool;
@@ -29,6 +30,61 @@ fn type_badge_class(tool_type: &str) -> &'static str {
     match tool_type {
         "x402" => "badge badge-x402",
         _ => "badge badge-neutral",
+    }
+}
+
+fn install_risk_badge_class(risk: &str) -> &'static str {
+    match risk {
+        "low" => "badge badge-risk-low",
+        "medium" => "badge badge-risk-medium",
+        "high" => "badge badge-risk-high",
+        "critical" => "badge badge-risk-critical",
+        _ => "badge badge-neutral",
+    }
+}
+
+fn install_risk_badge_label(risk: &str) -> &'static str {
+    match risk {
+        "low" => "Low risk",
+        "medium" => "Medium risk",
+        "high" => "High risk",
+        "critical" => "Critical risk",
+        _ => "Risk review",
+    }
+}
+
+fn bookmark_action_label(starred: bool) -> &'static str {
+    if starred {
+        "Remove from Toolkit"
+    } else {
+        "Save to Toolkit"
+    }
+}
+
+fn bookmark_icon_class(starred: bool) -> &'static str {
+    if starred {
+        "bookmark-icon is-filled"
+    } else {
+        "bookmark-icon"
+    }
+}
+
+fn bookmark_icon_fill(starred: bool) -> &'static str {
+    if starred {
+        "currentColor"
+    } else {
+        "none"
+    }
+}
+
+fn bookmark_icon(starred: bool) -> impl IntoView {
+    view! {
+        <LucideIcon
+            name="star".to_string()
+            class=bookmark_icon_class(starred)
+            fill=bookmark_icon_fill(starred)
+            stroke="currentColor"
+        />
     }
 }
 
@@ -120,6 +176,7 @@ pub fn ToolCard(
         })
         .unwrap_or_else(|| "—".into());
     let license = tool.license.clone().unwrap_or_default();
+    let risk_level = tool.install_risk_level.clone();
 
     let show_login = RwSignal::new(false);
     let starred = RwSignal::new(initially_starred);
@@ -159,6 +216,16 @@ pub fn ToolCard(
                                 {if tool.claim_state == "claimed" {
                                     view! {
                                         <span class="badge badge-neutral">"Claimed by team"</span>
+                                    }.into_any()
+                                } else {
+                                    ().into_any()
+                                }}
+                                {if !risk_level.is_empty() {
+                                    let risk_level_for_label = risk_level.clone();
+                                    view! {
+                                        <span class=install_risk_badge_class(&risk_level)>
+                                            {install_risk_badge_label(&risk_level_for_label)}
+                                        </span>
                                     }.into_any()
                                 } else if tool.install_risk_level == "low" && !install.is_empty() {
                                     view! {
@@ -211,8 +278,9 @@ pub fn ToolCard(
                 <button
                     type="button"
                     class="card-action-btn"
-                    aria-label=move || if starred.get() { "Remove from Toolkit" } else { "Save to Toolkit" }
-                    title=move || if starred.get() { "Remove from Toolkit" } else { "Save to Toolkit" }
+                    aria-label=move || bookmark_action_label(starred.get())
+                    aria-pressed=move || if starred.get() { "true" } else { "false" }
+                    title=move || bookmark_action_label(starred.get())
                     on:click=move |ev| {
                         ev.stop_propagation();
                         let slug_toggle = slug.clone();
@@ -234,7 +302,7 @@ pub fn ToolCard(
                         });
                     }
                 >
-                    {move || if starred.get() { "★" } else { "☆" }}
+                    {move || bookmark_icon(starred.get())}
                 </button>
             </div>
         </article>
@@ -279,5 +347,30 @@ mod tests {
         assert_eq!(badge_class("community"), "badge badge-community");
         assert_eq!(type_badge_class("x402"), "badge badge-x402");
         assert_eq!(type_badge_class("mcp"), "badge badge-neutral");
+    }
+
+    #[test]
+    fn bookmark_labels_match_toolkit_state() {
+        assert_eq!(bookmark_action_label(false), "Save to Toolkit");
+        assert_eq!(bookmark_action_label(true), "Remove from Toolkit");
+        assert_eq!(bookmark_icon_class(false), "bookmark-icon");
+        assert_eq!(bookmark_icon_class(true), "bookmark-icon is-filled");
+        assert_eq!(bookmark_icon_fill(false), "none");
+        assert_eq!(bookmark_icon_fill(true), "currentColor");
+    }
+
+    #[test]
+    fn install_risk_badges_match_trust_state() {
+        assert_eq!(install_risk_badge_class("low"), "badge badge-risk-low");
+        assert_eq!(
+            install_risk_badge_class("medium"),
+            "badge badge-risk-medium"
+        );
+        assert_eq!(install_risk_badge_class("high"), "badge badge-risk-high");
+        assert_eq!(
+            install_risk_badge_class("critical"),
+            "badge badge-risk-critical"
+        );
+        assert_eq!(install_risk_badge_label("critical"), "Critical risk");
     }
 }

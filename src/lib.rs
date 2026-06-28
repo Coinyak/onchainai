@@ -36,6 +36,41 @@ impl axum::extract::FromRef<AppState> for leptos::config::LeptosOptions {
     }
 }
 
+#[cfg(feature = "ssr")]
+fn canonical_www_location(host: &str, uri: &axum::http::Uri) -> Option<String> {
+    let host_without_port = host.split(':').next().unwrap_or(host);
+    if host_without_port != "onchain-ai.xyz" {
+        return None;
+    }
+    let path_and_query = uri.path_and_query().map(|pq| pq.as_str()).unwrap_or("/");
+    Some(format!("https://www.onchain-ai.xyz{path_and_query}"))
+}
+
+#[cfg(feature = "ssr")]
+async fn canonical_host_redirect(
+    req: axum::http::Request<axum::body::Body>,
+    next: axum::middleware::Next,
+) -> axum::response::Response {
+    use axum::http::{header, HeaderValue, StatusCode};
+    use axum::response::IntoResponse;
+
+    let location = req
+        .headers()
+        .get(header::HOST)
+        .and_then(|host| host.to_str().ok())
+        .and_then(|host| canonical_www_location(host, req.uri()));
+
+    if let Some(location) = location {
+        if let Ok(value) = HeaderValue::from_str(&location) {
+            let mut response = StatusCode::MOVED_PERMANENTLY.into_response();
+            response.headers_mut().insert(header::LOCATION, value);
+            return response;
+        }
+    }
+
+    next.run(req).await
+}
+
 /// Build the Axum application router.
 #[cfg(feature = "ssr")]
 pub fn build_app(pool: sqlx::PgPool, config: Config) -> axum::Router {
@@ -299,11 +334,33 @@ pub fn build_app(pool: sqlx::PgPool, config: Config) -> axum::Router {
         .merge(auth_routes)
         .merge(mcp_routes)
         .merge(app_routes)
+        .layer(axum::middleware::from_fn(canonical_host_redirect))
         .layer(security_headers)
         .layer(cors)
         .layer(CompressionLayer::new())
         .layer(RequestBodyLimitLayer::new(8 * 1024 * 1024))
         .layer(TraceLayer::new_for_http())
+}
+
+#[cfg(all(test, feature = "ssr"))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn canonical_www_location_redirects_apex_with_path_and_query() {
+        let uri = "/tools?chain=base".parse().expect("valid uri");
+        assert_eq!(
+            canonical_www_location("onchain-ai.xyz", &uri),
+            Some("https://www.onchain-ai.xyz/tools?chain=base".to_string())
+        );
+    }
+
+    #[test]
+    fn canonical_www_location_ignores_www_and_local_hosts() {
+        let uri = "/".parse().expect("valid uri");
+        assert_eq!(canonical_www_location("www.onchain-ai.xyz", &uri), None);
+        assert_eq!(canonical_www_location("localhost:3000", &uri), None);
+    }
 }
 
 #[cfg(feature = "ssr")]

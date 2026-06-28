@@ -204,6 +204,7 @@ pub(crate) fn default_source_registry_url(source_name: &str) -> &'static str {
             "https://raw.githubusercontent.com/rudazy/web3-mcp-hub/main/registry.json"
         }
         "github" => "https://github.com/topics",
+        "mcp-registry" => "https://registry.modelcontextprotocol.io/v0/servers",
         _ => "https://www.onchain-ai.xyz",
     }
 }
@@ -226,25 +227,14 @@ pub(crate) fn count_raws_per_source(
     counts
 }
 
-/// Run the default production pipeline: all four source crawlers in parallel,
+/// Run the default production pipeline: all registered source crawlers,
 /// normalize, dedupe, upsert to DB, and update `sources` status per source.
 ///
 /// Errors from individual sources are logged and do not abort the run; the
 /// `sources` table is updated for both successes and failures.
 #[allow(dead_code)]
 pub async fn run_all_sources(pool: &sqlx::PgPool) {
-    use crate::crawler::sources::{
-        cryptoskill::CryptoSkillCrawler, github::GitHubTopicsCrawler, npm::NpmCrawler,
-        web3mcp::Web3McpHubCrawler,
-    };
-    use std::sync::Arc;
-
-    let crawlers: Vec<Arc<dyn SourceCrawler>> = vec![
-        Arc::new(NpmCrawler),
-        Arc::new(CryptoSkillCrawler),
-        Arc::new(Web3McpHubCrawler),
-        Arc::new(GitHubTopicsCrawler),
-    ];
+    let crawlers = crate::crawler::sources::default_crawlers();
 
     let crawler_settings = settings::load_crawler_settings(pool).await;
 
@@ -378,13 +368,14 @@ pub async fn persist_crawl_results(
 /// Spawns work synchronously in the caller's task; long-running crawls should be
 /// invoked from a background `tokio::spawn` at the call site.
 pub async fn trigger_source(pool: &sqlx::PgPool, source: &str) {
-    use crate::crawler::sources::{cryptoskill, github, npm, web3mcp};
+    use crate::crawler::sources::{cryptoskill, github, mcp_registry, npm, web3mcp};
 
     match source {
         "npm" => npm::run_once(pool).await,
         "cryptoskill" => cryptoskill::run_once(pool).await,
         "web3-mcp-hub" => web3mcp::run_once(pool).await,
         "github" => github::run_once(pool).await,
+        "mcp-registry" => mcp_registry::run_once(pool).await,
         "sync_stars" => github::sync_stars(pool).await,
         other => tracing::warn!(source = other, "unknown crawler source trigger"),
     }

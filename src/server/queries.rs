@@ -87,6 +87,69 @@ pub const MCP_SEARCH_TOOLS_BASE_SQL: &str = concat!(
     "#
 );
 
+pub const MCP_SEARCH_TOOLS_RELEVANCE_SQL: &str = concat!(
+    r#"
+        SELECT * FROM tools
+        WHERE "#,
+    public_tool_where!(),
+    r#"
+          AND to_tsvector('english', coalesce(name, '') || ' ' || coalesce(description, ''))
+              @@ plainto_tsquery('english', $1)
+          AND ($2::text IS NULL OR function = $2)
+          AND ($3::text IS NULL OR $3 = ANY(chains))
+        ORDER BY ts_rank_cd(
+            to_tsvector('english', coalesce(name, '') || ' ' || coalesce(description, '')),
+            plainto_tsquery('english', $1)
+        ) DESC, trust_score DESC, stars DESC, updated_at DESC
+        LIMIT $4 OFFSET $5
+    "#
+);
+
+pub const MCP_SEARCH_TOOLS_TRUST_SQL: &str = concat!(
+    r#"
+        SELECT * FROM tools
+        WHERE "#,
+    public_tool_where!(),
+    r#"
+          AND to_tsvector('english', coalesce(name, '') || ' ' || coalesce(description, ''))
+              @@ plainto_tsquery('english', $1)
+          AND ($2::text IS NULL OR function = $2)
+          AND ($3::text IS NULL OR $3 = ANY(chains))
+        ORDER BY trust_score DESC, stars DESC, updated_at DESC
+        LIMIT $4 OFFSET $5
+    "#
+);
+
+pub const MCP_SEARCH_TOOLS_STARS_SQL: &str = concat!(
+    r#"
+        SELECT * FROM tools
+        WHERE "#,
+    public_tool_where!(),
+    r#"
+          AND to_tsvector('english', coalesce(name, '') || ' ' || coalesce(description, ''))
+              @@ plainto_tsquery('english', $1)
+          AND ($2::text IS NULL OR function = $2)
+          AND ($3::text IS NULL OR $3 = ANY(chains))
+        ORDER BY stars DESC, trust_score DESC, updated_at DESC
+        LIMIT $4 OFFSET $5
+    "#
+);
+
+pub const MCP_SEARCH_TOOLS_RECENT_SQL: &str = concat!(
+    r#"
+        SELECT * FROM tools
+        WHERE "#,
+    public_tool_where!(),
+    r#"
+          AND to_tsvector('english', coalesce(name, '') || ' ' || coalesce(description, ''))
+              @@ plainto_tsquery('english', $1)
+          AND ($2::text IS NULL OR function = $2)
+          AND ($3::text IS NULL OR $3 = ANY(chains))
+        ORDER BY updated_at DESC, stars DESC
+        LIMIT $4 OFFSET $5
+    "#
+);
+
 pub const DASHBOARD_TYPE_COUNTS_SQL: &str = concat!(
     r#"
         SELECT type AS id, COUNT(*)::bigint AS count

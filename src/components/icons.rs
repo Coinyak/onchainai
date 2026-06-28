@@ -4,22 +4,31 @@ use leptos::prelude::*;
 
 /// Render a 20×20 Lucide-style icon by name from `categories.icon`.
 #[component]
-pub fn LucideIcon(name: String) -> impl IntoView {
-    let stroke = "#4B4B4B";
+pub fn LucideIcon(
+    name: String,
+    #[prop(default = "")] class: &'static str,
+    #[prop(default = "none")] fill: &'static str,
+    #[prop(default = "#4B4B4B")] stroke: &'static str,
+) -> impl IntoView {
     view! {
         <svg
+            class=class
             xmlns="http://www.w3.org/2000/svg"
             width="20"
             height="20"
             viewBox="0 0 24 24"
-            fill="none"
+            fill=fill
             stroke=stroke
             stroke-width="2"
             stroke-linecap="round"
             stroke-linejoin="round"
             aria-hidden="true"
+            focusable="false"
         >
             {match name.as_str() {
+                "star" => view! {
+                    <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+                }.into_any(),
                 "git-branch" => view! {
                     <line x1="6" y1="3" x2="6" y2="15"/>
                     <circle cx="18" cy="6" r="3"/>

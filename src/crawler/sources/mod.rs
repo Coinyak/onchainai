@@ -7,8 +7,11 @@
 
 pub mod cryptoskill;
 pub mod github;
+pub mod mcp_registry;
 pub mod npm;
 pub mod web3mcp;
+
+use std::sync::Arc;
 
 use async_trait::async_trait;
 
@@ -43,7 +46,6 @@ pub fn http_client() -> anyhow::Result<reqwest::Client> {
 /// Each source (CryptoSkill, web3-mcp-hub, GitHub topics, npm) implements this
 /// trait. The orchestrator runs all sources in parallel via `tokio::spawn`.
 #[async_trait]
-#[allow(dead_code)]
 pub trait SourceCrawler: Send + Sync {
     /// Crawl the source, returning raw (pre-normalization) tools.
     ///
@@ -58,12 +60,16 @@ pub trait SourceCrawler: Send + Sync {
     fn interval(&self) -> &'static str;
 }
 
-// Force the compiler to consider the trait "used" at the crate level so that
-// dead-code warnings are not emitted for the trait definition itself. Concrete
-// crawler structs are registered by the scheduler.
-#[doc(hidden)]
-#[allow(dead_code)]
-pub trait _SourceCrawlerSealed: SourceCrawler {}
+/// Built-in source registry used by the production pipeline and manual runs.
+pub fn default_crawlers() -> Vec<Arc<dyn SourceCrawler>> {
+    vec![
+        Arc::new(npm::NpmCrawler),
+        Arc::new(cryptoskill::CryptoSkillCrawler),
+        Arc::new(web3mcp::Web3McpHubCrawler),
+        Arc::new(github::GitHubTopicsCrawler),
+        Arc::new(mcp_registry::OfficialMcpRegistryCrawler),
+    ]
+}
 
 #[cfg(test)]
 mod tests {
