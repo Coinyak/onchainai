@@ -10,6 +10,39 @@ use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 use uuid::Uuid;
 
+/// Profile upsert failure during OAuth / SIWX sign-in.
+#[derive(Debug)]
+pub enum ProfileSetupError {
+    SupabaseCreate(String),
+    Database(sqlx::Error),
+}
+
+impl std::fmt::Display for ProfileSetupError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::SupabaseCreate(msg) => write!(f, "supabase profile create failed: {msg}"),
+            Self::Database(err) => write!(f, "profile database error: {err}"),
+        }
+    }
+}
+
+impl ProfileSetupError {
+    /// Safe redirect code for `/login?auth=…` (no secret leakage).
+    pub fn auth_query_code(&self) -> &'static str {
+        match self {
+            Self::SupabaseCreate(msg)
+                if msg.contains("already been registered")
+                    || msg.contains("duplicate")
+                    || msg.contains("already exists") =>
+            {
+                "github_profile_exists"
+            }
+            Self::SupabaseCreate(_) => "github_profile_setup",
+            Self::Database(_) => "github_profile",
+        }
+    }
+}
+
 /// Required JWT `aud` claim. Supabase stamps `authenticated` on user tokens;
 /// server-minted SIWX/GitHub tokens use the same audience.
 pub const JWT_AUDIENCE: &str = "authenticated";
@@ -152,7 +185,7 @@ pub async fn ensure_siwx_profile(
     config: &Config,
     wallet_address: &str,
     chain_id: &str,
-) -> Result<Uuid, sqlx::Error> {
+) -> Result<Uuid, ProfileSetupError> {
     let existing = sqlx::query_scalar::<_, Uuid>(
         r#"
         SELECT id FROM profiles
@@ -162,7 +195,8 @@ pub async fn ensure_siwx_profile(
     )
     .bind(wallet_address)
     .fetch_optional(pool)
-    .await?;
+    .await
+    .map_err(ProfileSetupError::Database)?;
 
     if let Some(id) = existing {
         return Ok(id);
@@ -171,7 +205,7 @@ pub async fn ensure_siwx_profile(
     let nickname = siwx_nickname(wallet_address);
     let id = create_supabase_user_for_siwx(config, wallet_address, chain_id, &nickname)
         .await
-        .map_err(sqlx::Error::Protocol)?;
+        .map_err(ProfileSetupError::SupabaseCreate)?;
 
     sqlx::query(
         r#"
@@ -184,7 +218,8 @@ pub async fn ensure_siwx_profile(
     .bind(wallet_address)
     .bind(chain_id)
     .execute(pool)
-    .await?;
+    .await
+    .map_err(ProfileSetupError::Database)?;
 
     Ok(id)
 }
@@ -209,7 +244,7 @@ pub async fn ensure_github_profile(
     github_id: i64,
     login: &str,
     avatar_url: Option<&str>,
-) -> Result<Uuid, sqlx::Error> {
+) -> Result<Uuid, ProfileSetupError> {
     let nickname = sanitize_nickname(login).unwrap_or_else(|| {
         let fallback: String = login
             .chars()
@@ -240,7 +275,8 @@ pub async fn ensure_github_profile(
     )
     .bind(&nickname)
     .fetch_optional(pool)
-    .await?;
+    .await
+    .map_err(ProfileSetupError::Database)?;
 
     if let Some(id) = existing {
         if avatar_url.is_some() {
@@ -254,14 +290,15 @@ pub async fn ensure_github_profile(
             .bind(id)
             .bind(avatar_url)
             .execute(pool)
-            .await?;
+            .await
+            .map_err(ProfileSetupError::Database)?;
         }
         return Ok(id);
     }
 
     let id = create_supabase_user_for_github(config, github_id, login, avatar_url)
         .await
-        .map_err(sqlx::Error::Protocol)?;
+        .map_err(ProfileSetupError::SupabaseCreate)?;
 
     sqlx::query(
         r#"
@@ -273,7 +310,8 @@ pub async fn ensure_github_profile(
     .bind(&nickname)
     .bind(avatar_url)
     .execute(pool)
-    .await?;
+    .await
+    .map_err(ProfileSetupError::Database)?;
 
     Ok(id)
 }
@@ -657,5 +695,21 @@ mod tests {
             Some(Utc::now().timestamp() + 600),
         ));
         assert!(user_id_from_jwt(&token, SECRET, ISSUER).is_err());
+    }
+
+    #[test]
+    fn profile_setup_error_codes_are_safe() {
+        use super::ProfileSetupError;
+
+        let dup = ProfileSetupError::SupabaseCreate(
+            "User already been registered with this email".into(),
+        );
+        assert_eq!(dup.auth_query_code(), "github_profile_exists");
+
+        let setup = ProfileSetupError::SupabaseCreate("service unavailable".into());
+        assert_eq!(setup.auth_query_code(), "github_profile_setup");
+
+        let db = ProfileSetupError::Database(sqlx::Error::RowNotFound);
+        assert_eq!(db.auth_query_code(), "github_profile");
     }
 }

@@ -7,6 +7,31 @@ pub const ACCESS_TOKEN_COOKIE: &str = "onchainai_access_token";
 pub const PKCE_VERIFIER_COOKIE: &str = "onchainai_pkce_verifier";
 pub const GITHUB_STATE_COOKIE: &str = "onchainai_github_state";
 
+/// True when auth cookies must include `Secure` (production HTTPS).
+pub fn cookie_secure_for_domain(siwx_domain: &str) -> bool {
+    !siwx_domain.contains("localhost")
+}
+
+/// Whether the SSR shell will inject the WASM hydration bundle.
+///
+/// Matches [`crate::app::shell`] so wallet buttons can fall back to plain
+/// links when interactive handlers are unavailable.
+pub fn ssr_hydration_available() -> bool {
+    #[cfg(feature = "ssr")]
+    {
+        let bundle = std::path::Path::new("target/site/pkg/onchainai.js").exists();
+        match std::env::var("LEPTOS_HYDRATION").as_deref() {
+            Ok("0") | Ok("false") | Ok("FALSE") => false,
+            Ok("1") | Ok("true") | Ok("TRUE") => bundle,
+            _ => bundle,
+        }
+    }
+    #[cfg(not(feature = "ssr"))]
+    {
+        cfg!(feature = "hydrate")
+    }
+}
+
 /// Authenticated user resolved from JWT + profiles row.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct SessionUser {
@@ -95,5 +120,11 @@ mod tests {
         let err = optional_session_result(Err(AuthSessionError::Database("down".into())))
             .expect_err("db error");
         assert!(err.to_string().contains("down"));
+    }
+
+    #[test]
+    fn cookie_secure_for_production_domain() {
+        assert!(cookie_secure_for_domain("www.onchain-ai.xyz"));
+        assert!(!cookie_secure_for_domain("localhost:3000"));
     }
 }

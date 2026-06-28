@@ -1,6 +1,6 @@
 //! Shared tool detail body — install tabs, trust, chains, links.
 
-use crate::chains::chain_tags_show_all;
+use crate::chains::{chain_fallback_label, chain_logo_path, chain_tags_show_all};
 use crate::components::copy_button::CopyButton;
 use crate::components::official_links_list::OfficialLinksList;
 use crate::components::tool_logo::ToolLogo;
@@ -186,13 +186,19 @@ pub fn ToolDetailContent(
                                     view! {
                                         <img
                                             class="chain-logo chain-logo-tag"
-                                            src=meta.logo
+                                            src=chain_logo_path(meta.id)
                                             alt=meta.label
                                             title=meta.label
+                                            width="20"
+                                            height="20"
                                         />
                                     }.into_any()
                                 } else {
-                                    view! { <span class="chain-pill">{tag.raw}</span> }.into_any()
+                                    let label = chain_fallback_label(&tag.raw);
+                                    let title = tag.raw.clone();
+                                    view! {
+                                        <span class="chain-pill" title=title>{label}</span>
+                                    }.into_any()
                                 }
                             }).collect_view()}
                             {if extra_chains > 0 {

@@ -1,6 +1,6 @@
 //! Stripe-style tool card for list views — badges, bookmark, upvote.
 
-use crate::chains::chain_tags_show_all;
+use crate::chains::{chain_fallback_label, chain_logo_path, chain_tags_for_tool, ChainTagView};
 use crate::components::copy_button::CopyButton;
 use crate::components::login_modal::LoginModal;
 use crate::components::tool_logo::ToolLogo;
@@ -9,10 +9,16 @@ use crate::server::functions::{get_current_user, toggle_bookmark};
 use leptos::prelude::*;
 use leptos::task::spawn_local;
 
+/// Desktop tool card: show up to 5 chain tags, then "+N" (DESIGN.md / UI_UX_DESIGN.md).
+const CHAINS_VISIBLE_DESKTOP: usize = 5;
+/// Mobile tool card: show up to 3 chain tags, then "+N".
+const CHAINS_VISIBLE_MOBILE: usize = 3;
+
 fn badge_class(status: &str) -> &'static str {
     match status {
         "verified" => "badge badge-verified",
         "official" => "badge badge-official",
+        "community" => "badge badge-community",
         _ => "badge badge-neutral",
     }
 }
@@ -21,6 +27,52 @@ fn type_badge_class(tool_type: &str) -> &'static str {
     match tool_type {
         "x402" => "badge badge-x402",
         _ => "badge badge-neutral",
+    }
+}
+
+fn render_chain_tags(
+    preview: Vec<ChainTagView>,
+    extra: usize,
+    class: &'static str,
+) -> impl IntoView {
+    view! {
+        <span class=class>
+            {preview
+                .into_iter()
+                .map(|tag| {
+                    if let Some(meta) = tag.meta {
+                        view! {
+                            <img
+                                class="chain-logo chain-logo-tag"
+                                src=chain_logo_path(meta.id)
+                                alt=meta.label
+                                title=meta.label
+                                width="20"
+                                height="20"
+                            />
+                        }
+                        .into_any()
+                    } else {
+                        let label = chain_fallback_label(&tag.raw);
+                        let title = tag.raw.clone();
+                        view! {
+                            <span class="chain-pill" title=title>{label}</span>
+                        }
+                        .into_any()
+                    }
+                })
+                .collect_view()}
+            {if extra > 0 {
+                view! {
+                    <span class="chain-pill chain-more" title=format!("{extra} more chains")>
+                        {"+"}{extra}
+                    </span>
+                }
+                .into_any()
+            } else {
+                ().into_any()
+            }}
+        </span>
     }
 }
 
@@ -39,7 +91,8 @@ pub fn ToolCard(
     let status = tool.status.clone();
     let tool_type = tool.tool_type.clone();
     let chains = tool.chains.clone();
-    let (chain_preview, extra_chains) = chain_tags_show_all(&chains);
+    let (chain_desktop, extra_desktop) = chain_tags_for_tool(&chains, CHAINS_VISIBLE_DESKTOP);
+    let (chain_mobile, extra_mobile) = chain_tags_for_tool(&chains, CHAINS_VISIBLE_MOBILE);
     let install = tool.install_command.clone().unwrap_or_default();
     let stars = tool.stars;
     let description = tool
@@ -116,28 +169,8 @@ pub fn ToolCard(
                             }}
                         </div>
                         <div class="tool-meta">
-                            <span class="tool-chains">
-                                {chain_preview.into_iter().map(|tag| {
-                                    if let Some(meta) = tag.meta {
-                                        view! {
-                                            <img
-                                                class="chain-logo chain-logo-tag"
-                                                src=meta.logo
-                                                alt=meta.label
-                                                title=meta.label
-                                            />
-                                        }.into_any()
-                                    } else {
-                                        view! { <span class="chain-pill">{tag.raw}</span> }.into_any()
-                                    }
-                                }).collect_view()}
-                                {if extra_chains > 0 {
-                                    view! { <span class="chain-pill chain-more">{"+"}{extra_chains}</span> }
-                                        .into_any()
-                                } else {
-                                    ().into_any()
-                                }}
-                            </span>
+                            {render_chain_tags(chain_desktop, extra_desktop, "tool-chains tool-chains-desktop")}
+                            {render_chain_tags(chain_mobile, extra_mobile, "tool-chains tool-chains-mobile")}
                             <span class="tool-meta-sep">"·"</span>
                             <span class="tool-stars">{"★ "}{stars}</span>
                             <span class="tool-meta-sep">"·"</span>
@@ -184,5 +217,46 @@ pub fn ToolCard(
                 </button>
             </div>
         </article>
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::chains::chain_tags_for_tool;
+
+    #[test]
+    fn tool_card_chain_limits_match_design() {
+        let chains: Vec<String> = vec![
+            "bitcoin".into(),
+            "ethereum".into(),
+            "base".into(),
+            "solana".into(),
+            "arbitrum".into(),
+            "optimism".into(),
+        ];
+        let (desktop, extra_desktop) = chain_tags_for_tool(&chains, CHAINS_VISIBLE_DESKTOP);
+        assert_eq!(desktop.len(), 5);
+        assert_eq!(extra_desktop, 1);
+
+        let (mobile, extra_mobile) = chain_tags_for_tool(&chains, CHAINS_VISIBLE_MOBILE);
+        assert_eq!(mobile.len(), 3);
+        assert_eq!(extra_mobile, 3);
+    }
+
+    #[test]
+    fn chain_pill_label_abbreviates_long_values() {
+        assert_eq!(chain_fallback_label("hyperliquid"), "HYPE");
+        assert_eq!(chain_fallback_label("eth"), "ETH");
+        assert_eq!(chain_fallback_label("binance-smart-chain"), "BINA");
+    }
+
+    #[test]
+    fn badge_classes_match_design() {
+        assert_eq!(badge_class("verified"), "badge badge-verified");
+        assert_eq!(badge_class("official"), "badge badge-official");
+        assert_eq!(badge_class("community"), "badge badge-community");
+        assert_eq!(type_badge_class("x402"), "badge badge-x402");
+        assert_eq!(type_badge_class("mcp"), "badge badge-neutral");
     }
 }

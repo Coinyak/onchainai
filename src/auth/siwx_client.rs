@@ -1,5 +1,21 @@
 //! SIWX wallet connect — EIP-1193 `personal_sign` flow (hydrate / browser only).
 
+#[cfg(any(feature = "hydrate", test))]
+fn siwx_http_error(status: u16, path: &str) -> String {
+    match (status, path) {
+        (401, "/auth/siwx/verify") => "Wallet signature was rejected. Try connecting again.".into(),
+        (400, "/auth/siwx/verify") => {
+            "Sign-in challenge expired or already used. Try again.".into()
+        }
+        (400, "/auth/siwx/challenge") => "Invalid wallet address or chain. Try again.".into(),
+        (500, "/auth/siwx/verify") => {
+            "Could not finish wallet sign-in. Try GitHub or email, or retry shortly.".into()
+        }
+        (502..=599, _) => "Auth service is temporarily unavailable. Try again shortly.".into(),
+        _ => format!("Wallet sign-in failed ({status}). Try again."),
+    }
+}
+
 /// Connect via MetaMask (or any EIP-1193 wallet) and complete SIWX sign-in.
 /// Returns redirect path on success.
 #[cfg(feature = "hydrate")]
@@ -66,7 +82,7 @@ pub async fn siwx_connect_evm() -> Result<String, String> {
             .await
             .map_err(|e| e.to_string())?;
         if !resp.ok() {
-            return Err(format!("Request failed ({})", resp.status()));
+            return Err(siwx_http_error(resp.status(), path));
         }
         resp.json().await.map_err(|e| e.to_string())
     }
@@ -140,5 +156,22 @@ pub async fn siwx_connect_evm() -> Result<String, String> {
 
 #[cfg(not(feature = "hydrate"))]
 pub async fn siwx_connect_evm() -> Result<String, String> {
-    Err("Wallet sign-in requires a hydrated browser session.".to_string())
+    Err("Wallet sign-in requires the app JavaScript bundle. Use GitHub or email, or run `cargo leptos build` for local wallet login.".to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::siwx_http_error;
+
+    #[test]
+    fn verify_unauthorized_is_actionable() {
+        let msg = siwx_http_error(401, "/auth/siwx/verify");
+        assert!(msg.contains("signature"));
+    }
+
+    #[test]
+    fn verify_server_error_suggests_alternatives() {
+        let msg = siwx_http_error(500, "/auth/siwx/verify");
+        assert!(msg.contains("GitHub"));
+    }
 }

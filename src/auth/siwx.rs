@@ -1,7 +1,8 @@
 //! SIWX (CAIP-122) wallet authentication — challenge + verify.
 
 use crate::auth::session::{
-    ensure_siwx_profile, issue_access_token, post_auth_redirect_path, ACCESS_TOKEN_COOKIE,
+    cookie_secure_for_domain, ensure_siwx_profile, issue_access_token, post_auth_redirect_path,
+    ACCESS_TOKEN_COOKIE,
 };
 use crate::config::Config;
 use crate::AppState;
@@ -236,9 +237,15 @@ pub async fn verify(
         return Err(StatusCode::UNAUTHORIZED);
     }
 
-    let user_id = ensure_siwx_profile(&state.pool, config, &row.wallet_address, &row.chain_id)
+    let user_id = match ensure_siwx_profile(&state.pool, config, &row.wallet_address, &row.chain_id)
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    {
+        Ok(id) => id,
+        Err(err) => {
+            tracing::error!(error = %err, wallet = %row.wallet_address, "SIWX profile setup failed");
+            return Err(StatusCode::INTERNAL_SERVER_ERROR);
+        }
+    };
 
     sqlx::query(
         r#"
@@ -266,7 +273,7 @@ pub async fn verify(
     )
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    let secure_cookie = !config.siwx_domain.contains("localhost");
+    let secure_cookie = cookie_secure_for_domain(&config.siwx_domain);
     let mut headers = HeaderMap::new();
     headers.insert(
         header::SET_COOKIE,
@@ -315,6 +322,13 @@ mod tests {
         assert!(msg.contains("www.onchain-ai.xyz wants you to sign in"));
         assert!(msg.contains("Nonce: abc123"));
         assert!(msg.contains("Chain ID: 1"));
+    }
+
+    #[test]
+    fn session_cookie_uses_strict_samesite() {
+        let cookie = set_session_cookie(ACCESS_TOKEN_COOKIE, "tok", 86_400, true);
+        assert!(cookie.contains("SameSite=Strict"));
+        assert!(cookie.contains("; Secure"));
     }
 
     #[test]
