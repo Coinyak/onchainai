@@ -233,11 +233,13 @@ await waitForSidebarStorageLoaded(page).catch(() => {
   errors.push("layout:mobile-sidebar-hydration-timeout");
 });
 const mobileSidebarLayout = await page.evaluate(() => {
+  const header = document.querySelector(".site-top-nav");
   const aside = document.querySelector(".tools-sidebar");
   const main = document.querySelector(".tools-main");
   if (!aside || !main) {
-    return { collapsed: false, asideWidth: 0, mainX: 0, mainY: 0 };
+    return { collapsed: false, asideWidth: 0, mainX: 0, mainY: 0, headerBottom: 0 };
   }
+  const headerRect = header?.getBoundingClientRect();
   const asideRect = aside.getBoundingClientRect();
   const mainRect = main.getBoundingClientRect();
   return {
@@ -245,6 +247,7 @@ const mobileSidebarLayout = await page.evaluate(() => {
     asideWidth: asideRect.width,
     mainX: mainRect.x,
     mainY: mainRect.y,
+    headerBottom: headerRect?.bottom ?? 0,
   };
 });
 if (!mobileSidebarLayout.collapsed) {
@@ -253,7 +256,7 @@ if (!mobileSidebarLayout.collapsed) {
 if (mobileSidebarLayout.asideWidth > 48) {
   errors.push(`layout:mobile-sidebar-width:${mobileSidebarLayout.asideWidth}`);
 }
-if (mobileSidebarLayout.mainY > 8) {
+if (mobileSidebarLayout.mainY > mobileSidebarLayout.headerBottom + 8) {
   errors.push(`layout:mobile-main-stacked:${mobileSidebarLayout.mainY}`);
 }
 if (mobileSidebarLayout.mainX < 32) {

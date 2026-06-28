@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Curl smoke: public pages, chain markup, MCP initialize.
+# Curl smoke: public pages, dashboard/toolkit routes, chain markup, MCP initialize.
 #
 # Usage:
 #   ./scripts/smoke-test.sh
@@ -59,6 +59,12 @@ check_chain_markup "/tools"
 check_chain_markup "/tools?chain=ethereum"
 check_chain_markup "/categories/bridge"
 
+dashboard_body="$(check_get "/dashboard")"
+grep -q 'Crypto tool coverage' "$dashboard_body" || fail "GET /dashboard missing dashboard heading"
+
+toolkit_body="$(check_get "/toolkit")"
+grep -q 'Sign in to save your stack' "$toolkit_body" || fail "GET /toolkit missing anonymous sign-in state"
+
 # Fresh filter links should not carry pagination from a prior page (SSR heuristic).
 filter_body="$(check_get "/tools?function=bridge&type=mcp")"
 if echo "$filter_body" | grep -oE 'href="[^"]*function=bridge[^"]*"' | grep -q 'page='; then
@@ -76,5 +82,13 @@ mcp_code="$(curl -sS -o "$mcp_body" -w "%{http_code}" \
   "${BASE}/mcp")" || fail "POST /mcp curl failed"
 [[ "$mcp_code" == "200" ]] || fail "POST /mcp returned ${mcp_code}"
 grep -q '"serverInfo"' "$mcp_body" || fail "POST /mcp missing serverInfo"
+
+mcp_tools_body="$(mktemp)"
+mcp_tools_code="$(curl -sS -o "$mcp_tools_body" -w "%{http_code}" \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}' \
+  "${BASE}/mcp")" || fail "POST /mcp tools/list curl failed"
+[[ "$mcp_tools_code" == "200" ]] || fail "POST /mcp tools/list returned ${mcp_tools_code}"
+grep -q '"get_dashboard_snapshot"' "$mcp_tools_body" || fail "POST /mcp tools/list missing get_dashboard_snapshot"
 
 echo "SMOKE PASS ${BASE}"

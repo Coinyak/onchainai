@@ -57,6 +57,7 @@ use crate::server::secret_redaction::redact_tool_for_admin;
 use crate::workbench::{build_summary_cards, WorkbenchSummaryCard};
 #[cfg(feature = "ssr")]
 use axum::http::request::Parts;
+use std::fmt::Write as _;
 
 #[cfg(feature = "ssr")]
 fn request_context() -> Result<(Parts, sqlx::PgPool, String, String), ServerFnError> {
@@ -751,6 +752,116 @@ pub struct BrowserDataPayload {
     pub preview_tool: Option<Tool>,
 }
 
+pub const MAX_DASHBOARD_LIST_LIMIT: i64 = 12;
+
+pub fn clamp_dashboard_list_limit(limit: i64) -> i64 {
+    limit.clamp(1, MAX_DASHBOARD_LIST_LIMIT)
+}
+
+fn encoded_query_value(value: &str) -> String {
+    urlencoding::encode(value).into_owned()
+}
+
+pub fn dashboard_filter_href(axis: &str, value: &str) -> String {
+    let value = encoded_query_value(value);
+    match axis {
+        "function" => format!("/tools?function={value}"),
+        "type" => format!("/tools?type={value}"),
+        "chain" => format!("/tools?chain={value}"),
+        "status" => format!("/tools?status={value}"),
+        "pricing" => format!("/tools?q={value}"),
+        _ => "/tools".into(),
+    }
+}
+
+fn dashboard_label(axis: &str, value: &str) -> String {
+    match axis {
+        "type" if value.eq_ignore_ascii_case("mcp") => "MCP".into(),
+        "type" if value.eq_ignore_ascii_case("cli") => "CLI".into(),
+        "type" if value.eq_ignore_ascii_case("sdk") => "SDK".into(),
+        "type" if value.eq_ignore_ascii_case("api") => "API".into(),
+        "type" if value.eq_ignore_ascii_case("x402") => "x402".into(),
+        "status" if value.eq_ignore_ascii_case("official") => "Official".into(),
+        "status" if value.eq_ignore_ascii_case("verified") => "Verified".into(),
+        "status" if value.eq_ignore_ascii_case("community") => "Community".into(),
+        "pricing" if value.eq_ignore_ascii_case("x402") => "x402".into(),
+        _ => value
+            .split(['-', '_'])
+            .filter(|part| !part.is_empty())
+            .map(|part| {
+                let mut chars = part.chars();
+                match chars.next() {
+                    Some(first) => format!("{}{}", first.to_uppercase(), chars.as_str()),
+                    None => String::new(),
+                }
+            })
+            .collect::<Vec<_>>()
+            .join(" "),
+    }
+}
+
+fn dashboard_bucket(axis: &str, id: String, label: Option<String>, count: i64) -> DashboardBucket {
+    let label = label.unwrap_or_else(|| dashboard_label(axis, &id));
+    let href = dashboard_filter_href(axis, &id);
+    DashboardBucket {
+        id,
+        label,
+        count,
+        href,
+    }
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+pub struct DashboardBucket {
+    pub id: String,
+    pub label: String,
+    pub count: i64,
+    pub href: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct DashboardMetrics {
+    pub public_tools: i64,
+    pub mcp_tools: i64,
+    pub cli_tools: i64,
+    pub sdk_tools: i64,
+    pub api_tools: i64,
+    pub x402_tools: i64,
+    pub official_tools: i64,
+    pub verified_tools: i64,
+    pub updated_recently: i64,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct PublicDashboardSnapshot {
+    pub metrics: DashboardMetrics,
+    pub type_counts: Vec<DashboardBucket>,
+    pub function_counts: Vec<DashboardBucket>,
+    pub chain_counts: Vec<DashboardBucket>,
+    pub trust_counts: Vec<DashboardBucket>,
+    pub pricing_counts: Vec<DashboardBucket>,
+    pub new_tools: Vec<Tool>,
+    pub popular_tools: Vec<Tool>,
+    pub x402_tools: Vec<Tool>,
+    pub high_trust_tools: Vec<Tool>,
+    pub as_of: chrono::DateTime<chrono::Utc>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ToolkitExportPayload {
+    pub format: String,
+    pub filename: String,
+    pub body: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct MyToolkitPayload {
+    pub total: i64,
+    pub tools: Vec<Tool>,
+    pub markdown_export: ToolkitExportPayload,
+    pub json_export: ToolkitExportPayload,
+}
+
 /// Request for bundled browser data load.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct LoadBrowserDataRequest {
@@ -828,6 +939,305 @@ pub async fn load_browser_data(
         comment_counts,
         preview_tool,
     })
+}
+
+#[cfg_attr(feature = "ssr", derive(sqlx::FromRow))]
+struct DashboardValueCountRow {
+    id: String,
+    count: i64,
+}
+
+#[cfg_attr(feature = "ssr", derive(sqlx::FromRow))]
+struct DashboardCategoryCountRow {
+    id: String,
+    label: String,
+    count: i64,
+}
+
+#[cfg(feature = "ssr")]
+async fn fetch_dashboard_value_counts(
+    pool: &sqlx::PgPool,
+    axis: &str,
+    expression: &str,
+    limit: i64,
+) -> Result<Vec<DashboardBucket>, ServerFnError> {
+    let sql = format!(
+        r#"
+        SELECT {expression} AS id, COUNT(*)::bigint AS count
+        FROM tools
+        WHERE {TOOLS_APPROVED_WHERE}
+          AND {expression} IS NOT NULL
+          AND {expression} <> ''
+        GROUP BY {expression}
+        ORDER BY count DESC, id ASC
+        LIMIT $1
+        "#
+    );
+    let rows = sqlx::query_as::<_, DashboardValueCountRow>(&sql)
+        .bind(limit)
+        .fetch_all(pool)
+        .await
+        .map_err(|e| ServerFnError::new(format!("{axis} dashboard counts failed: {e}")))?;
+
+    Ok(rows
+        .into_iter()
+        .map(|row| dashboard_bucket(axis, row.id, None, row.count))
+        .collect())
+}
+
+#[cfg(feature = "ssr")]
+async fn fetch_dashboard_function_counts(
+    pool: &sqlx::PgPool,
+    limit: i64,
+) -> Result<Vec<DashboardBucket>, ServerFnError> {
+    let sql = format!(
+        r#"
+        SELECT c.id, c.label, COUNT(t.id)::bigint AS count
+        FROM categories c
+        LEFT JOIN tools t ON t.function = c.id AND t.{TOOLS_APPROVED_WHERE}
+        GROUP BY c.id, c.label, c.sort_order
+        HAVING COUNT(t.id) > 0
+        ORDER BY count DESC, c.sort_order ASC
+        LIMIT $1
+        "#
+    );
+    let rows = sqlx::query_as::<_, DashboardCategoryCountRow>(&sql)
+        .bind(limit)
+        .fetch_all(pool)
+        .await
+        .map_err(|e| ServerFnError::new(format!("function dashboard counts failed: {e}")))?;
+
+    Ok(rows
+        .into_iter()
+        .map(|row| dashboard_bucket("function", row.id, Some(row.label), row.count))
+        .collect())
+}
+
+#[cfg(feature = "ssr")]
+async fn fetch_dashboard_x402_tools(
+    pool: &sqlx::PgPool,
+    limit: i64,
+) -> Result<Vec<Tool>, ServerFnError> {
+    let sql = format!(
+        r#"
+        SELECT *
+        FROM tools
+        WHERE {TOOLS_APPROVED_WHERE}
+          AND (
+            type = 'x402'
+            OR pricing = 'x402'
+            OR x402_price IS NOT NULL
+            OR referral_enabled = true
+          )
+        ORDER BY stars DESC, created_at DESC
+        LIMIT $1
+        "#
+    );
+    let tools = sqlx::query_as::<_, Tool>(&sql)
+        .bind(limit)
+        .fetch_all(pool)
+        .await
+        .map_err(|e| ServerFnError::new(format!("x402 dashboard tools failed: {e}")))?;
+    Ok(sanitize_tools_for_public_response(tools))
+}
+
+#[cfg(feature = "ssr")]
+async fn fetch_dashboard_metrics(pool: &sqlx::PgPool) -> Result<DashboardMetrics, ServerFnError> {
+    let sql = format!(
+        r#"
+        SELECT
+          COUNT(*)::bigint,
+          COUNT(*) FILTER (WHERE type = 'mcp')::bigint,
+          COUNT(*) FILTER (WHERE type = 'cli')::bigint,
+          COUNT(*) FILTER (WHERE type = 'sdk')::bigint,
+          COUNT(*) FILTER (WHERE type = 'api')::bigint,
+          COUNT(*) FILTER (
+            WHERE type = 'x402' OR pricing = 'x402' OR x402_price IS NOT NULL
+          )::bigint,
+          COUNT(*) FILTER (WHERE status = 'official')::bigint,
+          COUNT(*) FILTER (WHERE status IN ('verified', 'official'))::bigint,
+          COUNT(*) FILTER (WHERE updated_at >= now() - interval '30 days')::bigint
+        FROM tools
+        WHERE {TOOLS_APPROVED_WHERE}
+        "#
+    );
+    let row = sqlx::query_as::<_, (i64, i64, i64, i64, i64, i64, i64, i64, i64)>(&sql)
+        .fetch_one(pool)
+        .await
+        .map_err(|e| ServerFnError::new(format!("dashboard metrics failed: {e}")))?;
+
+    Ok(DashboardMetrics {
+        public_tools: row.0,
+        mcp_tools: row.1,
+        cli_tools: row.2,
+        sdk_tools: row.3,
+        api_tools: row.4,
+        x402_tools: row.5,
+        official_tools: row.6,
+        verified_tools: row.7,
+        updated_recently: row.8,
+    })
+}
+
+#[cfg(feature = "ssr")]
+pub(crate) async fn fetch_public_dashboard_snapshot(
+    pool: &sqlx::PgPool,
+    list_limit: i64,
+) -> Result<PublicDashboardSnapshot, ServerFnError> {
+    let limit = clamp_dashboard_list_limit(list_limit);
+    let empty_filters = ToolFilters::default();
+    let high_trust_filters = ToolFilters {
+        status: vec!["official".into(), "verified".into()],
+        ..Default::default()
+    };
+
+    let (metrics, type_counts, function_counts, chain_counts, trust_counts, pricing_counts) = futures::join!(
+        fetch_dashboard_metrics(pool),
+        fetch_dashboard_value_counts(pool, "type", "type", limit),
+        fetch_dashboard_function_counts(pool, limit),
+        fetch_chain_counts(pool, limit),
+        fetch_dashboard_value_counts(pool, "status", "status", limit),
+        fetch_dashboard_value_counts(pool, "pricing", "pricing", limit),
+    );
+    let (new_tools, popular_tools, x402_tools, high_trust_tools) = futures::join!(
+        fetch_list_tools(pool, "new", 0, limit, &empty_filters, None),
+        fetch_list_tools(pool, "hot", 0, limit, &empty_filters, None),
+        fetch_dashboard_x402_tools(pool, limit),
+        fetch_list_tools(pool, "hot", 0, limit, &high_trust_filters, None),
+    );
+
+    Ok(PublicDashboardSnapshot {
+        metrics: metrics?,
+        type_counts: type_counts?,
+        function_counts: function_counts?,
+        chain_counts: chain_counts?
+            .into_iter()
+            .map(|(id, count)| dashboard_bucket("chain", id, None, count))
+            .collect(),
+        trust_counts: trust_counts?,
+        pricing_counts: pricing_counts?,
+        new_tools: new_tools?,
+        popular_tools: popular_tools?,
+        x402_tools: x402_tools?,
+        high_trust_tools: high_trust_tools?,
+        as_of: chrono::Utc::now(),
+    })
+}
+
+#[server(GetPublicDashboardSnapshot, "/api")]
+pub async fn get_public_dashboard_snapshot(
+    list_limit: i64,
+) -> Result<PublicDashboardSnapshot, ServerFnError> {
+    let pool = use_context::<sqlx::PgPool>()
+        .ok_or_else(|| ServerFnError::new("database pool not available"))?;
+    fetch_public_dashboard_snapshot(&pool, list_limit).await
+}
+
+fn sanitize_toolkit_tools(tools: Vec<Tool>) -> Vec<Tool> {
+    sanitize_tools_for_public_response(tools)
+        .into_iter()
+        .map(|mut tool| {
+            tool.name = redact_secrets(&tool.name);
+            tool.description = tool.description.map(|value| redact_secrets(&value));
+            tool.install_command = tool.install_command.map(|value| redact_secrets(&value));
+            tool.safe_copy_command = tool.safe_copy_command.map(|value| redact_secrets(&value));
+            tool.mcp_endpoint = tool.mcp_endpoint.map(|value| redact_secrets(&value));
+            tool
+        })
+        .collect()
+}
+
+fn toolkit_markdown_for_tools(tools: &[Tool]) -> String {
+    let mut body = String::from("# My OnchainAI Toolkit\n\n");
+    if tools.is_empty() {
+        body.push_str("No saved tools yet.\n");
+        return body;
+    }
+
+    body.push_str("Saved tools exported from OnchainAI.\n\n");
+    for tool in tools {
+        let chains = if tool.chains.is_empty() {
+            "Not listed".into()
+        } else {
+            tool.chains.join(", ")
+        };
+        let install = tool
+            .safe_copy_command
+            .as_deref()
+            .or(tool.install_command.as_deref())
+            .unwrap_or("No install command listed");
+        let endpoint = tool
+            .mcp_endpoint
+            .as_deref()
+            .unwrap_or("No MCP endpoint listed");
+        let _ = writeln!(body, "## {}", tool.name);
+        let _ = writeln!(body, "- Slug: {}", tool.slug);
+        let _ = writeln!(body, "- Type: {}", tool.tool_type);
+        let _ = writeln!(body, "- Function: {}", tool.function);
+        let _ = writeln!(body, "- Chains: {chains}");
+        let _ = writeln!(body, "- Trust: {}", tool.status);
+        let _ = writeln!(body, "- Pricing: {}", tool.pricing);
+        if let Some(price) = tool.x402_price.as_deref().filter(|value| !value.is_empty()) {
+            let _ = writeln!(body, "- x402 price: {price}");
+        }
+        let _ = writeln!(body, "- Install: `{install}`");
+        let _ = writeln!(body, "- MCP endpoint: {endpoint}");
+        let _ = writeln!(body, "- OnchainAI: /tools/{}\n", tool.slug);
+    }
+    body
+}
+
+pub fn build_toolkit_payload(tools: Vec<Tool>) -> Result<MyToolkitPayload, ServerFnError> {
+    let tools = sanitize_toolkit_tools(tools);
+    let markdown_body = toolkit_markdown_for_tools(&tools);
+    let json_body = serde_json::to_string_pretty(&tools)
+        .map_err(|e| ServerFnError::new(format!("failed to serialize toolkit: {e}")))?;
+
+    Ok(MyToolkitPayload {
+        total: tools.len() as i64,
+        tools,
+        markdown_export: ToolkitExportPayload {
+            format: "markdown".into(),
+            filename: "onchainai-toolkit.md".into(),
+            body: markdown_body,
+        },
+        json_export: ToolkitExportPayload {
+            format: "json".into(),
+            filename: "onchainai-toolkit.json".into(),
+            body: json_body,
+        },
+    })
+}
+
+#[cfg(feature = "ssr")]
+async fn fetch_user_toolkit(
+    pool: &sqlx::PgPool,
+    user_id: uuid::Uuid,
+) -> Result<MyToolkitPayload, ServerFnError> {
+    let sql = format!(
+        r#"
+        SELECT t.*
+        FROM bookmarks b
+        JOIN tools t ON t.id = b.tool_id
+        WHERE b.user_id = $1 AND {TOOLS_APPROVED_WHERE}
+        ORDER BY b.created_at DESC
+        LIMIT 200
+        "#
+    );
+    let tools = sqlx::query_as::<_, Tool>(&sql)
+        .bind(user_id)
+        .fetch_all(pool)
+        .await
+        .map_err(|e| ServerFnError::new(format!("failed to load toolkit: {e}")))?;
+
+    build_toolkit_payload(tools)
+}
+
+#[server(ListMyToolkit, "/api")]
+pub async fn list_my_toolkit() -> Result<MyToolkitPayload, ServerFnError> {
+    let (parts, pool, jwt_secret, issuer) = request_context()?;
+    let user = require_user(&parts, &pool, &jwt_secret, &issuer).await?;
+    fetch_user_toolkit(&pool, user.id).await
 }
 
 /// Batch comment counts for approved tools by slug.
@@ -3551,8 +3961,8 @@ pub async fn request_tool_claim(input: ClaimToolInput) -> Result<ToolClaimReques
         .await
         .map_err(|e| ServerFnError::new(format!("transaction failed: {e}")))?;
 
-    let proof_note = build_claim_proof_note(&input)
-        .map_err(|msg| ServerFnError::new(msg.to_string()))?;
+    let proof_note =
+        build_claim_proof_note(&input).map_err(|msg| ServerFnError::new(msg.to_string()))?;
 
     let claim = sqlx::query_as::<_, ToolClaimRequest>(
         r#"
@@ -3755,6 +4165,51 @@ mod tests {
         let categories =
             format!("LEFT JOIN tools t ON t.function = c.id AND t.{TOOLS_APPROVED_WHERE}");
         assert!(categories.contains("relevance_status = 'accepted'"));
+    }
+
+    #[test]
+    fn dashboard_snapshot_limit_is_bounded_for_public_surfaces() {
+        assert_eq!(clamp_dashboard_list_limit(0), 1);
+        assert_eq!(clamp_dashboard_list_limit(6), 6);
+        assert_eq!(clamp_dashboard_list_limit(99), MAX_DASHBOARD_LIST_LIMIT);
+    }
+
+    #[test]
+    fn dashboard_bucket_links_target_existing_public_filters() {
+        assert_eq!(
+            dashboard_filter_href("function", "payments"),
+            "/tools?function=payments"
+        );
+        assert_eq!(dashboard_filter_href("type", "mcp"), "/tools?type=mcp");
+        assert_eq!(dashboard_filter_href("chain", "base"), "/tools?chain=base");
+        assert_eq!(
+            dashboard_filter_href("status", "official"),
+            "/tools?status=official"
+        );
+        assert_eq!(dashboard_filter_href("pricing", "x402"), "/tools?q=x402");
+    }
+
+    #[test]
+    fn toolkit_export_payload_redacts_sensitive_payment_addresses() {
+        let mut tool = sample_review_tool();
+        tool.approval_status = "approved".into();
+        tool.relevance_status = "accepted".into();
+        tool.status = "official".into();
+        tool.pricing = "x402".into();
+        tool.x402_price = Some("$0.01".into());
+        tool.install_command = Some("npx bridge-mcp".into());
+        tool.referral_payout_address = Some("0xoperatorpayout".into());
+        tool.x402_pay_to_address = Some("0xproviderpayto".into());
+
+        let payload = build_toolkit_payload(vec![tool]).expect("toolkit payload");
+
+        assert_eq!(payload.total, 1);
+        assert_eq!(payload.tools[0].referral_payout_address, None);
+        assert_eq!(payload.tools[0].x402_pay_to_address, None);
+        assert!(payload.markdown_export.body.contains("Bridge MCP"));
+        assert!(payload.markdown_export.body.contains("npx bridge-mcp"));
+        assert!(!payload.markdown_export.body.contains("0xoperatorpayout"));
+        assert!(!payload.json_export.body.contains("0xproviderpayto"));
     }
 
     fn sample_review_tool() -> Tool {
@@ -4046,7 +4501,9 @@ mod tests {
 
     #[test]
     fn validate_claim_tool_input_rejects_too_many_proof_links() {
-        let links: Vec<String> = (0..11).map(|i| format!("https://example.com/{i}")).collect();
+        let links: Vec<String> = (0..11)
+            .map(|i| format!("https://example.com/{i}"))
+            .collect();
         let err = validate_claim_tool_input(&ClaimToolInput {
             slug: "bridge-mcp".into(),
             verification_note: "I maintain this repo and can verify via DNS TXT.".into(),

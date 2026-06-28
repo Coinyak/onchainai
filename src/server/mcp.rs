@@ -3,6 +3,7 @@
 use crate::install_safety::{blocks_structured_config, claude_mcp_config, install_warning_text};
 use crate::models::tool::{sanitize_tool_for_public_response, sanitize_tools_for_public_response};
 use crate::models::Tool;
+use crate::server::functions::{clamp_dashboard_list_limit, fetch_public_dashboard_snapshot};
 use crate::server::queries::PUBLIC_TOOL_WHERE;
 use crate::server::rate_limit::{check_mcp_ip_rate_limit, client_ip_from_parts};
 use crate::AppState;
@@ -155,6 +156,21 @@ async fn tools_list() -> Result<Value, (i32, String)> {
                 "inputSchema": { "type": "object", "properties": {} }
             },
             {
+                "name": "get_dashboard_snapshot",
+                "description": "Public no-login snapshot of OnchainAI tool coverage, categories, trust, x402, and featured tool lists",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "limit": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 12,
+                            "description": "Maximum tools or buckets per section"
+                        }
+                    }
+                }
+            },
+            {
                 "name": "get_install_guide",
                 "description": "Platform-specific install guide",
                 "inputSchema": {
@@ -213,6 +229,17 @@ async fn tools_call(pool: &PgPool, params: Option<Value>) -> Result<Value, (i32,
         "list_categories" => {
             let cats = mcp_list_categories(pool).await?;
             serde_json::to_string_pretty(&cats)
+                .map_err(|e| (-32603, format!("serialize error: {e}")))?
+        }
+        "get_dashboard_snapshot" => {
+            let limit = args
+                .get("limit")
+                .and_then(|value| value.as_i64())
+                .unwrap_or(6);
+            let snapshot = fetch_public_dashboard_snapshot(pool, clamp_dashboard_list_limit(limit))
+                .await
+                .map_err(|e| (-32603, format!("dashboard snapshot failed: {e}")))?;
+            serde_json::to_string_pretty(&snapshot)
                 .map_err(|e| (-32603, format!("serialize error: {e}")))?
         }
         "get_install_guide" => {
@@ -552,11 +579,14 @@ mod tests {
     use super::*;
 
     #[test]
-    fn tools_list_has_four_tools() {
+    fn tools_list_has_five_tools() {
         let rt = tokio::runtime::Runtime::new().unwrap();
         let value = rt.block_on(tools_list()).unwrap();
         let tools = value["tools"].as_array().unwrap();
-        assert_eq!(tools.len(), 4);
+        assert_eq!(tools.len(), 5);
+        assert!(tools
+            .iter()
+            .any(|tool| tool["name"].as_str() == Some("get_dashboard_snapshot")));
     }
 
     #[test]

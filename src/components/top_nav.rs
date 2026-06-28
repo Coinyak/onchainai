@@ -80,6 +80,18 @@ pub fn TopNav() -> impl IntoView {
                 </a>
                 <nav class="flex items-center gap-2 md:gap-5 text-[14px]">
                     <a
+                        href="/dashboard"
+                        class="hidden sm:inline text-[#6B6B6B] hover:text-[#1A1A1A] no-underline text-[13px]"
+                    >
+                        "Dashboard"
+                    </a>
+                    <a
+                        href="/toolkit"
+                        class="hidden md:inline text-[#6B6B6B] hover:text-[#1A1A1A] no-underline text-[13px]"
+                    >
+                        "Toolkit"
+                    </a>
+                    <a
                         href="/submit"
                         class="inline-flex items-center justify-center h-8 md:h-9 px-3 md:px-4 rounded-lg bg-[#E76F00] text-white text-[13px] md:text-[14px] font-medium no-underline hover:bg-[#D96400]"
                     >

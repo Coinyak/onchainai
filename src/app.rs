@@ -7,8 +7,9 @@ use crate::components::site_shell::SiteShell;
 use crate::components::top_nav::TopNav;
 use crate::pages::{
     AdminCategoriesPage, AdminCommentsPage, AdminCrawlerPage, AdminDashboardPage,
-    AdminFeaturedPage, AdminSettingsPage, AdminToolsPage, AdminUsersPage, CategoryPage, HomePage,
-    LoginPage, OnboardingProfilePage, SubmitPage, ToolDetailPage, ToolsListPage,
+    AdminFeaturedPage, AdminSettingsPage, AdminToolsPage, AdminUsersPage, CategoryPage,
+    DashboardPage, HomePage, LoginPage, OnboardingProfilePage, SubmitPage, ToolDetailPage,
+    ToolkitPage, ToolsListPage,
 };
 use leptos::prelude::*;
 use leptos_meta::{provide_meta_context, Link, Meta, MetaTags, Stylesheet, Title};
@@ -78,6 +79,8 @@ pub fn App() -> impl IntoView {
                 <FlatRoutes fallback=|| view! { <NotFoundPage/> }.into_view()>
                     <Route path=StaticSegment("") view=HomePage/>
                     <Route path=StaticSegment("tools") view=ToolsListPage/>
+                    <Route path=StaticSegment("dashboard") view=DashboardPage/>
+                    <Route path=StaticSegment("toolkit") view=ToolkitPage/>
                     <Route path=(StaticSegment("tools"), ParamSegment("slug")) view=ToolDetailPage/>
                     <Route path=(StaticSegment("categories"), ParamSegment("id")) view=CategoryPage/>
                     <Route path=StaticSegment("about") view=AboutPage/>

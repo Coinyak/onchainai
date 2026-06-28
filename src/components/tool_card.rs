@@ -30,6 +30,7 @@ pub fn ToolCard(
     #[prop(optional)] preview_href: Option<String>,
     #[prop(optional)] is_selected: bool,
     #[prop(optional)] comment_count: i64,
+    #[prop(optional)] initially_starred: bool,
 ) -> impl IntoView {
     let slug = tool.slug.clone();
     let detail_href = format!("/tools/{slug}");
@@ -66,7 +67,7 @@ pub fn ToolCard(
     let license = tool.license.clone().unwrap_or_default();
 
     let show_login = RwSignal::new(false);
-    let starred = RwSignal::new(false);
+    let starred = RwSignal::new(initially_starred);
     view! {
         <LoginModal show=show_login/>
         <article class=if is_selected { "tool-card is-selected" } else { "tool-card" }>
@@ -162,7 +163,8 @@ pub fn ToolCard(
                 <button
                     type="button"
                     class="card-action-btn"
-                    aria-label="Toggle bookmark"
+                    aria-label=move || if starred.get() { "Remove from Toolkit" } else { "Save to Toolkit" }
+                    title=move || if starred.get() { "Remove from Toolkit" } else { "Save to Toolkit" }
                     on:click=move |ev| {
                         ev.stop_propagation();
                         let slug_toggle = slug.clone();
