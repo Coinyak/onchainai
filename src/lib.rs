@@ -98,6 +98,9 @@ pub fn build_app(pool: sqlx::PgPool, config: Config) -> axum::Router {
 
     // Catalog pages fan out ~6 read-only server-fn calls on hydrate; smoke tests
     // navigate quickly — allow short bursts above 60/min without blocking SSR reads.
+    let relax_rate_limit = std::env::var("ONCHAINAI_RELAX_RATE_LIMIT")
+        .map(|v| v == "1")
+        .unwrap_or(false);
     let general_rate_limit = GovernorLayer::new(
         GovernorConfigBuilder::default()
             .per_second(5)
@@ -206,8 +209,29 @@ pub fn build_app(pool: sqlx::PgPool, config: Config) -> axum::Router {
         .with_state(state.clone())
         .layer(mcp_rate_limit);
 
+    let pkg_no_cache = std::env::var("ONCHAINAI_PKG_NO_CACHE")
+        .map(|v| v == "1")
+        .unwrap_or(false);
+    let pkg_cache_control = if pkg_no_cache {
+        axum::http::HeaderValue::from_static("no-store")
+    } else {
+        axum::http::HeaderValue::from_static("public, max-age=31536000, immutable")
+    };
+    let css_service = ServiceBuilder::new()
+        .layer(SetResponseHeaderLayer::overriding(
+            axum::http::header::CACHE_CONTROL,
+            pkg_cache_control.clone(),
+        ))
+        .service(ServeFile::new("style/output.css"));
+    let pkg_service = ServiceBuilder::new()
+        .layer(SetResponseHeaderLayer::overriding(
+            axum::http::header::CACHE_CONTROL,
+            pkg_cache_control,
+        ))
+        .service(leptos_axum::site_pkg_dir_service(&leptos_options));
+
     let app_routes = Router::new()
-        .route_service("/pkg/onchainai.css", ServeFile::new("style/output.css"))
+        .route_service("/pkg/onchainai.css", css_service)
         .nest_service(
             "/chains",
             ServiceBuilder::new()
@@ -217,10 +241,7 @@ pub fn build_app(pool: sqlx::PgPool, config: Config) -> axum::Router {
                 ))
                 .service(ServeDir::new("public/chains").append_index_html_on_directories(false)),
         )
-        .route_service(
-            &static_route,
-            leptos_axum::site_pkg_dir_service(&leptos_options),
-        )
+        .route_service(&static_route, pkg_service)
         .route(
             "/api/admin/operator/snapshot",
             axum::routing::get(server::operator_harness::get_operator_snapshot),
@@ -248,8 +269,13 @@ pub fn build_app(pool: sqlx::PgPool, config: Config) -> axum::Router {
             provide_fallback_context,
             app::shell,
         ))
-        .with_state(state.clone())
-        .layer(general_rate_limit);
+        .with_state(state.clone());
+
+    let app_routes = if relax_rate_limit {
+        app_routes
+    } else {
+        app_routes.layer(general_rate_limit)
+    };
 
     Router::new()
         .merge(auth_routes)

@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# Blocks push when the worktree has stale UI vs WASM (--no-verify commits).
+set -euo pipefail
+
+ROOT="$(git rev-parse --show-toplevel)"
+cd "$ROOT"
+exec ./scripts/ui-staleness-check.sh --worktree

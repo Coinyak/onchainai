@@ -33,6 +33,8 @@ git clone https://github.com/hoyeon4315-cpu/onchainai
 cd onchainai
 cp .env.example .env
 # Fill in .env (Supabase URL, keys, GitHub OAuth, JWT secret)
+./scripts/install-agent-hooks.sh
+# Optional session bootstrap: ./scripts/agent-start.sh   # once: Git pre-commit blocks stale UI commits
 docker build -t onchainai .
 docker run -p 3000:3000 onchainai
 ```

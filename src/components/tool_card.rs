@@ -1,6 +1,7 @@
 //! Stripe-style tool card for list views — badges, bookmark, upvote.
 
-use crate::chains::{chain_fallback_label, chain_logo_path, chain_tags_for_tool, ChainTagView};
+use crate::chains::{chain_fallback_label, chain_tags_for_tool, ChainTagView};
+use crate::components::chain_logo::ChainLogo;
 use crate::components::copy_button::CopyButton;
 use crate::components::login_modal::LoginModal;
 use crate::components::tool_logo::ToolLogo;
@@ -42,13 +43,11 @@ fn render_chain_tags(
                 .map(|tag| {
                     if let Some(meta) = tag.meta {
                         view! {
-                            <img
+                            <ChainLogo
+                                id=meta.id.to_string()
+                                label=meta.label.to_string()
                                 class="chain-logo chain-logo-tag"
-                                src=chain_logo_path(meta.id)
-                                alt=meta.label
-                                title=meta.label
-                                width="20"
-                                height="20"
+                                size=20
                             />
                         }
                         .into_any()
@@ -83,6 +82,7 @@ pub fn ToolCard(
     #[prop(optional)] is_selected: bool,
     #[prop(optional)] comment_count: i64,
     #[prop(optional)] initially_starred: bool,
+    #[prop(optional)] on_bookmark_changed: Option<Callback<bool>>,
 ) -> impl IntoView {
     let slug = tool.slug.clone();
     let detail_href = format!("/tools/{slug}");
@@ -206,6 +206,9 @@ pub fn ToolCard(
                                 Ok(Some(_)) => {
                                     if let Ok(now_starred) = toggle_bookmark(slug_toggle).await {
                                         starred.set(now_starred);
+                                        if let Some(callback) = on_bookmark_changed {
+                                            callback.run(now_starred);
+                                        }
                                     }
                                 }
                                 _ => show_login.set(true),

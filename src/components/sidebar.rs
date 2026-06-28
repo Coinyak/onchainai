@@ -89,6 +89,25 @@ const STATUSES: &[FilterOption] = &[
     },
 ];
 
+const PRICING: &[FilterOption] = &[
+    FilterOption {
+        id: "free",
+        label: "Free",
+    },
+    FilterOption {
+        id: "x402",
+        label: "x402",
+    },
+    FilterOption {
+        id: "paid",
+        label: "Paid",
+    },
+    FilterOption {
+        id: "freemium",
+        label: "Freemium",
+    },
+];
+
 fn default_section_state(function_open: bool) -> HashMap<String, bool> {
     [
         ("function", function_open),
@@ -96,6 +115,7 @@ fn default_section_state(function_open: bool) -> HashMap<String, bool> {
         ("actor", false),
         ("type", false),
         ("status", false),
+        ("pricing", false),
     ]
     .into_iter()
     .map(|(k, v)| (k.to_string(), v))
@@ -107,6 +127,28 @@ fn link_class(active: bool) -> &'static str {
         "sidebar-link active"
     } else {
         "sidebar-link"
+    }
+}
+
+fn persist_sidebar_collapsed(collapsed: bool) {
+    write_sidebar_collapsed(collapsed);
+}
+
+fn set_sidebar_collapsed(sidebar_collapsed: RwSignal<bool>, collapsed: bool) {
+    sidebar_collapsed.set(collapsed);
+    persist_sidebar_collapsed(collapsed);
+}
+
+fn collapse_mobile_sidebar(sidebar_collapsed: RwSignal<bool>) {
+    #[cfg(feature = "hydrate")]
+    {
+        if sidebar_default_collapsed_for_viewport() {
+            set_sidebar_collapsed(sidebar_collapsed, true);
+        }
+    }
+    #[cfg(not(feature = "hydrate"))]
+    {
+        let _ = sidebar_collapsed;
     }
 }
 
@@ -182,11 +224,13 @@ pub fn Sidebar(
     base: BrowserBase,
     categories: Vec<(Category, i64)>,
     query_base: String,
+    filter_revision: Memo<String>,
     active_function: Option<String>,
     active_asset_class: Option<String>,
     active_actor: Option<String>,
     active_type: Option<String>,
     active_status: Option<String>,
+    active_pricing: Option<String>,
     #[prop(default = true)] default_function_open: bool,
 ) -> impl IntoView {
     let base_path = base.path();
@@ -195,28 +239,80 @@ pub fn Sidebar(
     let actor_active = parse_multi(active_actor.as_deref());
     let type_active = parse_multi(active_type.as_deref());
     let status_active = parse_multi(active_status.as_deref());
+    let pricing_active = parse_multi(active_pricing.as_deref());
 
-    // SSR-safe defaults — localStorage is applied after hydration to avoid DOM mismatch.
+    // SSR: collapsed strip on mobile via CSS until storage loads; desktop expanded rail.
     let default_sections = default_section_state(default_function_open);
-    let sidebar_collapsed = RwSignal::new(false);
+    let sidebar_collapsed = RwSignal::new(true);
     let open_map = RwSignal::new(default_sections.clone());
     let sidebar_storage_loaded = RwSignal::new(false);
 
     #[cfg(feature = "hydrate")]
     {
         Effect::new(move |_| {
-            let default_collapsed = sidebar_default_collapsed_for_viewport();
-            sidebar_collapsed.set(read_sidebar_collapsed_with_default(default_collapsed));
-            open_map.set(read_sidebar_sections(default_sections.clone()));
-            sidebar_storage_loaded.set(true);
+            let sections_default = default_sections.clone();
+            wasm_bindgen_futures::spawn_local(async move {
+                gloo_timers::future::TimeoutFuture::new(0).await;
+                if sidebar_default_collapsed_for_viewport() {
+                    set_sidebar_collapsed(sidebar_collapsed, true);
+                } else {
+                    sidebar_collapsed.set(read_sidebar_collapsed_with_default(false));
+                }
+                open_map.set(read_sidebar_sections(sections_default));
+                sidebar_storage_loaded.set(true);
+            });
         });
     }
 
-    Effect::new(move |_| {
-        if sidebar_storage_loaded.get() {
-            write_sidebar_collapsed(sidebar_collapsed.get());
-        }
-    });
+    #[cfg(feature = "hydrate")]
+    {
+        Effect::new(move |_| {
+            let collapsed = sidebar_collapsed.get();
+            if let Some(body) = web_sys::window()
+                .and_then(|w| w.document())
+                .and_then(|d| d.body())
+            {
+                if sidebar_default_collapsed_for_viewport() && !collapsed {
+                    let _ = body.class_list().add_1("sidebar-scroll-locked");
+                } else {
+                    let _ = body.class_list().remove_1("sidebar-scroll-locked");
+                }
+            }
+        });
+    }
+
+    let backdrop_ref = NodeRef::<leptos::html::Button>::new();
+    #[cfg(feature = "hydrate")]
+    {
+        Effect::new(move |_| {
+            if !sidebar_collapsed.get() && sidebar_default_collapsed_for_viewport() {
+                if let Some(btn) = backdrop_ref.get() {
+                    let _ = btn.focus();
+                }
+            }
+        });
+
+        let revision_snapshot = StoredValue::new(String::new());
+        Effect::new(move |_| {
+            if !sidebar_storage_loaded.get() {
+                return;
+            }
+            let revision = filter_revision.get();
+            let prev = revision_snapshot.get_value();
+            if prev.is_empty() {
+                revision_snapshot.set_value(revision);
+                return;
+            }
+            if crate::filter_query::should_collapse_mobile_sidebar_on_route_change(
+                &prev,
+                &revision,
+                sidebar_default_collapsed_for_viewport(),
+            ) {
+                set_sidebar_collapsed(sidebar_collapsed, true);
+            }
+            revision_snapshot.set_value(revision);
+        });
+    }
 
     let aside_class = move || {
         if sidebar_collapsed.get() {
@@ -243,25 +339,87 @@ pub fn Sidebar(
     let query_for_type = query_base.clone();
     let base_for_status = base_path.clone();
     let query_for_status = query_base.clone();
+    let base_for_pricing = base_path.clone();
+    let query_for_pricing = query_base.clone();
+
+    let show_mobile_backdrop = move || {
+        if !sidebar_storage_loaded.get() || sidebar_collapsed.get() {
+            return false;
+        }
+        #[cfg(feature = "hydrate")]
+        {
+            sidebar_default_collapsed_for_viewport()
+        }
+        #[cfg(not(feature = "hydrate"))]
+        {
+            false
+        }
+    };
 
     view! {
-        <aside
-            class=aside_class
-            data-sidebar-ready=""
-            data-sidebar-storage-loaded=move || sidebar_storage_loaded.get().then_some("")
-            aria-busy=move || (!sidebar_storage_loaded.get()).then_some("true")
-        >
+        <div class="tools-sidebar-shell">
+            <Show when=show_mobile_backdrop>
+                <button
+                    type="button"
+                    node_ref=backdrop_ref
+                    class="sidebar-mobile-backdrop"
+                    aria-label="Close filters"
+                    tabindex="-1"
+                    on:click=move |_| set_sidebar_collapsed(sidebar_collapsed, true)
+                    on:keydown=move |ev| {
+                        if ev.key() == "Escape" {
+                            ev.stop_propagation();
+                            set_sidebar_collapsed(sidebar_collapsed, true);
+                        }
+                    }
+                />
+            </Show>
+            <aside
+                class=aside_class
+                data-sidebar-ready=""
+                data-filter-revision=move || filter_revision.get()
+                data-sidebar-storage-loaded=move || sidebar_storage_loaded.get().then_some("")
+                aria-busy=move || (!sidebar_storage_loaded.get()).then_some("true")
+                on:keydown=move |ev| {
+                    if ev.key() == "Escape" && !sidebar_collapsed.get() {
+                        ev.stop_propagation();
+                        set_sidebar_collapsed(sidebar_collapsed, true);
+                    }
+                }
+            >
             <div class="sidebar-controls">
                 <button
                     type="button"
                     class="sidebar-rail-toggle"
                     aria-label="Toggle filters sidebar"
                     prop:aria-expanded=move || !sidebar_collapsed.get()
-                    on:click=move |_| sidebar_collapsed.update(|c| *c = !*c)
+                    on:click=move |_| {
+                        let was_collapsed = sidebar_collapsed.get_untracked();
+                        let next_collapsed = !was_collapsed;
+                        set_sidebar_collapsed(sidebar_collapsed, next_collapsed);
+                        if was_collapsed {
+                            open_map.update(|m| {
+                                m.insert("function".to_string(), true);
+                                if sidebar_storage_loaded.get_untracked() {
+                                    write_sidebar_sections(m);
+                                }
+                            });
+                        }
+                    }
                 >
-                    "☰"
+                    <svg class="sidebar-rail-toggle-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+                        <line x1="4" y1="7" x2="20" y2="7" />
+                        <line x1="4" y1="12" x2="20" y2="12" />
+                        <line x1="4" y1="17" x2="20" y2="17" />
+                    </svg>
                 </button>
-                <a href=clear_href.clone() class="sidebar-clear sidebar-title-text">"Clear"</a>
+                <a
+                    href=clear_href.clone()
+                    class="sidebar-clear sidebar-title-text"
+                    on:click=move |_| collapse_mobile_sidebar(sidebar_collapsed)
+                >
+                    "Clear"
+                </a>
             </div>
 
             <div class="sidebar-rail-icons">
@@ -271,6 +429,7 @@ pub fn Sidebar(
                     ("actor", "Hu", "Actor"),
                     ("type", "Ty", "Type"),
                     ("status", "St", "Status"),
+                    ("pricing", "Pr", "Pricing"),
                 ].into_iter().map(|(id, short, label)| {
                     let section_id = id.to_string();
                     view! {
@@ -280,7 +439,7 @@ pub fn Sidebar(
                             title=label
                             aria-label=label
                             on:click=move |_| {
-                                sidebar_collapsed.set(false);
+                                set_sidebar_collapsed(sidebar_collapsed, false);
                                 open_map.update(|m| {
                                     m.insert(section_id.clone(), true);
                                     if sidebar_storage_loaded.get() {
@@ -299,7 +458,11 @@ pub fn Sidebar(
                 <CollapsibleSection section_id="function" title="Function" open_map=open_map sidebar_collapsed=sidebar_collapsed sidebar_storage_loaded=sidebar_storage_loaded>
                     <ul class="sidebar-list">
                         <li>
-                            <a href=fn_all_href.clone() class=if fn_active.is_empty() { "sidebar-link active" } else { "sidebar-link" }>
+                            <a
+                                href=fn_all_href.clone()
+                                class=if fn_active.is_empty() { "sidebar-link active" } else { "sidebar-link" }
+                                on:click=move |_| collapse_mobile_sidebar(sidebar_collapsed)
+                            >
                                 "All"
                             </a>
                         </li>
@@ -308,7 +471,11 @@ pub fn Sidebar(
                                 sidebar_function_link(&base_for_fn, &query_for_fn, &cat.id, &fn_active);
                             view! {
                                 <li>
-                                    <a href=href class=link_class(is_active)>
+                                    <a
+                                        href=href
+                                        class=link_class(is_active)
+                                        on:click=move |_| collapse_mobile_sidebar(sidebar_collapsed)
+                                    >
                                         <span class="sidebar-title-text">{cat.label}</span>
                                         <span class="sidebar-count">{count}</span>
                                     </a>
@@ -324,7 +491,15 @@ pub fn Sidebar(
                             let href = toggle_multi(&base_for_ac, &query_for_ac, "asset_class", opt.id, &ac_active);
                             let is_active = ac_active.iter().any(|v| v == opt.id);
                             view! {
-                                <li><a href=href class=link_class(is_active)><span class="sidebar-title-text">{opt.label}</span></a></li>
+                                <li>
+                                    <a
+                                        href=href
+                                        class=link_class(is_active)
+                                        on:click=move |_| collapse_mobile_sidebar(sidebar_collapsed)
+                                    >
+                                        <span class="sidebar-title-text">{opt.label}</span>
+                                    </a>
+                                </li>
                             }
                         }).collect_view()}
                     </ul>
@@ -336,7 +511,15 @@ pub fn Sidebar(
                             let href = toggle_multi(&base_for_actor, &query_for_actor, "actor", opt.id, &actor_active);
                             let is_active = actor_active.iter().any(|v| v == opt.id);
                             view! {
-                                <li><a href=href class=link_class(is_active)><span class="sidebar-title-text">{opt.label}</span></a></li>
+                                <li>
+                                    <a
+                                        href=href
+                                        class=link_class(is_active)
+                                        on:click=move |_| collapse_mobile_sidebar(sidebar_collapsed)
+                                    >
+                                        <span class="sidebar-title-text">{opt.label}</span>
+                                    </a>
+                                </li>
                             }
                         }).collect_view()}
                     </ul>
@@ -348,7 +531,15 @@ pub fn Sidebar(
                             let href = toggle_multi(&base_for_type, &query_for_type, "type", opt.id, &type_active);
                             let is_active = type_active.iter().any(|v| v == opt.id);
                             view! {
-                                <li><a href=href class=link_class(is_active)><span class="sidebar-title-text">{opt.label}</span></a></li>
+                                <li>
+                                    <a
+                                        href=href
+                                        class=link_class(is_active)
+                                        on:click=move |_| collapse_mobile_sidebar(sidebar_collapsed)
+                                    >
+                                        <span class="sidebar-title-text">{opt.label}</span>
+                                    </a>
+                                </li>
                             }
                         }).collect_view()}
                     </ul>
@@ -360,13 +551,42 @@ pub fn Sidebar(
                             let href = toggle_multi(&base_for_status, &query_for_status, "status", opt.id, &status_active);
                             let is_active = status_active.iter().any(|v| v == opt.id);
                             view! {
-                                <li><a href=href class=link_class(is_active)><span class="sidebar-title-text">{opt.label}</span></a></li>
+                                <li>
+                                    <a
+                                        href=href
+                                        class=link_class(is_active)
+                                        on:click=move |_| collapse_mobile_sidebar(sidebar_collapsed)
+                                    >
+                                        <span class="sidebar-title-text">{opt.label}</span>
+                                    </a>
+                                </li>
+                            }
+                        }).collect_view()}
+                    </ul>
+                </CollapsibleSection>
+
+                <CollapsibleSection section_id="pricing" title="Pricing" open_map=open_map sidebar_collapsed=sidebar_collapsed sidebar_storage_loaded=sidebar_storage_loaded>
+                    <ul class="sidebar-list">
+                        {PRICING.iter().map(|opt| {
+                            let href = toggle_multi(&base_for_pricing, &query_for_pricing, "pricing", opt.id, &pricing_active);
+                            let is_active = pricing_active.iter().any(|v| v == opt.id);
+                            view! {
+                                <li>
+                                    <a
+                                        href=href
+                                        class=link_class(is_active)
+                                        on:click=move |_| collapse_mobile_sidebar(sidebar_collapsed)
+                                    >
+                                        <span class="sidebar-title-text">{opt.label}</span>
+                                    </a>
+                                </li>
                             }
                         }).collect_view()}
                     </ul>
                 </CollapsibleSection>
             </div>
         </aside>
+        </div>
     }
 }
 
@@ -380,6 +600,7 @@ mod tests {
         let query_base = build_query_base(
             &BrowserBase::Tools,
             Some("bridge".into()),
+            None,
             None,
             None,
             None,
@@ -401,6 +622,7 @@ mod tests {
         let query_base = build_query_base(
             &BrowserBase::Tools,
             Some("bridge".into()),
+            None,
             None,
             None,
             None,
@@ -461,9 +683,33 @@ mod tests {
     }
 
     #[test]
+    fn sidebar_pricing_href_includes_pricing_param() {
+        let query_base = build_query_base(
+            &BrowserBase::Tools,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            "new".into(),
+            None,
+            None,
+            1,
+        );
+        let href = toggle_multi("/tools", &query_base, "pricing", "x402", &[]);
+        assert!(
+            href.contains("pricing=x402"),
+            "pricing filter href must include pricing=x402, got: {href}"
+        );
+    }
+
+    #[test]
     fn sidebar_function_link_bridge_href_includes_function_param() {
         let query_base = build_query_base(
             &BrowserBase::Tools,
+            None,
             None,
             None,
             None,

@@ -31,6 +31,18 @@ Then inspect the affected Rust/Leptos component, page, CSS, and script files. Do
 
 ## Workflow
 
+### 0. Preserve Existing Behavior
+
+Before editing, identify the existing behavior that must survive the change:
+
+- Navigation and auth controls.
+- Sidebar collapse/expand behavior and saved state.
+- Search, filters, sorting, pagination/load more, and selected tool behavior.
+- Modal open/close, keyboard dismissal, and focusable controls.
+- Existing `data-testid` selectors used by smoke scripts.
+
+Do not remove or rename these behaviors as part of a visual fix unless the user explicitly asks and the smoke scripts/docs are updated.
+
 ### 1. Frame The Change
 
 Write down:
@@ -67,15 +79,27 @@ Avoid mixing all three unless required. Preserve existing component names and sh
 
 ### 4. Inspect The Rendered UI
 
-Code review is not enough. Start or reuse a local server, then inspect:
+Code review is not enough.
+
+**While iterating**, run the watch loop so every save rebuilds SSR + WASM
+together and live-reloads the browser (no stale-bundle drift):
 
 ```bash
-./scripts/smoke-test.sh http://localhost:3000
-node scripts/browser-smoke.mjs http://localhost:3000
-node scripts/visual-snapshots.mjs http://localhost:3000 --out .playwright-cli/ui-snapshots
+./scripts/dev-watch.sh
 ```
 
-For final release checks, follow `docs/BUILD_DEPLOY_RULES.md`: build once with `cargo leptos build --release`, verify bundle coherence, restart the matching binary, then run curl and browser smoke.
+Never use `cargo build --features ssr` to preview UI — it rebuilds the server
+only and the browser hydrates a stale bundle. Git pre-commit +
+`ui-staleness-check.sh` block stale UI for any tool; optional IDE stop hooks
+(`.cursor/hooks.json`, `.claude/settings.json`) add earlier feedback.
+
+For **final** local verification after UI/auth/routing changes, run:
+
+```bash
+./scripts/ui-change-gate.sh
+```
+
+This is the preferred agent path because it does a coherent Leptos release build, restarts the matching binary, verifies bundle timestamps, runs curl/browser/auth smoke, and captures desktop/mobile screenshots.
 
 ### 5. Visual QA Gate
 
@@ -94,9 +118,10 @@ Use the smallest set that matches the risk:
 | Change | Minimum verification |
 |---|---|
 | Text or tiny style change | `cargo fmt --check`, targeted visual screenshot |
-| Leptos component/layout | `cargo build --features ssr`, desktop/mobile screenshots |
+| Leptos component/layout | `./scripts/ui-change-gate.sh` before final handoff |
 | Public route behavior | `./scripts/smoke-test.sh`, `node scripts/browser-smoke.mjs` |
-| Release/deploy-facing UI | `./scripts/release-build.sh`, `./scripts/verify-bundle.sh`, restart, smoke, browser smoke |
+| Auth shell, routing, or server-function UI | `./scripts/ui-change-gate.sh` |
+| Release/deploy-facing UI | `./scripts/ui-change-gate.sh`, then deploy/post-deploy checks if shipping |
 
 If Playwright is missing, say so and include the install hint from `scripts/post-deploy-verify.sh`. Do not claim browser QA passed without running it.
 

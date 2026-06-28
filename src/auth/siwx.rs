@@ -1,8 +1,8 @@
 //! SIWX (CAIP-122) wallet authentication — challenge + verify.
 
 use crate::auth::session::{
-    cookie_secure_for_domain, ensure_siwx_profile, issue_access_token, post_auth_redirect_path,
-    ACCESS_TOKEN_COOKIE,
+    cookie_secure_for_domain, ensure_siwx_profile, issue_access_token, local_dev_host,
+    post_auth_redirect_path, ACCESS_TOKEN_COOKIE,
 };
 use crate::config::Config;
 use crate::AppState;
@@ -49,8 +49,8 @@ pub struct VerifyResponse {
 }
 
 fn siwx_uri(config: &Config) -> String {
-    if config.siwx_domain.contains("localhost") {
-        format!("http://localhost:{}/auth/siwx", config.port)
+    if let Some(host) = local_dev_host(&config.siwx_domain) {
+        format!("http://{host}:{}/auth/siwx", config.port)
     } else {
         format!("https://{}/auth/siwx", config.siwx_domain)
     }

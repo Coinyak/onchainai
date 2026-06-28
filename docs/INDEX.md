@@ -20,7 +20,9 @@
 
 ## Agent Configuration
 
-- [[../AGENTS.md]] — Instructions for all coding agents (30+ tools supported)
+- [[../AGENTS.md]] — Short routing entry point for all coding agents
+- [[AGENT_HARNESS]] — Wiki-style agent workflow and executable UI/auth/routing gates
+- [[AGENT_READINESS_REPORT]] — Environment readiness report for coding agents
 - [[../CLAUDE.md]] — Claude Code entry point (imports AGENTS.md)
 
 ## External References

@@ -1,6 +1,7 @@
 //! Shared tool detail body — install tabs, trust, chains, links.
 
-use crate::chains::{chain_fallback_label, chain_logo_path, chain_tags_show_all};
+use crate::chains::{chain_fallback_label, chain_tags_show_all};
+use crate::components::chain_logo::ChainLogo;
 use crate::components::copy_button::CopyButton;
 use crate::components::official_links_list::OfficialLinksList;
 use crate::components::tool_logo::ToolLogo;
@@ -83,6 +84,85 @@ fn referral_disclosure(tool: &Tool) -> Option<String> {
     ))
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct DetailLink {
+    label: &'static str,
+    url: String,
+}
+
+fn normalized_link_key(url: &str) -> String {
+    let mut value = url.trim().trim_end_matches('/').to_ascii_lowercase();
+    if let Some(stripped) = value.strip_suffix(".git") {
+        value = stripped.to_string();
+    }
+    for prefix in ["https://", "http://"] {
+        if let Some(rest) = value.strip_prefix(prefix) {
+            value = rest.to_string();
+            break;
+        }
+    }
+    if let Some(rest) = value.strip_prefix("www.") {
+        value = rest.to_string();
+    }
+    value
+}
+
+fn push_unique_link(links: &mut Vec<DetailLink>, label: &'static str, url: Option<String>) {
+    let Some(url) = url else {
+        return;
+    };
+    let url = url.trim();
+    if url.is_empty() {
+        return;
+    }
+    let key = normalized_link_key(url);
+    if links
+        .iter()
+        .any(|existing| normalized_link_key(&existing.url) == key)
+    {
+        return;
+    }
+    links.push(DetailLink {
+        label,
+        url: url.to_string(),
+    });
+}
+
+fn npm_package_url(package: Option<&str>) -> Option<String> {
+    let package = package?.trim();
+    if package.is_empty() || package.starts_with("http://") || package.starts_with("https://") {
+        return None;
+    }
+    Some(format!("https://www.npmjs.com/package/{package}"))
+}
+
+fn http_url(url: Option<&str>) -> Option<String> {
+    let url = url?.trim();
+    if url.starts_with("https://") || url.starts_with("http://") {
+        Some(url.to_string())
+    } else {
+        None
+    }
+}
+
+fn detail_links(tool: &Tool) -> Vec<DetailLink> {
+    let mut links = Vec::new();
+    push_unique_link(&mut links, "Repository", tool.repo_url.clone());
+    push_unique_link(&mut links, "Homepage", tool.homepage.clone());
+    push_unique_link(
+        &mut links,
+        "npm package",
+        npm_package_url(tool.npm_package.as_deref()),
+    );
+    push_unique_link(
+        &mut links,
+        "MCP endpoint",
+        http_url(tool.mcp_endpoint.as_deref()),
+    );
+    push_unique_link(&mut links, "Source listing", tool.source_url.clone());
+    links
+}
+
 #[component]
 pub fn ToolDetailContent(
     tool: Tool,
@@ -118,6 +198,7 @@ pub fn ToolDetailContent(
     let x402_notice = x402_payment_notice(&tool);
     let referral_notice = referral_disclosure(&tool);
     let x402_verification = x402_verification_notice(&tool).to_string();
+    let links = detail_links(&tool);
 
     view! {
         <div class=if compact { "detail-content compact" } else { "detail-content" }>
@@ -184,13 +265,11 @@ pub fn ToolDetailContent(
                             {chain_tags.into_iter().map(|tag| {
                                 if let Some(meta) = tag.meta {
                                     view! {
-                                        <img
+                                        <ChainLogo
+                                            id=meta.id.to_string()
+                                            label=meta.label.to_string()
                                             class="chain-logo chain-logo-tag"
-                                            src=chain_logo_path(meta.id)
-                                            alt=meta.label
-                                            title=meta.label
-                                            width="20"
-                                            height="20"
+                                            size=20
                                         />
                                     }.into_any()
                                 } else {
@@ -290,33 +369,13 @@ pub fn ToolDetailContent(
             <section class="links-section">
                 <h3 class="install-heading">"Links"</h3>
                 <ul class="trust-list">
-                    {if let Some(url) = tool.repo_url.clone() {
-                        view! {
-                            <li>
-                                <a href=url target="_blank" rel="noopener" class="external-link">"Repository"</a>
-                            </li>
-                        }.into_any()
-                    } else {
-                        ().into_any()
-                    }}
-                    {if let Some(url) = tool.homepage.clone() {
-                        view! {
-                            <li>
-                                <a href=url target="_blank" rel="noopener" class="external-link">"Homepage"</a>
-                            </li>
-                        }.into_any()
-                    } else {
-                        ().into_any()
-                    }}
-                    {if let Some(url) = tool.source_url.clone() {
-                        view! {
-                            <li>
-                                <a href=url target="_blank" rel="noopener" class="external-link">"Source listing"</a>
-                            </li>
-                        }.into_any()
-                    } else {
-                        ().into_any()
-                    }}
+                    {links.into_iter().map(|link| view! {
+                        <li>
+                            <a href=link.url target="_blank" rel="noopener" class="external-link">
+                                {link.label}
+                            </a>
+                        </li>
+                    }).collect_view()}
                 </ul>
             </section>
             <section class="trust-section">
@@ -452,5 +511,63 @@ mod tests {
             x402_verification_notice(&tool),
             "Payment details not operator verified yet."
         );
+    }
+
+    #[test]
+    fn detail_links_remove_duplicate_source_urls() {
+        let mut tool = tool_with_install("npx @test/mcp", "low");
+        tool.repo_url = Some("https://github.com/acme/tool.git".into());
+        tool.source_url = Some("https://github.com/acme/tool".into());
+        tool.homepage = Some("https://acme.example".into());
+        tool.npm_package = Some("@acme/tool".into());
+
+        let links = detail_links(&tool);
+        assert_eq!(
+            links
+                .iter()
+                .map(|link| (link.label, link.url.as_str()))
+                .collect::<Vec<_>>(),
+            vec![
+                ("Repository", "https://github.com/acme/tool.git"),
+                ("Homepage", "https://acme.example"),
+                ("npm package", "https://www.npmjs.com/package/@acme/tool"),
+            ]
+        );
+    }
+
+    #[test]
+    fn normalized_link_key_treats_scheme_and_www_as_equivalent() {
+        assert_eq!(
+            normalized_link_key("https://www.Example.com/repo/"),
+            normalized_link_key("http://example.com/repo")
+        );
+        assert_eq!(
+            normalized_link_key("https://github.com/acme/tool.git"),
+            normalized_link_key("http://www.github.com/acme/tool")
+        );
+    }
+
+    #[test]
+    fn detail_links_dedup_http_https_homepage_variants() {
+        let mut tool = tool_with_install("npx @test/mcp", "low");
+        tool.homepage = Some("https://www.acme.example".into());
+        tool.source_url = Some("http://acme.example/".into());
+
+        let links = detail_links(&tool);
+        assert_eq!(links.len(), 2);
+        assert_eq!(links[0].label, "Homepage");
+        assert_eq!(links[1].label, "npm package");
+    }
+
+    #[test]
+    fn detail_links_include_http_mcp_endpoint_once() {
+        let mut tool = tool_with_install("npx @test/mcp", "low");
+        tool.mcp_endpoint = Some("https://api.example.com/mcp".into());
+        tool.source_url = Some("https://api.example.com/mcp/".into());
+
+        let links = detail_links(&tool);
+        assert_eq!(links.len(), 2);
+        assert_eq!(links[0].label, "npm package");
+        assert_eq!(links[1].label, "MCP endpoint");
     }
 }

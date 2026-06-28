@@ -1,8 +1,7 @@
 //! Horizontal chain logo strip — toggles `?chain=` multi-select filters (harness-round-11).
 
-use crate::chains::{
-    chain_filter_active, chain_logo_path, strip_chains, ChainMeta, STRIP_PRIMARY_VISIBLE,
-};
+use crate::chains::{chain_filter_active, strip_chains, ChainMeta, STRIP_PRIMARY_VISIBLE};
+use crate::components::chain_logo::ChainLogo;
 use crate::components::tools_browser::BrowserBase;
 use crate::filter_query::{clear_axis, parse_multi, toggle_multi};
 use leptos::prelude::*;
@@ -54,8 +53,16 @@ pub fn ChainStrip(
                     <button
                         type="button"
                         class=move || if expanded.get() { "chain-tile chain-tile-more active" } else { "chain-tile chain-tile-more" }
-                        aria-label=format!("Show {overflow_count} more chains")
-                        title=format!("Show {overflow_count} more chains")
+                        aria-label=move || if expanded.get() {
+                            "Hide extra chains".to_string()
+                        } else {
+                            format!("Show {overflow_count} more chains")
+                        }
+                        title=move || if expanded.get() {
+                            "Hide extra chains".to_string()
+                        } else {
+                            format!("Show {overflow_count} more chains")
+                        }
                         aria-expanded=move || if expanded.get() { "true" } else { "false" }
                         on:click=move |ev| {
                             ev.stop_propagation();
@@ -63,7 +70,11 @@ pub fn ChainStrip(
                             expanded.update(|v| *v = !*v);
                         }
                     >
-                        "+"
+                        {move || if expanded.get() {
+                            "Less".to_string()
+                        } else {
+                            format!("+{overflow_count}")
+                        }}
                     </button>
                 })}
             </div>
@@ -80,7 +91,6 @@ fn chain_tile(
     let href = toggle_multi(base_path, query_base, "chain", entry.id, chain_active);
     let is_active = chain_filter_active(entry, chain_active);
     let label = entry.label.to_string();
-    let logo = chain_logo_path(entry.id);
     let class = if is_active {
         "chain-tile chain-tile-logo active"
     } else {
@@ -95,15 +105,7 @@ fn chain_tile(
             title=label
             aria-pressed=if is_active { "true" } else { "false" }
         >
-            <img
-                class="chain-logo"
-                src=logo
-                alt=entry.label
-                width="36"
-                height="36"
-                loading="lazy"
-                decoding="async"
-            />
+            <ChainLogo id=entry.id.to_string() label=entry.label.to_string() size=36/>
         </a>
     }
 }

@@ -37,6 +37,13 @@ pub fn shell(options: LeptosOptions) -> impl IntoView {
         .unwrap_or(false);
     let options_reload = options.clone();
     let options_hydrate = options.clone();
+    // Safari aggressively caches /pkg/*; bust CSS when the served stylesheet changes.
+    let css_href = std::fs::metadata("style/output.css")
+        .ok()
+        .and_then(|m| m.modified().ok())
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| format!("/pkg/onchainai.css?v={}", d.as_secs()))
+        .unwrap_or_else(|| "/pkg/onchainai.css".to_string());
 
     view! {
         <!DOCTYPE html>
@@ -47,7 +54,7 @@ pub fn shell(options: LeptosOptions) -> impl IntoView {
                 <MetaTags/>
                 {enable_reload.then(|| view! { <AutoReload options=options_reload.clone()/> })}
                 {enable_hydration.then(|| view! { <HydrationScripts options=options_hydrate.clone()/> })}
-                <Stylesheet id="leptos" href="/pkg/onchainai.css"/>
+                <Stylesheet id="leptos" href=css_href/>
                 <Link rel="preconnect" href="https://fonts.googleapis.com"/>
                 <Link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous"/>
                 <Link

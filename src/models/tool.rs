@@ -171,7 +171,7 @@ pub fn logo_url_is_safe_for_img(url: &str) -> bool {
         _ => return false,
     };
 
-    logo_url_allowed_host(&host, scheme == "https")
+    logo_url_allowed_host(&host, scheme == "https") || logo_url_is_safe_homepage_favicon(trimmed)
 }
 
 /// Back-compat alias for [`logo_url_is_safe_for_img`].
@@ -201,14 +201,83 @@ fn logo_url_allowed_host(host: &str, is_https: bool) -> bool {
         || host.ends_with(".fastly.net")
 }
 
+/// Safe first-party favicon URLs (`https://host/favicon.ico`) may be stored and rendered.
+fn logo_url_is_safe_homepage_favicon(url: &str) -> bool {
+    let Ok(parsed) = url::Url::parse(url.trim()) else {
+        return false;
+    };
+    if parsed.scheme() != "https" {
+        return false;
+    }
+    if parsed.path() != "/favicon.ico" {
+        return false;
+    }
+    if !parsed.username().is_empty() || parsed.password().is_some() {
+        return false;
+    }
+    parsed.host_str().filter(|host| !host.is_empty()).is_some()
+}
+
 /// Filter a stored logo URL through [`logo_url_is_safe_for_img`].
 pub fn sanitize_logo_url(url: Option<String>) -> Option<String> {
     url.filter(|u| logo_url_is_safe_for_img(u))
 }
 
+fn is_valid_github_owner(owner: &str) -> bool {
+    if owner.is_empty() || owner.len() > 39 {
+        return false;
+    }
+    if owner.starts_with('-') || owner.ends_with('-') || owner.contains("--") {
+        return false;
+    }
+    owner
+        .bytes()
+        .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
+}
+
+/// Infer a GitHub owner avatar URL from a repository URL.
+pub fn github_owner_avatar_url(repo_url: Option<&str>) -> Option<String> {
+    let parsed = url::Url::parse(repo_url?.trim()).ok()?;
+    if !parsed.host_str()?.eq_ignore_ascii_case("github.com") {
+        return None;
+    }
+    let mut segments = parsed.path_segments()?;
+    let owner = segments.next()?.trim();
+    let repo = segments.next()?.trim().trim_end_matches(".git");
+    if owner.is_empty() || repo.is_empty() || !is_valid_github_owner(owner) {
+        return None;
+    }
+    Some(format!("https://avatars.githubusercontent.com/{owner}"))
+}
+
+fn safe_https_site_url(url: &str) -> Option<url::Url> {
+    let parsed = url::Url::parse(url.trim()).ok()?;
+    if parsed.scheme() != "https" {
+        return None;
+    }
+    if !parsed.username().is_empty() || parsed.password().is_some() {
+        return None;
+    }
+    parsed.host_str().filter(|host| !host.is_empty())?;
+    Some(parsed)
+}
+
+/// Infer a first-party favicon URL from a tool homepage.
+pub fn homepage_favicon_url(homepage: Option<&str>) -> Option<String> {
+    let parsed = safe_https_site_url(homepage?)?;
+    let host = parsed.host_str()?;
+    let port = parsed
+        .port()
+        .map(|port| format!(":{port}"))
+        .unwrap_or_default();
+    Some(format!("https://{host}{port}/favicon.ico"))
+}
+
 /// Logo URL to render for a tool, if safe.
 pub fn tool_logo_img_url(tool: &Tool) -> Option<String> {
     sanitize_logo_url(tool.logo_url.clone())
+        .or_else(|| github_owner_avatar_url(tool.repo_url.as_deref()))
+        .or_else(|| homepage_favicon_url(tool.homepage.as_deref()))
 }
 
 /// Strip unsafe `logo_url` and operator payout addresses before public API/MCP list/detail.
@@ -420,6 +489,24 @@ mod tests {
             sanitize_logo_url(Some("https://avatars.githubusercontent.com/acme".into())),
             Some("https://avatars.githubusercontent.com/acme".into())
         );
+        assert_eq!(
+            sanitize_logo_url(Some("https://gobob.xyz/favicon.ico".into())),
+            Some("https://gobob.xyz/favicon.ico".into())
+        );
+        assert_eq!(
+            sanitize_logo_url(Some("https://gobob.xyz/logo.png".into())),
+            None
+        );
+    }
+
+    #[test]
+    fn homepage_favicon_url_and_persisted_logo_match() {
+        let favicon = homepage_favicon_url(Some("https://gobob.xyz/docs")).unwrap();
+        assert_eq!(favicon, "https://gobob.xyz/favicon.ico");
+        assert_eq!(
+            sanitize_logo_url(Some(favicon)),
+            Some("https://gobob.xyz/favicon.ico".into())
+        );
     }
 
     #[test]
@@ -461,6 +548,29 @@ mod tests {
             tool_logo_img_url(&tool).as_deref(),
             Some("https://avatars.githubusercontent.com/acme")
         );
+    }
+
+    #[test]
+    fn tool_logo_img_url_falls_back_to_repo_owner_avatar() {
+        let mut tool = sample_tool();
+        tool.repo_url = Some("https://github.com/bob-collective/bob.git".into());
+        assert_eq!(
+            tool_logo_img_url(&tool).as_deref(),
+            Some("https://avatars.githubusercontent.com/bob-collective")
+        );
+    }
+
+    #[test]
+    fn tool_logo_img_url_falls_back_to_homepage_favicon() {
+        let mut tool = sample_tool();
+        tool.homepage = Some("https://gobob.xyz/docs".into());
+        assert_eq!(
+            tool_logo_img_url(&tool).as_deref(),
+            Some("https://gobob.xyz/favicon.ico")
+        );
+
+        tool.homepage = Some("http://gobob.xyz".into());
+        assert_eq!(homepage_favicon_url(tool.homepage.as_deref()), None);
     }
 
     #[test]

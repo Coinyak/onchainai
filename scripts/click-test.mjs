@@ -1,6 +1,8 @@
 // harness-round-11: gating click-test (sidebar-filter-click, mobile-tools)
 import { chromium } from "playwright";
-import { writeFileSync } from "fs";
+import { mkdirSync, writeFileSync } from "fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   TOOL_PAGE_SIZE,
   expectedCumulativeMin,
@@ -16,12 +18,6 @@ import {
   waitForSidebarStorageLoaded,
 } from "./browser-test-helpers.mjs";
 
-const base = (process.argv[2] || "https://www.onchain-ai.xyz").replace(/\/$/, "");
-const scratch =
-  process.env.ONCHAINAI_SCRATCH ||
-  "/var/folders/k7/_r0bjtp12dngr0ncryvtt4mc0000gn/T/grok-goal-11e98898edeb/implementer";
-const outDir = `${scratch}/click-test-artifacts`;
-const results = [];
 /** Steps that gate process exit (UI-only checks are informational). */
 const gating = new Set([
   "home-load",
@@ -42,14 +38,29 @@ const gating = new Set([
   "tool-detail",
   "mobile-tools",
   "mobile-chain-tile-more",
+  "bridge-sidebar-filter",
+  "chain-strip-more-click",
+  "bookmark-login-modal",
+  "mobile-filter-reentry",
   "console-errors",
   "exception",
 ]);
 
-function log(step, ok, detail = "", gate = true) {
-  results.push({ step, ok, detail, gate });
-  const tag = gate ? "" : " [info]";
-  console.log(`${ok ? "PASS" : "FAIL"} ${step}${tag}${detail ? ` — ${detail}` : ""}`);
+export function createClickTestContext(scratch) {
+  mkdirSync(scratch, { recursive: true });
+  const outDir = `${scratch}/click-test-artifacts`;
+  const results = [];
+  const consoleErrors = [];
+  const hydrationPanicRe =
+    /hydration|entered unreachable code|panicked at|reactive value disposed/i;
+
+  function log(step, ok, detail = "", gate = true) {
+    results.push({ step, ok, detail, gate });
+    const tag = gate ? "" : " [info]";
+    console.log(`${ok ? "PASS" : "FAIL"} ${step}${tag}${detail ? ` — ${detail}` : ""}`);
+  }
+
+  return { outDir, results, consoleErrors, hydrationPanicRe, log };
 }
 
 /** Expand collapsed sidebar rail and function section so filter links are visible. */
@@ -73,19 +84,20 @@ async function ensureSidebarFiltersVisible(page) {
     .catch(() => {});
 }
 
-const browser = await chromium.launch({ headless: true });
-const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
-const consoleErrors = [];
-const hydrationPanicRe = /hydration|entered unreachable code|panicked at|reactive value disposed/i;
-page.on("console", (msg) => {
-  const text = msg.text();
-  if (msg.type() === "error" && !isBenignConsoleError(text)) {
-    consoleErrors.push(text);
-  }
-  if (hydrationPanicRe.test(text)) {
-    consoleErrors.push(`hydration:${text}`);
-  }
-});
+export function attachClickTestHandlers(page, ctx) {
+  page.on("console", (msg) => {
+    const text = msg.text();
+    if (msg.type() === "error" && !isBenignConsoleError(text)) {
+      ctx.consoleErrors.push(text);
+    }
+    if (ctx.hydrationPanicRe.test(text)) {
+      ctx.consoleErrors.push(`hydration:${text}`);
+    }
+  });
+}
+
+export async function runClickTestChecks(page, base, ctx) {
+  const { outDir, results, consoleErrors, hydrationPanicRe, log } = ctx;
 
 try {
   await page.goto(`${base}/`, { waitUntil: "networkidle", timeout: 60000 });
@@ -110,6 +122,11 @@ try {
   await page.goto(`${base}/tools`, { waitUntil: "networkidle" });
   await waitForSidebarFilterLinks(page);
   await ensureSidebarFiltersVisible(page);
+  await page
+    .waitForSelector('aside .sidebar-body a[href*="function="]:visible', {
+      timeout: 8000,
+    })
+    .catch(() => {});
   const fnLink = await page.$('aside .sidebar-body a[href*="function="]:visible');
   if (fnLink) {
     await fnLink.click();
@@ -122,6 +139,29 @@ try {
     );
   } else {
     log("sidebar-filter-click", false, "no visible filter link");
+  }
+
+  await page.goto(`${base}/tools`, { waitUntil: "networkidle" });
+  await waitForSidebarFilterLinks(page);
+  await ensureSidebarFiltersVisible(page);
+  await page
+    .waitForSelector('aside .sidebar-body a[href*="function="]:visible', {
+      timeout: 8000,
+    })
+    .catch(() => {});
+  const bridgeLink = await page.$('aside .sidebar-body a[href*="function=bridge"]:visible');
+  if (bridgeLink) {
+    await bridgeLink.click();
+    await page.waitForLoadState("networkidle");
+    const bridgeAfter = await visiblePageText(page);
+    log(
+      "bridge-sidebar-filter",
+      page.url().includes("function=bridge") &&
+        !/error deserializing|missing field/i.test(bridgeAfter || ""),
+      page.url(),
+    );
+  } else {
+    log("bridge-sidebar-filter", false, "no visible bridge filter link");
   }
 
   await page.goto(`${base}/tools`, { waitUntil: "networkidle" });
@@ -156,6 +196,41 @@ try {
     log("chain-strip-click", !/error deserializing/i.test((await visiblePageText(page)) || ""), page.url());
   } else {
     log("chain-strip-click", false, "no chain link");
+  }
+
+  await page.goto(`${base}/tools`, { waitUntil: "networkidle" });
+  await waitForToolCards(page);
+  const chainMore = await page.$(".chain-tile-more");
+  if (chainMore) {
+    await chainMore.click();
+    const expanded = await page.evaluate(() => {
+      const pill = document.querySelector(".chain-tile-more");
+      return pill?.getAttribute("aria-expanded") === "true";
+    });
+    log("chain-strip-more-click", expanded, expanded ? "expanded" : "not-expanded");
+  } else {
+    log("chain-strip-more-click", true, "no overflow pill");
+  }
+
+  await page.goto(`${base}/tools`, { waitUntil: "networkidle" });
+  await waitForToolCards(page);
+  const bookmarkBtn = await page.$(".tool-card:not(.skeleton-card) .card-action-btn");
+  if (bookmarkBtn) {
+    await bookmarkBtn.click();
+    let hasDialog = false;
+    try {
+      await page.waitForSelector('[role="dialog"]', { timeout: 5000 });
+      hasDialog = true;
+    } catch {
+      hasDialog = false;
+    }
+    log("bookmark-login-modal", hasDialog, hasDialog ? "modal-open" : "no-modal");
+    if (hasDialog) {
+      await page.keyboard.press("Escape");
+      await page.waitForSelector('[role="dialog"]', { state: "detached", timeout: 3000 }).catch(() => {});
+    }
+  } else {
+    log("bookmark-login-modal", false, "no bookmark button");
   }
 
   const page1Cards = cardCount;
@@ -267,6 +342,39 @@ try {
   });
   log("mobile-chain-tile-more", chainMoreVisible, chainMoreVisible ? "visible" : "hidden");
 
+  await clearSidebarStorage(page);
+  await page.reload({ waitUntil: "networkidle" });
+  await waitForSidebarStorageLoaded(page).catch(() => {});
+  const railToggle = await page.$(".sidebar-rail-toggle");
+  let mobileFilterReentryOk = false;
+  if (railToggle) {
+    await railToggle.click();
+    const filterLink = await page.$('aside .sidebar-body a[href*="function="]:visible');
+    if (filterLink) {
+      await filterLink.click();
+      await page
+        .waitForFunction(
+          () =>
+            document
+              .querySelector(".tools-sidebar")
+              ?.classList.contains("tools-sidebar-collapsed") === true,
+          null,
+          { timeout: 10000 },
+        )
+        .catch(() => {});
+    }
+    await page.goto(`${base}/tools`, { waitUntil: "networkidle" });
+    await waitForSidebarStorageLoaded(page).catch(() => {});
+    mobileFilterReentryOk = await page.evaluate(() =>
+      document.querySelector(".tools-sidebar")?.classList.contains("tools-sidebar-collapsed"),
+    );
+  }
+  log(
+    "mobile-filter-reentry",
+    mobileFilterReentryOk,
+    mobileFilterReentryOk ? "collapsed-on-reentry" : "overlay-still-open",
+  );
+
   await page.screenshot({ path: `${outDir}-mobile-tools.png`, fullPage: false });
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto(`${base}/tools`, { waitUntil: "networkidle" });
@@ -281,10 +389,26 @@ try {
 } catch (e) {
   log("exception", false, String(e));
   await page.screenshot({ path: `${outDir}-error.png` }).catch(() => {});
-} finally {
-  writeFileSync(`${outDir}-results.json`, JSON.stringify(results, null, 2));
-  await browser.close();
 }
 
-const failed = results.filter((r) => r.gate !== false && !r.ok);
-process.exit(failed.length ? 1 : 0);
+  writeFileSync(`${outDir}-results.json`, JSON.stringify(results, null, 2));
+  return results.filter((r) => r.gate !== false && !r.ok).length;
+}
+
+const isMain =
+  process.argv[1] &&
+  path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+
+if (isMain) {
+  const base = (process.argv[2] || "https://www.onchain-ai.xyz").replace(/\/$/, "");
+  const scratch =
+    process.env.ONCHAINAI_SCRATCH ||
+    `${process.cwd()}/.playwright-cli/click-test-scratch`;
+  const ctx = createClickTestContext(scratch);
+  const browser = await chromium.launch({ headless: true });
+  const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+  attachClickTestHandlers(page, ctx);
+  const failed = await runClickTestChecks(page, base, ctx);
+  await browser.close();
+  process.exit(failed ? 1 : 0);
+}

@@ -117,6 +117,7 @@ pub fn ToolbarSearch(base: BrowserBase, initial_q: String) -> impl IntoView {
                 qm.get("actor").map(|s| s.to_string()),
                 qm.get("type").map(|s| s.to_string()),
                 qm.get("status").map(|s| s.to_string()),
+                qm.get("pricing").map(|s| s.to_string()),
                 qm.get("chain").map(|s| s.to_string()),
                 qm.get("sort")
                     .map(|s| s.to_string())

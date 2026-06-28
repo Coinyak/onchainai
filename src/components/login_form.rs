@@ -116,6 +116,9 @@ pub fn WalletConnectButton(
 pub fn LoginForm(
     #[prop(optional)] on_cancel: Option<Callback<()>>,
     #[prop(optional)] compact: bool,
+    /// When set (e.g. modal), used as the heading `id` for `aria-labelledby`.
+    #[prop(optional)]
+    heading_id: Option<&'static str>,
 ) -> impl IntoView {
     let email = RwSignal::new(String::new());
     let email_msg = RwSignal::new(None::<String>);
@@ -133,7 +136,7 @@ pub fn LoginForm(
     };
 
     view! {
-        <h1 class=heading_class>"Sign in to OnchainAI"</h1>
+        <h1 id=heading_id class=heading_class>"Sign in to OnchainAI"</h1>
         <p class=desc_class>
             "Sign in to comment, bookmark tools, and access admin features."
         </p>

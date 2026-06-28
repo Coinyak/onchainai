@@ -146,6 +146,7 @@ pub fn build_tool_filters(
     actor: Option<String>,
     tool_type: Option<String>,
     status: Option<String>,
+    pricing: Option<String>,
     chain: Option<String>,
 ) -> ToolFilters {
     ToolFilters {
@@ -154,6 +155,7 @@ pub fn build_tool_filters(
         actor: parse_multi(actor.as_deref()),
         tool_type: parse_multi(tool_type.as_deref()),
         status: parse_multi(status.as_deref()),
+        pricing: parse_multi(pricing.as_deref()),
         chain: parse_multi(chain.as_deref()),
     }
 }
@@ -166,6 +168,7 @@ pub struct ActiveFiltersSummary {
     pub actor: Vec<String>,
     pub tool_type: Vec<String>,
     pub status: Vec<String>,
+    pub pricing: Vec<String>,
     pub chain: Vec<String>,
     pub search: Option<String>,
     pub sort: String,
@@ -179,6 +182,7 @@ impl Default for ActiveFiltersSummary {
             actor: Vec::new(),
             tool_type: Vec::new(),
             status: Vec::new(),
+            pricing: Vec::new(),
             chain: Vec::new(),
             search: None,
             sort: "hot".into(),
@@ -194,6 +198,7 @@ impl ActiveFiltersSummary {
         actor: Option<String>,
         tool_type: Option<String>,
         status: Option<String>,
+        pricing: Option<String>,
         chain: Option<String>,
         search: Option<String>,
         sort: Option<String>,
@@ -204,6 +209,7 @@ impl ActiveFiltersSummary {
             actor: parse_multi(actor.as_deref()),
             tool_type: parse_multi(tool_type.as_deref()),
             status: parse_multi(status.as_deref()),
+            pricing: parse_multi(pricing.as_deref()),
             chain: parse_multi(chain.as_deref()),
             search: search.filter(|s| !s.trim().is_empty()),
             sort: sort.unwrap_or_else(|| "hot".into()),
@@ -216,6 +222,7 @@ impl ActiveFiltersSummary {
             || !self.actor.is_empty()
             || !self.tool_type.is_empty()
             || !self.status.is_empty()
+            || !self.pricing.is_empty()
             || !self.chain.is_empty()
             || self.search.is_some()
             || self.sort != "hot"
@@ -289,6 +296,14 @@ pub fn describe_active_filters(
             .collect();
         lines.push(format!("Status: {}", labels.join(", ")));
     }
+    if !summary.pricing.is_empty() {
+        let labels: Vec<String> = summary
+            .pricing
+            .iter()
+            .map(|id| humanize_filter_id(id))
+            .collect();
+        lines.push(format!("Pricing: {}", labels.join(", ")));
+    }
     if !summary.chain.is_empty() {
         let labels: Vec<String> = summary.chain.iter().map(|id| id.to_uppercase()).collect();
         lines.push(format!("Chain: {}", labels.join(", ")));
@@ -305,6 +320,15 @@ pub fn describe_active_filters(
         lines.push(format!("Sort: {sort_label}"));
     }
     lines
+}
+
+/// Returns true when a same-app route change should close the mobile filter overlay.
+pub fn should_collapse_mobile_sidebar_on_route_change(
+    prev_route: &str,
+    next_route: &str,
+    mobile_viewport: bool,
+) -> bool {
+    mobile_viewport && !prev_route.is_empty() && prev_route != next_route
 }
 
 #[cfg(test)]
@@ -385,9 +409,30 @@ mod tests {
     }
 
     #[test]
+    fn should_collapse_mobile_sidebar_on_route_change_only_for_mobile_nav() {
+        assert!(!should_collapse_mobile_sidebar_on_route_change(
+            "", "/tools", true
+        ));
+        assert!(!should_collapse_mobile_sidebar_on_route_change(
+            "/tools", "/tools", true
+        ));
+        assert!(should_collapse_mobile_sidebar_on_route_change(
+            "/tools",
+            "/tools?function=bridge",
+            true
+        ));
+        assert!(!should_collapse_mobile_sidebar_on_route_change(
+            "/tools",
+            "/tools?function=bridge",
+            false
+        ));
+    }
+
+    #[test]
     fn active_filters_summary_detects_filters() {
         let summary = ActiveFiltersSummary::from_query(
             Some("bridge".into()),
+            None,
             None,
             None,
             None,
@@ -410,6 +455,7 @@ mod tests {
             None,
             Some("mcp".into()),
             None,
+            Some("x402".into()),
             Some("eth".into()),
             Some("wallet".into()),
             Some("new".into()),
@@ -421,6 +467,7 @@ mod tests {
         assert!(lines.iter().any(|l| l.contains("Function: Bridge, Swap")));
         assert!(lines.iter().any(|l| l.contains("Asset class: Crypto")));
         assert!(lines.iter().any(|l| l.contains("Type: MCP")));
+        assert!(lines.iter().any(|l| l.contains("Pricing: X402")));
         assert!(lines.iter().any(|l| l.contains("Chain: ETH")));
         assert!(lines.iter().any(|l| l.contains("Search: \"wallet\"")));
         assert!(lines.iter().any(|l| l.contains("Sort: New")));

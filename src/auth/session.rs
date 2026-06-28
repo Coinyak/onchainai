@@ -7,9 +7,25 @@ pub const ACCESS_TOKEN_COOKIE: &str = "onchainai_access_token";
 pub const PKCE_VERIFIER_COOKIE: &str = "onchainai_pkce_verifier";
 pub const GITHUB_STATE_COOKIE: &str = "onchainai_github_state";
 
+/// True when `siwx_domain` points at local dev (localhost or 127.0.0.1).
+pub fn is_local_dev_domain(siwx_domain: &str) -> bool {
+    siwx_domain.contains("localhost") || siwx_domain.contains("127.0.0.1")
+}
+
+/// HTTP host for local OAuth/SIWX callbacks derived from `siwx_domain`.
+pub fn local_dev_host(siwx_domain: &str) -> Option<&'static str> {
+    if siwx_domain.contains("127.0.0.1") {
+        Some("127.0.0.1")
+    } else if siwx_domain.contains("localhost") {
+        Some("localhost")
+    } else {
+        None
+    }
+}
+
 /// True when auth cookies must include `Secure` (production HTTPS).
 pub fn cookie_secure_for_domain(siwx_domain: &str) -> bool {
-    !siwx_domain.contains("localhost")
+    !is_local_dev_domain(siwx_domain)
 }
 
 /// Whether the SSR shell will inject the WASM hydration bundle.
@@ -37,8 +53,35 @@ pub fn ssr_hydration_available() -> bool {
 pub struct SessionUser {
     pub id: Uuid,
     pub nickname: Option<String>,
+    pub avatar_url: Option<String>,
     pub is_admin: bool,
     pub auth_method: String,
+}
+
+/// Client-only: whether the session cookie is present (sticky nav during refetch).
+#[cfg(feature = "hydrate")]
+pub fn has_access_token_cookie() -> bool {
+    use wasm_bindgen::JsCast;
+
+    let Some(window) = web_sys::window() else {
+        return false;
+    };
+    let Some(document) = window.document() else {
+        return false;
+    };
+    let Ok(html_document) = document.dyn_into::<web_sys::HtmlDocument>() else {
+        return false;
+    };
+    let Ok(cookie) = html_document.cookie() else {
+        return false;
+    };
+    cookie_value(&cookie, ACCESS_TOKEN_COOKIE).is_some()
+}
+
+/// SSR/build without hydrate: defer to the blocking session resource.
+#[cfg(not(feature = "hydrate"))]
+pub fn has_access_token_cookie() -> bool {
+    true
 }
 
 /// Parse `Cookie` header value and extract the named cookie.
@@ -126,5 +169,29 @@ mod tests {
     fn cookie_secure_for_production_domain() {
         assert!(cookie_secure_for_domain("www.onchain-ai.xyz"));
         assert!(!cookie_secure_for_domain("localhost:3000"));
+        assert!(!cookie_secure_for_domain("127.0.0.1:3000"));
+    }
+
+    #[test]
+    fn local_dev_host_prefers_loopback_ip() {
+        assert_eq!(local_dev_host("127.0.0.1:3000"), Some("127.0.0.1"));
+        assert_eq!(local_dev_host("localhost:3000"), Some("localhost"));
+        assert_eq!(local_dev_host("www.onchain-ai.xyz"), None);
+    }
+
+    #[test]
+    fn session_user_serializes_avatar_url() {
+        let user = SessionUser {
+            id: Uuid::new_v4(),
+            nickname: Some("alice".into()),
+            avatar_url: Some("https://avatars.githubusercontent.com/u/1".into()),
+            is_admin: false,
+            auth_method: "github".into(),
+        };
+        let json = serde_json::to_string(&user).expect("serialize");
+        assert!(json.contains("avatar_url"));
+        let back: SessionUser = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(back.avatar_url, user.avatar_url);
+        assert_eq!(back.nickname, user.nickname);
     }
 }

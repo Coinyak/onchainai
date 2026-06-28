@@ -2,6 +2,7 @@
 
 use crate::components::copy_button::CopyButton;
 use crate::components::error_state::ErrorState;
+use crate::components::login_modal::LoginModal;
 use crate::components::site_shell::SiteShell;
 use crate::components::skeleton::ToolListSkeleton;
 use crate::components::tool_card::ToolCard;
@@ -25,7 +26,7 @@ fn ExportPanel(title: &'static str, export: ToolkitExportPayload) -> impl IntoVi
 }
 
 #[component]
-fn ToolkitContent(payload: MyToolkitPayload) -> impl IntoView {
+fn ToolkitContent(payload: MyToolkitPayload, on_toolkit_changed: Callback<()>) -> impl IntoView {
     let tools = payload.tools.clone();
     view! {
         <div class="toolkit-page">
@@ -64,7 +65,17 @@ fn ToolkitContent(payload: MyToolkitPayload) -> impl IntoView {
                     <div class="toolkit-layout">
                         <section class="toolkit-list" aria-label="Saved tools">
                             {tools.into_iter().map(|tool| {
-                                view! { <ToolCard tool=tool initially_starred=true/> }
+                                view! {
+                                    <ToolCard
+                                        tool=tool
+                                        initially_starred=true
+                                        on_bookmark_changed=Callback::new(move |starred: bool| {
+                                            if !starred {
+                                                on_toolkit_changed.run(());
+                                            }
+                                        })
+                                    />
+                                }
                             }).collect_view()}
                         </section>
                         <aside class="toolkit-export-stack">
@@ -80,7 +91,9 @@ fn ToolkitContent(payload: MyToolkitPayload) -> impl IntoView {
 
 #[component]
 fn ToolkitSignIn() -> impl IntoView {
+    let show_login = RwSignal::new(false);
     view! {
+        <LoginModal show=show_login/>
         <div class="toolkit-page">
             <section class="toolkit-header">
                 <div>
@@ -92,10 +105,16 @@ fn ToolkitSignIn() -> impl IntoView {
             </section>
             <section class="toolkit-empty">
                 <h2>"Create your personal toolkit"</h2>
-                <p>"Continue with GitHub or connect a wallet, then save tools from the directory."</p>
+                <p>"Sign in to save tools and export your stack from the directory."</p>
                 <div class="toolkit-auth-actions">
-                    <a href="/auth/github" class="toolkit-primary-link">"Continue with GitHub"</a>
-                    <a href="/login" class="toolkit-secondary-link">"Other sign-in options"</a>
+                    <button
+                        type="button"
+                        class="toolkit-primary-link cursor-pointer font-inherit"
+                        data-testid="toolkit-sign-in"
+                        on:click=move |_| show_login.set(true)
+                    >
+                        "Sign in"
+                    </button>
                 </div>
             </section>
         </div>
@@ -105,6 +124,7 @@ fn ToolkitSignIn() -> impl IntoView {
 #[component]
 pub fn ToolkitPage() -> impl IntoView {
     let retry = RwSignal::new(0u32);
+    let refresh_toolkit = Callback::new(move |_| retry.update(|n| *n = n.wrapping_add(1)));
     let toolkit = Resource::new_blocking(
         move || retry.get(),
         |_| async move { list_my_toolkit().await },
@@ -114,7 +134,9 @@ pub fn ToolkitPage() -> impl IntoView {
         <SiteShell>
             <Suspense fallback=|| view! { <div class="toolkit-page"><ToolListSkeleton count=4/></div> }>
                 {move || match toolkit.get() {
-                    Some(Ok(payload)) => view! { <ToolkitContent payload=payload/> }.into_any(),
+                    Some(Ok(payload)) => view! {
+                        <ToolkitContent payload=payload on_toolkit_changed=refresh_toolkit/>
+                    }.into_any(),
                     Some(Err(error)) if error.to_string().contains("sign in required")
                         || error.to_string().contains("authentication")
                         || error.to_string().contains("session") => {

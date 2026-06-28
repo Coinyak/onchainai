@@ -40,8 +40,14 @@ check_chain_markup() {
 home_body="$(check_get "/")"
 grep -q 'site-top-nav' "$home_body" || fail "GET / missing site-top-nav markup"
 grep -q 'auth-sign-in' "$home_body" || fail "GET / missing auth-sign-in markup"
-grep -q '/auth/github' "$home_body" || fail "GET / missing GitHub sign-in link"
-grep -qE 'Connect Wallet|>Wallet<' "$home_body" || fail "GET / missing wallet sign-in control"
+grep -q 'data-testid="top-nav-sign-in"' "$home_body" || fail "GET / missing top-nav Sign in control"
+grep -q '>Sign in<' "$home_body" || fail "GET / missing Sign in label"
+grep -q 'data-testid="profile-menu"' "$home_body" && fail "GET / unexpected profile-menu when signed out"
+grep -q 'site-top-nav-link-dashboard' "$home_body" && fail "GET / unexpected top-nav Dashboard link when signed out"
+grep -q 'site-top-nav-link-toolkit' "$home_body" && fail "GET / unexpected top-nav Toolkit link when signed out"
+login_body="$(check_get "/login")"
+grep -q 'Continue with GitHub' "$login_body" || fail "GET /login missing GitHub sign-in option"
+grep -q 'wallet-sign-in' "$login_body" || fail "GET /login missing wallet sign-in option"
 grep -q 'category-grid' "$home_body" && fail "GET / unexpected category-grid markup"
 
 tools_body="$(check_get "/tools")"
@@ -54,6 +60,7 @@ if echo "$tools_body" | grep -q 'class="tool-list"'; then
 fi
 
 check_get "/tools?function=bridge&type=mcp"
+check_get "/tools?pricing=x402"
 check_get "/tools?chain=ethereum&page=2"
 check_chain_markup "/tools"
 check_chain_markup "/tools?chain=ethereum"
@@ -64,6 +71,7 @@ grep -q 'Crypto tool coverage' "$dashboard_body" || fail "GET /dashboard missing
 
 toolkit_body="$(check_get "/toolkit")"
 grep -q 'Sign in to save your stack' "$toolkit_body" || fail "GET /toolkit missing anonymous sign-in state"
+grep -q 'data-testid="toolkit-sign-in"' "$toolkit_body" || fail "GET /toolkit missing Sign in control"
 
 # Fresh filter links should not carry pagination from a prior page (SSR heuristic).
 filter_body="$(check_get "/tools?function=bridge&type=mcp")"
@@ -71,9 +79,11 @@ if echo "$filter_body" | grep -oE 'href="[^"]*function=bridge[^"]*"' | grep -q '
   fail "GET /tools?function=bridge&type=mcp filter href contains page="
 fi
 
-svg_code="$(curl -sS -o /dev/null -w "%{http_code}" "${BASE}/chains/bitcoin.svg")" \
-  || fail "GET /chains/bitcoin.svg curl failed"
-[[ "$svg_code" == "200" ]] || fail "GET /chains/bitcoin.svg returned ${svg_code}"
+for chain_svg in bitcoin bob polygon; do
+  svg_code="$(curl -sS -o /dev/null -w "%{http_code}" "${BASE}/chains/${chain_svg}.svg")" \
+    || fail "GET /chains/${chain_svg}.svg curl failed"
+  [[ "$svg_code" == "200" ]] || fail "GET /chains/${chain_svg}.svg returned ${svg_code}"
+done
 
 mcp_body="$(mktemp)"
 mcp_code="$(curl -sS -o "$mcp_body" -w "%{http_code}" \

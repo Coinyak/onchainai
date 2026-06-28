@@ -44,6 +44,8 @@ pub struct Config {
     pub github_client_id: String,
     /// GitHub OAuth client secret (server only).
     pub github_client_secret: String,
+    /// Optional GitHub OAuth callback override (must match GitHub app settings).
+    pub github_redirect_uri: Option<String>,
     /// SIWX domain bound to signed messages.
     pub siwx_domain: String,
     /// SIWX session TTL in seconds.
@@ -52,8 +54,18 @@ pub struct Config {
     pub jwt_secret: String,
     /// Optional GitHub personal access token for crawler star sync.
     pub github_api_token: Option<String>,
+    /// GitHub logins that always receive `profiles.is_admin = true` on OAuth login.
+    pub admin_github_logins: Vec<String>,
     /// HTTP server bind port.
     pub port: u16,
+}
+
+/// Parse comma-separated GitHub logins for operator admin grants.
+pub fn parse_admin_github_logins(raw: &str) -> Vec<String> {
+    raw.split(',')
+        .map(|s| s.trim().to_lowercase())
+        .filter(|s| !s.is_empty())
+        .collect()
 }
 
 impl Config {
@@ -72,6 +84,10 @@ impl Config {
         let supabase_service_key = required("SUPABASE_SERVICE_KEY")?;
         let github_client_id = required("GITHUB_CLIENT_ID")?;
         let github_client_secret = required("GITHUB_CLIENT_SECRET")?;
+        let github_redirect_uri = env::var("GITHUB_REDIRECT_URI")
+            .ok()
+            .map(|s| s.trim().to_owned())
+            .filter(|s| !s.is_empty());
         let siwx_domain = required("SIWX_DOMAIN")?;
         let jwt_secret = required("JWT_SECRET")?;
 
@@ -83,6 +99,11 @@ impl Config {
             .unwrap_or(86_400);
 
         let github_api_token = env::var("GITHUB_API_TOKEN").ok().filter(|s| !s.is_empty());
+
+        let admin_github_logins = env::var("ADMIN_GITHUB_LOGINS")
+            .ok()
+            .map(|s| parse_admin_github_logins(&s))
+            .unwrap_or_default();
 
         let port = env::var("PORT")
             .ok()
@@ -98,12 +119,25 @@ impl Config {
             supabase_service_key,
             github_client_id,
             github_client_secret,
+            github_redirect_uri,
             siwx_domain,
             siwx_session_ttl,
             jwt_secret,
             github_api_token,
+            admin_github_logins,
             port,
         })
+    }
+
+    /// Whether a GitHub OAuth login matches a configured operator login.
+    pub fn is_admin_github_login(&self, login: &str) -> bool {
+        let normalized = login.trim().to_lowercase();
+        if normalized.is_empty() {
+            return false;
+        }
+        self.admin_github_logins
+            .iter()
+            .any(|candidate| candidate == &normalized)
     }
 
     /// Expected JWT `iss` claim for both Supabase-issued and server-minted
@@ -164,12 +198,37 @@ mod tests {
             supabase_service_key: "service".into(),
             github_client_id: "gid".into(),
             github_client_secret: "gsecret".into(),
+            github_redirect_uri: None,
             siwx_domain: "localhost".into(),
             siwx_session_ttl: 86_400,
             jwt_secret: "secret".into(),
             github_api_token: None,
+            admin_github_logins: Vec::new(),
             port: 3000,
         }
+    }
+
+    #[test]
+    fn parse_admin_github_logins_trims_and_lowercases() {
+        assert_eq!(
+            parse_admin_github_logins(" Hoyeon4315-cpu , alice_dev,,"),
+            vec!["hoyeon4315-cpu".to_string(), "alice_dev".to_string()]
+        );
+    }
+
+    #[test]
+    fn is_admin_github_login_matches_configured_operator() {
+        let mut cfg = base_config();
+        cfg.admin_github_logins = parse_admin_github_logins("hoyeon4315-cpu");
+        assert!(cfg.is_admin_github_login("Hoyeon4315-cpu"));
+        assert!(!cfg.is_admin_github_login("random-user"));
+    }
+
+    #[test]
+    fn is_admin_github_login_does_not_match_sanitized_alias() {
+        let mut cfg = base_config();
+        cfg.admin_github_logins = parse_admin_github_logins("user.name");
+        assert!(!cfg.is_admin_github_login("username"));
     }
 
     #[test]

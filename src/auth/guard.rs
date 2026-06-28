@@ -1,6 +1,7 @@
 //! Server-side authorization helpers (admin routes and mutations).
 
 use crate::auth::session::{session_from_parts, SessionUser};
+use crate::config::Config;
 use leptos::server_fn::ServerFnError;
 use sqlx::PgPool;
 
@@ -30,10 +31,9 @@ impl From<AuthError> for ServerFnError {
 pub async fn require_admin(
     parts: &axum::http::request::Parts,
     pool: &PgPool,
-    jwt_secret: &str,
-    issuer: &str,
+    config: &Config,
 ) -> Result<SessionUser, AuthError> {
-    let user = session_from_parts(parts, pool, jwt_secret, issuer)
+    let user = session_from_parts(parts, pool, &config.jwt_secret, &config.jwt_issuer())
         .await
         .map_err(|_| AuthError::Forbidden)?
         .ok_or(AuthError::Forbidden)?;

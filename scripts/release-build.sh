@@ -23,7 +23,12 @@ fi
 echo "Building release (cargo leptos build --release)..."
 cargo leptos build --release
 
-# wasm-bindgen JS loads onchainai_bg.wasm; cargo-leptos emits onchainai.wasm.
+# wasm-bindgen JS loads onchainai_bg.wasm; cargo-leptos emits processed onchainai.wasm in site/pkg.
+if [[ ! -s target/site/pkg/onchainai.wasm ]]; then
+  echo "Missing or empty wasm-bindgen WASM: target/site/pkg/onchainai.wasm" >&2
+  echo "Do not copy target/front/*.wasm — that raw artifact does not match onchainai.js." >&2
+  exit 1
+fi
 ln -sf onchainai.wasm target/site/pkg/onchainai_bg.wasm
 
 # /pkg/onchainai.css is served from this manual stylesheet in src/lib.rs.

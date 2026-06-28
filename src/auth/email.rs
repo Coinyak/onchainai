@@ -1,7 +1,8 @@
 //! Email magic-link authentication via Supabase Auth.
 
 use crate::auth::session::{
-    ensure_profile, post_auth_redirect_path, ACCESS_TOKEN_COOKIE, PKCE_VERIFIER_COOKIE,
+    cookie_secure_for_domain, ensure_profile, post_auth_redirect_path, ACCESS_TOKEN_COOKIE,
+    PKCE_VERIFIER_COOKIE,
 };
 use crate::config::Config;
 use crate::AppState;
@@ -102,7 +103,7 @@ pub async fn complete_magic_link(
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    let secure_cookie = !config.siwx_domain.contains("localhost");
+    let secure_cookie = cookie_secure_for_domain(&config.siwx_domain);
     let max_age = session.expires_in.max(3600);
 
     let mut headers = HeaderMap::new();

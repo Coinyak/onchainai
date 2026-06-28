@@ -1,5 +1,7 @@
 // harness-round-11: browser smoke for desktop/mobile public UI
 import { chromium } from "playwright";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   TOOL_PAGE_SIZE,
   expectedCumulativeMin,
@@ -10,12 +12,11 @@ import {
   evaluateLogoFallback,
   isBenignConsoleError,
   visiblePageText,
+  waitForToolCards,
   waitForSidebarStorageLoaded,
 } from "./browser-test-helpers.mjs";
 
-const base = (process.argv[2] || "http://localhost:3000").replace(/\/$/, "");
-const errors = [];
-const hydrationPanicRe =
+export const hydrationPanicRe =
   /hydration|entered unreachable code|panicked at|reactive value disposed/i;
 
 function countRealToolCards(page) {
@@ -24,10 +25,23 @@ function countRealToolCards(page) {
   );
 }
 
-const browser = await chromium.launch({ headless: true });
-const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+async function requireToolCards(page, errors, context) {
+  try {
+    await waitForToolCards(page);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    errors.push(`hydration:wait-for-tool-cards:${context}:${message}`);
+    return 0;
+  }
+  const count = await countRealToolCards(page);
+  if (count === 0) {
+    errors.push(`layout:no-tool-cards:${context}`);
+  }
+  return count;
+}
 
-page.on("console", (msg) => {
+export function attachBrowserSmokeHandlers(page, base, errors) {
+  page.on("console", (msg) => {
   const text = msg.text();
   if (hydrationPanicRe.test(text)) {
     errors.push(`hydration-panic:${text}`);
@@ -49,12 +63,21 @@ page.on("requestfailed", (req) => {
   if (url.includes("/chains/") && /ERR_ABORTED/i.test(failText)) {
     return;
   }
+  // Leptos preloads onchainai.wasm but wasm-bindgen fetches onchainai_bg.wasm; abort is benign.
+  if (url.includes("/pkg/onchainai.wasm") && /ERR_ABORTED/i.test(failText)) {
+    return;
+  }
   errors.push(`requestfailed:${url}:${failText}`);
 });
 page.on("response", async (res) => {
   const url = res.url();
+  if (!url.startsWith(base)) {
+    return;
+  }
   if (url.includes("/api") || url.includes("/pkg/")) {
-    if (res.status() >= 400) errors.push(`http:${res.status()}:${url}`);
+    if (res.status() >= 400) {
+      errors.push(`http:${res.status()}:${url}`);
+    }
     const contentType = res.headers()["content-type"] || "";
     const isText =
       contentType.includes("json") ||
@@ -68,17 +91,22 @@ page.on("response", async (res) => {
     }
   }
 });
+}
 
-await page.goto(`${base}/`, { waitUntil: "domcontentloaded" });
+export async function runBrowserSmokeChecks(page, base, errors) {
+await page.goto(`${base}/`, { waitUntil: "domcontentloaded", timeout: 60000 });
 await clearSidebarStorage(page);
 
-await page.goto(`${base}/`, { waitUntil: "networkidle" });
+// Wait for WASM hydrate before clicking auth controls (Safari/no-store pkg can be slow).
+await page.goto(`${base}/`, { waitUntil: "networkidle", timeout: 60000 });
 const homeLayout = await page.evaluate(() => ({
   hasTopNav: !!document.querySelector(".site-top-nav"),
   hasCategoryGrid: !!document.querySelector(".category-grid"),
   hasAuthSignIn: !!document.querySelector('[data-testid="auth-sign-in"]'),
-  hasGitHubSignIn: !!document.querySelector('a[href="/auth/github"]'),
-  hasWalletSignIn: !!document.querySelector('[data-testid="auth-sign-in"] button'),
+  hasTopNavSignIn: !!document.querySelector('[data-testid="top-nav-sign-in"]'),
+  hasProfileMenu: !!document.querySelector('[data-testid="profile-menu"]'),
+  hasTopNavDashboardLink: !!document.querySelector(".site-top-nav-link-dashboard"),
+  hasTopNavToolkitLink: !!document.querySelector(".site-top-nav-link-toolkit"),
 }));
 if (!homeLayout.hasTopNav) {
   errors.push("layout:home-missing-top-nav");
@@ -89,15 +117,87 @@ if (homeLayout.hasCategoryGrid) {
 if (!homeLayout.hasAuthSignIn) {
   errors.push("layout:home-missing-auth-sign-in");
 }
-if (!homeLayout.hasGitHubSignIn) {
-  errors.push("layout:home-missing-github-sign-in");
+if (!homeLayout.hasTopNavSignIn) {
+  errors.push("layout:home-missing-top-nav-sign-in");
 }
-if (!homeLayout.hasWalletSignIn) {
-  errors.push("layout:home-missing-wallet-sign-in");
+const authSlotPresent = await page.evaluate(
+  () => !!document.querySelector(".site-top-nav-auth"),
+);
+if (!authSlotPresent) {
+  errors.push("layout:home-missing-auth-slot");
+}
+if (homeLayout.hasProfileMenu) {
+  errors.push("layout:home-unexpected-profile-menu");
+}
+if (homeLayout.hasTopNavDashboardLink) {
+  errors.push("layout:home-unexpected-top-nav-dashboard");
+}
+if (homeLayout.hasTopNavToolkitLink) {
+  errors.push("layout:home-unexpected-top-nav-toolkit");
 }
 
+const hasSignInBeforeClick = await page.$('[data-testid="top-nav-sign-in"]');
+if (!hasSignInBeforeClick) {
+  errors.push("interaction:top-nav-sign-in-missing-before-click");
+} else {
+  await hasSignInBeforeClick.click();
+  await page
+    .waitForSelector('[role="dialog"]', { timeout: 5000 })
+    .catch(() => errors.push("interaction:top-nav-sign-in-no-modal"));
+}
+const signInModal = await page.evaluate(() => {
+  const dialog = document.querySelector('[role="dialog"]');
+  if (!dialog) {
+    return { open: false, hasGitHub: false, hasEmail: false, hasWallet: false };
+  }
+  return {
+    open: true,
+    hasGitHub: !!dialog.querySelector('a[href="/auth/github"]'),
+    hasEmail: !!dialog.querySelector('input[type="email"]'),
+    hasWallet: !!dialog.querySelector(
+      '[data-testid="wallet-sign-in"], [data-testid="wallet-sign-in-link"]',
+    ),
+  };
+});
+if (!signInModal.open) {
+  errors.push("interaction:sign-in-modal-missing");
+} else {
+  if (!signInModal.hasGitHub) {
+    errors.push("interaction:sign-in-modal-missing-github");
+  }
+  if (!signInModal.hasEmail) {
+    errors.push("interaction:sign-in-modal-missing-email");
+  }
+  if (!signInModal.hasWallet) {
+    errors.push("interaction:sign-in-modal-missing-wallet");
+  }
+  const modalStacking = await page.evaluate(() => {
+    const dialog = document.querySelector('[role="dialog"]');
+    const header = document.querySelector(".site-top-nav");
+    if (!dialog || !header) {
+      return { ok: false, dialogZ: null, headerZ: null };
+    }
+    const dialogZ = Number.parseInt(getComputedStyle(dialog).zIndex, 10);
+    const headerZ = Number.parseInt(getComputedStyle(header).zIndex, 10);
+    return {
+      ok: Number.isFinite(dialogZ) && Number.isFinite(headerZ) && dialogZ > headerZ,
+      dialogZ,
+      headerZ,
+    };
+  });
+  if (!modalStacking.ok) {
+    errors.push(
+      `layout:modal-below-header:${modalStacking.dialogZ}:${modalStacking.headerZ}`,
+    );
+  }
+}
+await page.keyboard.press("Escape");
+
 for (const path of ["/", "/tools", "/tools?function=bridge&type=mcp"]) {
-  await page.goto(`${base}${path}`, { waitUntil: "networkidle" });
+  await page.goto(`${base}${path}`, { waitUntil: "domcontentloaded" });
+  if (path.startsWith("/tools")) {
+    await requireToolCards(page, errors, `route${path}`);
+  }
   const text = await visiblePageText(page);
   if (/error deserializing|missing field/i.test(text || "")) {
     errors.push(`visible-error:${path}`);
@@ -105,13 +205,13 @@ for (const path of ["/", "/tools", "/tools?function=bridge&type=mcp"]) {
 }
 
 await page.setViewportSize({ width: 1280, height: 900 });
-await page.goto(`${base}/`, { waitUntil: "networkidle" });
+await page.goto(`${base}/`, { waitUntil: "domcontentloaded" });
 const desktopH1Size = await page.evaluate(() => {
   const h1 = document.querySelector(".home-page h1");
   return h1 ? getComputedStyle(h1).fontSize : "";
 });
 await page.setViewportSize({ width: 375, height: 812 });
-await page.goto(`${base}/`, { waitUntil: "networkidle" });
+await page.goto(`${base}/`, { waitUntil: "domcontentloaded" });
 const mobileH1Size = await page.evaluate(() => {
   const h1 = document.querySelector(".home-page h1");
   return h1 ? getComputedStyle(h1).fontSize : "";
@@ -131,20 +231,14 @@ if (!cssText || cssText.trim().length === 0) {
 }
 
 await page.setViewportSize({ width: 1280, height: 900 });
-await page.goto(`${base}/tools`, { waitUntil: "networkidle" });
+await page.goto(`${base}/tools`, { waitUntil: "domcontentloaded" });
+await requireToolCards(page, errors, "tools-desktop");
 const toolsLogoStats = await page.evaluate(() => ({
   cards: document.querySelectorAll(".tool-card:not(.skeleton-card)").length,
   imgs: document.querySelectorAll("img.tool-logo-img").length,
 }));
 if (toolsLogoStats.cards >= 50 && toolsLogoStats.imgs === 0) {
   errors.push(`layout:tools-missing-logo-imgs:cards=${toolsLogoStats.cards}`);
-}
-if (toolsLogoStats.imgs > 0) {
-  const brokeFallback = await probeLogoFallback(page);
-  const logoEval = evaluateLogoFallback(brokeFallback);
-  if (!logoEval.ok) {
-    errors.push(`layout:tools-logo-fallback-missing:${logoEval.detail}`);
-  }
 }
 const toolsLoadMore = await page.evaluate(() => {
   const cards = document.querySelectorAll(".tool-card:not(.skeleton-card)").length;
@@ -165,7 +259,8 @@ const toolsCards = await countRealToolCards(page);
 if (toolsCards >= 50) {
   const expectedPage2 = expectedCumulativeMin(toolsCards, 2);
   await sleep(NAV_PACE_MS);
-  await page.goto(`${base}/tools?page=2`, { waitUntil: "networkidle" });
+  await page.goto(`${base}/tools?page=2`, { waitUntil: "domcontentloaded" });
+  await requireToolCards(page, errors, "tools-page-2");
   const page2Text = await visiblePageText(page);
   const page2Cards = await countRealToolCards(page);
   if (/error deserializing|missing field/i.test(page2Text || "")) {
@@ -176,7 +271,8 @@ if (toolsCards >= 50) {
   }
 
   await sleep(NAV_PACE_MS);
-  await page.goto(`${base}/tools`, { waitUntil: "networkidle" });
+  await page.goto(`${base}/tools`, { waitUntil: "domcontentloaded" });
+  await requireToolCards(page, errors, "tools-load-more");
   const before = await countRealToolCards(page);
   const loadMore = await page.$("a.load-more-btn, .load-more-row a.load-more-btn");
   if (!loadMore) {
@@ -199,7 +295,10 @@ if (toolsCards >= 50) {
     await page.waitForURL(/[?&]page=2/, { timeout: 20000 }).catch(() => {
       navTimedOut = true;
     });
-    await page.waitForLoadState("networkidle");
+    await page.waitForLoadState("load").catch(() => {});
+    // Wait for first hydrated card before counting — polling for 100 while still
+    // on skeleton-only HTML can stall Leptos/WASM hydration (50->0 flake).
+    await requireToolCards(page, errors, "tools-load-more-after");
     const expectedMin = expectedCumulativeMin(before, 2);
     let timedOut = false;
     await page
@@ -225,10 +324,21 @@ if (toolsCards >= 50) {
   }
 }
 
+if (toolsLogoStats.imgs > 0) {
+  await page.goto(`${base}/tools`, { waitUntil: "domcontentloaded" });
+  await requireToolCards(page, errors, "tools-logo-fallback");
+  const brokeFallback = await probeLogoFallback(page);
+  const logoEval = evaluateLogoFallback(brokeFallback);
+  if (!logoEval.ok) {
+    errors.push(`layout:tools-logo-fallback-missing:${logoEval.detail}`);
+  }
+}
+
 await page.setViewportSize({ width: 375, height: 812 });
 await page.goto(`${base}/tools`, { waitUntil: "domcontentloaded" });
 await clearSidebarStorage(page);
-await page.reload({ waitUntil: "networkidle" });
+await page.reload({ waitUntil: "domcontentloaded" });
+await requireToolCards(page, errors, "mobile-tools");
 await waitForSidebarStorageLoaded(page).catch(() => {
   errors.push("layout:mobile-sidebar-hydration-timeout");
 });
@@ -245,6 +355,7 @@ const mobileSidebarLayout = await page.evaluate(() => {
   return {
     collapsed: aside.classList.contains("tools-sidebar-collapsed"),
     asideWidth: asideRect.width,
+    asideBottom: asideRect.bottom,
     mainX: mainRect.x,
     mainY: mainRect.y,
     headerBottom: headerRect?.bottom ?? 0,
@@ -253,32 +364,155 @@ const mobileSidebarLayout = await page.evaluate(() => {
 if (!mobileSidebarLayout.collapsed) {
   errors.push("layout:mobile-sidebar-not-collapsed");
 }
-if (mobileSidebarLayout.asideWidth > 48) {
-  errors.push(`layout:mobile-sidebar-width:${mobileSidebarLayout.asideWidth}`);
+if (mobileSidebarLayout.asideWidth < 320) {
+  errors.push(`layout:mobile-sidebar-not-full-width:${mobileSidebarLayout.asideWidth}`);
 }
-if (mobileSidebarLayout.mainY > mobileSidebarLayout.headerBottom + 8) {
-  errors.push(`layout:mobile-main-stacked:${mobileSidebarLayout.mainY}`);
+if (mobileSidebarLayout.mainY < mobileSidebarLayout.asideBottom - 1) {
+  errors.push(`layout:mobile-main-overlaps-sidebar:${mobileSidebarLayout.mainY}`);
 }
-if (mobileSidebarLayout.mainX < 32) {
-  errors.push(`layout:mobile-main-not-beside-rail:${mobileSidebarLayout.mainX}`);
+if (mobileSidebarLayout.mainX !== 0) {
+  errors.push(`layout:mobile-main-not-flush:${mobileSidebarLayout.mainX}`);
 }
 
-await page.goto(`${base}/tools`, { waitUntil: "networkidle" });
-const chainMoreVisible = await page.evaluate(() => {
-  const pill = document.querySelector(".chain-tile-more");
-  if (!pill) return true;
-  const style = getComputedStyle(pill);
-  return style.display !== "none" && style.visibility !== "hidden";
+const bookmarkTouch = await page.evaluate(() => {
+  const btn = document.querySelector(".tool-card:not(.skeleton-card) .card-action-btn");
+  if (!btn) return { ok: true, missing: true };
+  const rect = btn.getBoundingClientRect();
+  return { ok: rect.width >= 44 && rect.height >= 44, width: rect.width, height: rect.height };
 });
-if (!chainMoreVisible) {
+if (!bookmarkTouch.ok && !bookmarkTouch.missing) {
+  errors.push(`computed-style:bookmark-touch-target:${bookmarkTouch.width}x${bookmarkTouch.height}`);
+}
+
+const railToggle = await page.$(".sidebar-rail-toggle");
+if (railToggle) {
+  await railToggle.click();
+  const overlayState = await page.evaluate(() => ({
+    expanded: !document.querySelector(".tools-sidebar")?.classList.contains("tools-sidebar-collapsed"),
+    hasBackdrop: !!document.querySelector(".sidebar-mobile-backdrop"),
+    scrollLocked: document.body.classList.contains("sidebar-scroll-locked"),
+  }));
+  if (!overlayState.expanded || !overlayState.hasBackdrop) {
+    errors.push("interaction:mobile-filter-overlay-missing");
+  }
+  if (!overlayState.scrollLocked) {
+    errors.push("interaction:mobile-filter-scroll-lock-missing");
+  }
+  const fnToggle = await page.$(".sidebar-section button.sidebar-toggle");
+  if (fnToggle) {
+    await fnToggle.click();
+  }
+  const filterLink = await page.$('aside .sidebar-body a[href*="function="]:visible');
+  if (filterLink) {
+    const filterHref = await filterLink.getAttribute("href");
+    await filterLink.click();
+    if (filterHref) {
+      await page.waitForURL((url) => url.pathname === "/tools" && url.search.includes("function="), {
+        timeout: 10000,
+      }).catch(() => {
+        errors.push("interaction:mobile-filter-nav-timeout");
+      });
+    }
+    let collapsedAfterFilter = false;
+    try {
+      await page.waitForFunction(
+        () =>
+          document
+            .querySelector(".tools-sidebar")
+            ?.classList.contains("tools-sidebar-collapsed") === true,
+        null,
+        { timeout: 10000 },
+      );
+      collapsedAfterFilter = true;
+    } catch {
+      collapsedAfterFilter = false;
+    }
+    if (!collapsedAfterFilter) {
+      errors.push("interaction:mobile-filter-not-collapsed-after-click");
+    }
+  }
+  await page.goto(`${base}/tools`, { waitUntil: "domcontentloaded" });
+  await clearSidebarStorage(page);
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await requireToolCards(page, errors, "mobile-reentry");
+  const collapsedReentry = await page.evaluate(() =>
+    document.querySelector(".tools-sidebar")?.classList.contains("tools-sidebar-collapsed"),
+  );
+  if (!collapsedReentry) {
+    errors.push("layout:mobile-sidebar-not-collapsed-on-reentry");
+  }
+}
+
+await page.setViewportSize({ width: 1280, height: 900 });
+await page.goto(`${base}/tools`, { waitUntil: "networkidle", timeout: 60000 });
+await requireToolCards(page, errors, "desktop-interactions");
+const chainMore = await page.$(".chain-tile-more");
+if (chainMore) {
+  await chainMore.click();
+  await sleep(400);
+  const chainExpanded = await page.evaluate(() => {
+    const pill = document.querySelector(".chain-tile-more");
+    return pill?.getAttribute("aria-expanded") === "true";
+  });
+  if (!chainExpanded) {
+    errors.push("interaction:chain-more-not-expanded");
+  }
+}
+const bookmarkBtn = await page.$(".tool-card:not(.skeleton-card) .card-action-btn");
+if (bookmarkBtn) {
+  await bookmarkBtn.click({ timeout: 10000 });
+  await sleep(500);
+  const bookmarkModal = await page.$('[role="dialog"]');
+  if (!bookmarkModal) {
+    errors.push("interaction:bookmark-no-login-modal");
+  }
+  await page.keyboard.press("Escape");
+}
+
+await page.setViewportSize({ width: 375, height: 812 });
+await page.goto(`${base}/tools`, { waitUntil: "domcontentloaded" });
+await requireToolCards(page, errors, "mobile-chain-strip");
+const chainStripState = await page.evaluate(() => {
+  const strip = document.querySelector(".chain-strip");
+  if (!strip) {
+    return { hasStrip: false, pillVisible: true };
+  }
+  const pill = strip.querySelector(".chain-tile-more");
+  if (!pill) {
+    // Full catalog (20 chains) fits in the primary row — no overflow + pill.
+    return { hasStrip: true, pillVisible: true };
+  }
+  const style = getComputedStyle(pill);
+  return {
+    hasStrip: true,
+    pillVisible: style.display !== "none" && style.visibility !== "hidden",
+  };
+});
+if (!chainStripState.hasStrip) {
+  errors.push("layout:mobile-chain-strip-missing");
+}
+if (!chainStripState.pillVisible) {
   errors.push("computed-style:chain-strip-more-hidden-on-mobile");
 }
-
-await browser.close();
-
-if (errors.length) {
-  console.error(errors.join("\n"));
-  process.exit(1);
 }
 
-console.log(`BROWSER SMOKE PASS ${base}`);
+const isMain =
+  process.argv[1] &&
+  path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+
+if (isMain) {
+  const base = (process.argv[2] || "http://localhost:3000").replace(/\/$/, "");
+  const errors = [];
+  const browser = await chromium.launch({ headless: true });
+  const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+  attachBrowserSmokeHandlers(page, base, errors);
+  await runBrowserSmokeChecks(page, base, errors);
+  await browser.close();
+
+  if (errors.length) {
+    console.error(errors.join("\n"));
+    process.exit(1);
+  }
+
+  console.log(`BROWSER SMOKE PASS ${base}`);
+}
