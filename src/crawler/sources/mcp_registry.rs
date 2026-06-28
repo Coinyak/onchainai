@@ -66,18 +66,8 @@ fn registry_server_to_raw(server: &RegistryServer) -> RawTool {
     let name = server.title.clone().unwrap_or_else(|| server.name.clone());
     let repo_url = server.repository.as_ref().map(|repo| repo.url.clone());
     let mcp_endpoint = server.remotes.first().map(|remote| remote.url.clone());
-    let npm_package = server
-        .packages
-        .iter()
-        .find(|package| package.registry.as_deref() == Some("npm"))
-        .and_then(|package| package.name.clone());
-    let install_command = server.packages.first().and_then(|package| {
-        package.command.as_ref().map(|command| {
-            let mut parts = vec![command.clone()];
-            parts.extend(package.args.iter().cloned());
-            parts.join(" ")
-        })
-    });
+    let npm_package = npm_package(server);
+    let install_command = selected_install_package(server).and_then(package_install_command);
 
     RawTool {
         name,
@@ -95,6 +85,39 @@ fn registry_server_to_raw(server: &RegistryServer) -> RawTool {
         source_url: repo_url.or_else(|| Some(MCP_REGISTRY_URL.to_string())),
         license: None,
     }
+}
+
+fn npm_package(server: &RegistryServer) -> Option<String> {
+    server
+        .packages
+        .iter()
+        .find(|package| package.registry.as_deref() == Some("npm"))
+        .and_then(|package| package.name.clone())
+}
+
+fn selected_install_package(server: &RegistryServer) -> Option<&Package> {
+    server
+        .packages
+        .iter()
+        .find(|package| package.registry.as_deref() == Some("npm"))
+        .or_else(|| {
+            server
+                .packages
+                .iter()
+                .find(|package| package.command.is_some())
+        })
+}
+
+fn package_install_command(package: &Package) -> Option<String> {
+    if let Some(command) = &package.command {
+        let mut parts = vec![command.clone()];
+        parts.extend(package.args.iter().cloned());
+        return Some(parts.join(" "));
+    }
+    if package.registry.as_deref() == Some("npm") {
+        return package.name.as_ref().map(|name| format!("npx {name}"));
+    }
+    None
 }
 
 fn infer_chains(server: &RegistryServer) -> Vec<String> {
@@ -205,6 +228,16 @@ mod tests {
                             { "registry": "npm", "name": "@example/solana-mcp", "command": "npx", "args": ["@example/solana-mcp"] }
                         ]
                     }
+                },
+                {
+                    "server": {
+                        "name": "example/base-mcp",
+                        "description": "Base payments MCP server.",
+                        "packages": [
+                            { "registry": "docker", "name": "example/base-mcp", "command": "docker", "args": ["run", "example/base-mcp"] },
+                            { "registry": "npm", "name": "@example/base-mcp", "command": "npx", "args": ["@example/base-mcp"] }
+                        ]
+                    }
                 }
             ]
         }"#
@@ -225,7 +258,7 @@ mod tests {
             .await
             .expect("registry crawl should parse");
 
-        assert_eq!(raws.len(), 1);
+        assert_eq!(raws.len(), 2);
         assert_eq!(raws[0].name, "Solana MCP");
         assert_eq!(raws[0].tool_type, "mcp");
         assert_eq!(raws[0].source, SOURCE_NAME);
@@ -235,5 +268,10 @@ mod tests {
         );
         assert_eq!(raws[0].npm_package.as_deref(), Some("@example/solana-mcp"));
         assert!(raws[0].chains.contains(&"solana".to_string()));
+        assert_eq!(raws[1].npm_package.as_deref(), Some("@example/base-mcp"));
+        assert_eq!(
+            raws[1].install_command.as_deref(),
+            Some("npx @example/base-mcp")
+        );
     }
 }
