@@ -1,5 +1,6 @@
 //! Shared sign-in form — GitHub OAuth, email magic link, SIWX wallet.
 
+use crate::auth::session::ssr_hydration_available;
 use crate::auth::siwx_client::siwx_connect_evm;
 use leptos::prelude::*;
 use leptos::task::spawn_local;
@@ -34,18 +35,49 @@ async fn post_json(path: &str, body: serde_json::Value) -> Result<(), String> {
 pub fn WalletConnectButton(
     #[prop(default = "Connect Wallet (SIWX)")] label: &'static str,
     #[prop(optional)] class: Option<&'static str>,
+    /// When true, show a hint if the WASM bundle is missing (login page only).
+    #[prop(default = false)]
+    show_hydration_hint: bool,
 ) -> impl IntoView {
     let siwx_error = RwSignal::new(None::<String>);
     let siwx_busy = RwSignal::new(false);
     let btn_class = class.unwrap_or(
         "flex items-center justify-center w-full px-4 py-2.5 rounded-lg border border-[#E5E5E5] text-[14px] font-medium hover:bg-[#FAFAFA] disabled:opacity-60",
     );
+    let hydration_available = ssr_hydration_available();
+
+    if !hydration_available {
+        return view! {
+            <>
+                <a
+                    href="/login#wallet"
+                    class=btn_class
+                    data-testid="wallet-sign-in-link"
+                >
+                    {label}
+                </a>
+                {show_hydration_hint.then(|| view! {
+                    <p
+                        id="wallet"
+                        class="wallet-connect-error mt-2 text-[13px] text-[#6B6B6B]"
+                        role="status"
+                    >
+                        "Wallet sign-in needs the app JavaScript bundle. Use GitHub or email, or run "
+                        <code class="text-[12px]">"cargo leptos build"</code>
+                        " for local wallet login."
+                    </p>
+                })}
+            </>
+        }
+        .into_any();
+    }
 
     view! {
         <>
             <button
                 type="button"
                 class=btn_class
+                data-testid="wallet-sign-in"
                 disabled=move || siwx_busy.get()
                 on:click=move |_| {
                     siwx_error.set(None);
@@ -73,10 +105,11 @@ pub fn WalletConnectButton(
                 {move || if siwx_busy.get() { "Connecting wallet..." } else { label }}
             </button>
             {move || siwx_error.get().map(|e| view! {
-                <p class="wallet-connect-error mt-1 text-[13px] text-[#C0392B]">{e}</p>
+                <p class="wallet-connect-error mt-1 text-[13px] text-[#C0392B]" role="alert">{e}</p>
             })}
         </>
     }
+    .into_any()
 }
 
 #[component]
@@ -148,8 +181,8 @@ pub fn LoginForm(
         {move || email_msg.get().map(|m| view! {
             <p class="mt-2 text-[13px] text-[#6B6B6B]">{m}</p>
         })}
-        <div class="mt-3">
-            <WalletConnectButton/>
+        <div class="mt-3" id="wallet">
+            <WalletConnectButton show_hydration_hint=true/>
         </div>
         {move || on_cancel.map(|cb| view! {
             <button

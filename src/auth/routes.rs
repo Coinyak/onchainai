@@ -1,8 +1,8 @@
 //! Axum auth routes — direct GitHub OAuth, email magic links, and logout.
 
 use crate::auth::session::{
-    cookie_value, ensure_github_profile, issue_access_token, post_auth_redirect_path,
-    ACCESS_TOKEN_COOKIE, GITHUB_STATE_COOKIE,
+    cookie_secure_for_domain, cookie_value, ensure_github_profile, issue_access_token,
+    post_auth_redirect_path, ACCESS_TOKEN_COOKIE, GITHUB_STATE_COOKIE,
 };
 use crate::config::Config;
 use crate::AppState;
@@ -64,11 +64,6 @@ fn generate_oauth_state() -> String {
     URL_SAFE_NO_PAD.encode(bytes)
 }
 
-/// Production HTTPS must set `Secure` on OAuth state cookies or browsers drop them.
-fn cookie_secure(config: &Config) -> bool {
-    !config.siwx_domain.contains("localhost")
-}
-
 /// `GET /auth/github` — redirect to GitHub OAuth (callback stays on this app).
 pub async fn github_login(State(state): State<AppState>) -> Result<Response, StatusCode> {
     let config = &state.config;
@@ -92,11 +87,11 @@ pub async fn github_login(State(state): State<AppState>) -> Result<Response, Sta
             GITHUB_STATE_COOKIE,
             &oauth_state,
             600,
-            cookie_secure(config),
+            cookie_secure_for_domain(&config.siwx_domain),
             "Lax",
         )
-            .parse()
-            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?,
+        .parse()
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?,
     );
 
     Ok((headers, Redirect::temporary(&authorize_url)).into_response())
@@ -210,8 +205,10 @@ pub async fn oauth_callback(
     .await
     {
         Ok(id) => id,
-        Err(_) => {
-            return Ok(Redirect::to("/login?auth=github_profile").into_response());
+        Err(err) => {
+            tracing::error!(error = %err, github_id = github_user.id, "GitHub profile setup failed");
+            let code = err.auth_query_code();
+            return Ok(Redirect::to(&format!("/login?auth={code}")).into_response());
         }
     };
 
@@ -223,7 +220,7 @@ pub async fn oauth_callback(
     )
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    let secure_cookie = cookie_secure(config);
+    let secure_cookie = cookie_secure_for_domain(&config.siwx_domain);
 
     let mut headers = HeaderMap::new();
     headers.append(
@@ -253,7 +250,7 @@ pub async fn oauth_callback(
 
 /// `POST /auth/logout` — clear session cookie.
 pub async fn logout(State(state): State<AppState>) -> Response {
-    let secure_cookie = cookie_secure(&state.config);
+    let secure_cookie = cookie_secure_for_domain(&state.config.siwx_domain);
     let mut headers = HeaderMap::new();
     headers.insert(
         header::SET_COOKIE,
@@ -266,39 +263,47 @@ pub async fn logout(State(state): State<AppState>) -> Response {
 
 #[cfg(test)]
 mod tests {
-    use super::{cookie_secure, set_cookie};
-    use crate::config::Config;
-
-    fn prod_config() -> Config {
-        Config {
-            database_url: "postgres://localhost/x".into(),
-            supabase_url: "https://proj.supabase.co".into(),
-            supabase_anon_key: "anon".into(),
-            supabase_service_key: "service".into(),
-            github_client_id: "gid".into(),
-            github_client_secret: "gsecret".into(),
-            siwx_domain: "www.onchain-ai.xyz".into(),
-            siwx_session_ttl: 86_400,
-            jwt_secret: "secret".into(),
-            github_api_token: None,
-            port: 3000,
-        }
-    }
+    use super::{clear_cookie, set_cookie};
+    use crate::auth::session::{
+        cookie_secure_for_domain, ACCESS_TOKEN_COOKIE, GITHUB_STATE_COOKIE,
+    };
 
     #[test]
     fn oauth_state_cookie_is_secure_in_production() {
-        let cfg = prod_config();
-        assert!(cookie_secure(&cfg));
-        let cookie = set_cookie("onchainai_github_state", "abc", 600, true, "Lax");
+        assert!(cookie_secure_for_domain("www.onchain-ai.xyz"));
+        let cookie = set_cookie(GITHUB_STATE_COOKIE, "abc", 600, true, "Lax");
         assert!(cookie.contains("; Secure"));
+        assert!(cookie.contains("SameSite=Lax"));
     }
 
     #[test]
     fn oauth_state_cookie_omits_secure_on_localhost() {
-        let mut cfg = prod_config();
-        cfg.siwx_domain = "localhost:3000".into();
-        assert!(!cookie_secure(&cfg));
-        let cookie = set_cookie("onchainai_github_state", "abc", 600, false, "Lax");
+        assert!(!cookie_secure_for_domain("localhost:3000"));
+        let cookie = set_cookie(GITHUB_STATE_COOKIE, "abc", 600, false, "Lax");
         assert!(!cookie.contains("; Secure"));
+    }
+
+    #[test]
+    fn clear_github_state_cookie_preserves_secure_in_production() {
+        let cookie = clear_cookie(GITHUB_STATE_COOKIE, true, "Lax");
+        assert!(cookie.contains("; Secure"));
+        assert!(cookie.contains("Max-Age=0"));
+        assert!(cookie.contains("SameSite=Lax"));
+    }
+
+    #[test]
+    fn session_cookie_is_strict_and_secure_in_production() {
+        let cookie = set_cookie(ACCESS_TOKEN_COOKIE, "tok", 86_400, true, "Strict");
+        assert!(cookie.contains("SameSite=Strict"));
+        assert!(cookie.contains("; Secure"));
+        assert!(cookie.contains("HttpOnly"));
+    }
+
+    #[test]
+    fn logout_clears_session_cookie_with_matching_flags() {
+        let cookie = clear_cookie(ACCESS_TOKEN_COOKIE, true, "Strict");
+        assert!(cookie.contains("; Secure"));
+        assert!(cookie.contains("SameSite=Strict"));
+        assert!(cookie.contains("Max-Age=0"));
     }
 }

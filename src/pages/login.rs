@@ -17,8 +17,29 @@ fn auth_error_message(code: &str) -> Option<&'static str> {
         "github_token_exchange" | "github_user_fetch" => {
             Some("GitHub sign-in failed. Check OAuth app settings and try again.")
         }
-        "github_profile" => Some("Could not create your profile. Try again in a moment."),
+        "github_profile_exists" => {
+            Some("This GitHub account is already linked. Try signing in again.")
+        }
+        "github_profile_setup" => Some(
+            "Account setup failed while creating your profile. Try again in a moment, or use email sign-in.",
+        ),
+        "github_profile" => Some("Could not save your profile. Try again in a moment."),
         _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::auth_error_message;
+
+    #[test]
+    fn profile_setup_errors_are_user_friendly() {
+        assert!(auth_error_message("github_profile_setup")
+            .unwrap()
+            .contains("profile"));
+        assert!(auth_error_message("github_profile_exists")
+            .unwrap()
+            .contains("linked"));
     }
 }
 

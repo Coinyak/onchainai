@@ -40,7 +40,11 @@ fn AuthNav(
         .into_any(),
         Ok(None) | Err(_) => view! {
             <div class="site-top-nav-auth" data-testid="auth-sign-in">
-                <a href="/auth/github" class="site-top-nav-btn site-top-nav-btn-outline">
+                <a
+                    href="/auth/github"
+                    class="site-top-nav-btn site-top-nav-btn-outline"
+                    data-testid="github-sign-in"
+                >
                     "GitHub"
                 </a>
                 <WalletConnectButton

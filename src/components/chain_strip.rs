@@ -1,6 +1,8 @@
 //! Horizontal chain logo strip — toggles `?chain=` multi-select filters (harness-round-11).
 
-use crate::chains::{chain_filter_active, strip_chains, ChainMeta, STRIP_PRIMARY_VISIBLE};
+use crate::chains::{
+    chain_filter_active, chain_logo_path, strip_chains, ChainMeta, STRIP_PRIMARY_VISIBLE,
+};
 use crate::components::tools_browser::BrowserBase;
 use crate::filter_query::{clear_axis, parse_multi, toggle_multi};
 use leptos::prelude::*;
@@ -78,7 +80,7 @@ fn chain_tile(
     let href = toggle_multi(base_path, query_base, "chain", entry.id, chain_active);
     let is_active = chain_filter_active(entry, chain_active);
     let label = entry.label.to_string();
-    let logo = entry.logo.to_string();
+    let logo = chain_logo_path(entry.id);
     let class = if is_active {
         "chain-tile chain-tile-logo active"
     } else {
@@ -93,7 +95,15 @@ fn chain_tile(
             title=label
             aria-pressed=if is_active { "true" } else { "false" }
         >
-            <img class="chain-logo" src=logo alt=entry.label loading="lazy" decoding="async"/>
+            <img
+                class="chain-logo"
+                src=logo
+                alt=entry.label
+                width="36"
+                height="36"
+                loading="lazy"
+                decoding="async"
+            />
         </a>
     }
 }

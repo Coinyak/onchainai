@@ -22,140 +22,147 @@ pub const CHAIN_CATALOG: &[ChainMeta] = &[
         id: "bitcoin",
         label: "Bitcoin",
         logo: "/chains/bitcoin.svg",
-        aliases: &["btc"],
+        aliases: &["btc", "btc-mainnet", "xbt"],
         pinned: true,
     },
     ChainMeta {
         id: "bob",
         label: "BOB",
         logo: "/chains/bob.svg",
-        aliases: &[],
+        aliases: &["build-on-bitcoin", "gobob"],
         pinned: true,
     },
     ChainMeta {
         id: "ethereum",
         label: "Ethereum",
         logo: "/chains/ethereum.svg",
-        aliases: &["eth"],
+        aliases: &["eth", "eth-mainnet", "ethereum-mainnet"],
         pinned: false,
     },
     ChainMeta {
         id: "solana",
         label: "Solana",
         logo: "/chains/solana.svg",
-        aliases: &["sol"],
+        aliases: &["sol", "solana-mainnet"],
         pinned: false,
     },
     ChainMeta {
         id: "base",
         label: "Base",
         logo: "/chains/base.svg",
-        aliases: &[],
+        aliases: &["base-mainnet", "coinbase-base"],
         pinned: false,
     },
     ChainMeta {
         id: "arbitrum",
         label: "Arbitrum",
         logo: "/chains/arbitrum.svg",
-        aliases: &["arb"],
+        aliases: &["arb", "arbitrum-one", "arb-one"],
         pinned: false,
     },
     ChainMeta {
         id: "optimism",
         label: "Optimism",
         logo: "/chains/optimism.svg",
-        aliases: &["op"],
+        aliases: &["op", "optimism-mainnet", "op-mainnet"],
         pinned: false,
     },
     ChainMeta {
         id: "polygon",
         label: "Polygon",
         logo: "/chains/polygon.svg",
-        aliases: &["matic"],
+        aliases: &["matic", "polygon-pos", "polygon-mainnet", "matic-mainnet"],
         pinned: false,
     },
     ChainMeta {
         id: "bsc",
         label: "BNB Chain",
         logo: "/chains/bsc.svg",
-        aliases: &["bnb", "binance", "binance-smart-chain"],
+        aliases: &[
+            "bnb",
+            "binance",
+            "binance-smart-chain",
+            "bnb-chain",
+            "bnb-smart-chain",
+            "binance-chain",
+        ],
         pinned: false,
     },
     ChainMeta {
         id: "avalanche",
         label: "Avalanche",
         logo: "/chains/avalanche.svg",
-        aliases: &["avax"],
+        aliases: &["avax", "avalanche-c", "avax-c", "c-chain"],
         pinned: false,
     },
     ChainMeta {
         id: "sui",
         label: "Sui",
         logo: "/chains/sui.svg",
-        aliases: &[],
+        aliases: &["sui-mainnet"],
         pinned: false,
     },
     ChainMeta {
         id: "zksync",
         label: "zkSync",
         logo: "/chains/zksync.svg",
-        aliases: &["zk-sync", "zksync-era"],
+        aliases: &["zk-sync", "zksync-era", "zksync-mainnet", "zk-sync-era"],
         pinned: false,
     },
     ChainMeta {
         id: "sonic",
         label: "Sonic",
         logo: "/chains/sonic.svg",
-        aliases: &[],
+        aliases: &["sonic-mainnet"],
         pinned: false,
     },
     ChainMeta {
         id: "unichain",
         label: "Unichain",
         logo: "/chains/unichain.svg",
-        aliases: &[],
+        aliases: &["uni-chain"],
         pinned: false,
     },
     ChainMeta {
         id: "bera",
         label: "Berachain",
         logo: "/chains/bera.svg",
-        aliases: &["berachain"],
+        aliases: &["berachain", "berachain-mainnet"],
         pinned: false,
     },
     ChainMeta {
         id: "sei",
         label: "Sei",
         logo: "/chains/sei.svg",
-        aliases: &[],
+        aliases: &["sei-network", "sei-mainnet"],
         pinned: false,
     },
     ChainMeta {
         id: "soneium",
         label: "Soneium",
         logo: "/chains/soneium.svg",
-        aliases: &[],
+        aliases: &["soneium-mainnet"],
         pinned: false,
     },
     ChainMeta {
         id: "tron",
         label: "Tron",
         logo: "/chains/tron.svg",
-        aliases: &["trx"],
+        aliases: &["trx", "tron-mainnet"],
         pinned: false,
     },
     ChainMeta {
         id: "hyperliquid",
         label: "Hyperliquid",
         logo: "/chains/hyperliquid.svg",
-        aliases: &["hype"],
+        aliases: &["hype", "hyperliquid-xyz", "hl"],
         pinned: false,
     },
     ChainMeta {
         id: "plasma",
         label: "Plasma",
         logo: "/chains/plasma.svg",
-        aliases: &[],
+        aliases: &["plasma-mainnet"],
         pinned: false,
     },
 ];
@@ -163,10 +170,73 @@ pub const CHAIN_CATALOG: &[ChainMeta] = &[
 /// Primary-row chain tiles (excluding the All tile).
 pub const STRIP_PRIMARY_VISIBLE: usize = 6;
 
+/// DB noise values — not real chains; hidden from card tags and strip counts.
+const CHAIN_NOISE: &[&str] = &[
+    "all",
+    "any",
+    "none",
+    "unknown",
+    "multi-chain",
+    "multichain",
+    "multi",
+    "cross-chain",
+    "crosschain",
+    "omnichain",
+    "omni-chain",
+    "ecosystem",
+];
+
+/// Strip common network suffixes after separators are normalized.
+const CHAIN_SUFFIXES: &[&str] = &["-mainnet", "-testnet", "-network", "-one", "-pos", "-era"];
+
+/// Normalize a raw DB chain string for catalog lookup.
+pub fn normalize_chain_key(raw: &str) -> String {
+    let mut key = raw.trim().to_lowercase();
+    key = key.replace('_', "-").replace(' ', "-");
+    while key.contains("--") {
+        key = key.replace("--", "-");
+    }
+    key = key.trim_matches('-').to_string();
+
+    loop {
+        let mut stripped = false;
+        for suffix in CHAIN_SUFFIXES {
+            if let Some(base) = key.strip_suffix(suffix) {
+                if !base.is_empty() {
+                    key = base.to_string();
+                    stripped = true;
+                }
+            }
+        }
+        if !stripped {
+            break;
+        }
+    }
+
+    key
+}
+
+/// Whether a raw DB chain value is catalog noise (not a real chain).
+pub fn is_chain_noise(raw: &str) -> bool {
+    let key = normalize_chain_key(raw);
+    if key.is_empty() {
+        return true;
+    }
+    if CHAIN_NOISE.contains(&key.as_str()) {
+        return true;
+    }
+    key.contains('+') || key.contains("networks")
+}
+
+/// Public logo path for a catalog id — always `/chains/{id}.svg`.
+pub fn chain_logo_path(id: &str) -> String {
+    format!("/chains/{}.svg", id.trim().to_lowercase())
+}
+
 /// Resolve a raw DB chain string to a catalog entry, if any.
 pub fn resolve_chain(db_value: &str) -> Option<&'static ChainMeta> {
-    let normalized = db_value.trim().to_lowercase();
-    if normalized.is_empty() {
+    let normalized = normalize_chain_key(db_value);
+    if normalized.is_empty() || is_chain_noise(&normalized) {
         return None;
     }
     CHAIN_CATALOG.iter().find(|entry| {
@@ -174,26 +244,22 @@ pub fn resolve_chain(db_value: &str) -> Option<&'static ChainMeta> {
             || entry
                 .aliases
                 .iter()
-                .any(|alias| alias.eq_ignore_ascii_case(&normalized))
+                .any(|alias| normalize_chain_key(alias) == normalized)
     })
 }
 
 /// Lookup by canonical catalog id.
 pub fn chain_by_id(id: &str) -> Option<&'static ChainMeta> {
-    let normalized = id.trim().to_lowercase();
+    let normalized = normalize_chain_key(id);
     CHAIN_CATALOG.iter().find(|entry| entry.id == normalized)
 }
 
 /// Whether a selected `?chain=` value is active for a catalog entry (id or alias).
 pub fn chain_filter_active(entry: &ChainMeta, active: &[String]) -> bool {
-    active.iter().any(|value| {
-        let normalized = value.trim().to_lowercase();
-        entry.id == normalized
-            || entry
-                .aliases
-                .iter()
-                .any(|alias| alias.eq_ignore_ascii_case(&normalized))
-    })
+    active
+        .iter()
+        .filter_map(|value| resolve_chain(value))
+        .any(|resolved| resolved.id == entry.id)
 }
 
 /// Chains for the strip: pinned first (catalog order), then non-pinned by descending count.
@@ -245,16 +311,55 @@ pub fn chain_tags_show_all(chains: &[String]) -> (Vec<ChainTagView>, usize) {
 
 /// Map tool chain strings to catalog entries; returns visible tags and overflow count.
 pub fn chain_tags_for_tool(chains: &[String], max_visible: usize) -> (Vec<ChainTagView>, usize) {
-    let tags: Vec<ChainTagView> = chains
-        .iter()
-        .map(|raw| ChainTagView {
-            meta: resolve_chain(raw),
-            raw: raw.clone(),
-        })
-        .collect();
+    use std::collections::HashSet;
+
+    let mut tags: Vec<ChainTagView> = Vec::new();
+    let mut seen_catalog: HashSet<&'static str> = HashSet::new();
+    let mut seen_fallback: HashSet<String> = HashSet::new();
+
+    for raw in chains {
+        let trimmed = raw.trim();
+        if trimmed.is_empty() || is_chain_noise(trimmed) {
+            continue;
+        }
+        let meta = resolve_chain(trimmed);
+        if let Some(entry) = meta {
+            if !seen_catalog.insert(entry.id) {
+                continue;
+            }
+        } else {
+            let key = normalize_chain_key(trimmed);
+            if !seen_fallback.insert(key) {
+                continue;
+            }
+        }
+        tags.push(ChainTagView {
+            meta,
+            raw: trimmed.to_string(),
+        });
+    }
+
     let overflow = tags.len().saturating_sub(max_visible);
     let visible = tags.into_iter().take(max_visible).collect();
     (visible, overflow)
+}
+
+/// Abbreviated label for unknown chains shown as text pills.
+pub fn chain_fallback_label(raw: &str) -> String {
+    let token = raw
+        .split(|c: char| c == '-' || c == ' ' || c == '_')
+        .next()
+        .unwrap_or(raw)
+        .trim();
+    if token.is_empty() {
+        return "?".into();
+    }
+    let upper = token.to_uppercase();
+    if upper.len() <= 5 {
+        upper
+    } else {
+        upper.chars().take(4).collect()
+    }
 }
 
 #[cfg(test)]
@@ -385,10 +490,41 @@ mod tests {
 
     #[test]
     fn alias_mapping_resolves_common_db_values() {
-        assert_eq!(resolve_chain("eth").map(|c| c.id), Some("ethereum"));
-        assert_eq!(resolve_chain("BTC").map(|c| c.id), Some("bitcoin"));
-        assert_eq!(resolve_chain("matic").map(|c| c.id), Some("polygon"));
-        assert_eq!(resolve_chain("bnb").map(|c| c.id), Some("bsc"));
+        let cases = [
+            ("eth", "ethereum"),
+            ("BTC", "bitcoin"),
+            ("matic", "polygon"),
+            ("bnb", "bsc"),
+            ("BNB Chain", "bsc"),
+            ("binance_smart_chain", "bsc"),
+            ("arbitrum-one", "arbitrum"),
+            ("Arbitrum One", "arbitrum"),
+            ("optimism-mainnet", "optimism"),
+            ("polygon-pos", "polygon"),
+            ("zksync-era", "zksync"),
+            ("zk-sync", "zksync"),
+            ("avax-c", "avalanche"),
+            ("berachain", "bera"),
+            ("hyperliquid-xyz", "hyperliquid"),
+            ("sei-network", "sei"),
+            ("build-on-bitcoin", "bob"),
+            ("ETH Mainnet", "ethereum"),
+            ("Solana Mainnet", "solana"),
+        ];
+        for (raw, expected) in cases {
+            assert_eq!(
+                resolve_chain(raw).map(|c| c.id),
+                Some(expected),
+                "resolve_chain({raw}) should map to {expected}"
+            );
+        }
+    }
+
+    #[test]
+    fn chain_logo_paths_match_catalog_ids() {
+        for entry in CHAIN_CATALOG {
+            assert_eq!(entry.logo, chain_logo_path(entry.id));
+        }
     }
 
     #[test]
@@ -397,17 +533,49 @@ mod tests {
             "all",
             "multi-chain",
             "63+ networks",
-            "fantom",
-            "litecoin",
-            "xrp",
-            "celo",
-            "gnosis",
+            "cross-chain",
+            "omnichain",
         ] {
             assert!(
                 resolve_chain(noise).is_none(),
                 "noise value should not resolve: {noise}"
             );
+            assert!(is_chain_noise(noise), "noise value not flagged: {noise}");
         }
+        for unknown in ["fantom", "litecoin", "xrp", "celo", "gnosis", "linea"] {
+            assert!(
+                resolve_chain(unknown).is_none(),
+                "unknown chain should not resolve: {unknown}"
+            );
+            assert!(
+                !is_chain_noise(unknown),
+                "unknown chain should still render fallback pill: {unknown}"
+            );
+        }
+    }
+
+    #[test]
+    fn chain_tags_skip_noise_and_dedupe_catalog_entries() {
+        let chains = vec![
+            "ethereum".into(),
+            "eth".into(),
+            "multi-chain".into(),
+            "all".into(),
+            "base".into(),
+        ];
+        let (visible, overflow) = chain_tags_for_tool(&chains, 10);
+        assert_eq!(visible.len(), 2);
+        assert_eq!(overflow, 0);
+        assert!(visible.iter().all(|tag| tag.meta.is_some()));
+        assert_eq!(visible[0].meta.map(|m| m.id), Some("ethereum"));
+        assert_eq!(visible[1].meta.map(|m| m.id), Some("base"));
+    }
+
+    #[test]
+    fn chain_filter_active_matches_normalized_aliases() {
+        let entry = chain_by_id("bsc").expect("bsc");
+        let active = vec!["BNB Chain".into(), "ethereum".into()];
+        assert!(chain_filter_active(entry, &active));
     }
 
     #[test]
