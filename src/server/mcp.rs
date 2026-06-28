@@ -4,7 +4,10 @@ use crate::install_safety::{blocks_structured_config, claude_mcp_config, install
 use crate::models::tool::{sanitize_tool_for_public_response, sanitize_tools_for_public_response};
 use crate::models::Tool;
 use crate::server::functions::{clamp_dashboard_list_limit, fetch_public_dashboard_snapshot};
-use crate::server::queries::PUBLIC_TOOL_WHERE;
+use crate::server::queries::{
+    push_bind_clause, APPROVED_TOOL_BY_SLUG_SQL, CATEGORIES_WITH_COUNTS_SQL,
+    MCP_SEARCH_TOOLS_BASE_SQL,
+};
 use crate::server::rate_limit::{check_mcp_ip_rate_limit, client_ip_from_parts};
 use crate::AppState;
 use axum::{
@@ -270,21 +273,15 @@ async fn mcp_search_tools(
     category: Option<String>,
     chain: Option<String>,
 ) -> Result<Vec<Tool>, (i32, String)> {
-    let mut sql = format!(
-        r#"
-        SELECT * FROM tools
-        WHERE {PUBLIC_TOOL_WHERE}
-          AND to_tsvector('english', coalesce(name, '') || ' ' || coalesce(description, ''))
-              @@ plainto_tsquery('english', $1)
-        "#
-    );
+    let mut sql = MCP_SEARCH_TOOLS_BASE_SQL.to_string();
     let mut idx = 2;
     if category.is_some() {
-        sql.push_str(&format!(" AND function = ${idx}"));
+        push_bind_clause(&mut sql, "AND function =", idx);
         idx += 1;
     }
     if chain.is_some() {
-        sql.push_str(&format!(" AND ${idx} = ANY(chains)"));
+        push_bind_clause(&mut sql, "AND", idx);
+        sql.push_str(" = ANY(chains)");
     }
     sql.push_str(" ORDER BY stars DESC LIMIT 50");
 
@@ -304,8 +301,7 @@ async fn mcp_search_tools(
 }
 
 async fn mcp_fetch_public_tool(pool: &PgPool, slug: &str) -> Result<Tool, String> {
-    let sql = format!("SELECT * FROM tools WHERE slug = $1 AND {PUBLIC_TOOL_WHERE}");
-    sqlx::query_as::<_, Tool>(&sql)
+    sqlx::query_as::<_, Tool>(APPROVED_TOOL_BY_SLUG_SQL)
         .bind(slug)
         .fetch_optional(pool)
         .await
@@ -328,17 +324,9 @@ struct CategoryMcp {
 }
 
 async fn mcp_list_categories(pool: &PgPool) -> Result<Vec<CategoryMcp>, (i32, String)> {
-    let sql = format!(
-        r#"
-        SELECT c.id, c.label, c.icon, c.description, c.sort_order,
-               COUNT(t.id) AS count
-        FROM categories c
-        LEFT JOIN tools t ON t.function = c.id AND t.{PUBLIC_TOOL_WHERE}
-        GROUP BY c.id, c.label, c.icon, c.description, c.sort_order
-        ORDER BY c.sort_order ASC
-        "#
-    );
-    let rows = sqlx::query_as::<_, crate::server::functions::CategoryWithCount>(&sql)
+    let rows = sqlx::query_as::<_, crate::server::functions::CategoryWithCount>(
+        CATEGORIES_WITH_COUNTS_SQL,
+    )
         .fetch_all(pool)
         .await
         .map_err(|e| (-32603, format!("db error: {e}")))?;
@@ -727,24 +715,11 @@ mod tests {
 
     #[test]
     fn mcp_queries_include_public_visibility_filter() {
-        let search = format!(
-            r#"
-        SELECT * FROM tools
-        WHERE {PUBLIC_TOOL_WHERE}
-          AND to_tsvector('english', coalesce(name, '') || ' ' || coalesce(description, ''))
-              @@ plainto_tsquery('english', $1)
-        "#
-        );
-        assert!(search.contains("approval_status = 'approved'"));
-        assert!(search.contains("relevance_status = 'accepted'"));
-        assert!(search.contains("install_risk_level <> 'critical'"));
-        assert!(search.contains("quarantined_at IS NULL"));
-
-        let detail = format!("SELECT * FROM tools WHERE slug = $1 AND {PUBLIC_TOOL_WHERE}");
-        assert!(detail.contains("relevance_status = 'accepted'"));
-
-        let categories =
-            format!("LEFT JOIN tools t ON t.function = c.id AND t.{PUBLIC_TOOL_WHERE}");
-        assert!(categories.contains("quarantined_at IS NULL"));
+        assert!(MCP_SEARCH_TOOLS_BASE_SQL.contains("approval_status = 'approved'"));
+        assert!(MCP_SEARCH_TOOLS_BASE_SQL.contains("relevance_status = 'accepted'"));
+        assert!(MCP_SEARCH_TOOLS_BASE_SQL.contains("install_risk_level <> 'critical'"));
+        assert!(MCP_SEARCH_TOOLS_BASE_SQL.contains("quarantined_at IS NULL"));
+        assert!(APPROVED_TOOL_BY_SLUG_SQL.contains("relevance_status = 'accepted'"));
+        assert!(CATEGORIES_WITH_COUNTS_SQL.contains("quarantined_at IS NULL"));
     }
 }

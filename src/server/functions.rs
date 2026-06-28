@@ -41,7 +41,16 @@ use crate::server::operator_review_transition::{
     plan_operator_review, validate_review_approval_gate, OperatorReviewGate,
 };
 #[cfg(feature = "ssr")]
-use crate::server::queries::TOOLS_APPROVED_WHERE;
+use crate::server::queries::{
+    push_bind_clause, push_fts_filter, push_order_offset_limit, list_tools_order_clause,
+    DashboardCountAxis, APPROVED_TOOL_BY_SLUG_SQL, APPROVED_TOOL_ID_BY_SLUG_SQL,
+    CATEGORIES_WITH_COUNTS_SQL, CHAIN_COUNTS_SQL, COUNT_APPROVED_TOOLS_SQL,
+    DASHBOARD_FUNCTION_COUNTS_SQL, DASHBOARD_METRICS_SQL, DASHBOARD_X402_TOOLS_SQL,
+    IS_BOOKMARKED_SQL, LIST_APPROVED_TOOLS_SQL, RECENT_APPROVED_TOOLS_SQL,
+    SEARCH_APPROVED_TOOLS_BASE_SQL, TOOL_COMMENT_COUNT_BY_SLUG_SQL,
+    TOOL_COMMENT_COUNTS_BY_SLUGS_SQL, TOOL_COMMENTS_NEW_SORT_SQL, TOOL_COMMENTS_TOP_SORT_SQL,
+    USER_TOOLKIT_SQL,
+};
 #[cfg(feature = "ssr")]
 use crate::server::rate_limit::{check_user_rate_limit, UserRateLimitAction};
 #[cfg(feature = "ssr")]
@@ -311,10 +320,7 @@ pub async fn get_recent_tools(limit: i64) -> Result<Vec<Tool>, ServerFnError> {
         .ok_or_else(|| ServerFnError::new("database pool not available"))?;
 
     let limit = limit.clamp(1, 100);
-    let sql = format!(
-        "SELECT * FROM tools WHERE {TOOLS_APPROVED_WHERE} ORDER BY stars DESC, created_at DESC LIMIT $1"
-    );
-    let tools = sqlx::query_as::<_, Tool>(&sql)
+    let tools = sqlx::query_as::<_, Tool>(RECENT_APPROVED_TOOLS_SQL)
         .bind(limit)
         .fetch_all(&pool)
         .await
@@ -328,17 +334,7 @@ pub async fn get_recent_tools(limit: i64) -> Result<Vec<Tool>, ServerFnError> {
 pub(crate) async fn fetch_categories(
     pool: &sqlx::PgPool,
 ) -> Result<Vec<(Category, i64)>, ServerFnError> {
-    let sql = format!(
-        r#"
-        SELECT c.id, c.label, c.icon, c.description, c.sort_order,
-               COUNT(t.id) AS count
-        FROM categories c
-        LEFT JOIN tools t ON t.function = c.id AND t.{TOOLS_APPROVED_WHERE}
-        GROUP BY c.id, c.label, c.icon, c.description, c.sort_order
-        ORDER BY c.sort_order ASC
-        "#
-    );
-    let rows = sqlx::query_as::<_, CategoryWithCount>(&sql)
+    let rows = sqlx::query_as::<_, CategoryWithCount>(CATEGORIES_WITH_COUNTS_SQL)
         .fetch_all(pool)
         .await
         .map_err(|e| ServerFnError::new(format!("failed to load categories: {e}")))?;
@@ -366,25 +362,16 @@ pub async fn search_tools(
     let pool = use_context::<sqlx::PgPool>()
         .ok_or_else(|| ServerFnError::new("database pool not available"))?;
 
-    let mut sql = format!(
-        r#"
-        SELECT *
-        FROM tools
-        WHERE {TOOLS_APPROVED_WHERE}
-          AND (
-            to_tsvector('english', coalesce(name, '') || ' ' || coalesce(description, ''))
-            @@ plainto_tsquery('english', $1)
-          )
-        "#
-    );
+    let mut sql = SEARCH_APPROVED_TOOLS_BASE_SQL.to_string();
 
     let mut idx = 2;
     if function.is_some() {
-        sql.push_str(&format!(" AND function = ${idx}"));
+        push_bind_clause(&mut sql, "AND function =", idx);
         idx += 1;
     }
     if chain.is_some() {
-        sql.push_str(&format!(" AND ${idx} = ANY(chains)"));
+        push_bind_clause(&mut sql, "AND", idx);
+        sql.push_str(" = ANY(chains)");
     }
     sql.push_str(" ORDER BY stars DESC, created_at DESC LIMIT 50");
 
@@ -410,8 +397,7 @@ pub(crate) async fn fetch_tool_by_slug(
     pool: &sqlx::PgPool,
     slug: &str,
 ) -> Result<Option<Tool>, ServerFnError> {
-    let sql = format!("SELECT * FROM tools WHERE slug = $1 AND {TOOLS_APPROVED_WHERE}");
-    let tool = sqlx::query_as::<_, Tool>(&sql)
+    let tool = sqlx::query_as::<_, Tool>(APPROVED_TOOL_BY_SLUG_SQL)
         .bind(slug)
         .fetch_optional(pool)
         .await
@@ -521,32 +507,34 @@ pub struct ToolFilters {
 }
 
 fn append_tool_filters(sql: &mut String, filters: &ToolFilters, idx: &mut i32) {
+    use std::fmt::Write;
+
     if !filters.function.is_empty() {
-        sql.push_str(&format!(" AND function = ANY(${idx})"));
+        let _ = write!(sql, " AND function = ANY(${idx})");
         *idx += 1;
     }
     if !filters.asset_class.is_empty() {
-        sql.push_str(&format!(" AND asset_class = ANY(${idx})"));
+        let _ = write!(sql, " AND asset_class = ANY(${idx})");
         *idx += 1;
     }
     if !filters.actor.is_empty() {
-        sql.push_str(&format!(" AND actor = ANY(${idx})"));
+        let _ = write!(sql, " AND actor = ANY(${idx})");
         *idx += 1;
     }
     if !filters.tool_type.is_empty() {
-        sql.push_str(&format!(" AND type = ANY(${idx})"));
+        let _ = write!(sql, " AND type = ANY(${idx})");
         *idx += 1;
     }
     if !filters.status.is_empty() {
-        sql.push_str(&format!(" AND status = ANY(${idx})"));
+        let _ = write!(sql, " AND status = ANY(${idx})");
         *idx += 1;
     }
     if !filters.pricing.is_empty() {
-        sql.push_str(&format!(" AND pricing = ANY(${idx})"));
+        let _ = write!(sql, " AND pricing = ANY(${idx})");
         *idx += 1;
     }
     if !filters.chain.is_empty() {
-        sql.push_str(&format!(" AND chains && ${idx}"));
+        let _ = write!(sql, " AND chains && ${idx}");
         *idx += 1;
     }
 }
@@ -557,7 +545,7 @@ pub(crate) async fn fetch_count_tools(
     pool: &sqlx::PgPool,
     filters: &ToolFilters,
 ) -> Result<i64, ServerFnError> {
-    let mut sql = format!("SELECT COUNT(*) FROM tools WHERE {TOOLS_APPROVED_WHERE}");
+    let mut sql = COUNT_APPROVED_TOOLS_SQL.to_string();
     let mut idx = 1i32;
     append_tool_filters(&mut sql, filters, &mut idx);
 
@@ -608,17 +596,7 @@ pub(crate) async fn fetch_chain_counts(
     limit: i64,
 ) -> Result<Vec<(String, i64)>, ServerFnError> {
     let limit = limit.clamp(1, 100);
-    let sql = format!(
-        r#"
-        SELECT chain, COUNT(*) AS count
-        FROM tools, UNNEST(chains) AS chain
-        WHERE {TOOLS_APPROVED_WHERE}
-        GROUP BY chain
-        ORDER BY count DESC, chain ASC
-        LIMIT $1
-        "#
-    );
-    let rows = sqlx::query_as::<_, (String, i64)>(&sql)
+    let rows = sqlx::query_as::<_, (String, i64)>(CHAIN_COUNTS_SQL)
         .bind(limit)
         .fetch_all(pool)
         .await
@@ -647,29 +625,16 @@ pub(crate) async fn fetch_list_tools(
 ) -> Result<Vec<Tool>, ServerFnError> {
     let offset = offset.max(0);
     let limit = clamp_list_tools_limit(limit);
-    let order = match sort {
-        "new" => "created_at DESC",
-        "comments" => {
-            "(SELECT COUNT(*)::bigint FROM comments cm WHERE cm.tool_id = tools.id) DESC, created_at DESC"
-        }
-        _ => "stars DESC, created_at DESC",
-    };
-
+    let order = list_tools_order_clause(sort);
     let has_query = query.is_some_and(|q| !q.trim().is_empty());
-    let mut sql = format!("SELECT * FROM tools WHERE {TOOLS_APPROVED_WHERE}");
+    let mut sql = LIST_APPROVED_TOOLS_SQL.to_string();
     let mut idx = 1i32;
 
     if has_query {
-        sql.push_str(&format!(
-            " AND to_tsvector('english', coalesce(name, '') || ' ' || coalesce(description, '')) @@ plainto_tsquery('english', ${idx})"
-        ));
-        idx += 1;
+        push_fts_filter(&mut sql, &mut idx);
     }
     append_tool_filters(&mut sql, filters, &mut idx);
-    sql.push_str(&format!(
-        " ORDER BY {order} OFFSET ${idx} LIMIT ${}",
-        idx + 1
-    ));
+    push_order_offset_limit(&mut sql, order, &mut idx);
 
     let mut q = sqlx::query_as::<_, Tool>(&sql);
     if let Some(text) = query.filter(|q| !q.trim().is_empty()) {
@@ -1022,31 +987,23 @@ struct DashboardCategoryCountRow {
 #[cfg(feature = "ssr")]
 async fn fetch_dashboard_value_counts(
     pool: &sqlx::PgPool,
-    axis: &str,
-    expression: &str,
+    axis: DashboardCountAxis,
     limit: i64,
 ) -> Result<Vec<DashboardBucket>, ServerFnError> {
-    let sql = format!(
-        r#"
-        SELECT {expression} AS id, COUNT(*)::bigint AS count
-        FROM tools
-        WHERE {TOOLS_APPROVED_WHERE}
-          AND {expression} IS NOT NULL
-          AND {expression} <> ''
-        GROUP BY {expression}
-        ORDER BY count DESC, id ASC
-        LIMIT $1
-        "#
-    );
-    let rows = sqlx::query_as::<_, DashboardValueCountRow>(&sql)
+    let rows = sqlx::query_as::<_, DashboardValueCountRow>(axis.count_sql())
         .bind(limit)
         .fetch_all(pool)
         .await
-        .map_err(|e| ServerFnError::new(format!("{axis} dashboard counts failed: {e}")))?;
+        .map_err(|e| {
+            ServerFnError::new(format!(
+                "{} dashboard counts failed: {e}",
+                axis.bucket_axis()
+            ))
+        })?;
 
     Ok(rows
         .into_iter()
-        .map(|row| dashboard_bucket(axis, row.id, None, row.count))
+        .map(|row| dashboard_bucket(axis.bucket_axis(), row.id, None, row.count))
         .collect())
 }
 
@@ -1055,18 +1012,7 @@ async fn fetch_dashboard_function_counts(
     pool: &sqlx::PgPool,
     limit: i64,
 ) -> Result<Vec<DashboardBucket>, ServerFnError> {
-    let sql = format!(
-        r#"
-        SELECT c.id, c.label, COUNT(t.id)::bigint AS count
-        FROM categories c
-        LEFT JOIN tools t ON t.function = c.id AND t.{TOOLS_APPROVED_WHERE}
-        GROUP BY c.id, c.label, c.sort_order
-        HAVING COUNT(t.id) > 0
-        ORDER BY count DESC, c.sort_order ASC
-        LIMIT $1
-        "#
-    );
-    let rows = sqlx::query_as::<_, DashboardCategoryCountRow>(&sql)
+    let rows = sqlx::query_as::<_, DashboardCategoryCountRow>(DASHBOARD_FUNCTION_COUNTS_SQL)
         .bind(limit)
         .fetch_all(pool)
         .await
@@ -1083,22 +1029,7 @@ async fn fetch_dashboard_x402_tools(
     pool: &sqlx::PgPool,
     limit: i64,
 ) -> Result<Vec<Tool>, ServerFnError> {
-    let sql = format!(
-        r#"
-        SELECT *
-        FROM tools
-        WHERE {TOOLS_APPROVED_WHERE}
-          AND (
-            type = 'x402'
-            OR pricing = 'x402'
-            OR x402_price IS NOT NULL
-            OR referral_enabled = true
-          )
-        ORDER BY stars DESC, created_at DESC
-        LIMIT $1
-        "#
-    );
-    let tools = sqlx::query_as::<_, Tool>(&sql)
+    let tools = sqlx::query_as::<_, Tool>(DASHBOARD_X402_TOOLS_SQL)
         .bind(limit)
         .fetch_all(pool)
         .await
@@ -1108,25 +1039,7 @@ async fn fetch_dashboard_x402_tools(
 
 #[cfg(feature = "ssr")]
 async fn fetch_dashboard_metrics(pool: &sqlx::PgPool) -> Result<DashboardMetrics, ServerFnError> {
-    let sql = format!(
-        r#"
-        SELECT
-          COUNT(*)::bigint,
-          COUNT(*) FILTER (WHERE type = 'mcp')::bigint,
-          COUNT(*) FILTER (WHERE type = 'cli')::bigint,
-          COUNT(*) FILTER (WHERE type = 'sdk')::bigint,
-          COUNT(*) FILTER (WHERE type = 'api')::bigint,
-          COUNT(*) FILTER (
-            WHERE type = 'x402' OR pricing = 'x402' OR x402_price IS NOT NULL
-          )::bigint,
-          COUNT(*) FILTER (WHERE status = 'official')::bigint,
-          COUNT(*) FILTER (WHERE status = 'verified')::bigint,
-          COUNT(*) FILTER (WHERE updated_at >= now() - interval '30 days')::bigint
-        FROM tools
-        WHERE {TOOLS_APPROVED_WHERE}
-        "#
-    );
-    let row = sqlx::query_as::<_, (i64, i64, i64, i64, i64, i64, i64, i64, i64)>(&sql)
+    let row = sqlx::query_as::<_, (i64, i64, i64, i64, i64, i64, i64, i64, i64)>(DASHBOARD_METRICS_SQL)
         .fetch_one(pool)
         .await
         .map_err(|e| ServerFnError::new(format!("dashboard metrics failed: {e}")))?;
@@ -1158,11 +1071,11 @@ pub(crate) async fn fetch_public_dashboard_snapshot(
 
     let (metrics, type_counts, function_counts, chain_counts, trust_counts, pricing_counts) = futures::join!(
         fetch_dashboard_metrics(pool),
-        fetch_dashboard_value_counts(pool, "type", "type", limit),
+        fetch_dashboard_value_counts(pool, DashboardCountAxis::Type, limit),
         fetch_dashboard_function_counts(pool, limit),
         fetch_chain_counts(pool, limit),
-        fetch_dashboard_value_counts(pool, "status", "status", limit),
-        fetch_dashboard_value_counts(pool, "pricing", "pricing", limit),
+        fetch_dashboard_value_counts(pool, DashboardCountAxis::Status, limit),
+        fetch_dashboard_value_counts(pool, DashboardCountAxis::Pricing, limit),
     );
     let (new_tools, popular_tools, x402_tools, high_trust_tools) = futures::join!(
         fetch_list_tools(pool, "new", 0, limit, &empty_filters, None),
@@ -1281,17 +1194,7 @@ async fn fetch_user_toolkit(
     pool: &sqlx::PgPool,
     user_id: uuid::Uuid,
 ) -> Result<MyToolkitPayload, ServerFnError> {
-    let sql = format!(
-        r#"
-        SELECT t.*
-        FROM bookmarks b
-        JOIN tools t ON t.id = b.tool_id
-        WHERE b.user_id = $1 AND {TOOLS_APPROVED_WHERE}
-        ORDER BY b.created_at DESC
-        LIMIT 200
-        "#
-    );
-    let tools = sqlx::query_as::<_, Tool>(&sql)
+    let tools = sqlx::query_as::<_, Tool>(USER_TOOLKIT_SQL)
         .bind(user_id)
         .fetch_all(pool)
         .await
@@ -1317,16 +1220,7 @@ pub(crate) async fn fetch_tool_comment_counts(
         return Ok(Vec::new());
     }
 
-    let sql = format!(
-        r#"
-        SELECT t.slug, COUNT(c.id)::bigint AS comment_count
-        FROM tools t
-        LEFT JOIN comments c ON c.tool_id = t.id
-        WHERE t.slug = ANY($1) AND {TOOLS_APPROVED_WHERE}
-        GROUP BY t.slug
-        "#
-    );
-    let rows = sqlx::query_as::<_, (String, i64)>(&sql)
+    let rows = sqlx::query_as::<_, (String, i64)>(TOOL_COMMENT_COUNTS_BY_SLUGS_SQL)
         .bind(slugs)
         .fetch_all(pool)
         .await
@@ -2112,38 +2006,19 @@ pub async fn get_tool_comments(
         .ok()
         .flatten();
 
-    let tool_id = sqlx::query_scalar::<_, Uuid>(&format!(
-        "SELECT id FROM tools WHERE slug = $1 AND {TOOLS_APPROVED_WHERE}"
-    ))
+    let tool_id = sqlx::query_scalar::<_, Uuid>(APPROVED_TOOL_ID_BY_SLUG_SQL)
     .bind(&slug)
     .fetch_optional(&pool)
     .await
     .map_err(|e| ServerFnError::new(format!("failed to resolve tool: {e}")))?
     .ok_or_else(|| ServerFnError::new(format!("tool not found: {slug}")))?;
 
-    let order = match sort.as_str() {
-        "top" => "COUNT(u.id) DESC, c.created_at DESC",
-        "new" => "c.created_at DESC",
+    let sql = match sort.as_str() {
+        "top" => TOOL_COMMENTS_TOP_SORT_SQL,
+        "new" => TOOL_COMMENTS_NEW_SORT_SQL,
         _ => return Err(ServerFnError::new("sort must be 'new' or 'top'")),
     };
-    let sql = format!(
-        r#"
-        SELECT
-            c.id, c.tool_id, c.parent_id, c.user_id, c.content, c.created_at,
-            p.nickname AS author_nickname,
-            p.auth_method AS author_auth_method,
-            p.is_admin AS author_is_admin,
-            COUNT(u.id) AS upvote_count,
-            BOOL_OR(u.user_id = $2) AS viewer_upvoted
-        FROM comments c
-        JOIN profiles p ON p.id = c.user_id
-        LEFT JOIN upvotes u ON u.comment_id = c.id
-        WHERE c.tool_id = $1
-        GROUP BY c.id, p.nickname, p.auth_method, p.is_admin
-        ORDER BY {order}
-        "#
-    );
-    let rows = sqlx::query_as::<_, CommentRow>(&sql)
+    let rows = sqlx::query_as::<_, CommentRow>(sql)
         .bind(tool_id)
         .bind(viewer.as_ref().map(|v| v.id))
         .fetch_all(&pool)
@@ -2194,14 +2069,7 @@ pub async fn get_tool_comment_count(slug: String) -> Result<i64, ServerFnError> 
     let pool = use_context::<sqlx::PgPool>()
         .ok_or_else(|| ServerFnError::new("database pool not available"))?;
 
-    let count = sqlx::query_scalar::<_, i64>(&format!(
-        r#"
-        SELECT COUNT(*)::bigint
-        FROM comments c
-        JOIN tools t ON t.id = c.tool_id
-        WHERE t.slug = $1 AND {TOOLS_APPROVED_WHERE}
-        "#
-    ))
+    let count = sqlx::query_scalar::<_, i64>(TOOL_COMMENT_COUNT_BY_SLUG_SQL)
     .bind(slug)
     .fetch_one(&pool)
     .await
@@ -2227,9 +2095,7 @@ pub async fn create_comment(
         return Err(ServerFnError::new(limit.to_string()));
     }
 
-    let tool_id = sqlx::query_scalar::<_, Uuid>(&format!(
-        "SELECT id FROM tools WHERE slug = $1 AND {TOOLS_APPROVED_WHERE}"
-    ))
+    let tool_id = sqlx::query_scalar::<_, Uuid>(APPROVED_TOOL_ID_BY_SLUG_SQL)
     .bind(&slug)
     .fetch_optional(&pool)
     .await
@@ -2318,14 +2184,7 @@ pub async fn is_bookmarked(slug: String) -> Result<bool, ServerFnError> {
         return Ok(false);
     };
 
-    let bookmarked = sqlx::query_scalar::<_, i64>(&format!(
-        r#"
-        SELECT COUNT(*)::bigint
-        FROM bookmarks b
-        JOIN tools t ON t.id = b.tool_id
-        WHERE t.slug = $1 AND b.user_id = $2 AND {TOOLS_APPROVED_WHERE}
-        "#
-    ))
+    let bookmarked = sqlx::query_scalar::<_, i64>(IS_BOOKMARKED_SQL)
     .bind(slug)
     .bind(user.id)
     .fetch_one(&pool)
@@ -2344,9 +2203,7 @@ pub async fn set_bookmark(slug: String, starred: bool) -> Result<bool, ServerFnE
         return Err(ServerFnError::new(limit.to_string()));
     }
 
-    let tool_id = sqlx::query_scalar::<_, Uuid>(&format!(
-        "SELECT id FROM tools WHERE slug = $1 AND {TOOLS_APPROVED_WHERE}"
-    ))
+    let tool_id = sqlx::query_scalar::<_, Uuid>(APPROVED_TOOL_ID_BY_SLUG_SQL)
     .bind(&slug)
     .fetch_optional(&pool)
     .await
@@ -2394,9 +2251,7 @@ pub async fn toggle_bookmark(slug: String) -> Result<bool, ServerFnError> {
         return Err(ServerFnError::new(limit.to_string()));
     }
 
-    let tool_id = sqlx::query_scalar::<_, Uuid>(&format!(
-        "SELECT id FROM tools WHERE slug = $1 AND {TOOLS_APPROVED_WHERE}"
-    ))
+    let tool_id = sqlx::query_scalar::<_, Uuid>(APPROVED_TOOL_ID_BY_SLUG_SQL)
     .bind(&slug)
     .fetch_optional(&pool)
     .await
@@ -3727,9 +3582,7 @@ pub async fn get_tool_trust_view(slug: String) -> Result<ToolTrustView, ServerFn
     let pool = use_context::<sqlx::PgPool>()
         .ok_or_else(|| ServerFnError::new("database pool not available"))?;
 
-    let tool = sqlx::query_as::<_, Tool>(&format!(
-        "SELECT * FROM tools WHERE slug = $1 AND {TOOLS_APPROVED_WHERE}"
-    ))
+    let tool = sqlx::query_as::<_, Tool>(APPROVED_TOOL_BY_SLUG_SQL)
     .bind(slug.trim())
     .fetch_one(&pool)
     .await
@@ -4005,9 +3858,7 @@ pub async fn report_tool(input: ReportToolInput) -> Result<ToolReport, ServerFnE
     let (parts, pool, config) = request_context()?;
     let user = require_user(&parts, &pool, &config.jwt_secret, &config.jwt_issuer()).await?;
 
-    let tool_id = sqlx::query_scalar::<_, Uuid>(&format!(
-        "SELECT id FROM tools WHERE slug = $1 AND {TOOLS_APPROVED_WHERE}"
-    ))
+    let tool_id = sqlx::query_scalar::<_, Uuid>(APPROVED_TOOL_ID_BY_SLUG_SQL)
     .bind(slug)
     .fetch_optional(&pool)
     .await
@@ -4049,9 +3900,7 @@ pub async fn request_tool_claim(input: ClaimToolInput) -> Result<ToolClaimReques
     let (parts, pool, config) = request_context()?;
     let user = require_user(&parts, &pool, &config.jwt_secret, &config.jwt_issuer()).await?;
 
-    let tool = sqlx::query_as::<_, Tool>(&format!(
-        "SELECT * FROM tools WHERE slug = $1 AND {TOOLS_APPROVED_WHERE}"
-    ))
+    let tool = sqlx::query_as::<_, Tool>(APPROVED_TOOL_BY_SLUG_SQL)
     .bind(input.slug.trim())
     .fetch_optional(&pool)
     .await
@@ -4268,24 +4117,9 @@ mod tests {
 
     #[test]
     fn list_tools_comments_sort_uses_comment_count() {
-        let order = "(SELECT COUNT(*)::bigint FROM comments cm WHERE cm.tool_id = tools.id) DESC, created_at DESC";
+        let order = list_tools_order_clause("comments");
         assert!(order.contains("comments cm"));
         assert!(order.contains("COUNT(*)"));
-    }
-
-    #[test]
-    fn public_tool_where_used_in_public_queries() {
-        let recent = format!(
-            "SELECT * FROM tools WHERE {TOOLS_APPROVED_WHERE} ORDER BY stars DESC, created_at DESC LIMIT $1"
-        );
-        assert!(recent.contains("approval_status = 'approved'"));
-        assert!(recent.contains("relevance_status = 'accepted'"));
-        assert!(recent.contains("install_risk_level <> 'critical'"));
-        assert!(recent.contains("quarantined_at IS NULL"));
-
-        let categories =
-            format!("LEFT JOIN tools t ON t.function = c.id AND t.{TOOLS_APPROVED_WHERE}");
-        assert!(categories.contains("relevance_status = 'accepted'"));
     }
 
     #[test]
