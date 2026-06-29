@@ -81,14 +81,18 @@ du -sh ~/ /System/Volumes/Data/private/var/folders/k7/_r0bjtp12dngr0ncryvtt4mc00
 |----------|---------|---------|
 | `ONCHAINAI_MIN_FREE_GB` | 25 | Minimum free disk before build |
 | `ONCHAINAI_MAX_TARGET_GB` | 35 | Maximum `target/` size |
+| `ONCHAINAI_STALE_MAIN_CRATE_PRUNE_GB` | 16 | Start pruning stale local `onchainai` debug artifact groups when `target/` exceeds this size |
+| `ONCHAINAI_STALE_MAIN_CRATE_KEEP` | 3 | Keep the newest N local debug artifact groups |
 | `ONCHAINAI_DISK_GUARD_AUTOCLEAN` | 1 | Auto-run `--incremental-only` when over threshold |
 | `ONCHAINAI_DISK_GUARD_FORCE` | 0 | Skip checks (emergency only) |
 
 **Cleanup ladder (fast → slow):**
 
-1. `./scripts/clean-build-artifacts.sh --incremental-only` — drops `target/*/incremental/` only; keeps compiled deps.
-2. `./scripts/clean-build-artifacts.sh --dry-run` — preview full clean + `/tmp` linker snapshots.
-3. `./scripts/clean-build-artifacts.sh` — full `cargo clean` + linker snapshots (slow next build).
+0. Automatic before heavy builds: `disk-guard.sh` sweeps linker snapshots, then prunes stale local `onchainai` debug artifact groups once `target/` exceeds `ONCHAINAI_STALE_MAIN_CRATE_PRUNE_GB`; third-party compiled deps are kept.
+1. `./scripts/clean-build-artifacts.sh --stale-main-crate --stale-main-crate-keep 3` — remove old hashed `onchainai` / `libonchainai` debug groups; keeps latest local groups and dependency cache.
+2. `./scripts/clean-build-artifacts.sh --incremental-only` — drops `target/*/incremental/` only; keeps compiled deps.
+3. `./scripts/clean-build-artifacts.sh --dry-run` — preview full clean + `/tmp` linker snapshots.
+4. `./scripts/clean-build-artifacts.sh` — full `cargo clean` + linker snapshots (slow next build).
 
 `Cargo.toml` already limits debug bloat: `[profile.dev] debug = "line-tables-only"` and `[profile.dev.package."*"] debug = false`.
 

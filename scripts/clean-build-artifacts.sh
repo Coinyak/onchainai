@@ -2,6 +2,9 @@
 # Safe local cleanup. Usage:
 #   --incremental-only   drop target/*/incremental/ only (fast; keeps deps)
 #   --snapshots-only     sweep linker snapshots only; never touch target/
+#   --stale-main-crate   drop old target/debug/deps onchainai artifact groups
+#   --stale-main-crate-keep N
+#                        keep the newest N main-crate artifact groups (default: 3)
 #   --dry-run            print actions without deleting
 #   --playwright-days N  prune .playwright-cli files older than N days
 # Default (no flags): cargo clean + linker snapshots.
@@ -14,16 +17,31 @@ DRY_RUN=false
 PLAYWRIGHT_DAYS=""
 INCREMENTAL_ONLY=false
 SNAPSHOTS_ONLY=false
+STALE_MAIN_CRATE=false
+STALE_MAIN_CRATE_KEEP=3
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --dry-run) DRY_RUN=true; shift ;;
     --incremental-only) INCREMENTAL_ONLY=true; shift ;;
     --snapshots-only) SNAPSHOTS_ONLY=true; shift ;;
+    --stale-main-crate) STALE_MAIN_CRATE=true; shift ;;
+    --stale-main-crate-keep) STALE_MAIN_CRATE_KEEP="${2:?missing keep count}"; shift 2 ;;
     --playwright-days) PLAYWRIGHT_DAYS="${2:?missing days}"; shift 2 ;;
     *) echo "Unknown arg: $1" >&2; exit 2 ;;
   esac
 done
+
+case "$STALE_MAIN_CRATE_KEEP" in
+  ''|*[!0-9]*)
+    echo "Invalid --stale-main-crate-keep: ${STALE_MAIN_CRATE_KEEP}" >&2
+    exit 2
+    ;;
+esac
+if (( STALE_MAIN_CRATE_KEEP < 1 )); then
+  echo "--stale-main-crate-keep must be at least 1" >&2
+  exit 2
+fi
 
 run() {
   if [[ "$DRY_RUN" == true ]]; then
@@ -31,6 +49,122 @@ run() {
   else
     "$@"
   fi
+}
+
+stat_mtime() {
+  stat -f '%m' "$1" 2>/dev/null || stat -c '%Y' "$1"
+}
+
+prune_stale_main_crate() {
+  local debug_dir="target/debug"
+  local deps_dir="target/debug/deps"
+  if [[ -L "$debug_dir" ]]; then
+    echo "ERROR: target/debug is a symlink; refusing cleanup" >&2
+    return 1
+  fi
+  if [[ -L "$deps_dir" ]]; then
+    echo "ERROR: target/debug/deps is a symlink; refusing cleanup" >&2
+    return 1
+  fi
+  if [[ ! -d "$deps_dir" ]]; then
+    echo "no target/debug/deps directory — skipping stale main-crate cleanup"
+    return
+  fi
+
+  local target_root deps_real
+  target_root="$(cd target 2>/dev/null && pwd -P)" || {
+    echo "ERROR: could not resolve target directory" >&2
+    return 1
+  }
+  deps_real="$(cd "$deps_dir" 2>/dev/null && pwd -P)" || {
+    echo "ERROR: could not resolve target/debug/deps directory" >&2
+    return 1
+  }
+  case "$deps_real" in
+    "$target_root"/*) deps_dir="$deps_real" ;;
+    *)
+      echo "ERROR: target/debug/deps resolves outside target; refusing cleanup" >&2
+      return 1
+      ;;
+  esac
+
+  local stamps groups remove
+  stamps="$(mktemp)"
+  groups="$(mktemp)"
+  remove="$(mktemp)"
+
+  while IFS= read -r -d '' f; do
+    local base rest hash mtime
+    base="${f##*/}"
+    case "$base" in
+      onchainai-*)
+        rest="${base#onchainai-}"
+        hash="${rest%%.*}"
+        ;;
+      libonchainai-*)
+        rest="${base#libonchainai-}"
+        hash="${rest%%.*}"
+        ;;
+      *)
+        continue
+        ;;
+    esac
+    case "$hash" in
+      ''|*[!0123456789abcdefABCDEF]*) continue ;;
+    esac
+    mtime="$(stat_mtime "$f")"
+    printf '%s %s\n' "$mtime" "$hash" >> "$stamps"
+  done < <(find "$deps_dir" -maxdepth 1 -type f \( -name 'onchainai-*' -o -name 'libonchainai-*' \) -print0 2>/dev/null || true)
+
+  if [[ ! -s "$stamps" ]]; then
+    echo "no main-crate debug artifact groups to prune"
+    rm -f "$stamps" "$groups" "$remove"
+    return
+  fi
+
+  awk '{ if ($1 > max[$2]) max[$2] = $1 } END { for (h in max) print max[h], h }' "$stamps" \
+    | sort -rn > "$groups"
+
+  local group_count
+  group_count="$(wc -l < "$groups" | tr -d '[:space:]')"
+  if (( group_count <= STALE_MAIN_CRATE_KEEP )); then
+    echo "main-crate debug artifact groups within keep limit (${group_count}/${STALE_MAIN_CRATE_KEEP})"
+    rm -f "$stamps" "$groups" "$remove"
+    return
+  fi
+
+  tail -n +"$((STALE_MAIN_CRATE_KEEP + 1))" "$groups" > "$remove"
+
+  local removed_files=0
+  local removed_groups=0
+  local _mtime hash
+  while read -r _mtime hash; do
+    [[ -n "$hash" ]] || continue
+    removed_groups=$((removed_groups + 1))
+    if [[ "$DRY_RUN" == true ]]; then
+      echo "[dry-run] stale main-crate group: ${hash}"
+    fi
+    while IFS= read -r -d '' f; do
+      if [[ "$DRY_RUN" == true ]]; then
+        du -sh "$f" 2>/dev/null || echo "[dry-run] $f"
+      else
+        rm -f -- "$f"
+      fi
+      removed_files=$((removed_files + 1))
+    done < <(find "$deps_dir" -maxdepth 1 -type f \( \
+      -name "onchainai-${hash}" -o \
+      -name "onchainai-${hash}.d" -o \
+      -name "libonchainai-${hash}.*" \
+    \) -print0 2>/dev/null || true)
+  done < "$remove"
+
+  if [[ "$DRY_RUN" == true ]]; then
+    echo "[dry-run] would remove ${removed_files} stale main-crate artifact(s) across ${removed_groups} group(s)"
+  else
+    echo "removed ${removed_files} stale main-crate artifact(s) across ${removed_groups} group(s)"
+  fi
+
+  rm -f "$stamps" "$groups" "$remove"
 }
 
 if [[ -L target ]]; then
@@ -43,6 +177,8 @@ fi
 # Use this between work sessions; reserve full `cargo clean` for tight disk.
 if [[ "$SNAPSHOTS_ONLY" == true ]]; then
   : # skip all target/ cleanup; only the linker-snapshot sweep below runs
+elif [[ "$STALE_MAIN_CRATE" == true ]]; then
+  prune_stale_main_crate
 elif [[ "$INCREMENTAL_ONLY" == true ]]; then
   INC_DIRS=()
   for d in target/debug/incremental target/release/incremental; do
