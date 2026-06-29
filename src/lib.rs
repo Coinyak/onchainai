@@ -71,6 +71,60 @@ async fn canonical_host_redirect(
     next.run(req).await
 }
 
+#[cfg(feature = "ssr")]
+fn cache_control_for_response(
+    path: &str,
+    content_type: Option<&str>,
+) -> Option<axum::http::HeaderValue> {
+    if path == "/mcp"
+        || path.starts_with("/api/")
+        || path.starts_with("/auth/")
+        || path.starts_with("/onboarding/")
+    {
+        return Some(axum::http::HeaderValue::from_static("no-store"));
+    }
+
+    if content_type
+        .map(|value| value.starts_with("text/html"))
+        .unwrap_or(false)
+    {
+        return Some(axum::http::HeaderValue::from_static(
+            "private, no-cache, max-age=0, must-revalidate",
+        ));
+    }
+
+    None
+}
+
+#[cfg(feature = "ssr")]
+async fn cache_control_headers(
+    req: axum::http::Request<axum::body::Body>,
+    next: axum::middleware::Next,
+) -> axum::response::Response {
+    let path = req.uri().path().to_string();
+    let mut response = next.run(req).await;
+
+    if response
+        .headers()
+        .contains_key(axum::http::header::CACHE_CONTROL)
+    {
+        return response;
+    }
+
+    let content_type = response
+        .headers()
+        .get(axum::http::header::CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok());
+
+    if let Some(value) = cache_control_for_response(&path, content_type) {
+        response
+            .headers_mut()
+            .insert(axum::http::header::CACHE_CONTROL, value);
+    }
+
+    response
+}
+
 /// Build the Axum application router.
 #[cfg(feature = "ssr")]
 pub fn build_app(pool: sqlx::PgPool, config: Config) -> axum::Router {
@@ -334,6 +388,7 @@ pub fn build_app(pool: sqlx::PgPool, config: Config) -> axum::Router {
         .merge(auth_routes)
         .merge(mcp_routes)
         .merge(app_routes)
+        .layer(axum::middleware::from_fn(cache_control_headers))
         .layer(axum::middleware::from_fn(canonical_host_redirect))
         .layer(security_headers)
         .layer(cors)
@@ -345,6 +400,11 @@ pub fn build_app(pool: sqlx::PgPool, config: Config) -> axum::Router {
 #[cfg(all(test, feature = "ssr"))]
 mod tests {
     use super::*;
+
+    fn cache_header_str(path: &str, content_type: Option<&str>) -> Option<String> {
+        cache_control_for_response(path, content_type)
+            .map(|value| value.to_str().expect("valid cache-control").to_string())
+    }
 
     #[test]
     fn canonical_www_location_redirects_apex_with_path_and_query() {
@@ -360,6 +420,43 @@ mod tests {
         let uri = "/".parse().expect("valid uri");
         assert_eq!(canonical_www_location("www.onchain-ai.xyz", &uri), None);
         assert_eq!(canonical_www_location("localhost:3000", &uri), None);
+    }
+
+    #[test]
+    fn html_responses_revalidate_before_reuse() {
+        assert_eq!(
+            cache_header_str("/", Some("text/html; charset=utf-8")).as_deref(),
+            Some("private, no-cache, max-age=0, must-revalidate")
+        );
+        assert_eq!(
+            cache_header_str("/tools", Some("text/html")).as_deref(),
+            Some("private, no-cache, max-age=0, must-revalidate")
+        );
+    }
+
+    #[test]
+    fn dynamic_mutation_and_auth_paths_are_not_stored() {
+        for path in [
+            "/api/list_tools",
+            "/auth/logout",
+            "/onboarding/complete",
+            "/mcp",
+        ] {
+            assert_eq!(
+                cache_header_str(path, Some("application/json")).as_deref(),
+                Some("no-store"),
+                "{path}"
+            );
+        }
+    }
+
+    #[test]
+    fn static_assets_do_not_get_dynamic_cache_policy() {
+        assert!(cache_control_for_response("/pkg/onchainai.js", Some("text/javascript")).is_none());
+        assert!(
+            cache_control_for_response("/brand/onchainai-logo.svg", Some("image/svg+xml"))
+                .is_none()
+        );
     }
 }
 

@@ -115,4 +115,4 @@ Branch protection and review routing (CODEOWNERS, PR template, `ci-success` merg
 
 ## Operator Note
 
-After a passing local gate, an already-open browser tab can still use cached `/pkg/onchainai.js` or WASM. If the UI looks stale, hard refresh (`Cmd+Shift+R`) or clear site data.
+After a passing local gate, SSR HTML should revalidate and auth/API responses are not stored. An already-open browser tab can still hold an old in-memory WASM bundle until reload; use hard refresh (`Cmd+Shift+R`) only if that tab still looks stale after reload.

@@ -137,7 +137,7 @@ nohup ./target/release/onchainai > /tmp/onchainai.log 2>&1 &
 | `not found: /pkg/...` in page or smoke | pkg not built or wrong `site-root` | Full `cargo leptos build --release`; check `target/site/pkg/` |
 | Code "fixed" in repo but site unchanged | Server never restarted after build | Always restart after build (see §2) |
 | Production OK, localhost broken | Local-only stale process or mixed artifacts | `verify-bundle.sh` + restart; production Docker build is self-contained |
-| **Sidebar missing**, **buttons dead** (Sign in, filters, ☰), console `entered unreachable code` / hydration panic | **Bundle mismatch** (SSR binary ≠ WASM) **or** browser cached old `/pkg/onchainai.js` | `./scripts/restart-dev.sh` (never `cargo build --features ssr` alone for UI) → `verify-bundle.sh` → **`Cmd+Shift+R` hard refresh** → `node scripts/browser-smoke.mjs` |
+| **Sidebar missing**, **buttons dead** (Sign in, filters, ☰), console `entered unreachable code` / hydration panic | **Bundle mismatch** (SSR binary ≠ WASM) **or** an already-open tab holding an old hydration bundle | `./scripts/restart-dev.sh` (never `cargo build --features ssr` alone for UI) → `verify-bundle.sh` → reload the tab; use **`Cmd+Shift+R`** only if the old tab still fails → `node scripts/browser-smoke.mjs` |
 | OAuth/login works once then nav still shows **Sign in** after SPA navigation | Non-blocking auth fetch in shell (SSR HTML ≠ hydrated DOM) | `TopNav` must use `Resource::new_blocking` keyed on pathname (see §4.1) |
 
 Smoke scripts encode these checks: `scripts/smoke-test.sh`, `scripts/browser-smoke.mjs`, `scripts/local-auth-smoke.mjs`.
@@ -179,7 +179,7 @@ Smoke scripts encode these checks: `scripts/smoke-test.sh`, `scripts/browser-smo
 ./scripts/ui-change-gate.sh
 ```
 
-Then **hard refresh** the browser (`Cmd+Shift+R`) so cached WASM is dropped.
+Then reload the browser. Use **hard refresh** (`Cmd+Shift+R`) only when an already-open tab still holds a pre-restart WASM bundle.
 
 **Never for UI / Leptos component / auth shell changes:**
 
@@ -250,14 +250,15 @@ Run in order before `./scripts/deploy-railway.sh`:
 
 ## 7. Browser cache
 
-After deploy or a local rebuild, the browser may cache old `/pkg/onchainai.js` or `.wasm`.
+SSR HTML now sends `Cache-Control: private, no-cache, max-age=0, must-revalidate`, while auth/API/MCP paths send `no-store`. Normal users should receive the fresh app shell after deploy without clearing site data, and shared caches must not store session-specific HTML.
 
-- **Hard refresh:** macOS `Cmd+Shift+R`, Windows/Linux `Ctrl+Shift+R`
-- **Clear site data** for `localhost:3000` or production host
-- **DevTools → Network:** disable cache while debugging; confirm `/pkg/onchainai.js` loads and matches build time
-- If errors persist after server restart + smoke pass, try a private/incognito window
+- Versioned `/pkg/onchainai.js`, `/pkg/onchainai.wasm`, and `/pkg/onchainai.css` URLs may still use long asset caching.
+- Local dev restarts set `ONCHAINAI_PKG_NO_CACHE=1`, so `/pkg/*` is `no-store`.
+- An already-open tab can still hold the old in-memory bundle until reload.
+- **Hard refresh:** macOS `Cmd+Shift+R`, Windows/Linux `Ctrl+Shift+R`; use this only when a stale already-open tab persists after reload.
+- **DevTools → Network:** disable cache while debugging; confirm `/pkg/onchainai.js?v=...` and `/pkg/onchainai.wasm?v=...` match the current HTML.
 
-Server-side smoke can pass while a cached client still fails — always confirm with hard refresh.
+Server-side smoke can pass while a stale already-open tab still fails, so reload or hard refresh that tab before judging local UI state.
 
 ---
 
