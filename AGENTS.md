@@ -55,6 +55,7 @@ Keep `AGENTS.md` under 70 lines. Do not expand it with procedure details; route 
 - Auth is required for comments, upvotes, bookmarks, and admin routes; admin checks must be server-side.
 - After schema changes, run migrations and `sqlx prepare`.
 - Before commits/PRs, run relevant tests plus clippy/format, or state exactly why not.
+- Never auto-trigger CI or review bots. CI is `workflow_dispatch`-only; CodeRabbit/qodo are manual (`.coderabbit.yaml`, `.pr_agent.toml`) — run them only when the user asks for a specific PR/diff, never proactively. Pushing can wake them, so use `[skip ci]` when a push should run nothing.
 
 ## Review Mode
 

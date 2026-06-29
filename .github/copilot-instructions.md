@@ -52,6 +52,7 @@ Rust debug builds bloat `target/` fast. Expected, not a bug. Repo is configured 
 
 ## Code Review
 
+- Never auto-trigger CI or review bots. CI is `workflow_dispatch`-only; CodeRabbit/qodo are manual (`.coderabbit.yaml`, `.pr_agent.toml`). Run a review only when the user explicitly asks for a specific PR/diff — never proactively after finishing work. Use `[skip ci]` when a push should run nothing.
 - When asked for a review, prioritize bugs, regressions, missing tests, and security or data-loss risks.
 - Put findings first, ordered by severity, and include concrete file/line references when possible.
 - Keep summaries brief and secondary to the findings.
