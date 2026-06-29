@@ -39,7 +39,7 @@ Rust debug builds bloat `target/` fast. Expected, not a bug. Repo is configured 
 
 ## Rules (see AGENTS.md for full list)
 
-**Hard Rules in [`AGENTS.md`](../AGENTS.md#hard-rules):** secrets (`.env`, `SUPABASE_SERVICE_KEY`, `JWT_SECRET`), x402 attribution-only (no custody/payments), and server-side admin/auth checks.
+**Hard Rules in [`AGENTS.md`](../AGENTS.md#hard-rules):** secrets (`.env`, `SUPABASE_SERVICE_KEY`, `JWT_SECRET`), x402 attribution-only (no custody/payments), server-side admin/auth checks, and never auto-triggering CI / review bots (manual only).
 
 - Never commit `.env`; never expose `SUPABASE_SERVICE_KEY` / `JWT_SECRET` to client.
 - sqlx parameterized queries only (`query_as!`, `$1` binding). No string interpolation.
@@ -52,7 +52,6 @@ Rust debug builds bloat `target/` fast. Expected, not a bug. Repo is configured 
 
 ## Code Review
 
-- Never auto-trigger CI or review bots. CI is `workflow_dispatch`-only; CodeRabbit/qodo are manual (`.coderabbit.yaml`, `.pr_agent.toml`). Run a review only when the user explicitly asks for a specific PR/diff — never proactively after finishing work. Use `[skip ci]` when a push should run nothing.
 - When asked for a review, prioritize bugs, regressions, missing tests, and security or data-loss risks.
 - Put findings first, ordered by severity, and include concrete file/line references when possible.
 - Keep summaries brief and secondary to the findings.
