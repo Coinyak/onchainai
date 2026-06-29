@@ -80,9 +80,13 @@ for t in /tmp /private/tmp "${TMPDIR:-}"; do
 done
 
 LD_SNAPSHOTS=()
-while IFS= read -r -d '' p; do
-  LD_SNAPSHOTS+=("$p")
-done < <(find "${TMP_DIRS[@]}" -maxdepth 1 \( -name 'onchainai*.ld-snapshot' -o -name 'libonchainai*.ld-snapshot' \) -print0 2>/dev/null || true)
+# Guard: with no resolved temp roots, `find` with an empty arg list would scan
+# the current dir (repo root) and could delete matching paths there. Skip instead.
+if [[ ${#TMP_DIRS[@]} -gt 0 ]]; then
+  while IFS= read -r -d '' p; do
+    LD_SNAPSHOTS+=("$p")
+  done < <(find "${TMP_DIRS[@]}" -maxdepth 1 \( -name 'onchainai*.ld-snapshot' -o -name 'libonchainai*.ld-snapshot' \) -print0 2>/dev/null || true)
+fi
 if [[ ${#LD_SNAPSHOTS[@]} -gt 0 ]]; then
   if [[ "$DRY_RUN" == true ]]; then
     for p in "${LD_SNAPSHOTS[@]}"; do

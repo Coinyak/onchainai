@@ -39,8 +39,27 @@ if [[ "$UNINSTALL" == true ]]; then
   exit 0
 fi
 
-[[ -x "$CLEANER" ]] || chmod +x "$CLEANER" 2>/dev/null || true
+# Validate the cleaner before touching launchd — never register a broken agent.
+if [[ ! -f "$CLEANER" ]]; then
+  echo "[disk-autoclean] missing cleaner script: ${CLEANER}" >&2
+  exit 1
+fi
+[[ -x "$CLEANER" ]] || chmod +x "$CLEANER"
+if [[ ! -x "$CLEANER" ]]; then
+  echo "[disk-autoclean] cleaner is not executable: ${CLEANER}" >&2
+  exit 1
+fi
 mkdir -p "${HOME}/Library/LaunchAgents" "${HOME}/Library/Logs"
+
+# Escape XML-sensitive chars before interpolating paths/label into the plist.
+xml_escape() {
+  local s="$1"
+  s="${s//&/&amp;}"; s="${s//</&lt;}"; s="${s//>/&gt;}"
+  printf '%s' "$s"
+}
+LABEL_X="$(xml_escape "$LABEL")"
+CLEANER_X="$(xml_escape "$CLEANER")"
+LOG_X="$(xml_escape "$LOG")"
 
 cat > "$PLIST" <<PLIST_EOF
 <?xml version="1.0" encoding="UTF-8"?>
@@ -48,11 +67,11 @@ cat > "$PLIST" <<PLIST_EOF
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>${LABEL}</string>
+    <string>${LABEL_X}</string>
     <key>ProgramArguments</key>
     <array>
         <string>/bin/bash</string>
-        <string>${CLEANER}</string>
+        <string>${CLEANER_X}</string>
         <string>--snapshots-only</string>
     </array>
     <key>StartCalendarInterval</key>
@@ -63,9 +82,9 @@ cat > "$PLIST" <<PLIST_EOF
     <key>RunAtLoad</key>
     <true/>
     <key>StandardOutPath</key>
-    <string>${LOG}</string>
+    <string>${LOG_X}</string>
     <key>StandardErrorPath</key>
-    <string>${LOG}</string>
+    <string>${LOG_X}</string>
 </dict>
 </plist>
 PLIST_EOF
