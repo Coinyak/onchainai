@@ -18,6 +18,8 @@ Keep `AGENTS.md` under 70 lines. Do not expand it with procedure details; route 
 
 `restart-dev.sh`, `verify-bundle.sh`, and `deploy-railway.sh` are gate/deploy internals — agents do not run them as separate UI steps.
 
+Also once after clone (macOS): `./scripts/install-disk-autoclean.sh` schedules an auto-sweep of multi-GB linker snapshots so disk does not silently fill. See `docs/DISK_MAINTENANCE.md`.
+
 ## Start
 
 - Run `git status --short` before edits. Do not revert or overwrite unrelated user/agent changes.

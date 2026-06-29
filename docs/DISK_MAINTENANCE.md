@@ -106,6 +106,44 @@ cd ~/OnchainAI && ./scripts/disk-guard.sh
 
 ---
 
+## 2026-06-29 — Root cause: linker-snapshot sweep was a no-op (now automated)
+
+### Symptom
+
+Disk down to **~7GB free**. `/private/tmp` held **55GB** of
+`libonchainai.dylib-*.ld-snapshot` dirs (~2.5GB each) — one per dylib link,
+never removed.
+
+### Root cause (a real bug, not just hygiene)
+
+`clean-build-artifacts.sh` already swept these, but scanned `find /tmp ...`.
+On macOS `/tmp` is a **symlink** to `/private/tmp`, and BSD `find` does **not**
+descend a symlinked start path without `-H`/`-L`. So the sweep matched nothing
+and had **never actually run** on macOS — snapshots piled up unbounded.
+`disk-guard.sh`'s auto-clean called `--incremental-only`, which inherited the
+same broken sweep, so the guard never caught it either.
+
+### Fix (this branch)
+
+| Change | File |
+|--------|------|
+| Resolve `/tmp` → real path (and dedupe `$TMPDIR`) before `find`; sweep now works | `scripts/clean-build-artifacts.sh` |
+| New `--snapshots-only` flag: sweep snapshots, never touch `target/` | `scripts/clean-build-artifacts.sh` |
+| Sweep snapshots first, every run (size-independent) | `scripts/disk-guard.sh` |
+| Per-user scheduled sweep (macOS LaunchAgent), portable installer | `scripts/install-disk-autoclean.sh` |
+
+### Work rule — run once after clone
+
+```bash
+./scripts/install-disk-autoclean.sh   # daily 13:00 + at login; sweeps snapshots only
+```
+
+This makes the disk self-maintaining: build as often as you like, snapshots are
+swept automatically. Manual one-off: `./scripts/clean-build-artifacts.sh --snapshots-only`.
+Uninstall: `./scripts/install-disk-autoclean.sh --uninstall`.
+
+---
+
 ## Safe cleanup script (orchestrator)
 
 ```bash
