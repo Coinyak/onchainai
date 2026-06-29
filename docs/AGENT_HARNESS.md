@@ -18,6 +18,16 @@ This page is the wiki-style operating contract for coding agents. Keep `AGENTS.m
 
 Agents should rely on executable gates, not memory. The repo's common failure mode is a Leptos SSR/WASM/CSS mismatch: code changes are present, but localhost serves an old binary or the browser hydrates with old WASM. That makes UI changes look missing and can make existing buttons, sidebar controls, filters, or auth UI stop working.
 
+## Local Trouble Doctor
+
+When a user says localhost is stale, buttons do not work, or the server seems off, run:
+
+```bash
+./scripts/local-doctor.sh
+```
+
+The doctor is read-only: it checks the listener, stale `target/dev-server.pid`, bundle coherence, local cache headers for `/` and `/pkg/*`, and `localhost` vs `127.0.0.1` guidance. It prints the next command instead of killing or starting processes. Use it before asking the user to clear browser cache; hard refresh is only for an already-open tab that still holds an old in-memory bundle after the server is healthy.
+
 ## Note-Taking Rule
 
 Future agent notes must follow the same LLM-wiki pattern:
@@ -98,7 +108,7 @@ If using a non-default local port, prefer:
 ./scripts/ui-change-gate.sh --port 3001
 ```
 
-Use `./scripts/agent-harness-check.sh` for the full harness contract (includes `test-ui-staleness-check.sh` and `ui-change-gate.sh --check-only`). Use `./scripts/ui-change-gate.sh --check-only` to validate gate CLI/options only without build/restart/browser work.
+Use `./scripts/agent-harness-check.sh` for the full harness contract (includes `test-local-doctor.sh`, `test-ui-staleness-check.sh`, and `ui-change-gate.sh --check-only`). Use `./scripts/ui-change-gate.sh --check-only` to validate gate CLI/options only without build/restart/browser work.
 
 `--base` is accepted only for explicit local URLs. If `PORT` or `--port` is already set, the URL port must match it. Otherwise the gate derives the restart port from `--base`, so it cannot restart one server and smoke-test another.
 
@@ -115,4 +125,4 @@ Branch protection and review routing (CODEOWNERS, PR template, `ci-success` merg
 
 ## Operator Note
 
-After a passing local gate, an already-open browser tab can still use cached `/pkg/onchainai.js` or WASM. If the UI looks stale, hard refresh (`Cmd+Shift+R`) or clear site data.
+After a passing local gate, SSR HTML should revalidate and auth/API responses are not stored. An already-open browser tab can still hold an old in-memory WASM bundle until reload; use hard refresh (`Cmd+Shift+R`) only if that tab still looks stale after reload.

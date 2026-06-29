@@ -40,6 +40,8 @@ for path in \
   scripts/git-hooks/pre-push \
   scripts/agent-start.sh \
   scripts/dev-watch.sh \
+  scripts/local-doctor.sh \
+  scripts/test-local-doctor.sh \
   scripts/ui-staleness-check.sh \
   scripts/test-ui-staleness-check.sh \
   scripts/install-agent-hooks.sh \
@@ -68,6 +70,8 @@ grep -Fq './scripts/agent-readiness-report.sh' AGENTS.md || \
 [[ -x scripts/git-hooks/pre-commit ]] || fail "scripts/git-hooks/pre-commit must be executable"
 [[ -x scripts/git-hooks/pre-push ]] || fail "scripts/git-hooks/pre-push must be executable"
 [[ -x scripts/agent-start.sh ]] || fail "scripts/agent-start.sh must be executable"
+[[ -x scripts/local-doctor.sh ]] || fail "scripts/local-doctor.sh must be executable"
+[[ -x scripts/test-local-doctor.sh ]] || fail "scripts/test-local-doctor.sh must be executable"
 [[ -x scripts/ui-staleness-check.sh ]] || fail "scripts/ui-staleness-check.sh must be executable"
 [[ -x scripts/test-ui-staleness-check.sh ]] || fail "scripts/test-ui-staleness-check.sh must be executable"
 [[ -x scripts/install-agent-hooks.sh ]] || fail "scripts/install-agent-hooks.sh must be executable"
@@ -77,6 +81,8 @@ grep -Fq './scripts/agent-readiness-report.sh' AGENTS.md || \
 [[ -x .cursor/hooks/ui-staleness-stop.sh ]] || fail ".cursor/hooks/ui-staleness-stop.sh must be executable"
 bash -n scripts/agent-readiness-report.sh
 bash -n scripts/dev-watch.sh
+bash -n scripts/local-doctor.sh
+bash -n scripts/test-local-doctor.sh
 bash -n scripts/ui-staleness-check.sh
 bash -n scripts/test-ui-staleness-check.sh
 bash -n scripts/install-agent-hooks.sh
@@ -99,6 +105,7 @@ if [[ "$hooks_path" != "scripts/git-hooks" ]]; then
   ./scripts/install-agent-hooks.sh >/dev/null
 fi
 ./scripts/install-agent-hooks.sh --check-only >/dev/null
+./scripts/test-local-doctor.sh
 ./scripts/test-ui-staleness-check.sh
 ./scripts/ui-change-gate.sh --check-only >/dev/null
 ./scripts/verify-dev-watch.sh --check-only >/dev/null
