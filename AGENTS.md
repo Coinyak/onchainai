@@ -13,6 +13,7 @@ Keep `AGENTS.md` under 70 lines. Do not expand it with procedure details; route 
 | When | Command |
 |------|---------|
 | Once after clone | `./scripts/install-agent-hooks.sh` |
+| Once after clone (macOS, auto-sweep linker snapshots) | `./scripts/install-disk-autoclean.sh` |
 | While iterating on UI/auth/routing | `./scripts/dev-watch.sh` |
 | Before handoff/commit | `./scripts/ui-change-gate.sh` |
 
