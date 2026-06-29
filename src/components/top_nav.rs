@@ -177,16 +177,21 @@ pub fn TopNav() -> impl IntoView {
                     >
                         "GitHub"
                     </a>
-                    {move || {
-                        let user_res = user
-                            .read_untracked()
-                            .as_ref()
-                            .cloned()
-                            .unwrap_or(Ok(None));
-                        view! {
-                            <AuthNav user_res=user_res show_login=show_login/>
-                        }
-                    }}
+                    // Read the blocking session resource inside a Suspense
+                    // boundary with a tracked `.get()` (mirroring the tools
+                    // browser): this fills the initial SSR HTML with the
+                    // resolved auth state AND hydrates the profile menu's click
+                    // handlers on the client. Reading it untracked outside
+                    // Suspense returned `None` at render time and pinned the nav
+                    // to the signed-out branch even for authenticated sessions.
+                    <Suspense fallback=move || {
+                        view! { <AuthNav user_res=Ok(None) show_login=show_login/> }
+                    }>
+                        {move || {
+                            let user_res = user.get().unwrap_or(Ok(None));
+                            view! { <AuthNav user_res=user_res show_login=show_login/> }
+                        }}
+                    </Suspense>
                 </nav>
             </div>
         </header>

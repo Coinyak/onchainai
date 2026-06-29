@@ -34,12 +34,12 @@ fn auth_client(config: &Config) -> AuthClient {
 
 fn set_cookie(name: &str, value: &str, max_age_secs: i64, secure: bool) -> String {
     let secure_flag = if secure { "; Secure" } else { "" };
-    // Session cookie is SameSite=Strict for CSRF hardening (SECURITY.md).
-    // Strict governs whether the cookie is *sent* later; setting it here is
-    // unaffected by how the magic-link callback was reached.
-    format!(
-        "{name}={value}; Path=/; HttpOnly; SameSite=Strict; Max-Age={max_age_secs}{secure_flag}"
-    )
+    // Session cookie is SameSite=Lax so it is sent on the top-level navigation
+    // from the magic-link email back to /auth/callback (Strict withholds it on
+    // that cross-site-initiated landing, leaving the user signed out until the
+    // next same-site request). Lax still blocks cross-site POST/subresource
+    // sends; CSRF tokens + Origin checks remain the mutation defense (SECURITY.md).
+    format!("{name}={value}; Path=/; HttpOnly; SameSite=Lax; Max-Age={max_age_secs}{secure_flag}")
 }
 
 fn clear_cookie(name: &str) -> String {

@@ -67,7 +67,7 @@ Expiration Time: 2026-06-25T12:05:00Z
 ### 1.3 세션 관리
 
 - **JWT**: HS256 서명 (서버 비밀키), 15분 access token + 7일 refresh token
-- **세션 저장**: HttpOnly, Secure, SameSite=Strict 쿠키 (XSS로 접근 차단)
+- **세션 저장**: HttpOnly, Secure, SameSite=Lax 쿠키 (XSS로 접근 차단). Lax는 OAuth/매직링크 리다이렉트(외부 발 top-level GET)에서 세션 쿠키가 전달돼야 로그인 직후 화면에 반영되기 때문 — Strict는 그 첫 착지 요청에 쿠키를 누락시켜 로그아웃처럼 보임. Lax도 cross-site POST/서브리소스에는 쿠키를 보내지 않아 CSRF는 계속 차단 (OAuth state·PKCE 쿠키도 동일 이유로 Lax)
 - **세션 무효화**: 로그아웃 시 서버에서 토큰 jti 블랙리스트 등록
 - **재인증**: 민감한 작업(닉네임 변경, 이메일 변경, x402 결제) 시 재인증 필요 (OWASP)
 - **Risk-based**: 새 IP/기기에서 로그인 시 추가 검증 (나중용)
@@ -154,7 +154,7 @@ pub struct ProfileRequest {
 
 ### 3.4 CSRF 방지
 
-- **SameSite=Strict 쿠키**: 인증 쿠키에 SameSite 속성
+- **SameSite=Lax 쿠키**: 인증 쿠키에 SameSite 속성 (Lax는 cross-site POST/서브리소스 전송을 차단해 CSRF를 막으면서, OAuth/매직링크 top-level 리다이렉트 착지에는 쿠키를 전달). 변이는 모두 POST 기반이므로 Lax로 충분 — Origin 검증 + CSRF 토큰이 1차 방어
 - **Origin 헤더 검증**: POST/PUT/DELETE 요청 시 `Origin` 헤더가 `www.onchain-ai.xyz`인지 확인
 - **CSRF 토큰**: Leptos server function 호출 시 CSRF 토큰 검증 (Leptos 내장)
 - **axum_csrf crate**: 추가 CSRF 보호 레이어 (선택적)
@@ -408,7 +408,7 @@ X402_PAY_TO_ADDRESS=0x...
 ### 인증
 - [ ] JWT 검증: exp, nbf, iss, aud, sub 모두 검증
 - [ ] Access token 15분, Refresh token 7일
-- [ ] 쿠키: HttpOnly, Secure, SameSite=Strict
+- [ ] 쿠키: HttpOnly, Secure, SameSite=Lax (OAuth/매직링크 리다이렉트 착지에 세션 쿠키 전달)
 - [ ] 에러 메시지: 계정 존재 여부 누출 금지
 - [ ] Rate limiting: 인증 5회/분/IP
 - [ ] Account lockout: 5회 실패 시 15분
@@ -424,7 +424,7 @@ X402_PAY_TO_ADDRESS=0x...
 - [ ] 입력 검증: 모든 요청 validator crate
 - [ ] SQL: 파라미터화 쿼리만 (sqlx 매크로)
 - [ ] XSS: Leptos 이스케이핑 + CSP 헤더
-- [ ] CSRF: SameSite=Strict + Origin 검증 + CSRF 토큰
+- [ ] CSRF: SameSite=Lax (cross-site POST 차단) + Origin 검증 + CSRF 토큰
 - [ ] 보안 헤더: X-Frame-Options, X-Content-Type-Options, CSP, HSTS, Referrer-Policy
 - [ ] CORS: www.onchain-ai.xyz만 허용
 - [ ] Rate limiting: governor crate

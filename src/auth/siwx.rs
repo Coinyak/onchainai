@@ -138,11 +138,11 @@ fn verify_solana_signature(message: &str, signature_b58: &str, wallet: &str) -> 
 
 fn set_session_cookie(name: &str, value: &str, max_age_secs: i64, secure: bool) -> String {
     let secure_flag = if secure { "; Secure" } else { "" };
-    // SameSite=Strict for CSRF hardening (SECURITY.md). SIWX verify is a
-    // same-site fetch, so the session cookie is still sent on later requests.
-    format!(
-        "{name}={value}; Path=/; HttpOnly; SameSite=Strict; Max-Age={max_age_secs}{secure_flag}"
-    )
+    // SameSite=Lax for consistency with the GitHub/email session cookie so the
+    // cookie survives top-level redirect landings. Lax still blocks cross-site
+    // POST/subresource sends; CSRF tokens + Origin checks remain the primary
+    // mutation defense (SECURITY.md).
+    format!("{name}={value}; Path=/; HttpOnly; SameSite=Lax; Max-Age={max_age_secs}{secure_flag}")
 }
 
 /// `POST /auth/siwx/challenge` — server-generated CAIP-122 message + nonce.
@@ -331,9 +331,9 @@ mod tests {
     }
 
     #[test]
-    fn session_cookie_uses_strict_samesite() {
+    fn session_cookie_uses_lax_samesite() {
         let cookie = set_session_cookie(ACCESS_TOKEN_COOKIE, "tok", 86_400, true);
-        assert!(cookie.contains("SameSite=Strict"));
+        assert!(cookie.contains("SameSite=Lax"));
         assert!(cookie.contains("; Secure"));
     }
 
