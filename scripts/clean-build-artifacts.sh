@@ -75,7 +75,11 @@ for t in /tmp /private/tmp "${TMPDIR:-}"; do
   [[ -n "$t" && -d "$t" ]] || continue
   rp="$(cd "$t" 2>/dev/null && pwd -P)" || continue
   dup=false
-  for e in ${TMP_DIRS[@]+"${TMP_DIRS[@]}"}; do [[ "$e" == "$rp" ]] && dup=true; done
+  # Quoted array iteration, guarded so an empty TMP_DIRS does not trip `set -u`
+  # on bash 3.2 (macOS default). `"${TMP_DIRS[@]}"` is only expanded when non-empty.
+  if [[ ${#TMP_DIRS[@]} -gt 0 ]]; then
+    for e in "${TMP_DIRS[@]}"; do [[ "$e" == "$rp" ]] && { dup=true; break; }; done
+  fi
   [[ "$dup" == true ]] || TMP_DIRS+=("$rp")
 done
 

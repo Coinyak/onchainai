@@ -8,7 +8,10 @@ cd "$ROOT"
 # They accumulate in the temp dir independently of target/ size — each macOS
 # dylib link can leave a multi-GB *.ld-snapshot — so a target-size threshold
 # never catches them. Do this before measuring so free space reflects the sweep.
-"${ROOT}/scripts/clean-build-artifacts.sh" --snapshots-only >&2 || true
+# Best-effort, but surface failures (do not silently mask) so a broken sweep is
+# debuggable rather than hidden behind a still-low-disk threshold error.
+"${ROOT}/scripts/clean-build-artifacts.sh" --snapshots-only >&2 \
+  || echo "WARN: snapshot sweep failed (exit $?); continuing disk guard best-effort" >&2
 
 # Integer GB (floored) — 24.9GB reports as 24 and fails the 25GB default.
 MIN_FREE_GB="${ONCHAINAI_MIN_FREE_GB:-25}"
