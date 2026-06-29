@@ -45,6 +45,10 @@ for path in \
   scripts/ui-staleness-check.sh \
   scripts/test-ui-staleness-check.sh \
   scripts/install-agent-hooks.sh \
+  scripts/clean-build-artifacts.sh \
+  scripts/test-clean-build-artifacts.sh \
+  scripts/disk-guard.sh \
+  scripts/test-disk-guard.sh \
   scripts/ui-change-gate.sh \
   scripts/sync-ui-watch-paths.mjs \
   scripts/ui-watch-paths.inc.sh \
@@ -75,6 +79,10 @@ grep -Fq './scripts/agent-readiness-report.sh' AGENTS.md || \
 [[ -x scripts/ui-staleness-check.sh ]] || fail "scripts/ui-staleness-check.sh must be executable"
 [[ -x scripts/test-ui-staleness-check.sh ]] || fail "scripts/test-ui-staleness-check.sh must be executable"
 [[ -x scripts/install-agent-hooks.sh ]] || fail "scripts/install-agent-hooks.sh must be executable"
+[[ -x scripts/clean-build-artifacts.sh ]] || fail "scripts/clean-build-artifacts.sh must be executable"
+[[ -x scripts/test-clean-build-artifacts.sh ]] || fail "scripts/test-clean-build-artifacts.sh must be executable"
+[[ -x scripts/disk-guard.sh ]] || fail "scripts/disk-guard.sh must be executable"
+[[ -x scripts/test-disk-guard.sh ]] || fail "scripts/test-disk-guard.sh must be executable"
 [[ -x scripts/ui-change-gate.sh ]] || fail "scripts/ui-change-gate.sh must be executable"
 [[ -x scripts/verify-dev-watch.sh ]] || fail "scripts/verify-dev-watch.sh must be executable"
 [[ -x scripts/configure-branch-protection.sh ]] || fail "scripts/configure-branch-protection.sh must be executable"
@@ -86,6 +94,10 @@ bash -n scripts/test-local-doctor.sh
 bash -n scripts/ui-staleness-check.sh
 bash -n scripts/test-ui-staleness-check.sh
 bash -n scripts/install-agent-hooks.sh
+bash -n scripts/clean-build-artifacts.sh
+bash -n scripts/test-clean-build-artifacts.sh
+bash -n scripts/disk-guard.sh
+bash -n scripts/test-disk-guard.sh
 bash -n scripts/agent-start.sh
 node --check scripts/agent-readiness-report.mjs >/dev/null
 node --check scripts/sync-ui-watch-paths.mjs >/dev/null
@@ -107,6 +119,8 @@ fi
 ./scripts/install-agent-hooks.sh --check-only >/dev/null
 ./scripts/test-local-doctor.sh
 ./scripts/test-ui-staleness-check.sh
+./scripts/test-clean-build-artifacts.sh
+./scripts/test-disk-guard.sh
 ./scripts/ui-change-gate.sh --check-only >/dev/null
 ./scripts/verify-dev-watch.sh --check-only >/dev/null
 ./scripts/configure-branch-protection.sh --check-only >/dev/null

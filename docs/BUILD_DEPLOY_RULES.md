@@ -224,15 +224,16 @@ If a Railway deploy sticks in **BUILDING** or uses RAILPACK instead of Dockerfil
 
 Leptos SSR + WASM builds are large (`target/` often 10–50GB). Linker failures on macOS also write **multi-GB** snapshots under `/tmp/onchainai*.ld-snapshot` — these are safe to delete and are a common hidden disk drain.
 
-**`disk-guard.sh` thresholds (defaults):** free disk **≥25GB**, `target/` **≤35GB**. Override: `ONCHAINAI_MIN_FREE_GB`, `ONCHAINAI_MAX_TARGET_GB`. When over either limit it auto-runs `clean-build-artifacts.sh --incremental-only` once (`ONCHAINAI_DISK_GUARD_AUTOCLEAN=0` to disable).
+**`disk-guard.sh` thresholds (defaults):** free disk **≥25GB**, stale local-crate pruning when `target/` **>16GB**, hard `target/` cap **≤35GB**. Override: `ONCHAINAI_MIN_FREE_GB`, `ONCHAINAI_STALE_MAIN_CRATE_PRUNE_GB`, `ONCHAINAI_STALE_MAIN_CRATE_KEEP`, `ONCHAINAI_MAX_TARGET_GB`. The guard always sweeps linker snapshots first, then prunes old hashed `onchainai` / `libonchainai` debug artifact groups while preserving third-party compiled deps and the newest local groups. When still over a hard limit it auto-runs `clean-build-artifacts.sh --incremental-only` once (`ONCHAINAI_DISK_GUARD_AUTOCLEAN=0` to disable).
 
 **When `./scripts/disk-guard.sh` still fails:**
 
-1. Fast reclaim: `./scripts/clean-build-artifacts.sh --incremental-only`
-2. Preview full clean: `./scripts/clean-build-artifacts.sh --dry-run`
-3. Full clean: `./scripts/clean-build-artifacts.sh` (`cargo clean` + `/tmp` linker snapshots)
-4. Re-check: `df -h` — aim for **≥25GB** free before `cargo leptos build --release`
-5. If still tight: `ONCHAINAI_DISK_GUARD_FORCE=1 ./scripts/release-build.sh` (emergency only)
+1. Fast local-crate reclaim: `./scripts/clean-build-artifacts.sh --stale-main-crate --stale-main-crate-keep 3`
+2. Fast incremental reclaim: `./scripts/clean-build-artifacts.sh --incremental-only`
+3. Preview full clean: `./scripts/clean-build-artifacts.sh --dry-run`
+4. Full clean: `./scripts/clean-build-artifacts.sh` (`cargo clean` + `/tmp` linker snapshots)
+5. Re-check: `df -h` — aim for **≥25GB** free before `cargo leptos build --release`
+6. If still tight: `ONCHAINAI_DISK_GUARD_FORCE=1 ./scripts/release-build.sh` (emergency only)
 
 **During development:**
 
