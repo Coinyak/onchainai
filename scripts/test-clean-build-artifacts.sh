@@ -93,4 +93,29 @@ assert_exists target/debug/deps/onchainai-cccccccccccccccc
 assert_exists target/debug/deps/onchainai-dddddddddddddddd
 pass "stale main-crate pruning is a no-op when group count is under keep limit"
 
+symlink_repo="$tmpdir/symlink-repo"
+external_debug="$tmpdir/external-debug"
+mkdir -p "$symlink_repo/scripts" "$symlink_repo/target" "$external_debug/deps"
+cp "$CLEANER_SOURCE" "$symlink_repo/scripts/clean-build-artifacts.sh"
+chmod +x "$symlink_repo/scripts/clean-build-artifacts.sh"
+ln -s "$external_debug" "$symlink_repo/target/debug"
+cd "$symlink_repo"
+CLEANER="$symlink_repo/scripts/clean-build-artifacts.sh"
+write_artifact_group eeeeeeeeeeeeeeee 202606280101
+write_artifact_group ffffffffffffffff 202606290101
+
+symlink_out="$tmpdir/symlink.out"
+set +e
+"$CLEANER" --stale-main-crate --stale-main-crate-keep 1 >"$symlink_out" 2>&1
+symlink_status=$?
+set -e
+[[ "$symlink_status" == "1" ]] || {
+  cat "$symlink_out" >&2
+  fail "expected symlinked deps cleanup to exit 1, got ${symlink_status}"
+}
+assert_contains "ERROR: target/debug is a symlink; refusing cleanup" "$symlink_out"
+assert_exists "$external_debug/deps/onchainai-eeeeeeeeeeeeeeee"
+assert_exists "$external_debug/deps/onchainai-ffffffffffffffff"
+pass "stale main-crate pruning refuses symlinked deps"
+
 echo "CLEAN BUILD ARTIFACTS TESTS PASS"

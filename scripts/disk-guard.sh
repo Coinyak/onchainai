@@ -61,9 +61,15 @@ fi
 if (( target_gb > STALE_MAIN_CRATE_PRUNE_GB )); then
   if [[ "${ONCHAINAI_DISK_GUARD_AUTOCLEAN:-1}" == "1" ]]; then
     echo "disk-guard: target ${target_gb}GB exceeds stale artifact prune threshold ${STALE_MAIN_CRATE_PRUNE_GB}GB; pruning stale main-crate artifacts" >&2
-    "${ROOT}/scripts/clean-build-artifacts.sh" \
+    if "${ROOT}/scripts/clean-build-artifacts.sh" \
       --stale-main-crate \
-      --stale-main-crate-keep "${STALE_MAIN_CRATE_KEEP}" >&2 || true
+      --stale-main-crate-keep "${STALE_MAIN_CRATE_KEEP}" >&2
+    then
+      :
+    else
+      clean_status=$?
+      echo "WARN: stale main-crate cleanup failed (exit ${clean_status}); continuing disk guard best-effort" >&2
+    fi
     measure_usage
     echo "disk-guard: after stale prune free_disk_gb=${free_gb} target_gb=${target_gb}" >&2
   fi
@@ -75,7 +81,12 @@ fi
 if (( free_gb < MIN_FREE_GB )) || (( target_gb > MAX_TARGET_GB )); then
   if [[ "${ONCHAINAI_DISK_GUARD_AUTOCLEAN:-1}" == "1" ]]; then
     echo "disk-guard: over threshold; auto-cleaning incremental caches" >&2
-    "${ROOT}/scripts/clean-build-artifacts.sh" --incremental-only >&2 || true
+    if "${ROOT}/scripts/clean-build-artifacts.sh" --incremental-only >&2; then
+      :
+    else
+      clean_status=$?
+      echo "WARN: incremental cleanup failed (exit ${clean_status}); continuing disk guard best-effort" >&2
+    fi
     measure_usage
     echo "disk-guard: after auto-clean free_disk_gb=${free_gb} target_gb=${target_gb}" >&2
   fi

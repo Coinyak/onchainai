@@ -56,11 +56,37 @@ stat_mtime() {
 }
 
 prune_stale_main_crate() {
+  local debug_dir="target/debug"
   local deps_dir="target/debug/deps"
+  if [[ -L "$debug_dir" ]]; then
+    echo "ERROR: target/debug is a symlink; refusing cleanup" >&2
+    return 1
+  fi
+  if [[ -L "$deps_dir" ]]; then
+    echo "ERROR: target/debug/deps is a symlink; refusing cleanup" >&2
+    return 1
+  fi
   if [[ ! -d "$deps_dir" ]]; then
     echo "no target/debug/deps directory — skipping stale main-crate cleanup"
     return
   fi
+
+  local target_root deps_real
+  target_root="$(cd target 2>/dev/null && pwd -P)" || {
+    echo "ERROR: could not resolve target directory" >&2
+    return 1
+  }
+  deps_real="$(cd "$deps_dir" 2>/dev/null && pwd -P)" || {
+    echo "ERROR: could not resolve target/debug/deps directory" >&2
+    return 1
+  }
+  case "$deps_real" in
+    "$target_root"/*) deps_dir="$deps_real" ;;
+    *)
+      echo "ERROR: target/debug/deps resolves outside target; refusing cleanup" >&2
+      return 1
+      ;;
+  esac
 
   local stamps groups remove
   stamps="$(mktemp)"
@@ -122,7 +148,7 @@ prune_stale_main_crate() {
       if [[ "$DRY_RUN" == true ]]; then
         du -sh "$f" 2>/dev/null || echo "[dry-run] $f"
       else
-        rm -f "$f"
+        rm -f -- "$f"
       fi
       removed_files=$((removed_files + 1))
     done < <(find "$deps_dir" -maxdepth 1 -type f \( \
