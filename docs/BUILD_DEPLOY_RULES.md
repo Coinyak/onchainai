@@ -62,6 +62,17 @@ served live (`ServeFile`), so CSS edits just need a browser refresh.
 > Do **not** reach for `cargo build --features ssr` to "preview" UI — it rebuilds
 > the server only, so the browser hydrates a stale WASM bundle. Use the watch loop.
 
+If localhost looks stale, the server is not reachable, or cache headers look wrong,
+diagnose before clearing browser data:
+
+```bash
+./scripts/local-doctor.sh
+```
+
+It is read-only and reports the next command, usually `./scripts/dev-watch.sh`
+while editing or `./scripts/restart-dev.sh --foreground` when checking release
+artifacts locally.
+
 Universal enforcement: `./scripts/install-agent-hooks.sh` wires Git pre-commit
 (`scripts/git-hooks/pre-commit` → `ui-staleness-check.sh --staged`) so **any**
 coding tool is blocked from committing stale UI. Optional IDE stop hooks
@@ -137,6 +148,7 @@ nohup ./target/release/onchainai > /tmp/onchainai.log 2>&1 &
 | `not found: /pkg/...` in page or smoke | pkg not built or wrong `site-root` | Full `cargo leptos build --release`; check `target/site/pkg/` |
 | Code "fixed" in repo but site unchanged | Server never restarted after build | Always restart after build (see §2) |
 | Production OK, localhost broken | Local-only stale process or mixed artifacts | `verify-bundle.sh` + restart; production Docker build is self-contained |
+| Local server is not running or looks cached | Missing listener, stale pid, wrong cache headers, or mixed local artifacts | `./scripts/local-doctor.sh` first, then follow its printed next command |
 | **Sidebar missing**, **buttons dead** (Sign in, filters, ☰), console `entered unreachable code` / hydration panic | **Bundle mismatch** (SSR binary ≠ WASM) **or** an already-open tab holding an old hydration bundle | `./scripts/restart-dev.sh` (never `cargo build --features ssr` alone for UI) → `verify-bundle.sh` → reload the tab; use **`Cmd+Shift+R`** only if the old tab still fails → `node scripts/browser-smoke.mjs` |
 | OAuth/login works once then nav still shows **Sign in** after SPA navigation | Non-blocking auth fetch in shell (SSR HTML ≠ hydrated DOM) | `TopNav` must use `Resource::new_blocking` keyed on pathname (see §4.1) |
 
@@ -252,6 +264,7 @@ Run in order before `./scripts/deploy-railway.sh`:
 
 SSR HTML now sends `Cache-Control: private, no-cache, max-age=0, must-revalidate`, while auth/API/MCP paths send `no-store`. Normal users should receive the fresh app shell after deploy without clearing site data, and shared caches must not store session-specific HTML.
 
+- Local troubleshooting starts with `./scripts/local-doctor.sh`; it verifies the server, bundle, and cache headers before browser cache is blamed.
 - Versioned `/pkg/onchainai.js`, `/pkg/onchainai.wasm`, and `/pkg/onchainai.css` URLs may still use long asset caching.
 - Local dev restarts set `ONCHAINAI_PKG_NO_CACHE=1`, so `/pkg/*` is `no-store`.
 - An already-open tab can still hold the old in-memory bundle until reload.
