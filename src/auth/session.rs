@@ -15,7 +15,7 @@ pub const GITHUB_STATE_COOKIE: &str = "onchainai_github_state";
 pub fn set_session_hint_cookie(max_age_secs: i64, secure: bool) -> String {
     let secure_flag = if secure { "; Secure" } else { "" };
     format!(
-        "{SESSION_HINT_COOKIE}={SESSION_HINT_VALUE}; Path=/; SameSite=Strict; Max-Age={max_age_secs}{secure_flag}"
+        "{SESSION_HINT_COOKIE}={SESSION_HINT_VALUE}; Path=/; SameSite=Lax; Max-Age={max_age_secs}{secure_flag}"
     )
 }
 
@@ -27,7 +27,7 @@ pub fn session_hint_present(cookie_header: &str) -> bool {
 /// Clear the client-readable session hint on logout.
 pub fn clear_session_hint_cookie(secure: bool) -> String {
     let secure_flag = if secure { "; Secure" } else { "" };
-    format!("{SESSION_HINT_COOKIE}=; Path=/; SameSite=Strict; Max-Age=0{secure_flag}")
+    format!("{SESSION_HINT_COOKIE}=; Path=/; SameSite=Lax; Max-Age=0{secure_flag}")
 }
 
 /// True when `siwx_domain` points at local dev (localhost or 127.0.0.1).
@@ -182,7 +182,7 @@ mod tests {
         assert!(cookie.contains(SESSION_HINT_COOKIE));
         assert!(cookie.contains(SESSION_HINT_VALUE));
         assert!(!cookie.contains("HttpOnly"));
-        assert!(cookie.contains("SameSite=Strict"));
+        assert!(cookie.contains("SameSite=Lax"));
         assert!(cookie.contains("; Secure"));
     }
 
@@ -198,7 +198,7 @@ mod tests {
         let cookie = clear_session_hint_cookie(true);
         assert!(cookie.contains(SESSION_HINT_COOKIE));
         assert!(cookie.contains("Max-Age=0"));
-        assert!(cookie.contains("SameSite=Strict"));
+        assert!(cookie.contains("SameSite=Lax"));
         assert!(cookie.contains("; Secure"));
     }
 

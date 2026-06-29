@@ -290,8 +290,15 @@ pub fn build_app(pool: sqlx::PgPool, config: Config) -> axum::Router {
             axum::routing::post(auth::siwx::challenge),
         )
         .route("/auth/siwx/verify", axum::routing::post(auth::siwx::verify))
-        .with_state(state.clone())
-        .layer(auth_rate_limit);
+        .with_state(state.clone());
+    // Local dev (ONCHAINAI_RELAX_RATE_LIMIT=1) skips the tight auth limiter
+    // (burst 5, ~1/12s) so repeated login/logout cycles while iterating don't
+    // hit 429s. Production never sets the flag, so the limiter stays active.
+    let auth_routes = if relax_rate_limit {
+        auth_routes
+    } else {
+        auth_routes.layer(auth_rate_limit)
+    };
 
     let mcp_routes = Router::new()
         .route("/mcp", axum::routing::post(server::mcp::handle_mcp))

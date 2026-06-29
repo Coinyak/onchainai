@@ -234,13 +234,18 @@ pub async fn oauth_callback(
     let mut headers = HeaderMap::new();
     headers.append(
         header::SET_COOKIE,
-        // Session cookie is SameSite=Strict for CSRF hardening (SECURITY.md).
+        // Session cookie is SameSite=Lax: it must be sent on the top-level
+        // navigation back from the GitHub/Supabase redirect (Strict withholds
+        // it on that cross-site-initiated landing, so the user appears signed
+        // out until the next same-site request). Lax still blocks the cookie on
+        // cross-site POST/subresource requests, and CSRF tokens + Origin checks
+        // remain the primary mutation defense (SECURITY.md).
         set_cookie(
             ACCESS_TOKEN_COOKIE,
             &access_token,
             config.siwx_session_ttl,
             secure_cookie,
-            "Strict",
+            "Lax",
         )
         .parse()
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?,
@@ -269,7 +274,7 @@ pub async fn logout(State(state): State<AppState>) -> Response {
     let mut headers = HeaderMap::new();
     headers.append(
         header::SET_COOKIE,
-        clear_cookie(ACCESS_TOKEN_COOKIE, secure_cookie, "Strict")
+        clear_cookie(ACCESS_TOKEN_COOKIE, secure_cookie, "Lax")
             .parse()
             .unwrap_or_else(|_| "onchainai_access_token=; Path=/".parse().unwrap()),
     );
@@ -364,18 +369,18 @@ mod tests {
     }
 
     #[test]
-    fn session_cookie_is_strict_and_secure_in_production() {
-        let cookie = set_cookie(ACCESS_TOKEN_COOKIE, "tok", 86_400, true, "Strict");
-        assert!(cookie.contains("SameSite=Strict"));
+    fn session_cookie_is_lax_and_secure_in_production() {
+        let cookie = set_cookie(ACCESS_TOKEN_COOKIE, "tok", 86_400, true, "Lax");
+        assert!(cookie.contains("SameSite=Lax"));
         assert!(cookie.contains("; Secure"));
         assert!(cookie.contains("HttpOnly"));
     }
 
     #[test]
     fn logout_clears_session_cookie_with_matching_flags() {
-        let cookie = clear_cookie(ACCESS_TOKEN_COOKIE, true, "Strict");
+        let cookie = clear_cookie(ACCESS_TOKEN_COOKIE, true, "Lax");
         assert!(cookie.contains("; Secure"));
-        assert!(cookie.contains("SameSite=Strict"));
+        assert!(cookie.contains("SameSite=Lax"));
         assert!(cookie.contains("Max-Age=0"));
     }
 
@@ -386,7 +391,7 @@ mod tests {
         let cookie = clear_session_hint_cookie(true);
         assert!(cookie.contains(SESSION_HINT_COOKIE));
         assert!(cookie.contains("; Secure"));
-        assert!(cookie.contains("SameSite=Strict"));
+        assert!(cookie.contains("SameSite=Lax"));
         assert!(cookie.contains("Max-Age=0"));
     }
 }
