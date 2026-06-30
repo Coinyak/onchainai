@@ -141,7 +141,8 @@ fn infer_chains(server: &RegistryServer) -> Vec<String> {
         ("bnb", "bnb"),
     ]
     .iter()
-    .filter_map(|(needle, chain)| text.contains(needle).then(|| (*chain).to_string()))
+    .filter(|(needle, _)| text.contains(needle))
+    .map(|(_, chain)| (*chain).to_string())
     .collect()
 }
 

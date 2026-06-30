@@ -5,7 +5,9 @@
 
 use crate::auth::guard::{require_admin, AuthError};
 use crate::models::Tool;
-use crate::server::functions::{derive_claim_state, derive_lifecycle_state, review_queue_where};
+use crate::server::functions::{
+    derive_claim_state, derive_lifecycle_state, review_queue_count_sql, review_queue_sql,
+};
 #[cfg(feature = "ssr")]
 use crate::server::review_persistence::{
     complete_review_run, insert_review_entry, insert_review_run, load_tool_review_timeline,
@@ -522,16 +524,13 @@ pub async fn build_operator_snapshot(
     limit: usize,
 ) -> Result<OperatorSnapshotV1, String> {
     let normalized = normalize_harness_queue(queue).map_err(|e| e.to_string())?;
-    let where_clause = review_queue_where(normalized).map_err(|e| e.to_string())?;
 
-    let count_sql = format!("SELECT COUNT(*)::bigint FROM tools WHERE {where_clause}");
-    let total_matching: i64 = sqlx::query_scalar(&count_sql)
+    let total_matching: i64 = sqlx::query_scalar(review_queue_count_sql(normalized)?)
         .fetch_one(pool)
         .await
         .map_err(|e| format!("count failed: {e}"))?;
 
-    let sql = format!("SELECT * FROM tools WHERE {where_clause} ORDER BY updated_at DESC LIMIT $1");
-    let tools = sqlx::query_as::<_, Tool>(&sql)
+    let tools = sqlx::query_as::<_, Tool>(review_queue_sql(normalized)?)
         .bind(limit as i64)
         .fetch_all(pool)
         .await
