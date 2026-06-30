@@ -524,15 +524,26 @@ mod tests {
         std::env::remove_var("ONCHAINAI_RELAX_RATE_LIMIT");
 
         let app = build_app(test_pool(), test_config());
-        for _ in 0..150 {
-            let req = request_with_ip("/favicon.ico");
-            let res = tower::ServiceExt::oneshot(app.clone(), req).await.unwrap();
-            assert_ne!(res.status(), axum::http::StatusCode::TOO_MANY_REQUESTS);
-        }
-        for path in ["/pkg/onchainai.wasm", "/pkg/onchainai.js"] {
-            let req = request_with_ip(path);
-            let res = tower::ServiceExt::oneshot(app.clone(), req).await.unwrap();
-            assert_ne!(res.status(), axum::http::StatusCode::TOO_MANY_REQUESTS);
+        for path in [
+            "/favicon.ico",
+            "/apple-touch-icon.png",
+            "/site.webmanifest",
+            "/brand/onchainai-logo.svg",
+            "/chains/base.svg",
+            "/pkg/onchainai.css",
+            "/pkg/onchainai.js",
+            "/pkg/onchainai.wasm",
+        ] {
+            for attempt in 0..150 {
+                let req = request_with_ip(path);
+                let res = tower::ServiceExt::oneshot(app.clone(), req).await.unwrap();
+                assert_ne!(
+                    res.status(),
+                    axum::http::StatusCode::TOO_MANY_REQUESTS,
+                    "{path} hit 429 on request {}",
+                    attempt + 1
+                );
+            }
         }
     }
 
