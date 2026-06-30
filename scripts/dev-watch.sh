@@ -59,6 +59,10 @@ fi
 
 export SKIP_CRAWLER="${SKIP_CRAWLER:-1}"
 export ONCHAINAI_PKG_NO_CACHE="${ONCHAINAI_PKG_NO_CACHE:-1}"
+# Uncached /pkg/* (above) + fast iterative page loads would trip the IP rate
+# limiter (429 on wasm/js → broken hydration). Relax it locally; prod never
+# sets this flag. Same flag also relaxes the auth limiter for login/logout loops.
+export ONCHAINAI_RELAX_RATE_LIMIT="${ONCHAINAI_RELAX_RATE_LIMIT:-1}"
 # cargo-leptos reads LEPTOS_SITE_ADDR to override site-addr from Cargo.toml.
 export LEPTOS_SITE_ADDR="127.0.0.1:${PORT}"
 

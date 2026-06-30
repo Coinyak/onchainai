@@ -117,6 +117,11 @@ export LEPTOS_SITE_ROOT="${LEPTOS_SITE_ROOT:-target/site}"
 export SKIP_CRAWLER="${SKIP_CRAWLER:-1}"
 # Safari caches /pkg/* aggressively on localhost — disable for local dev.
 export ONCHAINAI_PKG_NO_CACHE="${ONCHAINAI_PKG_NO_CACHE:-1}"
+# Local QA serves /pkg/* uncached (above) and the browser gate loads many
+# image-heavy pages fast; without relaxing the IP rate limiter that traffic
+# trips 429 on /pkg/*.wasm|js and hydration fails. This flag already relaxes the
+# auth limiter locally; it gates the general limiter too. Prod never sets it.
+export ONCHAINAI_RELAX_RATE_LIMIT="${ONCHAINAI_RELAX_RATE_LIMIT:-1}"
 
 mkdir -p target
 

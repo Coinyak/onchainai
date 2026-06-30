@@ -326,7 +326,15 @@ pub fn build_app(pool: sqlx::PgPool, config: Config) -> axum::Router {
         ))
         .service(leptos_axum::site_pkg_dir_service(&leptos_options));
 
-    let app_routes = Router::new()
+    // Static assets (immutable cached) bypass the general IP rate limiter.
+    // Serving them under general_rate_limit starves WASM/JS/CSS on shared IPs
+    // (NAT/proxy/Railway peer-IP) and breaks hydration when many subresources
+    // load together. Cache headers + CDN front the abuse vector; mutations,
+    // auth, MCP, SSR pages, and admin API stay throttled in app_routes below.
+    // Route order matters: the explicit /pkg/onchainai.css must precede the
+    // /pkg/{*path} wildcard (static_route) so cargo-leptos placeholder never
+    // shadows the real CSS.
+    let static_routes = Router::new()
         .route_service("/pkg/onchainai.css", css_service)
         .route_service("/favicon.ico", ServeFile::new("public/favicon.ico"))
         .route_service(
@@ -355,7 +363,9 @@ pub fn build_app(pool: sqlx::PgPool, config: Config) -> axum::Router {
                 ))
                 .service(ServeDir::new("public/chains").append_index_html_on_directories(false)),
         )
-        .route_service(&static_route, pkg_service)
+        .route_service(&static_route, pkg_service);
+
+    let app_routes = Router::new()
         .route(
             "/api/admin/operator/snapshot",
             axum::routing::get(server::operator_harness::get_operator_snapshot),
@@ -394,6 +404,7 @@ pub fn build_app(pool: sqlx::PgPool, config: Config) -> axum::Router {
     Router::new()
         .merge(auth_routes)
         .merge(mcp_routes)
+        .merge(static_routes)
         .merge(app_routes)
         .layer(axum::middleware::from_fn(cache_control_headers))
         .layer(axum::middleware::from_fn(canonical_host_redirect))
@@ -464,6 +475,94 @@ mod tests {
             cache_control_for_response("/brand/onchainai-logo.svg", Some("image/svg+xml"))
                 .is_none()
         );
+    }
+
+    fn test_config() -> Config {
+        Config {
+            database_url: String::new(),
+            supabase_url: "https://proj.supabase.co".into(),
+            supabase_anon_key: String::new(),
+            supabase_service_key: String::new(),
+            github_client_id: String::new(),
+            github_client_secret: String::new(),
+            github_redirect_uri: None,
+            siwx_domain: "localhost:3000".into(),
+            siwx_session_ttl: 86_400,
+            jwt_secret: "test-secret-at-least-32-bytes-long-aaaa".into(),
+            github_api_token: None,
+            admin_github_logins: Vec::new(),
+            port: 3000,
+        }
+    }
+
+    fn test_pool() -> sqlx::PgPool {
+        sqlx::postgres::PgPoolOptions::new()
+            .connect_lazy("postgres://localhost/onchainai_test")
+            .expect("lazy pool")
+    }
+
+    fn request_with_ip(uri: &str) -> axum::http::Request<axum::body::Body> {
+        use axum::extract::ConnectInfo;
+        use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+        let mut req: axum::http::Request<axum::body::Body> = axum::http::Request::builder()
+            .uri(uri)
+            .body(axum::body::Body::empty())
+            .unwrap();
+        req.extensions_mut().insert(ConnectInfo(SocketAddr::new(
+            IpAddr::V4(Ipv4Addr::new(203, 0, 113, 7)),
+            0,
+        )));
+        req
+    }
+
+    /// Static assets (WASM/JS/CSS/favicon/brand/chains) must bypass the general
+    /// IP rate limiter. Shared IPs (NAT/proxy/Railway peer-IP) would otherwise
+    /// starve hydration on 429 when many subresources load together.
+    #[tokio::test]
+    async fn static_assets_bypass_general_rate_limiter() {
+        // Force relax off — this test verifies prod behavior.
+        std::env::remove_var("ONCHAINAI_RELAX_RATE_LIMIT");
+
+        let app = build_app(test_pool(), test_config());
+        for path in [
+            "/favicon.ico",
+            "/apple-touch-icon.png",
+            "/site.webmanifest",
+            "/brand/onchainai-logo.svg",
+            "/chains/base.svg",
+            "/pkg/onchainai.css",
+            "/pkg/onchainai.js",
+            "/pkg/onchainai.wasm",
+        ] {
+            for attempt in 0..150 {
+                let req = request_with_ip(path);
+                let res = tower::ServiceExt::oneshot(app.clone(), req).await.unwrap();
+                assert_ne!(
+                    res.status(),
+                    axum::http::StatusCode::TOO_MANY_REQUESTS,
+                    "{path} hit 429 on request {}",
+                    attempt + 1
+                );
+            }
+        }
+    }
+
+    /// Dynamic routes (SSR + admin API) stay throttled by the general limiter.
+    #[tokio::test]
+    async fn dynamic_routes_stay_rate_limited() {
+        std::env::remove_var("ONCHAINAI_RELAX_RATE_LIMIT");
+
+        let app = build_app(test_pool(), test_config());
+        let mut got_429 = false;
+        for _ in 0..150 {
+            let req = request_with_ip("/api/admin/operator/snapshot");
+            let res = tower::ServiceExt::oneshot(app.clone(), req).await.unwrap();
+            if res.status() == axum::http::StatusCode::TOO_MANY_REQUESTS {
+                got_429 = true;
+                break;
+            }
+        }
+        assert!(got_429, "dynamic route should hit 429 after burst");
     }
 }
 
