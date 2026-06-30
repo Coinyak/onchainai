@@ -133,10 +133,10 @@ fn validate_search_tools_input(
         )));
     }
     if let Some(filter) = function {
-        validate_tool_filter_values("function", &[filter.clone()])?;
+        validate_tool_filter_values("function", std::slice::from_ref(filter))?;
     }
     if let Some(filter) = chain {
-        validate_tool_filter_values("chain", &[filter.clone()])?;
+        validate_tool_filter_values("chain", std::slice::from_ref(filter))?;
     }
     Ok(())
 }
@@ -219,7 +219,7 @@ pub struct ToolFilters {
     pub chain: Vec<String>,
 }
 
-fn append_tool_filters(sql: &mut String, filters: &ToolFilters, idx: &mut i32) {
+pub(crate) fn append_tool_filters(sql: &mut String, filters: &ToolFilters, idx: &mut i32) {
     use std::fmt::Write;
 
     if !filters.function.is_empty() {

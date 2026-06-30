@@ -71,9 +71,7 @@ fn validate_claim_proof_url_scheme(url: &str) -> Result<(), &'static str> {
 }
 
 fn claim_proof_url_scheme_allowed(url: &str) -> bool {
-    url.starts_with("https://")
-        || url.starts_with("http://localhost")
-        || url.starts_with("http://127.0.0.1")
+    url.starts_with("https://") || is_dev_loopback_http_url(url)
 }
 
 fn validate_claim_proof_url_len(url: &str) -> Result<(), &'static str> {

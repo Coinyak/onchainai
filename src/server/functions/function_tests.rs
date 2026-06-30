@@ -467,6 +467,13 @@ mod tests {
     }
 
     #[test]
+    fn validate_claim_proof_urls_rejects_localhost_prefix_spoofing() {
+        let urls = vec!["http://localhost.evil.example/proof".to_string()];
+        let err = validate_claim_proof_urls(&urls).expect_err("spoofed localhost should fail");
+        assert!(err.contains("https"));
+    }
+
+    #[test]
     fn validate_claim_tool_input_rejects_too_many_proof_links() {
         let links: Vec<String> = (0..11)
             .map(|i| format!("https://example.com/{i}"))
@@ -729,20 +736,35 @@ mod tests {
     }
 
     #[test]
+    fn toggle_sql_uses_advisory_lock_for_same_target_and_user() {
+        assert!(TOGGLE_UPVOTE_SQL.contains("pg_advisory_xact_lock"));
+        assert!(TOGGLE_UPVOTE_SQL.contains("upvote:"));
+        assert!(TOGGLE_BOOKMARK_SQL.contains("pg_advisory_xact_lock"));
+        assert!(TOGGLE_BOOKMARK_SQL.contains("bookmark:"));
+    }
+
+    #[test]
     fn validate_category_input_accepts_slug_id() {
-        assert!(validate_category_input(
-            "my-cat",
-            "My Category",
-            "git-branch",
-            "A test category.",
-            10
-        )
+        assert!(validate_category_input(&CategoryInput {
+            id: "my-cat".into(),
+            label: "My Category".into(),
+            icon: "git-branch".into(),
+            description: "A test category.".into(),
+            sort_order: 10,
+        })
         .is_ok());
     }
 
     #[test]
     fn validate_category_input_rejects_uppercase_id() {
-        assert!(validate_category_input("Bad-ID", "Label", "icon", "Description.", 1).is_err());
+        assert!(validate_category_input(&CategoryInput {
+            id: "Bad-ID".into(),
+            label: "Label".into(),
+            icon: "icon".into(),
+            description: "Description.".into(),
+            sort_order: 1,
+        })
+        .is_err());
     }
 
     #[test]
@@ -772,6 +794,20 @@ mod tests {
             None
         )
         .is_err());
+    }
+
+    #[test]
+    fn featured_queries_require_full_public_visibility_gate() {
+        for sql in [
+            GET_FEATURED_CARDS_SQL,
+            SEARCH_TOOLS_FOR_PICKER_SQL,
+            FEATURED_TOOL_EXISTS_SQL,
+        ] {
+            assert!(sql.contains("approval_status = 'approved'"));
+            assert!(sql.contains("relevance_status = 'accepted'"));
+            assert!(sql.contains("install_risk_level <> 'critical'"));
+            assert!(sql.contains("quarantined_at IS NULL"));
+        }
     }
 
     #[test]

@@ -40,14 +40,7 @@ pub struct ToolPickerItem {
     pub slug: String,
 }
 
-/// Active featured cards for the public carousel (ordered).
-#[server(GetFeaturedCards, "/api")]
-pub async fn get_featured_cards() -> Result<Vec<FeaturedCardView>, ServerFnError> {
-    let pool = use_context::<sqlx::PgPool>()
-        .ok_or_else(|| ServerFnError::new("database pool not available"))?;
-
-    let rows = sqlx::query_as::<_, FeaturedCardView>(
-        r#"
+pub(crate) const GET_FEATURED_CARDS_SQL: &str = r#"
         SELECT
             fc.id,
             fc.tool_id,
@@ -61,12 +54,52 @@ pub async fn get_featured_cards() -> Result<Vec<FeaturedCardView>, ServerFnError
         INNER JOIN tools t ON t.id = fc.tool_id
         WHERE fc.is_active = true
           AND t.approval_status = 'approved'
+          AND t.relevance_status = 'accepted'
+          AND NOT (t.crypto_relevance_score = 0
+            AND 'migration-backfill: crypto keyword in name or description' = ANY(t.crypto_relevance_reasons))
+          AND t.install_risk_level <> 'critical'
+          AND t.quarantined_at IS NULL
         ORDER BY fc.sort_order ASC, fc.created_at ASC
-        "#,
-    )
-    .fetch_all(&pool)
-    .await
-    .map_err(|e| ServerFnError::new(format!("failed to load featured cards: {e}")))?;
+        "#;
+
+pub(crate) const SEARCH_TOOLS_FOR_PICKER_SQL: &str = r#"
+        SELECT id, name, slug
+        FROM tools
+        WHERE approval_status = 'approved'
+          AND relevance_status = 'accepted'
+          AND NOT (crypto_relevance_score = 0
+            AND 'migration-backfill: crypto keyword in name or description' = ANY(crypto_relevance_reasons))
+          AND install_risk_level <> 'critical'
+          AND quarantined_at IS NULL
+          AND (name ILIKE $1 OR slug ILIKE $1)
+        ORDER BY stars DESC, name ASC
+        LIMIT $2
+        "#;
+
+pub(crate) const FEATURED_TOOL_EXISTS_SQL: &str = r#"
+        SELECT EXISTS(
+            SELECT 1
+            FROM tools
+            WHERE id = $1
+              AND approval_status = 'approved'
+              AND relevance_status = 'accepted'
+              AND NOT (crypto_relevance_score = 0
+                AND 'migration-backfill: crypto keyword in name or description' = ANY(crypto_relevance_reasons))
+              AND install_risk_level <> 'critical'
+              AND quarantined_at IS NULL
+        )
+        "#;
+
+/// Active featured cards for the public carousel (ordered).
+#[server(GetFeaturedCards, "/api")]
+pub async fn get_featured_cards() -> Result<Vec<FeaturedCardView>, ServerFnError> {
+    let pool = use_context::<sqlx::PgPool>()
+        .ok_or_else(|| ServerFnError::new("database pool not available"))?;
+
+    let rows = sqlx::query_as::<_, FeaturedCardView>(GET_FEATURED_CARDS_SQL)
+        .fetch_all(&pool)
+        .await
+        .map_err(|e| ServerFnError::new(format!("failed to load featured cards: {e}")))?;
 
     Ok(rows)
 }
@@ -308,21 +341,12 @@ pub async fn search_tools_for_picker(
 
     let limit = limit.clamp(1, 50);
     let pattern = format!("%{q}%");
-    let rows = sqlx::query_as::<_, ToolPickerItem>(
-        r#"
-        SELECT id, name, slug
-        FROM tools
-        WHERE approval_status = 'approved'
-          AND (name ILIKE $1 OR slug ILIKE $1)
-        ORDER BY stars DESC, name ASC
-        LIMIT $2
-        "#,
-    )
-    .bind(pattern)
-    .bind(limit)
-    .fetch_all(&pool)
-    .await
-    .map_err(|e| ServerFnError::new(format!("tool search failed: {e}")))?;
+    let rows = sqlx::query_as::<_, ToolPickerItem>(SEARCH_TOOLS_FOR_PICKER_SQL)
+        .bind(pattern)
+        .bind(limit)
+        .fetch_all(&pool)
+        .await
+        .map_err(|e| ServerFnError::new(format!("tool search failed: {e}")))?;
 
     Ok(rows)
 }
@@ -332,13 +356,11 @@ async fn ensure_featured_tool_exists(
     pool: &sqlx::PgPool,
     tool_id: Uuid,
 ) -> Result<(), ServerFnError> {
-    let exists = sqlx::query_scalar::<_, bool>(
-        "SELECT EXISTS(SELECT 1 FROM tools WHERE id = $1 AND approval_status = 'approved')",
-    )
-    .bind(tool_id)
-    .fetch_one(pool)
-    .await
-    .map_err(|e| ServerFnError::new(format!("tool lookup failed: {e}")))?;
+    let exists = sqlx::query_scalar::<_, bool>(FEATURED_TOOL_EXISTS_SQL)
+        .bind(tool_id)
+        .fetch_one(pool)
+        .await
+        .map_err(|e| ServerFnError::new(format!("tool lookup failed: {e}")))?;
 
     if exists {
         Ok(())

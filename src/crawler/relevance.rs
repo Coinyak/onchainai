@@ -120,7 +120,9 @@ impl RelevanceScore {
     }
 
     fn has_strong_or_medium_signal(&self) -> bool {
-        self.reasons.iter().any(is_crypto_strength_reason)
+        self.reasons
+            .iter()
+            .any(|reason| is_crypto_strength_reason(reason.as_str()))
     }
 }
 
@@ -251,7 +253,7 @@ fn phrase_keyword(keyword: &str) -> bool {
     keyword.contains([' ', '.', '-'])
 }
 
-fn is_crypto_strength_reason(reason: &String) -> bool {
+fn is_crypto_strength_reason(reason: &str) -> bool {
     !GENERIC_REASON_FRAGMENTS
         .iter()
         .any(|fragment| reason.contains(fragment))

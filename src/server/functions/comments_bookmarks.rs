@@ -16,6 +16,50 @@ pub struct CommentView {
     pub viewer_upvoted: bool,
 }
 
+pub(crate) const TOGGLE_UPVOTE_SQL: &str = r#"
+WITH lock_key AS (
+    SELECT pg_advisory_xact_lock(hashtextextended('upvote:' || $1::text || ':' || $2::text, 0::bigint))
+),
+deleted AS (
+    DELETE FROM upvotes
+    WHERE comment_id = $1
+      AND user_id = $2
+      AND EXISTS (SELECT 1 FROM lock_key)
+    RETURNING 1
+),
+inserted AS (
+    INSERT INTO upvotes (comment_id, user_id)
+    SELECT $1, $2
+    WHERE NOT EXISTS (SELECT 1 FROM deleted)
+      AND EXISTS (SELECT 1 FROM lock_key)
+    ON CONFLICT DO NOTHING
+    RETURNING 1
+)
+SELECT EXISTS(SELECT 1 FROM inserted)
+"#;
+
+pub(crate) const TOGGLE_BOOKMARK_SQL: &str = r#"
+WITH lock_key AS (
+    SELECT pg_advisory_xact_lock(hashtextextended('bookmark:' || $1::text || ':' || $2::text, 0::bigint))
+),
+deleted AS (
+    DELETE FROM bookmarks
+    WHERE tool_id = $1
+      AND user_id = $2
+      AND EXISTS (SELECT 1 FROM lock_key)
+    RETURNING 1
+),
+inserted AS (
+    INSERT INTO bookmarks (tool_id, user_id)
+    SELECT $1, $2
+    WHERE NOT EXISTS (SELECT 1 FROM deleted)
+      AND EXISTS (SELECT 1 FROM lock_key)
+    ON CONFLICT DO NOTHING
+    RETURNING 1
+)
+SELECT EXISTS(SELECT 1 FROM inserted)
+"#;
+
 /// Validate comment body before insert.
 pub(crate) fn validate_comment_content(content: &str) -> Result<(), &'static str> {
     let trimmed = content.trim();
@@ -176,38 +220,12 @@ pub async fn toggle_upvote(comment_id: Uuid) -> Result<bool, ServerFnError> {
     let (parts, pool, config) = request_context()?;
     let user = require_user(&parts, &pool, &config.jwt_secret, &config.jwt_issuer()).await?;
 
-    let mut tx = pool
-        .begin()
-        .await
-        .map_err(|e| ServerFnError::new(format!("transaction failed: {e}")))?;
-
-    let deleted: i64 = sqlx::query_scalar(
-        "WITH deleted AS (DELETE FROM upvotes WHERE comment_id = $1 AND user_id = $2 RETURNING 1) \
-         SELECT COUNT(*) FROM deleted",
-    )
-    .bind(comment_id)
-    .bind(user.id)
-    .fetch_one(&mut *tx)
-    .await
-    .map_err(|e| ServerFnError::new(format!("upvote toggle failed: {e}")))?;
-
-    if deleted > 0 {
-        tx.commit()
-            .await
-            .map_err(|e| ServerFnError::new(format!("commit failed: {e}")))?;
-        return Ok(false);
-    }
-
-    sqlx::query("INSERT INTO upvotes (comment_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING")
+    sqlx::query_scalar::<_, bool>(TOGGLE_UPVOTE_SQL)
         .bind(comment_id)
         .bind(user.id)
-        .execute(&mut *tx)
+        .fetch_one(&pool)
         .await
-        .map_err(|e| ServerFnError::new(format!("failed to add upvote: {e}")))?;
-    tx.commit()
-        .await
-        .map_err(|e| ServerFnError::new(format!("commit failed: {e}")))?;
-    Ok(true)
+        .map_err(|e| ServerFnError::new(format!("upvote toggle failed: {e}")))
 }
 
 /// Whether the current user bookmarked a tool (false when signed out).
@@ -274,38 +292,12 @@ pub async fn toggle_bookmark(slug: String) -> Result<bool, ServerFnError> {
     }
 
     let tool_id = resolve_bookmark_tool_id(&pool, &slug).await?;
-    let mut tx = pool
-        .begin()
-        .await
-        .map_err(|e| ServerFnError::new(format!("transaction failed: {e}")))?;
-
-    let deleted: i64 = sqlx::query_scalar(
-        "WITH deleted AS (DELETE FROM bookmarks WHERE tool_id = $1 AND user_id = $2 RETURNING 1) \
-         SELECT COUNT(*) FROM deleted",
-    )
-    .bind(tool_id)
-    .bind(user.id)
-    .fetch_one(&mut *tx)
-    .await
-    .map_err(|e| ServerFnError::new(format!("bookmark toggle failed: {e}")))?;
-
-    if deleted > 0 {
-        tx.commit()
-            .await
-            .map_err(|e| ServerFnError::new(format!("commit failed: {e}")))?;
-        return Ok(false);
-    }
-
-    sqlx::query("INSERT INTO bookmarks (tool_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING")
+    sqlx::query_scalar::<_, bool>(TOGGLE_BOOKMARK_SQL)
         .bind(tool_id)
         .bind(user.id)
-        .execute(&mut *tx)
+        .fetch_one(&pool)
         .await
-        .map_err(|e| ServerFnError::new(format!("failed to add bookmark: {e}")))?;
-    tx.commit()
-        .await
-        .map_err(|e| ServerFnError::new(format!("commit failed: {e}")))?;
-    Ok(true)
+        .map_err(|e| ServerFnError::new(format!("bookmark toggle failed: {e}")))
 }
 
 async fn resolve_bookmark_tool_id(pool: &sqlx::PgPool, slug: &str) -> Result<Uuid, ServerFnError> {

@@ -233,7 +233,7 @@ fn apply_package_manager_context(
         return;
     }
 
-    if signals.score < 50 {
+    if !command.is_known_package_manager_command() && signals.score < 50 {
         signals.score = signals.score.max(45);
         signals
             .reasons

@@ -35,7 +35,7 @@ pub(crate) fn validate_optional_https_url(value: Option<&str>) -> Result<(), &'s
     Err("URLs must use https:// (http://localhost allowed in dev)")
 }
 
-fn is_dev_loopback_http_url(raw: &str) -> bool {
+pub(crate) fn is_dev_loopback_http_url(raw: &str) -> bool {
     ["http://localhost", "http://127.0.0.1"]
         .iter()
         .any(|prefix| {
