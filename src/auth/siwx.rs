@@ -139,9 +139,10 @@ fn verify_solana_signature(message: &str, signature_b58: &str, wallet: &str) -> 
 fn set_session_cookie(name: &str, value: &str, max_age_secs: i64, secure: bool) -> String {
     let secure_flag = if secure { "; Secure" } else { "" };
     // SameSite=Lax for consistency with the GitHub/email session cookie so the
-    // cookie survives top-level redirect landings. Lax still blocks cross-site
-    // POST/subresource sends; CSRF tokens + Origin checks remain the primary
-    // mutation defense (SECURITY.md).
+    // cookie survives top-level redirect landings. Lax blocks cross-site
+    // POST/subresource sends, which is the primary CSRF defense for v1. No
+    // CSRF token or Origin-check middleware is implemented yet; see
+    // docs/SECURITY.md §3.4 for the current posture.
     format!("{name}={value}; Path=/; HttpOnly; SameSite=Lax; Max-Age={max_age_secs}{secure_flag}")
 }
 
