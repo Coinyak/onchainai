@@ -2,8 +2,6 @@
 // Goal harness deliverable AC2
 // harness-round-7: 2026-06-25T19:10:00Z-queries
 
-use std::fmt::Write;
-
 /// WHERE clause fragment: only publicly visible tools (approval + relevance + safety + quarantine).
 macro_rules! public_tool_where {
     () => {
@@ -62,7 +60,7 @@ pub const CATEGORIES_WITH_COUNTS_SQL: &str = concat!(
     "#
 );
 
-pub const SEARCH_APPROVED_TOOLS_BASE_SQL: &str = concat!(
+pub const SEARCH_APPROVED_TOOLS_SQL: &str = concat!(
     r#"
         SELECT *
         FROM tools
@@ -73,6 +71,10 @@ pub const SEARCH_APPROVED_TOOLS_BASE_SQL: &str = concat!(
             to_tsvector('english', coalesce(name, '') || ' ' || coalesce(description, ''))
             @@ plainto_tsquery('english', $1)
           )
+          AND ($2::text IS NULL OR function = $2)
+          AND ($3::text IS NULL OR $3 = ANY(chains))
+        ORDER BY stars DESC, created_at DESC
+        LIMIT 50
     "#
 );
 
@@ -358,33 +360,6 @@ pub fn list_tools_order_clause(sort: &str) -> &'static str {
     }
 }
 
-/// Push a parameterized SQL fragment with a locally generated bind index.
-pub fn push_bind_clause(sql: &mut String, clause: &str, idx: i32) {
-    let _ = write!(sql, " {clause} ${idx}");
-}
-
-pub const FTS_NAME_DESCRIPTION_FILTER: &str = "AND to_tsvector('english', coalesce(name, '') || ' ' || coalesce(description, '')) @@ plainto_tsquery('english',";
-
-/// Append full-text search filter and advance the bind index.
-pub fn push_fts_filter(sql: &mut String, idx: &mut i32) {
-    let _ = write!(
-        sql,
-        " {FTS_NAME_DESCRIPTION_FILTER} ${idx})",
-        FTS_NAME_DESCRIPTION_FILTER = FTS_NAME_DESCRIPTION_FILTER
-    );
-    *idx += 1;
-}
-
-/// Append ORDER BY / OFFSET / LIMIT with generated bind indices.
-pub fn push_order_offset_limit(sql: &mut String, order: &str, idx: &mut i32) {
-    let _ = write!(
-        sql,
-        " ORDER BY {order} OFFSET ${idx} LIMIT ${limit_idx}",
-        limit_idx = *idx + 1
-    );
-    *idx += 2;
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -428,6 +403,7 @@ mod tests {
         for sql in [
             RECENT_APPROVED_TOOLS_SQL,
             APPROVED_TOOL_BY_SLUG_SQL,
+            SEARCH_APPROVED_TOOLS_SQL,
             COUNT_APPROVED_TOOLS_SQL,
             LIST_APPROVED_TOOLS_SQL,
             CHAIN_COUNTS_SQL,

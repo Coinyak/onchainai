@@ -61,6 +61,10 @@ impl<'a> InstallCommand<'a> {
     fn is_known_package_manager_command(&self) -> bool {
         self.starts_with_any(KNOWN_PACKAGE_MANAGER_PREFIXES)
     }
+
+    fn is_simple_package_manager_invocation(&self) -> bool {
+        !self.contains_any(SHELL_CONTROL_MARKERS)
+    }
 }
 
 #[derive(Debug, Default)]
@@ -80,6 +84,15 @@ impl RiskSignals {
         if self.reasons.is_empty() {
             self.reasons.push(reason.to_string());
         }
+    }
+
+    fn package_manager_cap_allowed(&self) -> bool {
+        self.score == 0
+            || (self.score <= 40
+                && self
+                    .reasons
+                    .iter()
+                    .all(|reason| reason == "global package install"))
     }
 
     fn into_assessment(mut self, command: &InstallCommand<'_>) -> InstallSafetyAssessment {
@@ -187,6 +200,9 @@ fn flag_remote_shell_execution(signals: &mut RiskSignals, command: &InstallComma
     if command.fetches_remote_script_into_shell() {
         signals.flag(80, "remote script fetched and piped to shell");
     }
+    if command.pipes_to_shell() {
+        signals.flag(75, "command output piped to shell");
+    }
     if command.uses_shell_command_wrapper() {
         signals.flag(75, "shell -c wrapper executes arbitrary command string");
     }
@@ -227,7 +243,11 @@ fn apply_package_manager_context(
     command: &InstallCommand<'_>,
     npm_package: Option<&str>,
 ) {
-    if command.is_known_package_manager_command() && npm_package.is_some() {
+    if command.is_known_package_manager_command()
+        && npm_package.is_some()
+        && command.is_simple_package_manager_invocation()
+        && signals.package_manager_cap_allowed()
+    {
         signals.score = signals.score.min(20);
         signals.ensure_reason("documented package manager install");
         return;
@@ -278,6 +298,8 @@ const KNOWN_PACKAGE_MANAGER_PREFIXES: &[&str] = &[
     "cargo install ",
     "pip install ",
 ];
+
+const SHELL_CONTROL_MARKERS: &[&str] = &["|", "&&", ";", "$(", "`", ">", "<"];
 
 /// Whether Claude/Cursor JSON config generation should be blocked for this risk level.
 pub fn blocks_structured_config(risk_level: &str) -> bool {
@@ -371,6 +393,27 @@ mod tests {
         );
         assert_eq!(a.risk_level, "medium");
         assert!(a.requires_secret);
+    }
+
+    #[test]
+    fn package_manager_context_does_not_downgrade_destructive_suffix() {
+        let a = assess_install(
+            Some("npm i @scope/wallet-mcp && rm -rf /"),
+            Some("@scope/wallet-mcp"),
+        );
+        assert_eq!(a.risk_level, "critical");
+        assert!(a.safe_copy_command.is_none());
+        assert!(a.reasons.iter().any(|r| r.contains("rm -rf")));
+    }
+
+    #[test]
+    fn package_manager_context_does_not_downgrade_shell_pipe() {
+        let a = assess_install(
+            Some("npm i @scope/wallet-mcp | sh"),
+            Some("@scope/wallet-mcp"),
+        );
+        assert_eq!(a.risk_level, "high");
+        assert!(a.safe_copy_command.is_none());
     }
 
     #[test]

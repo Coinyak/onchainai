@@ -4,6 +4,12 @@ use super::*;
 pub(crate) const LIST_PENDING_TOOLS_SQL: &str =
     "SELECT * FROM tools WHERE approval_status = 'pending' ORDER BY created_at DESC LIMIT $1";
 
+pub const MAX_ADMIN_REVIEW_LIST_LIMIT: i64 = 100;
+
+pub(crate) fn clamp_admin_review_list_limit(limit: i64) -> i64 {
+    limit.clamp(1, MAX_ADMIN_REVIEW_LIST_LIMIT)
+}
+
 /// List tools awaiting admin review (`approval_status = 'pending'`).
 #[server(ListPendingTools, "/api")]
 pub async fn list_pending_tools(limit: i64) -> Result<Vec<Tool>, ServerFnError> {
@@ -11,7 +17,7 @@ pub async fn list_pending_tools(limit: i64) -> Result<Vec<Tool>, ServerFnError> 
     require_admin(&parts, &pool, &config).await?;
 
     let tools = sqlx::query_as::<_, Tool>(LIST_PENDING_TOOLS_SQL)
-        .bind(limit)
+        .bind(clamp_admin_review_list_limit(limit))
         .fetch_all(&pool)
         .await
         .map_err(|e| ServerFnError::new(format!("failed to list pending tools: {e}")))?;
@@ -54,6 +60,80 @@ pub(crate) fn review_queue_where(queue: &str) -> Result<&'static str, &'static s
             "approval_status IN ('pending', 'approved') \
              AND install_risk_level IN ('high', 'critical') AND quarantined_at IS NULL",
         ),
+        _ => Err("unknown review queue"),
+    }
+}
+
+pub(crate) fn review_queue_sql(queue: &str) -> Result<&'static str, &'static str> {
+    match queue {
+        "new_candidate" => Ok("SELECT * FROM tools \
+             WHERE approval_status = 'pending' \
+               AND last_reviewed_at IS NULL \
+               AND quarantined_at IS NULL \
+             ORDER BY updated_at DESC \
+             LIMIT $1"),
+        "known_update" => Ok("SELECT * FROM tools \
+             WHERE approval_status = 'approved' \
+               AND last_reviewed_at IS NOT NULL \
+               AND updated_at > last_reviewed_at \
+               AND quarantined_at IS NULL \
+             ORDER BY updated_at DESC \
+             LIMIT $1"),
+        "needs_manual_research" => Ok("SELECT * FROM tools \
+             WHERE approval_status IN ('pending', 'approved') \
+               AND relevance_status = 'needs_review' \
+               AND crypto_relevance_score < 50 \
+               AND quarantined_at IS NULL \
+             ORDER BY updated_at DESC \
+             LIMIT $1"),
+        "low_relevance" => Ok("SELECT * FROM tools \
+             WHERE approval_status = 'pending' \
+               AND relevance_status = 'rejected' \
+               AND quarantined_at IS NULL \
+             ORDER BY updated_at DESC \
+             LIMIT $1"),
+        "reported" => Ok("SELECT * FROM tools \
+             WHERE id IN (SELECT DISTINCT tool_id FROM tool_reports WHERE status = 'open') \
+               AND quarantined_at IS NULL \
+             ORDER BY updated_at DESC \
+             LIMIT $1"),
+        "high_risk_install" => Ok("SELECT * FROM tools \
+             WHERE approval_status IN ('pending', 'approved') \
+               AND install_risk_level IN ('high', 'critical') \
+               AND quarantined_at IS NULL \
+             ORDER BY updated_at DESC \
+             LIMIT $1"),
+        _ => Err("unknown review queue"),
+    }
+}
+
+pub(crate) fn review_queue_count_sql(queue: &str) -> Result<&'static str, &'static str> {
+    match queue {
+        "new_candidate" => Ok("SELECT COUNT(*)::bigint FROM tools \
+             WHERE approval_status = 'pending' \
+               AND last_reviewed_at IS NULL \
+               AND quarantined_at IS NULL"),
+        "known_update" => Ok("SELECT COUNT(*)::bigint FROM tools \
+             WHERE approval_status = 'approved' \
+               AND last_reviewed_at IS NOT NULL \
+               AND updated_at > last_reviewed_at \
+               AND quarantined_at IS NULL"),
+        "needs_manual_research" => Ok("SELECT COUNT(*)::bigint FROM tools \
+             WHERE approval_status IN ('pending', 'approved') \
+               AND relevance_status = 'needs_review' \
+               AND crypto_relevance_score < 50 \
+               AND quarantined_at IS NULL"),
+        "low_relevance" => Ok("SELECT COUNT(*)::bigint FROM tools \
+             WHERE approval_status = 'pending' \
+               AND relevance_status = 'rejected' \
+               AND quarantined_at IS NULL"),
+        "reported" => Ok("SELECT COUNT(*)::bigint FROM tools \
+             WHERE id IN (SELECT DISTINCT tool_id FROM tool_reports WHERE status = 'open') \
+               AND quarantined_at IS NULL"),
+        "high_risk_install" => Ok("SELECT COUNT(*)::bigint FROM tools \
+             WHERE approval_status IN ('pending', 'approved') \
+               AND install_risk_level IN ('high', 'critical') \
+               AND quarantined_at IS NULL"),
         _ => Err("unknown review queue"),
     }
 }
@@ -204,17 +284,15 @@ pub async fn list_review_queue(
     queue: String,
     limit: i64,
 ) -> Result<Vec<ReviewQueueItem>, ServerFnError> {
-    if let Err(msg) = review_queue_where(&queue) {
+    if let Err(msg) = review_queue_sql(&queue) {
         return Err(ServerFnError::new(msg.to_string()));
     }
 
     let (parts, pool, config) = request_context()?;
     require_admin(&parts, &pool, &config).await?;
 
-    let where_clause = review_queue_where(&queue).expect("validated above");
-    let sql = format!("SELECT * FROM tools WHERE {where_clause} ORDER BY updated_at DESC LIMIT $1");
-    let tools = sqlx::query_as::<_, Tool>(&sql)
-        .bind(limit)
+    let tools = sqlx::query_as::<_, Tool>(review_queue_sql(&queue).expect("validated above"))
+        .bind(clamp_admin_review_list_limit(limit))
         .fetch_all(&pool)
         .await
         .map_err(|e| ServerFnError::new(format!("failed to list review queue: {e}")))?;

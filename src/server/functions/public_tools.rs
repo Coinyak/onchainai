@@ -53,28 +53,10 @@ pub async fn search_tools(
 
     validate_search_tools_input(&query, &function, &chain)?;
 
-    let mut sql = SEARCH_APPROVED_TOOLS_BASE_SQL.to_string();
-
-    let mut idx = 2;
-    if function.is_some() {
-        push_bind_clause(&mut sql, "AND function =", idx);
-        idx += 1;
-    }
-    if chain.is_some() {
-        push_bind_clause(&mut sql, "AND", idx);
-        sql.push_str(" = ANY(chains)");
-    }
-    sql.push_str(" ORDER BY stars DESC, created_at DESC LIMIT 50");
-
-    let mut q = sqlx::query_as::<_, Tool>(&sql).bind(&query);
-    if let Some(f) = &function {
-        q = q.bind(f);
-    }
-    if let Some(c) = &chain {
-        q = q.bind(c);
-    }
-
-    let tools = q
+    let tools = sqlx::query_as::<_, Tool>(SEARCH_APPROVED_TOOLS_SQL)
+        .bind(&query)
+        .bind(function.as_deref())
+        .bind(chain.as_deref())
         .fetch_all(&pool)
         .await
         .map_err(|e| ServerFnError::new(format!("search failed: {e}")))?;
@@ -169,8 +151,15 @@ pub fn validate_tool_filters(filters: &ToolFilters) -> Result<(), ServerFnError>
     Ok(())
 }
 
+fn validate_tool_sort(sort: &str) -> Result<(), ServerFnError> {
+    matches!(sort, "hot" | "new" | "comments")
+        .then_some(())
+        .ok_or_else(|| ServerFnError::new("sort must be one of: hot, new, comments"))
+}
+
 /// Validates browser tool-list request bounds (rejects out-of-range instead of clamping).
 pub fn validate_tool_list_request(req: &ToolListRequest) -> Result<(), ServerFnError> {
+    validate_tool_sort(&req.sort)?;
     validate_tool_filters(&req.filters)?;
     if req.offset < 0 {
         return Err(ServerFnError::new("offset must be >= 0"));
@@ -219,37 +208,91 @@ pub struct ToolFilters {
     pub chain: Vec<String>,
 }
 
-pub(crate) fn append_tool_filters(sql: &mut String, filters: &ToolFilters, idx: &mut i32) {
-    use std::fmt::Write;
-
+#[cfg(feature = "ssr")]
+pub(crate) fn append_tool_filters<'qb>(
+    query: &mut sqlx::QueryBuilder<'qb, sqlx::Postgres>,
+    filters: &'qb ToolFilters,
+) {
     if !filters.function.is_empty() {
-        let _ = write!(sql, " AND function = ANY(${idx})");
-        *idx += 1;
+        query
+            .push(" AND function = ANY(")
+            .push_bind(&filters.function)
+            .push(")");
     }
     if !filters.asset_class.is_empty() {
-        let _ = write!(sql, " AND asset_class = ANY(${idx})");
-        *idx += 1;
+        query
+            .push(" AND asset_class = ANY(")
+            .push_bind(&filters.asset_class)
+            .push(")");
     }
     if !filters.actor.is_empty() {
-        let _ = write!(sql, " AND actor = ANY(${idx})");
-        *idx += 1;
+        query
+            .push(" AND actor = ANY(")
+            .push_bind(&filters.actor)
+            .push(")");
     }
     if !filters.tool_type.is_empty() {
-        let _ = write!(sql, " AND type = ANY(${idx})");
-        *idx += 1;
+        query
+            .push(" AND type = ANY(")
+            .push_bind(&filters.tool_type)
+            .push(")");
     }
     if !filters.status.is_empty() {
-        let _ = write!(sql, " AND status = ANY(${idx})");
-        *idx += 1;
+        query
+            .push(" AND status = ANY(")
+            .push_bind(&filters.status)
+            .push(")");
     }
     if !filters.pricing.is_empty() {
-        let _ = write!(sql, " AND pricing = ANY(${idx})");
-        *idx += 1;
+        query
+            .push(" AND pricing = ANY(")
+            .push_bind(&filters.pricing)
+            .push(")");
     }
     if !filters.chain.is_empty() {
-        let _ = write!(sql, " AND chains && ${idx}");
-        *idx += 1;
+        query.push(" AND chains && ").push_bind(&filters.chain);
     }
+}
+
+#[cfg(feature = "ssr")]
+fn push_list_query_filter<'qb>(
+    query: &mut sqlx::QueryBuilder<'qb, sqlx::Postgres>,
+    search: Option<&'qb str>,
+) {
+    if let Some(text) = search.filter(|q| !q.trim().is_empty()) {
+        query.push(
+            " AND to_tsvector('english', coalesce(name, '') || ' ' || coalesce(description, '')) \
+             @@ plainto_tsquery('english', ",
+        );
+        query.push_bind(text);
+        query.push(")");
+    }
+}
+
+#[cfg(feature = "ssr")]
+fn push_list_order_offset_limit(
+    query: &mut sqlx::QueryBuilder<'_, sqlx::Postgres>,
+    sort: &str,
+    offset: i64,
+    limit: i64,
+) {
+    match sort {
+        "new" => {
+            query.push(" ORDER BY created_at DESC");
+        }
+        "comments" => {
+            query.push(
+                " ORDER BY \
+                 (SELECT COUNT(*)::bigint FROM comments cm WHERE cm.tool_id = tools.id) DESC, \
+                 created_at DESC",
+            );
+        }
+        _ => {
+            query.push(" ORDER BY stars DESC, created_at DESC");
+        }
+    }
+    query.push(" OFFSET ").push_bind(offset);
+    query.push(" LIMIT ").push_bind(limit);
 }
 
 /// Count approved tools with optional multi-axis filters.
@@ -258,34 +301,11 @@ pub(crate) async fn fetch_count_tools(
     pool: &sqlx::PgPool,
     filters: &ToolFilters,
 ) -> Result<i64, ServerFnError> {
-    let mut sql = COUNT_APPROVED_TOOLS_SQL.to_string();
-    let mut idx = 1i32;
-    append_tool_filters(&mut sql, filters, &mut idx);
-
-    let mut q = sqlx::query_as::<_, (i64,)>(&sql);
-    if !filters.function.is_empty() {
-        q = q.bind(&filters.function);
-    }
-    if !filters.asset_class.is_empty() {
-        q = q.bind(&filters.asset_class);
-    }
-    if !filters.actor.is_empty() {
-        q = q.bind(&filters.actor);
-    }
-    if !filters.tool_type.is_empty() {
-        q = q.bind(&filters.tool_type);
-    }
-    if !filters.status.is_empty() {
-        q = q.bind(&filters.status);
-    }
-    if !filters.pricing.is_empty() {
-        q = q.bind(&filters.pricing);
-    }
-    if !filters.chain.is_empty() {
-        q = q.bind(&filters.chain);
-    }
+    let mut q = sqlx::QueryBuilder::new(COUNT_APPROVED_TOOLS_SQL);
+    append_tool_filters(&mut q, filters);
 
     let count = q
+        .build_query_as::<(i64,)>()
         .fetch_one(pool)
         .await
         .map_err(|e| ServerFnError::new(format!("count failed: {e}")))?;
@@ -338,45 +358,13 @@ pub(crate) async fn fetch_list_tools(
 ) -> Result<Vec<Tool>, ServerFnError> {
     let offset = offset.max(0);
     let limit = clamp_list_tools_limit(limit);
-    let order = list_tools_order_clause(sort);
-    let has_query = query.is_some_and(|q| !q.trim().is_empty());
-    let mut sql = LIST_APPROVED_TOOLS_SQL.to_string();
-    let mut idx = 1i32;
-
-    if has_query {
-        push_fts_filter(&mut sql, &mut idx);
-    }
-    append_tool_filters(&mut sql, filters, &mut idx);
-    push_order_offset_limit(&mut sql, order, &mut idx);
-
-    let mut q = sqlx::query_as::<_, Tool>(&sql);
-    if let Some(text) = query.filter(|q| !q.trim().is_empty()) {
-        q = q.bind(text);
-    }
-    if !filters.function.is_empty() {
-        q = q.bind(&filters.function);
-    }
-    if !filters.asset_class.is_empty() {
-        q = q.bind(&filters.asset_class);
-    }
-    if !filters.actor.is_empty() {
-        q = q.bind(&filters.actor);
-    }
-    if !filters.tool_type.is_empty() {
-        q = q.bind(&filters.tool_type);
-    }
-    if !filters.status.is_empty() {
-        q = q.bind(&filters.status);
-    }
-    if !filters.pricing.is_empty() {
-        q = q.bind(&filters.pricing);
-    }
-    if !filters.chain.is_empty() {
-        q = q.bind(&filters.chain);
-    }
-    q = q.bind(offset).bind(limit);
+    let mut q = sqlx::QueryBuilder::new(LIST_APPROVED_TOOLS_SQL);
+    push_list_query_filter(&mut q, query);
+    append_tool_filters(&mut q, filters);
+    push_list_order_offset_limit(&mut q, sort, offset, limit);
 
     let tools = q
+        .build_query_as::<Tool>()
         .fetch_all(pool)
         .await
         .map_err(|e| ServerFnError::new(format!("list tools failed: {e}")))?;
@@ -393,6 +381,14 @@ pub async fn list_tools(
     filters: ToolFilters,
     query: Option<String>,
 ) -> Result<Vec<Tool>, ServerFnError> {
+    let req = ToolListRequest {
+        sort: sort.clone(),
+        offset,
+        limit,
+        filters: filters.clone(),
+        query: query.clone(),
+    };
+    validate_tool_list_request(&req)?;
     let pool = use_context::<sqlx::PgPool>()
         .ok_or_else(|| ServerFnError::new("database pool not available"))?;
     fetch_list_tools(&pool, &sort, offset, limit, &filters, query.as_deref()).await

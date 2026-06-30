@@ -102,17 +102,30 @@ mod tests {
     }
 
     #[test]
-    fn append_tool_filters_supports_multi_select_any() {
-        let mut sql = String::from("SELECT * FROM tools WHERE true");
-        let mut idx = 1;
+    fn tool_list_request_rejects_invalid_sort() {
+        let req = ToolListRequest {
+            sort: "random".into(),
+            offset: 0,
+            limit: 50,
+            filters: ToolFilters::default(),
+            query: None,
+        };
+        let err = validate_tool_list_request(&req).expect_err("invalid sort should fail");
+        assert!(err.to_string().contains("sort must be one of"));
+    }
+
+    #[cfg(feature = "ssr")]
+    #[test]
+    fn append_tool_filters_uses_query_builder_binds() {
+        let mut query = sqlx::QueryBuilder::new("SELECT * FROM tools WHERE true");
         let filters = ToolFilters {
             function: vec!["bridge".into(), "swap".into()],
             pricing: vec!["x402".into()],
             ..Default::default()
         };
-        append_tool_filters(&mut sql, &filters, &mut idx);
-        assert!(sql.contains("function = ANY($1)"));
-        assert!(sql.contains("pricing = ANY($2)"));
+        append_tool_filters(&mut query, &filters);
+        assert!(query.sql().contains("function = ANY($1)"));
+        assert!(query.sql().contains("pricing = ANY($2)"));
     }
 
     #[test]
@@ -323,6 +336,16 @@ mod tests {
     }
 
     #[test]
+    fn admin_review_limit_is_clamped() {
+        assert_eq!(clamp_admin_review_list_limit(0), 1);
+        assert_eq!(clamp_admin_review_list_limit(25), 25);
+        assert_eq!(
+            clamp_admin_review_list_limit(10_000),
+            MAX_ADMIN_REVIEW_LIST_LIMIT
+        );
+    }
+
+    #[test]
     fn review_queue_where_covers_all_queues() {
         for queue in REVIEW_QUEUES {
             assert!(
@@ -331,6 +354,17 @@ mod tests {
             );
         }
         assert_eq!(review_queue_where("unknown"), Err("unknown review queue"));
+    }
+
+    #[test]
+    fn review_queue_sql_covers_all_queues_without_runtime_formatting() {
+        for queue in REVIEW_QUEUES {
+            let sql = review_queue_sql(queue).expect("queue sql");
+            assert!(sql.starts_with("SELECT * FROM tools"));
+            assert!(sql.contains("LIMIT $1"));
+            assert!(!sql.contains("{}"));
+        }
+        assert_eq!(review_queue_sql("unknown"), Err("unknown review queue"));
     }
 
     #[test]
