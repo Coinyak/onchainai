@@ -3,6 +3,7 @@
 use crate::pages::admin::admin_page_shell;
 use crate::server::functions::{
     create_category, delete_category, list_admin_categories, update_category, AdminCategoryView,
+    CategoryInput,
 };
 use leptos::prelude::*;
 use leptos::task::spawn_local;
@@ -258,11 +259,18 @@ fn CategoryForm(
                     let icon_v = icon.get_untracked();
                     let desc_v = description.get_untracked();
                     let order_v = sort_order.get_untracked();
+                    let input = CategoryInput {
+                        id: id_v,
+                        label: label_v,
+                        icon: icon_v,
+                        description: desc_v,
+                        sort_order: order_v,
+                    };
                     spawn_local(async move {
                         let result = if mode == "create" {
-                            create_category(id_v, label_v, icon_v, desc_v, order_v).await.map(|_| ())
+                            create_category(input).await.map(|_| ())
                         } else {
-                            update_category(id_v, label_v, icon_v, desc_v, order_v).await.map(|_| ())
+                            update_category(input).await.map(|_| ())
                         };
                         busy.set(false);
                         match result {

@@ -11,161 +11,292 @@ pub struct InstallSafetyAssessment {
     pub safe_copy_command: Option<String>,
 }
 
+#[derive(Debug)]
+struct InstallCommand<'a> {
+    raw: &'a str,
+    lower: String,
+}
+
+impl<'a> InstallCommand<'a> {
+    fn parse(install_command: Option<&'a str>) -> Option<Self> {
+        let raw = install_command.map(str::trim).filter(|s| !s.is_empty())?;
+        Some(Self {
+            raw,
+            lower: raw.to_lowercase(),
+        })
+    }
+
+    fn contains(&self, marker: &str) -> bool {
+        self.lower.contains(marker)
+    }
+
+    fn contains_any(&self, markers: &[&str]) -> bool {
+        markers.iter().any(|marker| self.contains(marker))
+    }
+
+    fn starts_with_any(&self, prefixes: &[&str]) -> bool {
+        prefixes.iter().any(|prefix| self.lower.starts_with(prefix))
+    }
+
+    fn pipes_to_shell(&self) -> bool {
+        self.contains_any(&["| sh", "| bash"])
+    }
+
+    fn has_base64_shell_pipe(&self) -> bool {
+        self.contains("base64") && self.pipes_to_shell()
+    }
+
+    fn fetches_remote_script_into_shell(&self) -> bool {
+        self.contains_any(&["curl", "wget"]) && self.pipes_to_shell()
+    }
+
+    fn uses_shell_command_wrapper(&self) -> bool {
+        self.contains_any(&["bash -c", "sh -c"])
+    }
+
+    fn substitutes_remote_fetch(&self) -> bool {
+        self.contains("$(") && self.contains_any(&["curl", "wget"])
+    }
+
+    fn is_known_package_manager_command(&self) -> bool {
+        self.starts_with_any(KNOWN_PACKAGE_MANAGER_PREFIXES)
+    }
+}
+
+#[derive(Debug, Default)]
+struct RiskSignals {
+    score: i32,
+    reasons: Vec<String>,
+    requires_secret: bool,
+}
+
+impl RiskSignals {
+    fn flag(&mut self, score: i32, reason: &str) {
+        self.score = self.score.max(score);
+        self.reasons.push(reason.to_string());
+    }
+
+    fn ensure_reason(&mut self, reason: &str) {
+        if self.reasons.is_empty() {
+            self.reasons.push(reason.to_string());
+        }
+    }
+
+    fn into_assessment(mut self, command: &InstallCommand<'_>) -> InstallSafetyAssessment {
+        self.ensure_reason("no elevated risk patterns detected");
+        let risk_level = RiskLevel::from_score(self.score);
+
+        InstallSafetyAssessment {
+            risk_level: risk_level.as_str().to_string(),
+            reasons: self.reasons,
+            requires_secret: self.requires_secret,
+            safe_copy_command: risk_level.safe_copy_command(command),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RiskLevel {
+    Low,
+    Medium,
+    High,
+    Critical,
+}
+
+impl RiskLevel {
+    fn from_score(score: i32) -> Self {
+        match score {
+            90.. => Self::Critical,
+            70..=89 => Self::High,
+            40..=69 => Self::Medium,
+            _ => Self::Low,
+        }
+    }
+
+    fn from_label(label: &str) -> Self {
+        match label {
+            "critical" => Self::Critical,
+            "high" => Self::High,
+            "medium" => Self::Medium,
+            _ => Self::Low,
+        }
+    }
+
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Low => "low",
+            Self::Medium => "medium",
+            Self::High => "high",
+            Self::Critical => "critical",
+        }
+    }
+
+    fn blocks_structured_config(self) -> bool {
+        matches!(self, Self::High | Self::Critical)
+    }
+
+    fn safe_copy_command(self, command: &InstallCommand<'_>) -> Option<String> {
+        matches!(self, Self::Low | Self::Medium).then(|| command.raw.to_string())
+    }
+}
+
 /// Assess an install command for safety risk.
 pub fn assess_install(
     install_command: Option<&str>,
     npm_package: Option<&str>,
 ) -> InstallSafetyAssessment {
-    let cmd = install_command.map(str::trim).filter(|s| !s.is_empty());
-
-    let Some(cmd) = cmd else {
-        return InstallSafetyAssessment {
-            risk_level: "medium".into(),
-            reasons: vec!["no install command provided".into()],
-            requires_secret: false,
-            safe_copy_command: None,
-        };
+    let Some(command) = InstallCommand::parse(install_command) else {
+        return missing_install_assessment();
     };
 
-    let lower = cmd.to_lowercase();
-    let mut reasons: Vec<String> = Vec::new();
-    let mut risk_score: i32 = 0;
+    let mut signals = scan_command_risks(&command);
+    apply_package_manager_context(&mut signals, &command, npm_package);
+    signals.into_assessment(&command)
+}
 
-    if lower.contains("rm -rf") || lower.contains("rm -fr") {
-        risk_score = 100;
-        reasons.push("destructive rm -rf command".into());
-    }
-
-    if lower.contains("base64") && (lower.contains("| sh") || lower.contains("| bash")) {
-        risk_score = risk_score.max(100);
-        reasons.push("obfuscated base64 piped to shell".into());
-    }
-
-    if (lower.contains("curl") || lower.contains("wget"))
-        && (lower.contains("| sh") || lower.contains("| bash"))
-    {
-        risk_score = risk_score.max(80);
-        reasons.push("remote script fetched and piped to shell".into());
-    }
-
-    if lower.contains("bash -c") || lower.contains("sh -c") {
-        risk_score = risk_score.max(75);
-        reasons.push("shell -c wrapper executes arbitrary command string".into());
-    }
-
-    if lower.contains("> ~/.") || lower.contains(">> ~/.") || lower.contains(">~/") {
-        risk_score = risk_score.max(75);
-        reasons.push("shell redirection into config files".into());
-    }
-
-    if lower.contains("$(") && (lower.contains("curl") || lower.contains("wget")) {
-        risk_score = risk_score.max(100);
-        reasons.push("command substitution fetching remote code".into());
-    }
-
-    let exfil_patterns = [
-        ("curl", "secret", "credential exfiltration pattern"),
-        ("wget", "token", "credential exfiltration pattern"),
-        ("curl", "api_key", "credential exfiltration pattern"),
-        ("curl", "password", "credential exfiltration pattern"),
-    ];
-    for (tool, secret, label) in exfil_patterns {
-        if lower.contains(tool) && lower.contains(secret) {
-            risk_score = risk_score.max(100);
-            reasons.push(label.to_string());
-        }
-    }
-
-    let requires_secret = lower.contains("api_key")
-        || lower.contains("api-key")
-        || lower.contains("apikey")
-        || lower.contains("secret")
-        || lower.contains("token")
-        || lower.contains("private_key")
-        || lower.contains("private-key")
-        || lower.contains("${")
-        || lower.contains("$env");
-
-    if requires_secret {
-        risk_score = risk_score.max(45);
-        reasons.push("requires API key or environment secret".into());
-    }
-
-    if lower.contains("npm i -g")
-        || lower.contains("npm install -g")
-        || lower.contains("pnpm add -g")
-        || lower.contains("yarn global")
-        || lower.contains("cargo install")
-    {
-        risk_score = risk_score.max(40);
-        reasons.push("global package install".into());
-    }
-
-    let is_known_package_manager = lower.starts_with("npm i ")
-        || lower.starts_with("npm install ")
-        || lower.starts_with("pnpm add ")
-        || lower.starts_with("pnpm install ")
-        || lower.starts_with("yarn add ")
-        || lower.starts_with("npx ")
-        || lower.starts_with("cargo install ")
-        || lower.starts_with("pip install ");
-
-    if is_known_package_manager && npm_package.is_some() {
-        risk_score = risk_score.min(20);
-        if reasons.is_empty() {
-            reasons.push("documented package manager install".into());
-        }
-    } else if !is_known_package_manager && risk_score < 50 {
-        risk_score = risk_score.max(45);
-        reasons.push("unknown or non-package-manager binary command".into());
-    }
-
-    let risk_level = if risk_score >= 90 {
-        "critical"
-    } else if risk_score >= 70 {
-        "high"
-    } else if risk_score >= 40 {
-        "medium"
-    } else {
-        "low"
-    };
-
-    let safe_copy_command = if matches!(risk_level, "low" | "medium") {
-        Some(cmd.to_string())
-    } else {
-        None
-    };
-
-    if reasons.is_empty() {
-        reasons.push("no elevated risk patterns detected".into());
-    }
-
+fn missing_install_assessment() -> InstallSafetyAssessment {
     InstallSafetyAssessment {
-        risk_level: risk_level.to_string(),
-        reasons,
-        requires_secret,
-        safe_copy_command,
+        risk_level: "medium".into(),
+        reasons: vec!["no install command provided".into()],
+        requires_secret: false,
+        safe_copy_command: None,
     }
 }
 
+fn scan_command_risks(command: &InstallCommand<'_>) -> RiskSignals {
+    let mut signals = RiskSignals::default();
+    flag_destructive_commands(&mut signals, command);
+    flag_remote_shell_execution(&mut signals, command);
+    flag_config_redirection(&mut signals, command);
+    flag_credential_exfiltration(&mut signals, command);
+    flag_secret_requirements(&mut signals, command);
+    flag_global_installs(&mut signals, command);
+    signals
+}
+
+fn flag_destructive_commands(signals: &mut RiskSignals, command: &InstallCommand<'_>) {
+    if command.contains_any(&["rm -rf", "rm -fr"]) {
+        signals.flag(100, "destructive rm -rf command");
+    }
+}
+
+fn flag_remote_shell_execution(signals: &mut RiskSignals, command: &InstallCommand<'_>) {
+    if command.has_base64_shell_pipe() {
+        signals.flag(100, "obfuscated base64 piped to shell");
+    }
+    if command.fetches_remote_script_into_shell() {
+        signals.flag(80, "remote script fetched and piped to shell");
+    }
+    if command.uses_shell_command_wrapper() {
+        signals.flag(75, "shell -c wrapper executes arbitrary command string");
+    }
+    if command.substitutes_remote_fetch() {
+        signals.flag(100, "command substitution fetching remote code");
+    }
+}
+
+fn flag_config_redirection(signals: &mut RiskSignals, command: &InstallCommand<'_>) {
+    if command.contains_any(&["> ~/.", ">> ~/.", ">~/"]) {
+        signals.flag(75, "shell redirection into config files");
+    }
+}
+
+fn flag_credential_exfiltration(signals: &mut RiskSignals, command: &InstallCommand<'_>) {
+    for (tool, secret) in CREDENTIAL_EXFILTRATION_PATTERNS {
+        if command.contains(tool) && command.contains(secret) {
+            signals.flag(100, "credential exfiltration pattern");
+        }
+    }
+}
+
+fn flag_secret_requirements(signals: &mut RiskSignals, command: &InstallCommand<'_>) {
+    signals.requires_secret = SECRET_MARKERS.iter().any(|marker| command.contains(marker));
+    if signals.requires_secret {
+        signals.flag(45, "requires API key or environment secret");
+    }
+}
+
+fn flag_global_installs(signals: &mut RiskSignals, command: &InstallCommand<'_>) {
+    if command.contains_any(GLOBAL_INSTALL_MARKERS) {
+        signals.flag(40, "global package install");
+    }
+}
+
+fn apply_package_manager_context(
+    signals: &mut RiskSignals,
+    command: &InstallCommand<'_>,
+    npm_package: Option<&str>,
+) {
+    if command.is_known_package_manager_command() && npm_package.is_some() {
+        signals.score = signals.score.min(20);
+        signals.ensure_reason("documented package manager install");
+        return;
+    }
+
+    if signals.score < 50 {
+        signals.score = signals.score.max(45);
+        signals
+            .reasons
+            .push("unknown or non-package-manager binary command".into());
+    }
+}
+
+const CREDENTIAL_EXFILTRATION_PATTERNS: &[(&str, &str)] = &[
+    ("curl", "secret"),
+    ("wget", "token"),
+    ("curl", "api_key"),
+    ("curl", "password"),
+];
+
+const SECRET_MARKERS: &[&str] = &[
+    "api_key",
+    "api-key",
+    "apikey",
+    "secret",
+    "token",
+    "private_key",
+    "private-key",
+    "${",
+    "$env",
+];
+
+const GLOBAL_INSTALL_MARKERS: &[&str] = &[
+    "npm i -g",
+    "npm install -g",
+    "pnpm add -g",
+    "yarn global",
+    "cargo install",
+];
+
+const KNOWN_PACKAGE_MANAGER_PREFIXES: &[&str] = &[
+    "npm i ",
+    "npm install ",
+    "pnpm add ",
+    "pnpm install ",
+    "yarn add ",
+    "npx ",
+    "cargo install ",
+    "pip install ",
+];
+
 /// Whether Claude/Cursor JSON config generation should be blocked for this risk level.
 pub fn blocks_structured_config(risk_level: &str) -> bool {
-    matches!(risk_level, "high" | "critical")
+    RiskLevel::from_label(risk_level).blocks_structured_config()
 }
 
 /// Human-readable warning for risky install commands.
 pub fn install_warning_text(risk_level: &str) -> Option<&'static str> {
-    match risk_level {
-        "critical" => Some(
+    match RiskLevel::from_label(risk_level) {
+        RiskLevel::Critical => Some(
             "Install blocked pending operator review. This command contains critical safety risks.",
         ),
-        "high" => Some(
+        RiskLevel::High => Some(
             "High-risk install command. Review carefully before running. Structured editor config is not generated for this command.",
         ),
-        "medium" => Some(
+        RiskLevel::Medium => Some(
             "Medium-risk install command. May require secrets or elevated permissions.",
         ),
-        _ => None,
+        RiskLevel::Low => None,
     }
 }
 

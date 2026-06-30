@@ -593,23 +593,26 @@ pub fn Sidebar(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::components::tools_browser::{build_query_base, BrowserBase};
+    use crate::components::tools_browser::{build_query_base, BrowserBase, BrowserQueryParams};
+
+    fn query_params() -> BrowserQueryParams {
+        BrowserQueryParams {
+            sort: "hot".into(),
+            page: 1,
+            ..BrowserQueryParams::default()
+        }
+    }
 
     #[test]
     fn function_all_clears_only_function_param() {
         let query_base = build_query_base(
             &BrowserBase::Tools,
-            Some("bridge".into()),
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            "new".into(),
-            Some("test query".into()),
-            None,
-            1,
+            &BrowserQueryParams {
+                function: Some("bridge".into()),
+                sort: "new".into(),
+                search_q: Some("test query".into()),
+                ..query_params()
+            },
         );
         let href = clear_axis("/tools", &query_base, "function");
         assert!(!href.contains("function="));
@@ -621,17 +624,11 @@ mod tests {
     fn sidebar_function_link_produces_multi_select_href() {
         let query_base = build_query_base(
             &BrowserBase::Tools,
-            Some("bridge".into()),
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            "new".into(),
-            None,
-            None,
-            1,
+            &BrowserQueryParams {
+                function: Some("bridge".into()),
+                sort: "new".into(),
+                ..query_params()
+            },
         );
         let fn_active = parse_multi(Some("bridge"));
         let tools_base = BrowserBase::Tools;
@@ -686,17 +683,10 @@ mod tests {
     fn sidebar_pricing_href_includes_pricing_param() {
         let query_base = build_query_base(
             &BrowserBase::Tools,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            "new".into(),
-            None,
-            None,
-            1,
+            &BrowserQueryParams {
+                sort: "new".into(),
+                ..query_params()
+            },
         );
         let href = toggle_multi("/tools", &query_base, "pricing", "x402", &[]);
         assert!(
@@ -709,17 +699,10 @@ mod tests {
     fn sidebar_function_link_bridge_href_includes_function_param() {
         let query_base = build_query_base(
             &BrowserBase::Tools,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            "new".into(),
-            None,
-            None,
-            1,
+            &BrowserQueryParams {
+                sort: "new".into(),
+                ..query_params()
+            },
         );
         let (href, active) = sidebar_function_link(&BrowserBase::Tools, &query_base, "bridge", &[]);
         assert!(!active);

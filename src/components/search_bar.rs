@@ -1,6 +1,6 @@
 //! Search inputs — debounced URL sync via leptos_router.
 
-use crate::components::tools_browser::{build_query_base, BrowserBase};
+use crate::components::tools_browser::{build_query_base, BrowserBase, BrowserQueryParams};
 
 use leptos::leptos_dom::helpers::TimeoutHandle;
 use leptos::prelude::*;
@@ -38,11 +38,7 @@ pub fn SearchBar() -> impl IntoView {
         schedule_debounced_set(timer, debounced, val);
     });
 
-    on_cleanup(move || {
-        if let Some(handle) = timer.get_value() {
-            handle.clear();
-        }
-    });
+    on_cleanup(move || clear_timer(timer));
 
     Effect::new(move |_| {
         let q = debounced.get();
@@ -67,6 +63,35 @@ pub fn SearchBar() -> impl IntoView {
     }
 }
 
+fn toolbar_query_params(
+    base: &BrowserBase,
+    query: &leptos_router::params::ParamsMap,
+    q: String,
+) -> BrowserQueryParams {
+    BrowserQueryParams {
+        function: base.function_from_query(query.get("function").map(|s| s.to_string())),
+        asset_class: query.get("asset_class").map(|s| s.to_string()),
+        actor: query.get("actor").map(|s| s.to_string()),
+        tool_type: query.get("type").map(|s| s.to_string()),
+        status: query.get("status").map(|s| s.to_string()),
+        pricing: query.get("pricing").map(|s| s.to_string()),
+        chain: query.get("chain").map(|s| s.to_string()),
+        sort: query
+            .get("sort")
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| "hot".into()),
+        search_q: Some(q).filter(|s| !s.is_empty()),
+        selected: None,
+        page: 1,
+    }
+}
+
+fn clear_timer(timer: StoredValue<Option<TimeoutHandle>>) {
+    if let Some(handle) = timer.get_value() {
+        handle.clear();
+    }
+}
+
 /// Toolbar search — debounced, preserves active filters on same base path.
 #[component]
 pub fn ToolbarSearch(base: BrowserBase, initial_q: String) -> impl IntoView {
@@ -83,9 +108,7 @@ pub fn ToolbarSearch(base: BrowserBase, initial_q: String) -> impl IntoView {
         if input.get_untracked() == q {
             return;
         }
-        if let Some(handle) = timer.get_value() {
-            handle.clear();
-        }
+        clear_timer(timer);
         syncing_from_url.set_value(true);
         input.set(q.clone());
         debounced.set(q);
@@ -101,32 +124,12 @@ pub fn ToolbarSearch(base: BrowserBase, initial_q: String) -> impl IntoView {
         schedule_debounced_set(timer, debounced, val);
     });
 
-    on_cleanup(move || {
-        if let Some(handle) = timer.get_value() {
-            handle.clear();
-        }
-    });
+    on_cleanup(move || clear_timer(timer));
 
     Effect::new(move |_| {
         let q = debounced.get();
-        let url = query.with(|qm| {
-            build_query_base(
-                &base,
-                base.function_from_query(qm.get("function").map(|s| s.to_string())),
-                qm.get("asset_class").map(|s| s.to_string()),
-                qm.get("actor").map(|s| s.to_string()),
-                qm.get("type").map(|s| s.to_string()),
-                qm.get("status").map(|s| s.to_string()),
-                qm.get("pricing").map(|s| s.to_string()),
-                qm.get("chain").map(|s| s.to_string()),
-                qm.get("sort")
-                    .map(|s| s.to_string())
-                    .unwrap_or_else(|| "hot".into()),
-                Some(q.clone()).filter(|s| !s.is_empty()),
-                None,
-                1,
-            )
-        });
+        let url =
+            query.with(|qm| build_query_base(&base, &toolbar_query_params(&base, qm, q.clone())));
         let current_q = query.with_untracked(|qm| qm.get("q").unwrap_or_default().to_string());
         if q == current_q {
             return;

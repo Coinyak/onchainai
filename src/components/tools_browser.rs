@@ -62,91 +62,109 @@ pub fn category_href(cat_id: &str, query_base: &str) -> String {
     }
 }
 
-#[allow(clippy::too_many_arguments)]
-pub fn build_query_base(
-    base: &BrowserBase,
-    function: Option<String>,
-    asset_class: Option<String>,
-    actor: Option<String>,
-    tool_type: Option<String>,
-    status: Option<String>,
-    pricing: Option<String>,
-    chain: Option<String>,
-    sort: String,
-    search_q: Option<String>,
-    selected: Option<String>,
-    page: u32,
-) -> String {
-    let mut parts: Vec<String> = Vec::new();
-    if !matches!(base, BrowserBase::Category(_)) {
-        if let Some(v) = function {
-            parts.push(format!("function={}", urlencoding::encode(&v)));
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct BrowserQueryParams {
+    pub function: Option<String>,
+    pub asset_class: Option<String>,
+    pub actor: Option<String>,
+    pub tool_type: Option<String>,
+    pub status: Option<String>,
+    pub pricing: Option<String>,
+    pub chain: Option<String>,
+    pub sort: String,
+    pub search_q: Option<String>,
+    pub selected: Option<String>,
+    pub page: u32,
+}
+
+impl BrowserQueryParams {
+    pub fn for_filter_navigation(&self) -> Self {
+        Self {
+            selected: None,
+            page: 1,
+            ..self.clone()
         }
     }
-    if let Some(v) = asset_class {
-        parts.push(format!("asset_class={}", urlencoding::encode(&v)));
+
+    pub fn for_sort(&self, sort: &str) -> Self {
+        Self {
+            sort: sort.to_string(),
+            selected: None,
+            page: 1,
+            ..self.clone()
+        }
     }
-    if let Some(v) = actor {
-        parts.push(format!("actor={}", urlencoding::encode(&v)));
+
+    pub fn for_next_page(&self) -> Self {
+        Self {
+            selected: None,
+            page: self.page.saturating_add(1),
+            ..self.clone()
+        }
     }
-    if let Some(v) = tool_type {
-        parts.push(format!("type={}", urlencoding::encode(&v)));
+}
+
+pub fn build_query_base(base: &BrowserBase, params: &BrowserQueryParams) -> String {
+    let mut parts: Vec<String> = Vec::new();
+    append_optional_param(
+        &mut parts,
+        "function",
+        category_function_filter(base, params),
+    );
+    append_optional_param(&mut parts, "asset_class", params.asset_class.as_deref());
+    append_optional_param(&mut parts, "actor", params.actor.as_deref());
+    append_optional_param(&mut parts, "type", params.tool_type.as_deref());
+    append_optional_param(&mut parts, "status", params.status.as_deref());
+    append_optional_param(&mut parts, "pricing", params.pricing.as_deref());
+    append_optional_param(&mut parts, "chain", params.chain.as_deref());
+    append_sort_param(&mut parts, &params.sort);
+    append_search_param(&mut parts, params.search_q.as_deref());
+    append_optional_param(&mut parts, "selected", params.selected.as_deref());
+    append_page_param(&mut parts, params.page);
+    query_path(base, parts)
+}
+
+pub fn build_filter_navigation_base(base: &BrowserBase, params: &BrowserQueryParams) -> String {
+    build_query_base(base, &params.for_filter_navigation())
+}
+
+fn category_function_filter<'a>(
+    base: &BrowserBase,
+    params: &'a BrowserQueryParams,
+) -> Option<&'a str> {
+    (!matches!(base, BrowserBase::Category(_)))
+        .then_some(params.function.as_deref())
+        .flatten()
+}
+
+fn append_optional_param(parts: &mut Vec<String>, key: &str, value: Option<&str>) {
+    if let Some(value) = value {
+        parts.push(format!("{key}={}", urlencoding::encode(value)));
     }
-    if let Some(v) = status {
-        parts.push(format!("status={}", urlencoding::encode(&v)));
-    }
-    if let Some(v) = pricing {
-        parts.push(format!("pricing={}", urlencoding::encode(&v)));
-    }
-    if let Some(v) = chain {
-        parts.push(format!("chain={}", urlencoding::encode(&v)));
-    }
+}
+
+fn append_sort_param(parts: &mut Vec<String>, sort: &str) {
     if sort != "hot" {
-        parts.push(format!("sort={}", urlencoding::encode(&sort)));
+        append_optional_param(parts, "sort", Some(sort));
     }
-    if let Some(v) = search_q.filter(|s| !s.is_empty()) {
-        parts.push(format!("q={}", urlencoding::encode(v.as_str())));
-    }
-    if let Some(v) = selected {
-        parts.push(format!("selected={}", urlencoding::encode(&v)));
-    }
+}
+
+fn append_search_param(parts: &mut Vec<String>, search_q: Option<&str>) {
+    append_optional_param(parts, "q", search_q.filter(|value| !value.is_empty()));
+}
+
+fn append_page_param(parts: &mut Vec<String>, page: u32) {
     if page > 1 {
         parts.push(format!("page={page}"));
     }
+}
+
+fn query_path(base: &BrowserBase, parts: Vec<String>) -> String {
     if parts.is_empty() {
         base.path()
     } else {
         format!("{}?{}", base.path(), parts.join("&"))
     }
-}
-
-#[allow(clippy::too_many_arguments)]
-pub fn build_filter_navigation_base(
-    base: &BrowserBase,
-    function: Option<String>,
-    asset_class: Option<String>,
-    actor: Option<String>,
-    tool_type: Option<String>,
-    status: Option<String>,
-    pricing: Option<String>,
-    chain: Option<String>,
-    sort: String,
-    search_q: Option<String>,
-) -> String {
-    build_query_base(
-        base,
-        function,
-        asset_class,
-        actor,
-        tool_type,
-        status,
-        pricing,
-        chain,
-        sort,
-        search_q,
-        None,
-        1,
-    )
 }
 
 pub fn clamp_browser_page(page: u32) -> u32 {
@@ -216,64 +234,12 @@ pub fn with_selected(base_path: &BrowserBase, base: &str, slug: &str) -> String 
 }
 
 /// Sort toolbar link — rebuilds query via `build_query_base` (no duplicate `sort=` params).
-#[allow(clippy::too_many_arguments)]
-pub fn build_sort_href(
-    base: &BrowserBase,
-    function: Option<String>,
-    asset_class: Option<String>,
-    actor: Option<String>,
-    tool_type: Option<String>,
-    status: Option<String>,
-    pricing: Option<String>,
-    chain: Option<String>,
-    sort: &str,
-    search_q: Option<String>,
-) -> String {
-    build_query_base(
-        base,
-        function,
-        asset_class,
-        actor,
-        tool_type,
-        status,
-        pricing,
-        chain,
-        sort.to_string(),
-        search_q,
-        None,
-        1,
-    )
+pub fn build_sort_href(base: &BrowserBase, params: &BrowserQueryParams, sort: &str) -> String {
+    build_query_base(base, &params.for_sort(sort))
 }
 
-#[allow(clippy::too_many_arguments)]
-pub fn build_load_more_href(
-    base: &BrowserBase,
-    function: Option<String>,
-    asset_class: Option<String>,
-    actor: Option<String>,
-    tool_type: Option<String>,
-    status: Option<String>,
-    pricing: Option<String>,
-    chain: Option<String>,
-    sort: String,
-    search_q: Option<String>,
-    _selected: Option<String>,
-    page: u32,
-) -> String {
-    build_query_base(
-        base,
-        function,
-        asset_class,
-        actor,
-        tool_type,
-        status,
-        pricing,
-        chain,
-        sort,
-        search_q,
-        None,
-        page.saturating_add(1),
-    )
+pub fn build_load_more_href(base: &BrowserBase, params: &BrowserQueryParams) -> String {
+    build_query_base(base, &params.for_next_page())
 }
 
 pub fn without_selected(base_path: &BrowserBase, base: &str) -> String {
@@ -363,22 +329,21 @@ pub fn ToolsBrowser(
     let page_number =
         Memo::new(move |_| parse_page_param(query.with(|q| q.get("page").map(|s| s.to_string()))));
 
-    let query_base = Memo::new(move |_| {
-        build_query_base(
-            &base.get_value(),
-            function.get(),
-            asset_class.get(),
-            actor.get(),
-            tool_type.get(),
-            status.get(),
-            pricing.get(),
-            chain.get(),
-            sort.get(),
-            search_q.get(),
-            selected.get(),
-            page_number.get(),
-        )
+    let browser_query_params = Memo::new(move |_| BrowserQueryParams {
+        function: function.get(),
+        asset_class: asset_class.get(),
+        actor: actor.get(),
+        tool_type: tool_type.get(),
+        status: status.get(),
+        pricing: pricing.get(),
+        chain: chain.get(),
+        sort: sort.get(),
+        search_q: search_q.get(),
+        selected: selected.get(),
+        page: page_number.get(),
     });
+    let query_base =
+        Memo::new(move |_| build_query_base(&base.get_value(), &browser_query_params.get()));
     let filter_revision = Memo::new(move |_| {
         format!(
             "f={}|ac={}|a={}|t={}|st={}|p={}|c={}",
@@ -392,18 +357,7 @@ pub fn ToolsBrowser(
         )
     });
     let filter_query_base = Memo::new(move |_| {
-        build_filter_navigation_base(
-            &base.get_value(),
-            function.get(),
-            asset_class.get(),
-            actor.get(),
-            tool_type.get(),
-            status.get(),
-            pricing.get(),
-            chain.get(),
-            sort.get(),
-            search_q.get(),
-        )
+        build_filter_navigation_base(&base.get_value(), &browser_query_params.get())
     });
 
     let filters = Memo::new(move |_| {
@@ -461,47 +415,12 @@ pub fn ToolsBrowser(
         }
     });
 
-    let sort_hot = Memo::new(move |_| {
-        build_sort_href(
-            &base.get_value(),
-            function.get(),
-            asset_class.get(),
-            actor.get(),
-            tool_type.get(),
-            status.get(),
-            pricing.get(),
-            chain.get(),
-            "hot",
-            search_q.get(),
-        )
-    });
-    let sort_new = Memo::new(move |_| {
-        build_sort_href(
-            &base.get_value(),
-            function.get(),
-            asset_class.get(),
-            actor.get(),
-            tool_type.get(),
-            status.get(),
-            pricing.get(),
-            chain.get(),
-            "new",
-            search_q.get(),
-        )
-    });
+    let sort_hot =
+        Memo::new(move |_| build_sort_href(&base.get_value(), &browser_query_params.get(), "hot"));
+    let sort_new =
+        Memo::new(move |_| build_sort_href(&base.get_value(), &browser_query_params.get(), "new"));
     let sort_comments = Memo::new(move |_| {
-        build_sort_href(
-            &base.get_value(),
-            function.get(),
-            asset_class.get(),
-            actor.get(),
-            tool_type.get(),
-            status.get(),
-            pricing.get(),
-            chain.get(),
-            "comments",
-            search_q.get(),
-        )
+        build_sort_href(&base.get_value(), &browser_query_params.get(), "comments")
     });
 
     let children_fallback = children.clone();
@@ -656,17 +575,7 @@ pub fn ToolsBrowser(
                                             {if should_show_load_more(tools_len, data.total, page_number.get()) {
                                                 let next_href = build_load_more_href(
                                                     &browser_base,
-                                                    function.get(),
-                                                    asset_class.get(),
-                                                    actor.get(),
-                                                    tool_type.get(),
-                                                    status.get(),
-                                                    pricing.get(),
-                                                    chain.get(),
-                                                    sort.get(),
-                                                    search_q.get(),
-                                                    selected.get(),
-                                                    page_number.get(),
+                                                    &browser_query_params.get(),
                                                 );
                                                 view! {
                                                     <div class="load-more-row">
@@ -731,21 +640,47 @@ pub fn ToolsBrowser(
 mod tests {
     use super::*;
 
+    fn query_params() -> BrowserQueryParams {
+        BrowserQueryParams {
+            sort: "hot".into(),
+            page: 1,
+            ..BrowserQueryParams::default()
+        }
+    }
+
+    fn assert_contains_all(text: &str, fragments: &[&str]) {
+        for fragment in fragments {
+            assert!(text.contains(fragment), "missing {fragment} in {text}");
+        }
+    }
+
+    fn assert_page_cases(cases: &[(&str, Option<u32>)]) {
+        for (query, expected) in cases {
+            assert_eq!(parse_page_from_query_string(query), *expected);
+        }
+    }
+
+    fn assert_parse_page_param_cases(cases: &[(Option<&str>, u32)]) {
+        for (raw, expected) in cases {
+            assert_eq!(parse_page_param(raw.map(str::to_string)), *expected);
+        }
+    }
+
+    fn assert_clamp_cases(cases: &[(u32, u32)]) {
+        for (raw, expected) in cases {
+            assert_eq!(clamp_browser_page(*raw), *expected);
+        }
+    }
+
     #[test]
     fn category_path_omits_function_param_but_keeps_chain() {
         let q = build_query_base(
             &BrowserBase::Category("bridge".into()),
-            Some("bridge".into()),
-            None,
-            None,
-            None,
-            None,
-            None,
-            Some("ethereum,solana".into()),
-            "hot".into(),
-            None,
-            None,
-            1,
+            &BrowserQueryParams {
+                function: Some("bridge".into()),
+                chain: Some("ethereum,solana".into()),
+                ..query_params()
+            },
         );
         assert_eq!(q, "/categories/bridge?chain=ethereum%2Csolana");
     }
@@ -763,55 +698,38 @@ mod tests {
     fn home_query_includes_multi_filters_and_selected() {
         let q = build_query_base(
             &BrowserBase::Home,
-            Some("bridge,swap".into()),
-            None,
-            None,
-            Some("mcp".into()),
-            None,
-            None,
-            None,
-            "hot".into(),
-            None,
-            Some("zapper".into()),
-            1,
+            &BrowserQueryParams {
+                function: Some("bridge,swap".into()),
+                tool_type: Some("mcp".into()),
+                selected: Some("zapper".into()),
+                ..query_params()
+            },
         );
         assert!(q.starts_with("/?"));
         assert!(q.contains("function=bridge%2Cswap") || q.contains("function=bridge,swap"));
-        assert!(q.contains("type=mcp"));
-        assert!(q.contains("selected=zapper"));
+        assert_contains_all(&q, &["type=mcp", "selected=zapper"]);
     }
 
     #[test]
     fn query_base_keeps_page_only_after_first_page() {
         let first = build_query_base(
             &BrowserBase::Tools,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            Some("base".into()),
-            "hot".into(),
-            Some("wallet".into()),
-            None,
-            1,
+            &BrowserQueryParams {
+                chain: Some("base".into()),
+                search_q: Some("wallet".into()),
+                ..query_params()
+            },
         );
         assert_eq!(first, "/tools?chain=base&q=wallet");
 
         let second = build_query_base(
             &BrowserBase::Tools,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            Some("base".into()),
-            "hot".into(),
-            Some("wallet".into()),
-            None,
-            2,
+            &BrowserQueryParams {
+                chain: Some("base".into()),
+                search_q: Some("wallet".into()),
+                page: 2,
+                ..query_params()
+            },
         );
         assert_eq!(second, "/tools?chain=base&q=wallet&page=2");
     }
@@ -820,17 +738,17 @@ mod tests {
     fn load_more_href_increments_page_and_drops_preview_selection() {
         let href = build_load_more_href(
             &BrowserBase::Tools,
-            Some("bridge".into()),
-            None,
-            None,
-            Some("mcp".into()),
-            None,
-            Some("x402".into()),
-            Some("base".into()),
-            "comments".into(),
-            Some("agent".into()),
-            Some("selected-tool".into()),
-            2,
+            &BrowserQueryParams {
+                function: Some("bridge".into()),
+                tool_type: Some("mcp".into()),
+                pricing: Some("x402".into()),
+                chain: Some("base".into()),
+                sort: "comments".into(),
+                search_q: Some("agent".into()),
+                selected: Some("selected-tool".into()),
+                page: 2,
+                ..query_params()
+            },
         );
         assert_eq!(
             href,
@@ -842,15 +760,14 @@ mod tests {
     fn filter_navigation_base_omits_pagination_and_preview_selection() {
         let href = build_filter_navigation_base(
             &BrowserBase::Tools,
-            Some("bridge".into()),
-            None,
-            None,
-            Some("mcp".into()),
-            None,
-            None,
-            Some("base".into()),
-            "comments".into(),
-            Some("agent".into()),
+            &BrowserQueryParams {
+                function: Some("bridge".into()),
+                tool_type: Some("mcp".into()),
+                chain: Some("base".into()),
+                sort: "comments".into(),
+                search_q: Some("agent".into()),
+                ..query_params()
+            },
         );
         assert_eq!(
             href,
@@ -862,45 +779,42 @@ mod tests {
 
     #[test]
     fn visible_limit_for_page_is_bounded() {
-        assert_eq!(visible_limit_for_page(0), 50);
-        assert_eq!(visible_limit_for_page(1), 50);
-        assert_eq!(visible_limit_for_page(2), 100);
-        assert_eq!(visible_limit_for_page(3), 150);
-        assert_eq!(visible_limit_for_page(99), 500);
+        let cases = [(0, 50), (1, 50), (2, 100), (3, 150), (99, 500)];
+        for (page, expected) in cases {
+            assert_eq!(visible_limit_for_page(page), expected);
+        }
     }
 
     #[test]
     fn parse_page_from_query_string_reads_page_param() {
-        assert_eq!(parse_page_from_query_string("?page=2&sort=hot"), Some(2));
-        assert_eq!(parse_page_from_query_string("page=3"), Some(3));
-        assert_eq!(parse_page_from_query_string("?page=%32"), Some(2));
-        assert_eq!(parse_page_from_query_string("?sort=hot"), None);
-        assert_eq!(parse_page_from_query_string("?page=0"), None);
-        assert_eq!(parse_page_from_query_string("?page=abc"), None);
-        assert_eq!(parse_page_from_query_string("?page=-1"), None);
-        assert_eq!(
-            parse_page_from_query_string("?page=999"),
-            Some(MAX_BROWSER_PAGE)
-        );
+        assert_page_cases(&[
+            ("?page=2&sort=hot", Some(2)),
+            ("page=3", Some(3)),
+            ("?page=%32", Some(2)),
+            ("?sort=hot", None),
+            ("?page=0", None),
+            ("?page=abc", None),
+            ("?page=-1", None),
+            ("?page=999", Some(MAX_BROWSER_PAGE)),
+        ]);
     }
 
     #[test]
     fn parse_page_param_falls_back_for_invalid_values() {
-        assert_eq!(parse_page_param(Some("2".into())), 2);
-        assert_eq!(parse_page_param(Some("%32".into())), 2);
-        assert_eq!(parse_page_param(Some("abc".into())), 1);
-        assert_eq!(parse_page_param(Some("0".into())), 1);
-        assert_eq!(parse_page_param(Some("-1".into())), 1);
-        assert_eq!(parse_page_param(None), 1);
-        assert_eq!(parse_page_param(Some("99".into())), MAX_BROWSER_PAGE);
+        assert_parse_page_param_cases(&[
+            (Some("2"), 2),
+            (Some("%32"), 2),
+            (Some("abc"), 1),
+            (Some("0"), 1),
+            (Some("-1"), 1),
+            (None, 1),
+            (Some("99"), MAX_BROWSER_PAGE),
+        ]);
     }
 
     #[test]
     fn clamp_browser_page_bounds_visible_window() {
-        assert_eq!(clamp_browser_page(0), 1);
-        assert_eq!(clamp_browser_page(1), 1);
-        assert_eq!(clamp_browser_page(10), 10);
-        assert_eq!(clamp_browser_page(11), MAX_BROWSER_PAGE);
+        assert_clamp_cases(&[(0, 1), (1, 1), (10, 10), (11, MAX_BROWSER_PAGE)]);
     }
 
     fn sample_cache_key(page: u32) -> BrowserCacheKey {
@@ -1025,27 +939,12 @@ mod tests {
 
     #[test]
     fn sort_href_rebuilds_without_duplicate_sort_param() {
-        let filters = (
-            Some("bridge,swap".into()),
-            None::<String>,
-            None::<String>,
-            Some("mcp".into()),
-            None::<String>,
-            None::<String>,
-            None::<String>,
-        );
-        let from_new = build_sort_href(
-            &BrowserBase::Tools,
-            filters.0.clone(),
-            filters.1.clone(),
-            filters.2.clone(),
-            filters.3.clone(),
-            filters.4.clone(),
-            filters.5.clone(),
-            None,
-            "new",
-            None,
-        );
+        let filters = BrowserQueryParams {
+            function: Some("bridge,swap".into()),
+            tool_type: Some("mcp".into()),
+            ..query_params()
+        };
+        let from_new = build_sort_href(&BrowserBase::Tools, &filters, "new");
         assert_eq!(from_new.matches("sort=").count(), 1);
         assert!(
             from_new.contains("function=bridge%2Cswap")
@@ -1053,18 +952,7 @@ mod tests {
         );
         assert!(from_new.contains("sort=new"));
 
-        let to_hot = build_sort_href(
-            &BrowserBase::Tools,
-            filters.0,
-            filters.1,
-            filters.2,
-            filters.3,
-            filters.4,
-            filters.5,
-            None,
-            "hot",
-            None,
-        );
+        let to_hot = build_sort_href(&BrowserBase::Tools, &filters, "hot");
         assert!(!to_hot.contains("sort="));
         assert!(
             to_hot.contains("function=bridge%2Cswap") || to_hot.contains("function=bridge,swap")
@@ -1074,18 +962,7 @@ mod tests {
 
     #[test]
     fn sort_href_omits_selected_preview() {
-        let href = build_sort_href(
-            &BrowserBase::Tools,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            "new",
-            None,
-        );
+        let href = build_sort_href(&BrowserBase::Tools, &query_params(), "new");
         assert!(!href.contains("selected="));
     }
 

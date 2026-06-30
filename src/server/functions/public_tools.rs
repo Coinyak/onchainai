@@ -1,0 +1,929 @@
+use super::*;
+
+/// Returns the most recently added **approved** tools.
+///
+/// HOT order = higher `stars` first, then more recent `created_at`.
+#[server(GetRecentTools, "/api")]
+pub async fn get_recent_tools(limit: i64) -> Result<Vec<Tool>, ServerFnError> {
+    let pool = use_context::<sqlx::PgPool>()
+        .ok_or_else(|| ServerFnError::new("database pool not available"))?;
+
+    let limit = limit.clamp(1, 100);
+    let tools = sqlx::query_as::<_, Tool>(RECENT_APPROVED_TOOLS_SQL)
+        .bind(limit)
+        .fetch_all(&pool)
+        .await
+        .map_err(|e| ServerFnError::new(format!("failed to load tools: {e}")))?;
+
+    Ok(sanitize_tools_for_public_response(tools))
+}
+
+/// Returns all function categories with live **approved** tool counts.
+#[cfg(feature = "ssr")]
+pub(crate) async fn fetch_categories(
+    pool: &sqlx::PgPool,
+) -> Result<Vec<(Category, i64)>, ServerFnError> {
+    let rows = sqlx::query_as::<_, CategoryWithCount>(CATEGORIES_WITH_COUNTS_SQL)
+        .fetch_all(pool)
+        .await
+        .map_err(|e| ServerFnError::new(format!("failed to load categories: {e}")))?;
+
+    Ok(rows.into_iter().map(CategoryWithCount::into_pair).collect())
+}
+
+/// Returns all function categories with live **approved** tool counts.
+#[server(GetCategories, "/api")]
+pub async fn get_categories() -> Result<Vec<(Category, i64)>, ServerFnError> {
+    let pool = use_context::<sqlx::PgPool>()
+        .ok_or_else(|| ServerFnError::new("database pool not available"))?;
+    fetch_categories(&pool).await
+}
+
+/// Searches **approved** tools using Postgres full-text search.
+///
+/// Optional filters narrow by `function` and any chain in `chains`.
+#[server(SearchTools, "/api")]
+pub async fn search_tools(
+    query: String,
+    function: Option<String>,
+    chain: Option<String>,
+) -> Result<Vec<Tool>, ServerFnError> {
+    let pool = use_context::<sqlx::PgPool>()
+        .ok_or_else(|| ServerFnError::new("database pool not available"))?;
+
+    let mut sql = SEARCH_APPROVED_TOOLS_BASE_SQL.to_string();
+
+    let mut idx = 2;
+    if function.is_some() {
+        push_bind_clause(&mut sql, "AND function =", idx);
+        idx += 1;
+    }
+    if chain.is_some() {
+        push_bind_clause(&mut sql, "AND", idx);
+        sql.push_str(" = ANY(chains)");
+    }
+    sql.push_str(" ORDER BY stars DESC, created_at DESC LIMIT 50");
+
+    let mut q = sqlx::query_as::<_, Tool>(&sql).bind(&query);
+    if let Some(f) = &function {
+        q = q.bind(f);
+    }
+    if let Some(c) = &chain {
+        q = q.bind(c);
+    }
+
+    let tools = q
+        .fetch_all(&pool)
+        .await
+        .map_err(|e| ServerFnError::new(format!("search failed: {e}")))?;
+
+    Ok(sanitize_tools_for_public_response(tools))
+}
+
+/// Fetch a single **approved** tool by slug, if present.
+#[cfg(feature = "ssr")]
+pub(crate) async fn fetch_tool_by_slug(
+    pool: &sqlx::PgPool,
+    slug: &str,
+) -> Result<Option<Tool>, ServerFnError> {
+    let tool = sqlx::query_as::<_, Tool>(APPROVED_TOOL_BY_SLUG_SQL)
+        .bind(slug)
+        .fetch_optional(pool)
+        .await
+        .map_err(|e| ServerFnError::new(format!("failed to load tool: {e}")))?;
+
+    Ok(tool.map(sanitize_tool_for_public_response))
+}
+
+/// Fetch a single **approved** tool by slug (404-style error if missing or not approved).
+#[server(GetToolBySlug, "/api")]
+pub async fn get_tool_by_slug(slug: String) -> Result<Tool, ServerFnError> {
+    let pool = use_context::<sqlx::PgPool>()
+        .ok_or_else(|| ServerFnError::new("database pool not available"))?;
+    fetch_tool_by_slug(&pool, &slug)
+        .await?
+        .ok_or_else(|| ServerFnError::new(format!("tool not found: {slug}")))
+}
+
+/// Maximum tools returned by `list_tools` / browser "load more" (matches UI cap).
+pub const MAX_LIST_TOOLS_LIMIT: i64 = 500;
+
+/// Clamp list-tools `limit` to the browser cap (500), never the legacy 100 ceiling.
+pub(crate) fn clamp_list_tools_limit(limit: i64) -> i64 {
+    limit.clamp(1, MAX_LIST_TOOLS_LIMIT)
+}
+
+const MAX_TOOL_FILTER_VALUES: usize = 20;
+const MAX_TOOL_FILTER_VALUE_LEN: usize = 64;
+const MAX_TOOL_LIST_QUERY_LEN: usize = 200;
+
+fn validate_tool_filter_values(axis: &str, values: &[String]) -> Result<(), ServerFnError> {
+    if values.len() > MAX_TOOL_FILTER_VALUES {
+        return Err(ServerFnError::new(format!(
+            "filter `{axis}` accepts at most {MAX_TOOL_FILTER_VALUES} values"
+        )));
+    }
+    for value in values {
+        if value.len() > MAX_TOOL_FILTER_VALUE_LEN {
+            return Err(ServerFnError::new(format!(
+                "filter `{axis}` values must be at most {MAX_TOOL_FILTER_VALUE_LEN} characters"
+            )));
+        }
+    }
+    Ok(())
+}
+
+/// Validates multi-axis tool filters for list/count queries.
+pub fn validate_tool_filters(filters: &ToolFilters) -> Result<(), ServerFnError> {
+    validate_tool_filter_values("function", &filters.function)?;
+    validate_tool_filter_values("asset_class", &filters.asset_class)?;
+    validate_tool_filter_values("actor", &filters.actor)?;
+    validate_tool_filter_values("tool_type", &filters.tool_type)?;
+    validate_tool_filter_values("status", &filters.status)?;
+    validate_tool_filter_values("pricing", &filters.pricing)?;
+    validate_tool_filter_values("chain", &filters.chain)?;
+    Ok(())
+}
+
+/// Validates browser tool-list request bounds (rejects out-of-range instead of clamping).
+pub fn validate_tool_list_request(req: &ToolListRequest) -> Result<(), ServerFnError> {
+    validate_tool_filters(&req.filters)?;
+    if req.offset < 0 {
+        return Err(ServerFnError::new("offset must be >= 0"));
+    }
+    if !(1..=MAX_LIST_TOOLS_LIMIT).contains(&req.limit) {
+        return Err(ServerFnError::new(format!(
+            "limit must be between 1 and {MAX_LIST_TOOLS_LIMIT}"
+        )));
+    }
+    if let Some(query) = req.query.as_ref() {
+        if query.len() > MAX_TOOL_LIST_QUERY_LEN {
+            return Err(ServerFnError::new(format!(
+                "query must be at most {MAX_TOOL_LIST_QUERY_LEN} characters"
+            )));
+        }
+    }
+    Ok(())
+}
+
+/// Stable request payload for browser tool-list queries (avoids positional arg drift).
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ToolListRequest {
+    pub sort: String,
+    pub offset: i64,
+    pub limit: i64,
+    pub filters: ToolFilters,
+    pub query: Option<String>,
+}
+
+/// Optional axis filters for tool list/count queries (AND across axes; OR within axis via ANY).
+#[derive(Debug, Clone, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct ToolFilters {
+    #[serde(default)]
+    pub function: Vec<String>,
+    #[serde(default)]
+    pub asset_class: Vec<String>,
+    #[serde(default)]
+    pub actor: Vec<String>,
+    #[serde(default)]
+    pub tool_type: Vec<String>,
+    #[serde(default)]
+    pub status: Vec<String>,
+    #[serde(default)]
+    pub pricing: Vec<String>,
+    #[serde(default)]
+    pub chain: Vec<String>,
+}
+
+fn append_tool_filters(sql: &mut String, filters: &ToolFilters, idx: &mut i32) {
+    use std::fmt::Write;
+
+    if !filters.function.is_empty() {
+        let _ = write!(sql, " AND function = ANY(${idx})");
+        *idx += 1;
+    }
+    if !filters.asset_class.is_empty() {
+        let _ = write!(sql, " AND asset_class = ANY(${idx})");
+        *idx += 1;
+    }
+    if !filters.actor.is_empty() {
+        let _ = write!(sql, " AND actor = ANY(${idx})");
+        *idx += 1;
+    }
+    if !filters.tool_type.is_empty() {
+        let _ = write!(sql, " AND type = ANY(${idx})");
+        *idx += 1;
+    }
+    if !filters.status.is_empty() {
+        let _ = write!(sql, " AND status = ANY(${idx})");
+        *idx += 1;
+    }
+    if !filters.pricing.is_empty() {
+        let _ = write!(sql, " AND pricing = ANY(${idx})");
+        *idx += 1;
+    }
+    if !filters.chain.is_empty() {
+        let _ = write!(sql, " AND chains && ${idx}");
+        *idx += 1;
+    }
+}
+
+/// Count approved tools with optional multi-axis filters.
+#[cfg(feature = "ssr")]
+pub(crate) async fn fetch_count_tools(
+    pool: &sqlx::PgPool,
+    filters: &ToolFilters,
+) -> Result<i64, ServerFnError> {
+    let mut sql = COUNT_APPROVED_TOOLS_SQL.to_string();
+    let mut idx = 1i32;
+    append_tool_filters(&mut sql, filters, &mut idx);
+
+    let mut q = sqlx::query_as::<_, (i64,)>(&sql);
+    if !filters.function.is_empty() {
+        q = q.bind(&filters.function);
+    }
+    if !filters.asset_class.is_empty() {
+        q = q.bind(&filters.asset_class);
+    }
+    if !filters.actor.is_empty() {
+        q = q.bind(&filters.actor);
+    }
+    if !filters.tool_type.is_empty() {
+        q = q.bind(&filters.tool_type);
+    }
+    if !filters.status.is_empty() {
+        q = q.bind(&filters.status);
+    }
+    if !filters.pricing.is_empty() {
+        q = q.bind(&filters.pricing);
+    }
+    if !filters.chain.is_empty() {
+        q = q.bind(&filters.chain);
+    }
+
+    let count = q
+        .fetch_one(pool)
+        .await
+        .map_err(|e| ServerFnError::new(format!("count failed: {e}")))?;
+
+    Ok(count.0)
+}
+
+/// Count approved tools with optional multi-axis filters.
+#[server(CountTools, "/api")]
+pub async fn count_tools(filters: ToolFilters) -> Result<i64, ServerFnError> {
+    validate_tool_filters(&filters)?;
+    let pool = use_context::<sqlx::PgPool>()
+        .ok_or_else(|| ServerFnError::new("database pool not available"))?;
+    fetch_count_tools(&pool, &filters).await
+}
+
+/// Top chains by approved-tool count for sidebar filters.
+#[cfg(feature = "ssr")]
+pub(crate) async fn fetch_chain_counts(
+    pool: &sqlx::PgPool,
+    limit: i64,
+) -> Result<Vec<(String, i64)>, ServerFnError> {
+    let limit = limit.clamp(1, 100);
+    let rows = sqlx::query_as::<_, (String, i64)>(CHAIN_COUNTS_SQL)
+        .bind(limit)
+        .fetch_all(pool)
+        .await
+        .map_err(|e| ServerFnError::new(format!("chain counts failed: {e}")))?;
+
+    Ok(rows)
+}
+
+/// Top chains by approved-tool count for sidebar filters.
+#[server(GetChainCounts, "/api")]
+pub async fn get_chain_counts(limit: i64) -> Result<Vec<(String, i64)>, ServerFnError> {
+    let pool = use_context::<sqlx::PgPool>()
+        .ok_or_else(|| ServerFnError::new("database pool not available"))?;
+    fetch_chain_counts(&pool, limit).await
+}
+
+/// List approved tools with sort, pagination, FTS query, and optional filters.
+#[cfg(feature = "ssr")]
+pub(crate) async fn fetch_list_tools(
+    pool: &sqlx::PgPool,
+    sort: &str,
+    offset: i64,
+    limit: i64,
+    filters: &ToolFilters,
+    query: Option<&str>,
+) -> Result<Vec<Tool>, ServerFnError> {
+    let offset = offset.max(0);
+    let limit = clamp_list_tools_limit(limit);
+    let order = list_tools_order_clause(sort);
+    let has_query = query.is_some_and(|q| !q.trim().is_empty());
+    let mut sql = LIST_APPROVED_TOOLS_SQL.to_string();
+    let mut idx = 1i32;
+
+    if has_query {
+        push_fts_filter(&mut sql, &mut idx);
+    }
+    append_tool_filters(&mut sql, filters, &mut idx);
+    push_order_offset_limit(&mut sql, order, &mut idx);
+
+    let mut q = sqlx::query_as::<_, Tool>(&sql);
+    if let Some(text) = query.filter(|q| !q.trim().is_empty()) {
+        q = q.bind(text);
+    }
+    if !filters.function.is_empty() {
+        q = q.bind(&filters.function);
+    }
+    if !filters.asset_class.is_empty() {
+        q = q.bind(&filters.asset_class);
+    }
+    if !filters.actor.is_empty() {
+        q = q.bind(&filters.actor);
+    }
+    if !filters.tool_type.is_empty() {
+        q = q.bind(&filters.tool_type);
+    }
+    if !filters.status.is_empty() {
+        q = q.bind(&filters.status);
+    }
+    if !filters.pricing.is_empty() {
+        q = q.bind(&filters.pricing);
+    }
+    if !filters.chain.is_empty() {
+        q = q.bind(&filters.chain);
+    }
+    q = q.bind(offset).bind(limit);
+
+    let tools = q
+        .fetch_all(pool)
+        .await
+        .map_err(|e| ServerFnError::new(format!("list tools failed: {e}")))?;
+
+    Ok(sanitize_tools_for_public_response(tools))
+}
+
+/// List approved tools with sort, pagination, FTS query, and optional filters.
+#[server(ListTools, "/api")]
+pub async fn list_tools(
+    sort: String,
+    offset: i64,
+    limit: i64,
+    filters: ToolFilters,
+    query: Option<String>,
+) -> Result<Vec<Tool>, ServerFnError> {
+    let pool = use_context::<sqlx::PgPool>()
+        .ok_or_else(|| ServerFnError::new("database pool not available"))?;
+    fetch_list_tools(&pool, &sort, offset, limit, &filters, query.as_deref()).await
+}
+
+/// Stable browser-facing tool list — wraps positional `list_tools` with a struct payload.
+#[server(ListToolsV1, "/api")]
+pub async fn list_tools_v1(req: ToolListRequest) -> Result<Vec<Tool>, ServerFnError> {
+    validate_tool_list_request(&req)?;
+    let pool = use_context::<sqlx::PgPool>()
+        .ok_or_else(|| ServerFnError::new("database pool not available"))?;
+    fetch_list_tools(
+        &pool,
+        &req.sort,
+        req.offset,
+        req.limit,
+        &req.filters,
+        req.query.as_deref(),
+    )
+    .await
+}
+
+/// Tools browser page size (must match `tools_browser::TOOL_PAGE_SIZE`).
+pub const BROWSER_TOOL_PAGE_SIZE: u32 = 50;
+
+/// Clamp browser `page` query param to the UI-visible window.
+pub fn clamp_browser_page_param(page: u32) -> u32 {
+    let max_page = (MAX_LIST_TOOLS_LIMIT as u32) / BROWSER_TOOL_PAGE_SIZE;
+    page.max(1).min(max_page)
+}
+
+/// Cumulative list limit for browser pagination (`offset` always 0).
+pub fn browser_visible_limit_for_page(page: u32) -> i64 {
+    let page = clamp_browser_page_param(page);
+    let limit = page
+        .saturating_mul(BROWSER_TOOL_PAGE_SIZE)
+        .min(MAX_LIST_TOOLS_LIMIT as u32);
+    i64::from(limit)
+}
+
+/// Single RPC payload for `ToolsBrowser` — avoids client-side fan-out into 5–6 `/api` calls.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct BrowserDataPayload {
+    pub categories: Vec<(Category, i64)>,
+    pub chains: Vec<(String, i64)>,
+    pub total: i64,
+    pub tools: Vec<Tool>,
+    pub comment_counts: HashMap<String, i64>,
+    pub preview_tool: Option<Tool>,
+}
+
+pub const MAX_DASHBOARD_LIST_LIMIT: i64 = 12;
+
+pub fn clamp_dashboard_list_limit(limit: i64) -> i64 {
+    limit.clamp(1, MAX_DASHBOARD_LIST_LIMIT)
+}
+
+fn encoded_query_value(value: &str) -> String {
+    urlencoding::encode(value).into_owned()
+}
+
+pub fn dashboard_filter_href(axis: &str, value: &str) -> String {
+    let value = encoded_query_value(value);
+    match axis {
+        "function" => format!("/tools?function={value}"),
+        "type" => format!("/tools?type={value}"),
+        "chain" => format!("/tools?chain={value}"),
+        "status" => format!("/tools?status={value}"),
+        "pricing" => format!("/tools?pricing={value}"),
+        _ => "/tools".into(),
+    }
+}
+
+fn dashboard_label(axis: &str, value: &str) -> String {
+    match axis {
+        "type" if value.eq_ignore_ascii_case("mcp") => "MCP".into(),
+        "type" if value.eq_ignore_ascii_case("cli") => "CLI".into(),
+        "type" if value.eq_ignore_ascii_case("sdk") => "SDK".into(),
+        "type" if value.eq_ignore_ascii_case("api") => "API".into(),
+        "type" if value.eq_ignore_ascii_case("x402") => "x402".into(),
+        "status" if value.eq_ignore_ascii_case("official") => "Official".into(),
+        "status" if value.eq_ignore_ascii_case("verified") => "Verified".into(),
+        "status" if value.eq_ignore_ascii_case("community") => "Community".into(),
+        "pricing" if value.eq_ignore_ascii_case("x402") => "x402".into(),
+        _ => value
+            .split(['-', '_'])
+            .filter(|part| !part.is_empty())
+            .map(|part| {
+                let mut chars = part.chars();
+                match chars.next() {
+                    Some(first) => format!("{}{}", first.to_uppercase(), chars.as_str()),
+                    None => String::new(),
+                }
+            })
+            .collect::<Vec<_>>()
+            .join(" "),
+    }
+}
+
+fn dashboard_bucket(axis: &str, id: String, label: Option<String>, count: i64) -> DashboardBucket {
+    let label = label.unwrap_or_else(|| dashboard_label(axis, &id));
+    let href = dashboard_filter_href(axis, &id);
+    DashboardBucket {
+        id,
+        label,
+        count,
+        href,
+    }
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+pub struct DashboardBucket {
+    pub id: String,
+    pub label: String,
+    pub count: i64,
+    pub href: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct DashboardMetrics {
+    pub public_tools: i64,
+    pub mcp_tools: i64,
+    pub cli_tools: i64,
+    pub sdk_tools: i64,
+    pub api_tools: i64,
+    pub x402_tools: i64,
+    pub official_tools: i64,
+    pub verified_tools: i64,
+    pub updated_recently: i64,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct PublicDashboardSnapshot {
+    pub metrics: DashboardMetrics,
+    pub type_counts: Vec<DashboardBucket>,
+    pub function_counts: Vec<DashboardBucket>,
+    pub chain_counts: Vec<DashboardBucket>,
+    pub trust_counts: Vec<DashboardBucket>,
+    pub pricing_counts: Vec<DashboardBucket>,
+    pub new_tools: Vec<Tool>,
+    pub popular_tools: Vec<Tool>,
+    pub x402_tools: Vec<Tool>,
+    pub high_trust_tools: Vec<Tool>,
+    pub as_of: chrono::DateTime<chrono::Utc>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ToolkitExportPayload {
+    pub format: String,
+    pub filename: String,
+    pub body: String,
+}
+
+/// Public-safe tool shape for JSON export — omits internal ids and operator fields.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct ToolkitExportTool {
+    pub slug: String,
+    pub name: String,
+    pub description: Option<String>,
+    pub function: String,
+    #[serde(rename = "type")]
+    pub tool_type: String,
+    pub chains: Vec<String>,
+    pub status: String,
+    pub official_team: Option<String>,
+    pub pricing: String,
+    pub x402_price: Option<String>,
+    pub install_command: Option<String>,
+    pub safe_copy_command: Option<String>,
+    pub mcp_endpoint: Option<String>,
+    pub repo_url: Option<String>,
+    pub homepage: Option<String>,
+    pub npm_package: Option<String>,
+    pub license: Option<String>,
+    pub stars: i32,
+    pub claim_state: String,
+    pub install_risk_level: String,
+}
+
+fn tool_to_toolkit_export(tool: &Tool) -> ToolkitExportTool {
+    ToolkitExportTool {
+        slug: tool.slug.clone(),
+        name: tool.name.clone(),
+        description: tool.description.clone(),
+        function: tool.function.clone(),
+        tool_type: tool.tool_type.clone(),
+        chains: tool.chains.clone(),
+        status: tool.status.clone(),
+        official_team: tool.official_team.clone(),
+        pricing: tool.pricing.clone(),
+        x402_price: tool.x402_price.clone(),
+        install_command: tool.install_command.clone(),
+        safe_copy_command: tool.safe_copy_command.clone(),
+        mcp_endpoint: tool.mcp_endpoint.clone(),
+        repo_url: tool.repo_url.clone(),
+        homepage: tool.homepage.clone(),
+        npm_package: tool.npm_package.clone(),
+        license: tool.license.clone(),
+        stars: tool.stars,
+        claim_state: tool.claim_state.clone(),
+        install_risk_level: tool.install_risk_level.clone(),
+    }
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct MyToolkitPayload {
+    pub total: i64,
+    pub tools: Vec<Tool>,
+    pub markdown_export: ToolkitExportPayload,
+    pub json_export: ToolkitExportPayload,
+}
+
+/// Request for bundled browser data load.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct LoadBrowserDataRequest {
+    pub sort: String,
+    #[serde(default)]
+    pub filters: ToolFilters,
+    #[serde(default)]
+    pub search_q: Option<String>,
+    #[serde(default)]
+    pub selected: Option<String>,
+    pub page: u32,
+}
+
+/// Load all data required by `ToolsBrowser` in **one** server round-trip (one DB pool checkout
+/// sequence per HTTP request; internal queries still run concurrently on the server).
+#[server(LoadBrowserData, "/api")]
+pub async fn load_browser_data(
+    req: LoadBrowserDataRequest,
+) -> Result<BrowserDataPayload, ServerFnError> {
+    validate_tool_filters(&req.filters)?;
+    let pool = use_context::<sqlx::PgPool>()
+        .ok_or_else(|| ServerFnError::new("database pool not available"))?;
+
+    let page = clamp_browser_page_param(req.page);
+    let list_req = ToolListRequest {
+        sort: req.sort.clone(),
+        offset: 0,
+        limit: browser_visible_limit_for_page(page),
+        filters: req.filters.clone(),
+        query: req.search_q.clone(),
+    };
+    validate_tool_list_request(&list_req)?;
+
+    let preview_slug = req.selected.filter(|s| !s.is_empty());
+
+    let (categories, chains, total, tools, preview_tool) = futures::join!(
+        fetch_categories(&pool),
+        fetch_chain_counts(&pool, 12),
+        fetch_count_tools(&pool, &req.filters),
+        fetch_list_tools(
+            &pool,
+            &list_req.sort,
+            list_req.offset,
+            list_req.limit,
+            &list_req.filters,
+            list_req.query.as_deref(),
+        ),
+        async {
+            match preview_slug.as_deref() {
+                Some(s) => fetch_tool_by_slug(&pool, s).await.ok().flatten(),
+                None => None,
+            }
+        },
+    );
+    let categories = categories?;
+    let chains = chains?;
+    let total = total?;
+    let tools = tools?;
+
+    let slugs: Vec<String> = tools.iter().map(|t| t.slug.clone()).collect();
+    let comment_counts: HashMap<String, i64> = if slugs.is_empty() {
+        HashMap::new()
+    } else {
+        fetch_tool_comment_counts(&pool, &slugs)
+            .await?
+            .into_iter()
+            .collect()
+    };
+
+    Ok(BrowserDataPayload {
+        categories,
+        chains,
+        total,
+        tools,
+        comment_counts,
+        preview_tool,
+    })
+}
+
+#[cfg_attr(feature = "ssr", derive(sqlx::FromRow))]
+struct DashboardValueCountRow {
+    id: String,
+    count: i64,
+}
+
+#[cfg_attr(feature = "ssr", derive(sqlx::FromRow))]
+struct DashboardCategoryCountRow {
+    id: String,
+    label: String,
+    count: i64,
+}
+
+#[cfg(feature = "ssr")]
+async fn fetch_dashboard_value_counts(
+    pool: &sqlx::PgPool,
+    axis: DashboardCountAxis,
+    limit: i64,
+) -> Result<Vec<DashboardBucket>, ServerFnError> {
+    let rows = sqlx::query_as::<_, DashboardValueCountRow>(axis.count_sql())
+        .bind(limit)
+        .fetch_all(pool)
+        .await
+        .map_err(|e| {
+            ServerFnError::new(format!(
+                "{} dashboard counts failed: {e}",
+                axis.bucket_axis()
+            ))
+        })?;
+
+    Ok(rows
+        .into_iter()
+        .map(|row| dashboard_bucket(axis.bucket_axis(), row.id, None, row.count))
+        .collect())
+}
+
+#[cfg(feature = "ssr")]
+async fn fetch_dashboard_function_counts(
+    pool: &sqlx::PgPool,
+    limit: i64,
+) -> Result<Vec<DashboardBucket>, ServerFnError> {
+    let rows = sqlx::query_as::<_, DashboardCategoryCountRow>(DASHBOARD_FUNCTION_COUNTS_SQL)
+        .bind(limit)
+        .fetch_all(pool)
+        .await
+        .map_err(|e| ServerFnError::new(format!("function dashboard counts failed: {e}")))?;
+
+    Ok(rows
+        .into_iter()
+        .map(|row| dashboard_bucket("function", row.id, Some(row.label), row.count))
+        .collect())
+}
+
+#[cfg(feature = "ssr")]
+async fn fetch_dashboard_x402_tools(
+    pool: &sqlx::PgPool,
+    limit: i64,
+) -> Result<Vec<Tool>, ServerFnError> {
+    let tools = sqlx::query_as::<_, Tool>(DASHBOARD_X402_TOOLS_SQL)
+        .bind(limit)
+        .fetch_all(pool)
+        .await
+        .map_err(|e| ServerFnError::new(format!("x402 dashboard tools failed: {e}")))?;
+    Ok(sanitize_tools_for_public_response(tools))
+}
+
+#[cfg(feature = "ssr")]
+async fn fetch_dashboard_metrics(pool: &sqlx::PgPool) -> Result<DashboardMetrics, ServerFnError> {
+    let row =
+        sqlx::query_as::<_, (i64, i64, i64, i64, i64, i64, i64, i64, i64)>(DASHBOARD_METRICS_SQL)
+            .fetch_one(pool)
+            .await
+            .map_err(|e| ServerFnError::new(format!("dashboard metrics failed: {e}")))?;
+
+    Ok(DashboardMetrics {
+        public_tools: row.0,
+        mcp_tools: row.1,
+        cli_tools: row.2,
+        sdk_tools: row.3,
+        api_tools: row.4,
+        x402_tools: row.5,
+        official_tools: row.6,
+        verified_tools: row.7,
+        updated_recently: row.8,
+    })
+}
+
+#[cfg(feature = "ssr")]
+pub(crate) async fn fetch_public_dashboard_snapshot(
+    pool: &sqlx::PgPool,
+    list_limit: i64,
+) -> Result<PublicDashboardSnapshot, ServerFnError> {
+    let limit = clamp_dashboard_list_limit(list_limit);
+    let empty_filters = ToolFilters::default();
+    let high_trust_filters = ToolFilters {
+        status: vec!["official".into(), "verified".into()],
+        ..Default::default()
+    };
+
+    let (metrics, type_counts, function_counts, chain_counts, trust_counts, pricing_counts) = futures::join!(
+        fetch_dashboard_metrics(pool),
+        fetch_dashboard_value_counts(pool, DashboardCountAxis::Type, limit),
+        fetch_dashboard_function_counts(pool, limit),
+        fetch_chain_counts(pool, limit),
+        fetch_dashboard_value_counts(pool, DashboardCountAxis::Status, limit),
+        fetch_dashboard_value_counts(pool, DashboardCountAxis::Pricing, limit),
+    );
+    let (new_tools, popular_tools, x402_tools, high_trust_tools) = futures::join!(
+        fetch_list_tools(pool, "new", 0, limit, &empty_filters, None),
+        fetch_list_tools(pool, "hot", 0, limit, &empty_filters, None),
+        fetch_dashboard_x402_tools(pool, limit),
+        fetch_list_tools(pool, "hot", 0, limit, &high_trust_filters, None),
+    );
+
+    Ok(PublicDashboardSnapshot {
+        metrics: metrics?,
+        type_counts: type_counts?,
+        function_counts: function_counts?,
+        chain_counts: chain_counts?
+            .into_iter()
+            .map(|(id, count)| dashboard_bucket("chain", id, None, count))
+            .collect(),
+        trust_counts: trust_counts?,
+        pricing_counts: pricing_counts?,
+        new_tools: new_tools?,
+        popular_tools: popular_tools?,
+        x402_tools: x402_tools?,
+        high_trust_tools: high_trust_tools?,
+        as_of: chrono::Utc::now(),
+    })
+}
+
+#[server(GetPublicDashboardSnapshot, "/api")]
+pub async fn get_public_dashboard_snapshot(
+    list_limit: i64,
+) -> Result<PublicDashboardSnapshot, ServerFnError> {
+    let pool = use_context::<sqlx::PgPool>()
+        .ok_or_else(|| ServerFnError::new("database pool not available"))?;
+    fetch_public_dashboard_snapshot(&pool, list_limit).await
+}
+
+fn sanitize_toolkit_tools(tools: Vec<Tool>) -> Vec<Tool> {
+    sanitize_tools_for_public_response(tools)
+        .into_iter()
+        .map(|mut tool| {
+            tool.name = redact_secrets(&tool.name);
+            tool.description = tool.description.map(|value| redact_secrets(&value));
+            tool.install_command = tool.install_command.map(|value| redact_secrets(&value));
+            tool.safe_copy_command = tool.safe_copy_command.map(|value| redact_secrets(&value));
+            tool.mcp_endpoint = tool.mcp_endpoint.map(|value| redact_secrets(&value));
+            tool
+        })
+        .collect()
+}
+
+fn toolkit_markdown_for_tools(tools: &[Tool]) -> String {
+    let mut body = String::from("# My OnchainAI Toolkit\n\n");
+    if tools.is_empty() {
+        body.push_str("No saved tools yet.\n");
+        return body;
+    }
+
+    body.push_str("Saved tools exported from OnchainAI.\n\n");
+    for tool in tools {
+        let chains = if tool.chains.is_empty() {
+            "Not listed".into()
+        } else {
+            tool.chains.join(", ")
+        };
+        let install = tool
+            .safe_copy_command
+            .as_deref()
+            .or(tool.install_command.as_deref())
+            .unwrap_or("No install command listed");
+        let endpoint = tool
+            .mcp_endpoint
+            .as_deref()
+            .unwrap_or("No MCP endpoint listed");
+        let _ = writeln!(body, "## {}", tool.name);
+        let _ = writeln!(body, "- Slug: {}", tool.slug);
+        let _ = writeln!(body, "- Type: {}", tool.tool_type);
+        let _ = writeln!(body, "- Function: {}", tool.function);
+        let _ = writeln!(body, "- Chains: {chains}");
+        let _ = writeln!(body, "- Trust: {}", tool.status);
+        let _ = writeln!(body, "- Pricing: {}", tool.pricing);
+        if let Some(price) = tool.x402_price.as_deref().filter(|value| !value.is_empty()) {
+            let _ = writeln!(body, "- x402 price: {price}");
+        }
+        let _ = writeln!(body, "- Install: `{install}`");
+        let _ = writeln!(body, "- MCP endpoint: {endpoint}");
+        let _ = writeln!(body, "- OnchainAI: /tools/{}\n", tool.slug);
+    }
+    body
+}
+
+pub fn build_toolkit_payload(tools: Vec<Tool>) -> Result<MyToolkitPayload, ServerFnError> {
+    let tools = sanitize_toolkit_tools(tools);
+    let markdown_body = toolkit_markdown_for_tools(&tools);
+    let export_tools: Vec<ToolkitExportTool> = tools.iter().map(tool_to_toolkit_export).collect();
+    let json_body = serde_json::to_string_pretty(&export_tools)
+        .map_err(|e| ServerFnError::new(format!("failed to serialize toolkit: {e}")))?;
+
+    Ok(MyToolkitPayload {
+        total: tools.len() as i64,
+        tools,
+        markdown_export: ToolkitExportPayload {
+            format: "markdown".into(),
+            filename: "onchainai-toolkit.md".into(),
+            body: markdown_body,
+        },
+        json_export: ToolkitExportPayload {
+            format: "json".into(),
+            filename: "onchainai-toolkit.json".into(),
+            body: json_body,
+        },
+    })
+}
+
+#[cfg(feature = "ssr")]
+async fn fetch_user_toolkit(
+    pool: &sqlx::PgPool,
+    user_id: uuid::Uuid,
+) -> Result<MyToolkitPayload, ServerFnError> {
+    let tools = sqlx::query_as::<_, Tool>(USER_TOOLKIT_SQL)
+        .bind(user_id)
+        .fetch_all(pool)
+        .await
+        .map_err(|e| ServerFnError::new(format!("failed to load toolkit: {e}")))?;
+
+    build_toolkit_payload(tools)
+}
+
+#[server(ListMyToolkit, "/api")]
+pub async fn list_my_toolkit() -> Result<MyToolkitPayload, ServerFnError> {
+    let (parts, pool, config) = request_context()?;
+    let user = require_user(&parts, &pool, &config.jwt_secret, &config.jwt_issuer()).await?;
+    fetch_user_toolkit(&pool, user.id).await
+}
+
+/// Batch comment counts for approved tools by slug.
+#[cfg(feature = "ssr")]
+pub(crate) async fn fetch_tool_comment_counts(
+    pool: &sqlx::PgPool,
+    slugs: &[String],
+) -> Result<Vec<(String, i64)>, ServerFnError> {
+    if slugs.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let rows = sqlx::query_as::<_, (String, i64)>(TOOL_COMMENT_COUNTS_BY_SLUGS_SQL)
+        .bind(slugs)
+        .fetch_all(pool)
+        .await
+        .map_err(|e| ServerFnError::new(format!("comment counts failed: {e}")))?;
+
+    Ok(rows)
+}
+
+/// Batch comment counts for approved tools by slug.
+#[server(GetToolCommentCounts, "/api")]
+pub async fn get_tool_comment_counts(
+    slugs: Vec<String>,
+) -> Result<Vec<(String, i64)>, ServerFnError> {
+    let pool = use_context::<sqlx::PgPool>()
+        .ok_or_else(|| ServerFnError::new("database pool not available"))?;
+    fetch_tool_comment_counts(&pool, &slugs).await
+}

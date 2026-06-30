@@ -1,6 +1,5 @@
 //! MCP server — JSON-RPC 2.0 handler with 4 public tools at POST /mcp.
 
-use crate::install_safety::{blocks_structured_config, claude_mcp_config, install_warning_text};
 use crate::models::tool::sanitize_tool_for_public_response;
 use crate::models::Tool;
 use crate::server::functions::{clamp_dashboard_list_limit, fetch_public_dashboard_snapshot};
@@ -129,173 +128,224 @@ fn error_response(id: Value, code: i32, message: &str) -> JsonRpcResponse {
 }
 
 async fn tools_list() -> Result<Value, (i32, String)> {
-    Ok(json!({
-        "tools": [
-            {
-                "name": "search_tools",
-                "description": "Search OnchainAI for crypto/onchain MCP, CLI, SDK, API, x402, and AI-agent tools by capability. Examples: bridge USDC to Base, Uniswap MCP server, Solana wallet SDK.",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "query": {
-                            "type": "string",
-                            "description": "Natural-language capability, package, protocol, or tool name to search for"
-                        },
-                        "category": {
-                            "type": "string",
-                            "description": "Optional OnchainAI function filter, such as bridge, swap, wallet, payments, data, dev-tool, or ai-agent"
-                        },
-                        "chain": {
-                            "type": "string",
-                            "description": "Optional chain filter, such as base, ethereum, solana, arbitrum, or bitcoin"
-                        },
-                        "sort": {
-                            "type": "string",
-                            "enum": ["relevance", "trust", "stars", "recent"],
-                            "description": "Ranking strategy. Defaults to relevance, which combines text relevance, trust, stars, and freshness"
-                        },
-                        "limit": {
-                            "type": "integer",
-                            "minimum": 1,
-                            "maximum": 25,
-                            "description": "Maximum number of tools to return; defaults to 10"
-                        },
-                        "cursor": {
-                            "type": "string",
-                            "description": "Opaque pagination cursor returned by the previous search_tools call"
-                        }
-                    },
-                    "required": ["query"]
+    Ok(json!({ "tools": tool_definitions() }))
+}
+
+fn tool_definitions() -> Vec<Value> {
+    vec![
+        search_tools_definition(),
+        get_tool_detail_definition(),
+        list_categories_definition(),
+        get_dashboard_snapshot_definition(),
+        get_install_guide_definition(),
+    ]
+}
+
+fn search_tools_definition() -> Value {
+    json!({
+        "name": "search_tools",
+        "description": "Search OnchainAI for crypto/onchain MCP, CLI, SDK, API, x402, and AI-agent tools by capability. Examples: bridge USDC to Base, Uniswap MCP server, Solana wallet SDK.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "Natural-language capability, package, protocol, or tool name to search for"
+                },
+                "category": {
+                    "type": "string",
+                    "description": "Optional OnchainAI function filter, such as bridge, swap, wallet, payments, data, dev-tool, or ai-agent"
+                },
+                "chain": {
+                    "type": "string",
+                    "description": "Optional chain filter, such as base, ethereum, solana, arbitrum, or bitcoin"
+                },
+                "sort": {
+                    "type": "string",
+                    "enum": ["relevance", "trust", "stars", "recent"],
+                    "description": "Ranking strategy. Defaults to relevance, which combines text relevance, trust, stars, and freshness"
+                },
+                "limit": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 25,
+                    "description": "Maximum number of tools to return; defaults to 10"
+                },
+                "cursor": {
+                    "type": "string",
+                    "description": "Opaque pagination cursor returned by the previous search_tools call"
                 }
             },
-            {
-                "name": "get_tool_detail",
-                "description": "Get detailed info for a tool by slug",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": { "slug": { "type": "string" } },
-                    "required": ["slug"]
-                }
-            },
-            {
-                "name": "list_categories",
-                "description": "List all tool categories with counts",
-                "inputSchema": { "type": "object", "properties": {} }
-            },
-            {
-                "name": "get_dashboard_snapshot",
-                "description": "Public no-login snapshot of OnchainAI tool coverage, categories, trust, x402, and featured tool lists",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "limit": {
-                            "type": "integer",
-                            "minimum": 1,
-                            "maximum": 12,
-                            "description": "Maximum tools or buckets per section"
-                        }
-                    }
-                }
-            },
-            {
-                "name": "get_install_guide",
-                "description": "Platform-specific install guide",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "slug": { "type": "string" },
-                        "platform": { "type": "string", "enum": ["claude", "cursor", "generic"] }
-                    },
-                    "required": ["slug", "platform"]
+            "required": ["query"]
+        }
+    })
+}
+
+fn get_tool_detail_definition() -> Value {
+    json!({
+        "name": "get_tool_detail",
+        "description": "Get detailed info for a tool by slug",
+        "inputSchema": {
+            "type": "object",
+            "properties": { "slug": { "type": "string" } },
+            "required": ["slug"]
+        }
+    })
+}
+
+fn list_categories_definition() -> Value {
+    json!({
+        "name": "list_categories",
+        "description": "List all tool categories with counts",
+        "inputSchema": { "type": "object", "properties": {} }
+    })
+}
+
+fn get_dashboard_snapshot_definition() -> Value {
+    json!({
+        "name": "get_dashboard_snapshot",
+        "description": "Public no-login snapshot of OnchainAI tool coverage, categories, trust, x402, and featured tool lists",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "limit": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 12,
+                    "description": "Maximum tools or buckets per section"
                 }
             }
-        ]
-    }))
+        }
+    })
+}
+
+fn get_install_guide_definition() -> Value {
+    json!({
+        "name": "get_install_guide",
+        "description": "Platform-specific install guide",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "slug": { "type": "string" },
+                "platform": { "type": "string", "enum": ["claude", "cursor", "generic"] }
+            },
+            "required": ["slug", "platform"]
+        }
+    })
 }
 
 async fn tools_call(pool: &PgPool, params: Option<Value>) -> Result<Value, (i32, String)> {
-    let params = params.ok_or((-32602, "Missing params".into()))?;
-    let name = params
-        .get("name")
-        .and_then(|v| v.as_str())
-        .ok_or((-32602, "Missing tool name".into()))?;
-    let args = params
-        .get("arguments")
-        .cloned()
-        .unwrap_or_else(|| json!({}));
+    let request = ToolCallRequest::parse(params)?;
+    let content = dispatch_tool_call(pool, &request.name, &request.args).await?;
+    Ok(tool_call_text_response(content))
+}
 
-    let content = match name {
-        "search_tools" => {
-            let query = args
-                .get("query")
-                .and_then(|v| v.as_str())
-                .ok_or((-32602, "query required".into()))?;
-            let category = args
-                .get("category")
-                .and_then(|v| v.as_str())
-                .map(str::to_string);
-            let chain = args
-                .get("chain")
-                .and_then(|v| v.as_str())
-                .map(str::to_string);
-            let sort = McpSearchSort::parse(
-                args.get("sort")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or(McpSearchSort::Relevance.as_str()),
-            )?;
-            let limit = parse_search_limit(args.get("limit"));
-            let cursor = parse_search_cursor(args.get("cursor"))?;
-            let page = mcp_search_tools(pool, query, category, chain, sort, limit, cursor).await?;
-            serde_json::to_string_pretty(&page)
-                .map_err(|e| (-32603, format!("serialize error: {e}")))?
-        }
-        "get_tool_detail" => {
-            let slug = args
-                .get("slug")
-                .and_then(|v| v.as_str())
-                .ok_or((-32602, "slug required".into()))?;
-            match mcp_get_tool(pool, slug).await {
-                Ok(tool) => serde_json::to_string_pretty(&tool)
-                    .map_err(|e| (-32603, format!("serialize error: {e}")))?,
-                Err(msg) => return Err((-32000, msg)),
-            }
-        }
-        "list_categories" => {
-            let cats = mcp_list_categories(pool).await?;
-            serde_json::to_string_pretty(&cats)
-                .map_err(|e| (-32603, format!("serialize error: {e}")))?
-        }
-        "get_dashboard_snapshot" => {
-            let limit = args
-                .get("limit")
-                .and_then(|value| value.as_i64())
-                .unwrap_or(6);
-            let snapshot = fetch_public_dashboard_snapshot(pool, clamp_dashboard_list_limit(limit))
-                .await
-                .map_err(|e| (-32603, format!("dashboard snapshot failed: {e}")))?;
-            serde_json::to_string_pretty(&snapshot)
-                .map_err(|e| (-32603, format!("serialize error: {e}")))?
-        }
-        "get_install_guide" => {
-            let slug = args
-                .get("slug")
-                .and_then(|v| v.as_str())
-                .ok_or((-32602, "slug required".into()))?;
-            let platform = args
-                .get("platform")
-                .and_then(|v| v.as_str())
-                .unwrap_or("generic");
-            let guide = mcp_install_guide(pool, slug, platform).await?;
-            serde_json::to_string_pretty(&guide)
-                .map_err(|e| (-32603, format!("serialize error: {e}")))?
-        }
-        other => return Err((-32601, format!("Unknown tool: {other}"))),
-    };
+struct ToolCallRequest {
+    name: String,
+    args: Value,
+}
 
-    Ok(json!({
+impl ToolCallRequest {
+    fn parse(params: Option<Value>) -> Result<Self, (i32, String)> {
+        let params = params.ok_or((-32602, "Missing params".into()))?;
+        let name = required_str(&params, "name", "Missing tool name")?.to_string();
+        let args = params
+            .get("arguments")
+            .cloned()
+            .unwrap_or_else(|| json!({}));
+        Ok(Self { name, args })
+    }
+}
+
+async fn dispatch_tool_call(
+    pool: &PgPool,
+    name: &str,
+    args: &Value,
+) -> Result<String, (i32, String)> {
+    match name {
+        "search_tools" => call_search_tools(pool, args).await,
+        "get_tool_detail" => call_get_tool_detail(pool, args).await,
+        "list_categories" => call_list_categories(pool).await,
+        "get_dashboard_snapshot" => call_dashboard_snapshot(pool, args).await,
+        "get_install_guide" => call_install_guide(pool, args).await,
+        other => Err((-32601, format!("Unknown tool: {other}"))),
+    }
+}
+
+async fn call_search_tools(pool: &PgPool, args: &Value) -> Result<String, (i32, String)> {
+    let query = required_str(args, "query", "query required")?;
+    let category = optional_string(args, "category");
+    let chain = optional_string(args, "chain");
+    let sort = parse_mcp_sort(args)?;
+    let limit = parse_search_limit(args.get("limit"));
+    let cursor = parse_search_cursor(args.get("cursor"))?;
+    let page = mcp_search_tools(pool, query, category, chain, sort, limit, cursor).await?;
+    serialize_tool_payload(&page)
+}
+
+async fn call_get_tool_detail(pool: &PgPool, args: &Value) -> Result<String, (i32, String)> {
+    let slug = required_str(args, "slug", "slug required")?;
+    let tool = mcp_get_tool(pool, slug)
+        .await
+        .map_err(|msg| (-32000, msg))?;
+    serialize_tool_payload(&tool)
+}
+
+async fn call_list_categories(pool: &PgPool) -> Result<String, (i32, String)> {
+    let categories = mcp_list_categories(pool).await?;
+    serialize_tool_payload(&categories)
+}
+
+async fn call_dashboard_snapshot(pool: &PgPool, args: &Value) -> Result<String, (i32, String)> {
+    let limit = args
+        .get("limit")
+        .and_then(|value| value.as_i64())
+        .unwrap_or(6);
+    let snapshot = fetch_public_dashboard_snapshot(pool, clamp_dashboard_list_limit(limit))
+        .await
+        .map_err(|e| (-32603, format!("dashboard snapshot failed: {e}")))?;
+    serialize_tool_payload(&snapshot)
+}
+
+async fn call_install_guide(pool: &PgPool, args: &Value) -> Result<String, (i32, String)> {
+    let slug = required_str(args, "slug", "slug required")?;
+    let platform = args
+        .get("platform")
+        .and_then(|value| value.as_str())
+        .unwrap_or("generic");
+    let guide = mcp_install_guide(pool, slug, platform).await?;
+    serialize_tool_payload(&guide)
+}
+
+fn parse_mcp_sort(args: &Value) -> Result<McpSearchSort, (i32, String)> {
+    McpSearchSort::parse(
+        args.get("sort")
+            .and_then(|value| value.as_str())
+            .unwrap_or(McpSearchSort::Relevance.as_str()),
+    )
+}
+
+fn required_str<'a>(args: &'a Value, key: &str, message: &str) -> Result<&'a str, (i32, String)> {
+    args.get(key)
+        .and_then(|value| value.as_str())
+        .ok_or((-32602, message.into()))
+}
+
+fn optional_string(args: &Value, key: &str) -> Option<String> {
+    args.get(key)
+        .and_then(|value| value.as_str())
+        .map(str::to_string)
+}
+
+fn serialize_tool_payload(payload: &impl Serialize) -> Result<String, (i32, String)> {
+    serde_json::to_string_pretty(payload).map_err(|e| (-32603, format!("serialize error: {e}")))
+}
+
+fn tool_call_text_response(content: String) -> Value {
+    json!({
         "content": [{ "type": "text", "text": content }],
         "isError": false
-    }))
+    })
 }
 
 async fn mcp_fetch_public_tool(pool: &PgPool, slug: &str) -> Result<Tool, String> {
@@ -341,228 +391,16 @@ async fn mcp_list_categories(pool: &PgPool) -> Result<Vec<CategoryMcp>, (i32, St
         .collect())
 }
 
-#[derive(Serialize)]
-struct ReferralMetadata {
-    enabled: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    bps: Option<i32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    payout_address: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    model: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    builder_code: Option<String>,
-    payment_verified: bool,
-    x402_endpoint_verified: bool,
-    price_verified: bool,
-}
+mod install_guide;
 
-#[derive(Serialize)]
-struct InstallGuide {
-    command: String,
-    risk_level: String,
-    risk_reasons: Vec<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    warning: Option<String>,
-    blocked: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    config_json: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    x402_notice: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    referral: Option<ReferralMetadata>,
-    steps: Vec<String>,
-}
-
-fn x402_notice_for_tool(tool: &Tool) -> Option<String> {
-    if tool.pricing != "x402" && tool.x402_price.is_none() && !tool.referral_enabled {
-        return None;
-    }
-    let price = tool
-        .x402_price
-        .as_deref()
-        .filter(|p| !p.trim().is_empty())
-        .unwrap_or("the provider's x402 price");
-    let verification =
-        if tool.payment_verified && tool.x402_endpoint_verified && tool.price_verified {
-            "Payment details are operator verified."
-        } else {
-            "Payment details are not operator verified yet."
-        };
-    Some(format!(
-        "This tool may request x402 payment ({price}). Connect an agent wallet before calling it. {verification}"
-    ))
-}
-
-fn referral_metadata_for_tool(tool: &Tool) -> Option<ReferralMetadata> {
-    if !tool.referral_enabled {
-        return None;
-    }
-    Some(ReferralMetadata {
-        enabled: tool.referral_enabled,
-        bps: tool.referral_bps,
-        payout_address: tool.referral_payout_address.clone(),
-        model: tool.referral_model.clone(),
-        builder_code: tool.x402_builder_code.clone(),
-        payment_verified: tool.payment_verified,
-        x402_endpoint_verified: tool.x402_endpoint_verified,
-        price_verified: tool.price_verified,
-    })
-}
-
-async fn record_referral_event(pool: &PgPool, tool: &Tool, event_type: &str, platform: &str) {
-    if !tool.referral_enabled && tool.pricing != "x402" {
-        return;
-    }
-    let metadata = json!({
-        "platform": platform,
-        "source": "mcp_install_guide",
-        "builder_code": tool.x402_builder_code,
-    });
-    if let Err(error) = sqlx::query(
-        r#"
-        INSERT INTO referral_events (tool_id, event_type, metadata)
-        VALUES ($1, $2, $3)
-        "#,
-    )
-    .bind(tool.id)
-    .bind(event_type)
-    .bind(metadata)
-    .execute(pool)
-    .await
-    {
-        tracing::warn!(
-            tool_id = %tool.id,
-            event_type,
-            "failed to record referral event: {error}"
-        );
-    }
-}
-
-async fn mcp_install_guide(
-    pool: &PgPool,
-    slug: &str,
-    platform: &str,
-) -> Result<InstallGuide, (i32, String)> {
-    if !matches!(platform, "claude" | "cursor" | "generic") {
-        return Err((-32602, format!("invalid platform: {platform}")));
-    }
-
-    let tool = mcp_fetch_public_tool(pool, slug)
-        .await
-        .map_err(|m| (-32000, m))?;
-    record_referral_event(pool, &tool, "install_guide", platform).await;
-
-    let risk_level = tool.install_risk_level.clone();
-    let risk_reasons = tool.install_risk_reasons.clone();
-    let warning = install_warning_text(&risk_level).map(str::to_string);
-    let blocked = risk_level == "critical";
-
-    let install = tool
-        .safe_copy_command
-        .clone()
-        .or(tool.install_command.clone())
-        .unwrap_or_else(|| "No install command available.".into());
-
-    if blocked {
-        let x402_notice = x402_notice_for_tool(&tool);
-        let referral = referral_metadata_for_tool(&tool);
-        return Ok(InstallGuide {
-            command: install,
-            risk_level,
-            risk_reasons,
-            warning: Some(
-                "Install guidance blocked: critical risk pending operator review.".into(),
-            ),
-            blocked: true,
-            config_json: None,
-            x402_notice,
-            referral,
-            steps: vec![
-                "This tool has a critical-risk install command.".into(),
-                "Public install guidance is withheld until an operator reviews the listing.".into(),
-                "Contact the project directly or wait for operator approval.".into(),
-            ],
-        });
-    }
-
-    let config_blocked = blocks_structured_config(&risk_level);
-
-    let (command, config_json, steps) = match platform {
-        "claude" => {
-            let config = if config_blocked {
-                None
-            } else {
-                tool.install_command
-                    .as_deref()
-                    .and_then(|cmd| claude_mcp_config(slug, cmd, &risk_level))
-            };
-            (
-                install.clone(),
-                config,
-                vec![
-                    "Open Claude Desktop settings.".into(),
-                    if config_blocked {
-                        "Structured config is unavailable for high-risk commands; use generic install only if you trust the source.".into()
-                    } else {
-                        "Paste the structured MCP config JSON into your Claude settings.".into()
-                    },
-                    "Restart Claude to load the tool.".into(),
-                ],
-            )
-        }
-        "cursor" => (
-            install.clone(),
-            if config_blocked {
-                None
-            } else {
-                Some(
-                    json!({
-                        "mcpServers": {
-                            slug: {
-                                "command": "npx",
-                                "args": ["mcp-remote", "www.onchain-ai.xyz/mcp"]
-                            }
-                        }
-                    })
-                    .to_string(),
-                )
-            },
-            vec![
-                "Open Cursor MCP settings.".into(),
-                if config_blocked {
-                    "High-risk install: do not paste raw shell wrappers. Add manually only if you trust the source.".into()
-                } else {
-                    "Paste the config JSON or use the install command.".into()
-                },
-                "Reload MCP servers.".into(),
-            ],
-        ),
-        _ => (
-            install.clone(),
-            None,
-            vec!["Run the install command in your terminal.".into()],
-        ),
-    };
-    let x402_notice = x402_notice_for_tool(&tool);
-    let referral = referral_metadata_for_tool(&tool);
-
-    Ok(InstallGuide {
-        command,
-        risk_level,
-        risk_reasons,
-        warning,
-        blocked: false,
-        config_json,
-        x402_notice,
-        referral,
-        steps,
-    })
-}
+use install_guide::mcp_install_guide;
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::server::mcp::install_guide::{
+        referral_metadata_for_tool, InstallGuide, ReferralMetadata,
+    };
     use crate::server::queries::MCP_SEARCH_TOOLS_BASE_SQL;
 
     #[test]

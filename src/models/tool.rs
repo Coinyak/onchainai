@@ -138,40 +138,7 @@ pub fn parse_page_value(raw: &str) -> Option<u32> {
 
 /// Whether `logo_url` is safe to render as an external image.
 pub fn logo_url_is_safe_for_img(url: &str) -> bool {
-    let trimmed = url.trim();
-    if trimmed.contains(['"', '\'', '<', '>', '\r', '\n']) {
-        return false;
-    }
-    let lower = trimmed.to_ascii_lowercase();
-    if lower.starts_with("javascript:")
-        || lower.starts_with("data:")
-        || lower.starts_with("vbscript:")
-        || lower.starts_with("file:")
-        || lower.starts_with("blob:")
-    {
-        return false;
-    }
-
-    let parsed = match url::Url::parse(trimmed) {
-        Ok(u) => u,
-        Err(_) => return false,
-    };
-
-    if !parsed.username().is_empty() || parsed.password().is_some() {
-        return false;
-    }
-
-    let scheme = parsed.scheme();
-    if scheme != "http" && scheme != "https" {
-        return false;
-    }
-
-    let host = match parsed.host_str() {
-        Some(h) if !h.is_empty() => h.to_ascii_lowercase(),
-        _ => return false,
-    };
-
-    logo_url_allowed_host(&host, scheme == "https") || logo_url_is_safe_homepage_favicon(trimmed)
+    LogoUrlCandidate::parse(url).is_some_and(|candidate| candidate.is_renderable())
 }
 
 /// Back-compat alias for [`logo_url_is_safe_for_img`].
@@ -179,60 +146,127 @@ pub fn logo_url_is_http(url: &str) -> bool {
     logo_url_is_safe_for_img(url)
 }
 
-fn logo_url_github_host(host: &str) -> bool {
-    matches!(
-        host,
-        "github.com" | "avatars.githubusercontent.com" | "raw.githubusercontent.com"
-    ) || host.ends_with(".githubusercontent.com")
+struct LogoUrlCandidate {
+    parsed: url::Url,
+    host: LogoHost,
 }
 
-fn logo_url_allowed_host(host: &str, is_https: bool) -> bool {
-    if logo_url_github_host(host) {
-        return true;
+impl LogoUrlCandidate {
+    fn parse(raw: &str) -> Option<Self> {
+        let trimmed = raw.trim();
+        LogoText(trimmed).is_safe().then_some(())?;
+        let parsed = url::Url::parse(trimmed).ok()?;
+        valid_logo_credentials(&parsed).then_some(())?;
+        valid_logo_scheme(parsed.scheme()).then_some(())?;
+        let host = LogoHost::new(parsed.host_str().filter(|host| !host.is_empty())?);
+        Some(Self { parsed, host })
     }
-    if !is_https {
-        return false;
+
+    fn is_renderable(&self) -> bool {
+        self.allowed_host() || self.safe_homepage_favicon()
     }
-    host.ends_with(".cloudfront.net")
-        || host.ends_with(".amazonaws.com")
-        || host == "cdn.jsdelivr.net"
-        || host.ends_with(".jsdelivr.net")
-        || host == "unpkg.com"
-        || host.ends_with(".fastly.net")
+
+    fn allowed_host(&self) -> bool {
+        self.host.github() || self.https_cdn_host()
+    }
+
+    fn https_cdn_host(&self) -> bool {
+        self.parsed.scheme() == "https" && self.host.cdn()
+    }
+
+    fn safe_homepage_favicon(&self) -> bool {
+        self.parsed.scheme() == "https" && self.parsed.path() == "/favicon.ico"
+    }
 }
 
-/// Safe first-party favicon URLs (`https://host/favicon.ico`) may be stored and rendered.
-fn logo_url_is_safe_homepage_favicon(url: &str) -> bool {
-    let Ok(parsed) = url::Url::parse(url.trim()) else {
-        return false;
-    };
-    if parsed.scheme() != "https" {
-        return false;
+struct LogoText<'a>(&'a str);
+
+impl LogoText<'_> {
+    fn is_safe(&self) -> bool {
+        !self.has_forbidden_chars() && !self.has_blocked_scheme_prefix()
     }
-    if parsed.path() != "/favicon.ico" {
-        return false;
+
+    fn has_forbidden_chars(&self) -> bool {
+        self.0.contains(['\"', '\'', '<', '>', '\r', '\n'])
     }
-    if !parsed.username().is_empty() || parsed.password().is_some() {
-        return false;
+
+    fn has_blocked_scheme_prefix(&self) -> bool {
+        let lower = self.0.to_ascii_lowercase();
+        BLOCKED_LOGO_SCHEMES
+            .iter()
+            .any(|scheme| lower.starts_with(scheme))
     }
-    parsed.host_str().filter(|host| !host.is_empty()).is_some()
 }
+
+struct LogoHost(String);
+
+impl LogoHost {
+    fn new(host: &str) -> Self {
+        Self(host.to_ascii_lowercase())
+    }
+
+    fn github(&self) -> bool {
+        GITHUB_LOGO_HOSTS.contains(&self.0.as_str()) || self.0.ends_with(".githubusercontent.com")
+    }
+
+    fn cdn(&self) -> bool {
+        HTTPS_CDN_LOGO_HOST_SUFFIXES
+            .iter()
+            .any(|suffix| self.0.ends_with(suffix))
+            || HTTPS_CDN_LOGO_HOSTS.contains(&self.0.as_str())
+    }
+}
+
+fn valid_logo_credentials(parsed: &url::Url) -> bool {
+    parsed.username().is_empty() && parsed.password().is_none()
+}
+
+fn valid_logo_scheme(scheme: &str) -> bool {
+    matches!(scheme, "http" | "https")
+}
+
+const BLOCKED_LOGO_SCHEMES: &[&str] = &["javascript:", "data:", "vbscript:", "file:", "blob:"];
+
+const GITHUB_LOGO_HOSTS: &[&str] = &[
+    "github.com",
+    "avatars.githubusercontent.com",
+    "raw.githubusercontent.com",
+];
+
+const HTTPS_CDN_LOGO_HOSTS: &[&str] = &["cdn.jsdelivr.net", "unpkg.com"];
+
+const HTTPS_CDN_LOGO_HOST_SUFFIXES: &[&str] = &[
+    ".cloudfront.net",
+    ".amazonaws.com",
+    ".jsdelivr.net",
+    ".fastly.net",
+];
 
 /// Filter a stored logo URL through [`logo_url_is_safe_for_img`].
 pub fn sanitize_logo_url(url: Option<String>) -> Option<String> {
     url.filter(|u| logo_url_is_safe_for_img(u))
 }
 
-fn is_valid_github_owner(owner: &str) -> bool {
-    if owner.is_empty() || owner.len() > 39 {
-        return false;
+struct GitHubOwner<'a>(&'a str);
+
+impl GitHubOwner<'_> {
+    fn is_valid(&self) -> bool {
+        self.has_valid_length() && self.has_valid_hyphens() && self.has_valid_bytes()
     }
-    if owner.starts_with('-') || owner.ends_with('-') || owner.contains("--") {
-        return false;
+
+    fn has_valid_length(&self) -> bool {
+        !self.0.is_empty() && self.0.len() <= 39
     }
-    owner
-        .bytes()
-        .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
+
+    fn has_valid_hyphens(&self) -> bool {
+        !self.0.starts_with('-') && !self.0.ends_with('-') && !self.0.contains("--")
+    }
+
+    fn has_valid_bytes(&self) -> bool {
+        self.0
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
+    }
 }
 
 /// Infer a GitHub owner avatar URL from a repository URL.
@@ -244,10 +278,14 @@ pub fn github_owner_avatar_url(repo_url: Option<&str>) -> Option<String> {
     let mut segments = parsed.path_segments()?;
     let owner = segments.next()?.trim();
     let repo = segments.next()?.trim().trim_end_matches(".git");
-    if owner.is_empty() || repo.is_empty() || !is_valid_github_owner(owner) {
+    if !github_repo_path_is_valid(owner, repo) {
         return None;
     }
     Some(format!("https://avatars.githubusercontent.com/{owner}"))
+}
+
+fn github_repo_path_is_valid(owner: &str, repo: &str) -> bool {
+    !owner.is_empty() && !repo.is_empty() && GitHubOwner(owner).is_valid()
 }
 
 fn safe_https_site_url(url: &str) -> Option<url::Url> {
@@ -319,6 +357,31 @@ pub fn display_monogram(tool: &Tool) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn assert_page_value_cases(cases: &[(&str, Option<u32>)]) {
+        for (raw, expected) in cases {
+            assert_eq!(parse_page_value(raw), *expected);
+        }
+    }
+
+    fn assert_logo_safety(cases: &[(&str, bool)]) {
+        for (url, expected) in cases {
+            assert_eq!(logo_url_is_safe_for_img(url), *expected, "url: {url}");
+        }
+    }
+
+    fn assert_sanitize_logo_cases(cases: &[(Option<&str>, Option<&str>)]) {
+        for (raw, expected) in cases {
+            let sanitized = sanitize_logo_url(raw.map(str::to_string));
+            assert_eq!(sanitized.as_deref(), *expected);
+        }
+    }
+
+    fn assert_json_fields(json: &serde_json::Value, cases: &[(&str, serde_json::Value)]) {
+        for (key, expected) in cases {
+            assert_eq!(&json[*key], expected);
+        }
+    }
 
     fn sample_tool() -> Tool {
         let review = default_review_fields();
@@ -423,80 +486,61 @@ mod tests {
 
     #[test]
     fn parse_page_value_rejects_invalid_values() {
-        assert_eq!(parse_page_value("2"), Some(2));
-        assert_eq!(parse_page_value("01"), Some(1));
-        assert_eq!(parse_page_value("abc"), None);
-        assert_eq!(parse_page_value("0"), None);
-        assert_eq!(parse_page_value("-1"), None);
-        assert_eq!(parse_page_value(""), None);
-        assert_eq!(parse_page_value(" 2"), None);
-        assert_eq!(parse_page_value("2.5"), None);
-        assert_eq!(parse_page_value("4294967296"), None);
+        assert_page_value_cases(&[
+            ("2", Some(2)),
+            ("01", Some(1)),
+            ("abc", None),
+            ("0", None),
+            ("-1", None),
+            ("", None),
+            (" 2", None),
+            ("2.5", None),
+            ("4294967296", None),
+        ]);
     }
 
     #[test]
     fn logo_url_is_safe_for_img_requires_allowlisted_hosts() {
-        assert!(logo_url_is_safe_for_img(
-            "https://avatars.githubusercontent.com/bob-collective"
-        ));
-        assert!(logo_url_is_safe_for_img(
-            "https://cdn.example.cloudfront.net/logo.png"
-        ));
-        assert!(logo_url_is_safe_for_img(
-            "https://cdn.jsdelivr.net/npm/pkg/logo.png"
-        ));
-        assert!(logo_url_is_safe_for_img(
-            "http://avatars.githubusercontent.com/u/1"
-        ));
-        assert!(logo_url_is_safe_for_img(
-            "http://raw.githubusercontent.com/org/repo/logo.png"
-        ));
-        assert!(logo_url_is_safe_for_img("http://github.com/org/repo"));
-        assert!(!logo_url_is_safe_for_img("https://example.com/logo.png"));
-        assert!(!logo_url_is_safe_for_img(
-            "https://tracker.evil.example/pixel.gif"
-        ));
-        assert!(!logo_url_is_safe_for_img("http://example.com/logo.png"));
-        assert!(!logo_url_is_safe_for_img(
-            "http://cdn.jsdelivr.net/pkg/logo.png"
-        ));
-        assert!(!logo_url_is_safe_for_img(
-            "http://x.cloudfront.net/logo.png"
-        ));
-        assert!(!logo_url_is_safe_for_img("javascript:alert(1)"));
-        assert!(!logo_url_is_safe_for_img("data:image/png;base64,abc"));
-        assert!(!logo_url_is_safe_for_img("vbscript:msgbox(1)"));
-        assert!(!logo_url_is_safe_for_img("file:///etc/passwd"));
-        assert!(!logo_url_is_safe_for_img("blob:https://example.com/uuid"));
-        assert!(!logo_url_is_safe_for_img("//example.com/logo.png"));
-        assert!(!logo_url_is_safe_for_img("/chains/ethereum.svg"));
-        assert!(!logo_url_is_safe_for_img("https:///logo.png"));
-        assert!(!logo_url_is_safe_for_img(
-            "https://user:pass@evil.example/logo"
-        ));
-        assert!(!logo_url_is_safe_for_img(
-            "https://evil.example@other.example/logo"
-        ));
-        assert!(!logo_url_is_safe_for_img(
-            "https://example.com/logo\"onerror=alert(1)"
-        ));
+        assert_logo_safety(&[
+            ("https://avatars.githubusercontent.com/bob-collective", true),
+            ("https://cdn.example.cloudfront.net/logo.png", true),
+            ("https://cdn.jsdelivr.net/npm/pkg/logo.png", true),
+            ("http://avatars.githubusercontent.com/u/1", true),
+            ("http://raw.githubusercontent.com/org/repo/logo.png", true),
+            ("http://github.com/org/repo", true),
+            ("https://example.com/logo.png", false),
+            ("https://tracker.evil.example/pixel.gif", false),
+            ("http://example.com/logo.png", false),
+            ("http://cdn.jsdelivr.net/pkg/logo.png", false),
+            ("http://x.cloudfront.net/logo.png", false),
+            ("javascript:alert(1)", false),
+            ("data:image/png;base64,abc", false),
+            ("vbscript:msgbox(1)", false),
+            ("file:///etc/passwd", false),
+            ("blob:https://example.com/uuid", false),
+            ("//example.com/logo.png", false),
+            ("/chains/ethereum.svg", false),
+            ("https:///logo.png", false),
+            ("https://user:pass@evil.example/logo", false),
+            ("https://evil.example@other.example/logo", false),
+            ("https://example.com/logo\"onerror=alert(1)", false),
+        ]);
     }
 
     #[test]
     fn sanitize_logo_url_filters_unsafe_values() {
-        assert_eq!(sanitize_logo_url(Some("javascript:alert(1)".into())), None);
-        assert_eq!(
-            sanitize_logo_url(Some("https://avatars.githubusercontent.com/acme".into())),
-            Some("https://avatars.githubusercontent.com/acme".into())
-        );
-        assert_eq!(
-            sanitize_logo_url(Some("https://gobob.xyz/favicon.ico".into())),
-            Some("https://gobob.xyz/favicon.ico".into())
-        );
-        assert_eq!(
-            sanitize_logo_url(Some("https://gobob.xyz/logo.png".into())),
-            None
-        );
+        assert_sanitize_logo_cases(&[
+            (Some("javascript:alert(1)"), None),
+            (
+                Some("https://avatars.githubusercontent.com/acme"),
+                Some("https://avatars.githubusercontent.com/acme"),
+            ),
+            (
+                Some("https://gobob.xyz/favicon.ico"),
+                Some("https://gobob.xyz/favicon.ico"),
+            ),
+            (Some("https://gobob.xyz/logo.png"), None),
+        ]);
     }
 
     #[test]
@@ -580,9 +624,17 @@ mod tests {
         tool.relevance_status = "accepted".into();
         tool.install_risk_level = "low".into();
         let json = serde_json::to_value(&tool).expect("serialize tool");
-        assert_eq!(json["crypto_relevance_score"], 72);
-        assert_eq!(json["relevance_status"], "accepted");
-        assert_eq!(json["install_risk_level"], "low");
-        assert_eq!(json["review_policy_version"], "operator-hardening-v1");
+        assert_json_fields(
+            &json,
+            &[
+                ("crypto_relevance_score", serde_json::json!(72)),
+                ("relevance_status", serde_json::json!("accepted")),
+                ("install_risk_level", serde_json::json!("low")),
+                (
+                    "review_policy_version",
+                    serde_json::json!("operator-hardening-v1"),
+                ),
+            ],
+        );
     }
 }

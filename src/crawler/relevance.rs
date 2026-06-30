@@ -29,6 +29,101 @@ pub struct RelevanceInput<'a> {
     pub source: &'a str,
 }
 
+#[derive(Debug)]
+struct RelevanceContext<'a> {
+    input: &'a RelevanceInput<'a>,
+    text: String,
+}
+
+impl<'a> RelevanceContext<'a> {
+    fn new(input: &'a RelevanceInput<'a>) -> Self {
+        Self {
+            input,
+            text: corpus(input),
+        }
+    }
+
+    fn matches(&self, keyword: &str) -> bool {
+        matches_keyword(&self.text, keyword)
+    }
+
+    fn has_evidence(&self) -> bool {
+        input_has_url(self.input.repo_url)
+            || input_has_url(self.input.homepage)
+            || input_has_value(self.input.npm_package)
+            || input_has_url(self.input.mcp_endpoint)
+            || !self.input.chains.is_empty()
+            || crypto_registry_source(self.input.source)
+    }
+
+    fn keyword_hits(&self) -> usize {
+        CRYPTO_KEYWORDS
+            .iter()
+            .filter(|keyword| self.matches(keyword))
+            .count()
+    }
+
+    fn weak_only_count(&self) -> usize {
+        WEAK_ONLY_KEYWORDS
+            .iter()
+            .filter(|keyword| self.matches(keyword))
+            .count()
+    }
+}
+
+#[derive(Debug, Default)]
+struct RelevanceScore {
+    score: i32,
+    reasons: Vec<String>,
+    negative_signals: Vec<String>,
+}
+
+impl RelevanceScore {
+    fn add_points(&mut self, points: i32, reason: &str) {
+        self.score += points;
+        self.add_reason(reason);
+    }
+
+    fn add_reason(&mut self, reason: &str) {
+        if !self.reasons.iter().any(|known| known == reason) {
+            self.reasons.push(reason.to_string());
+        }
+    }
+
+    fn add_negative_signal(&mut self, signal: &str) {
+        self.negative_signals.push(signal.to_string());
+    }
+
+    fn subtract(&mut self, points: i32) {
+        self.score = self.score.saturating_sub(points);
+    }
+
+    fn cap_at(&mut self, cap: i32) {
+        self.score = self.score.min(cap);
+    }
+
+    fn floor_at(&mut self, floor: i32) {
+        self.score = self.score.max(floor);
+    }
+
+    fn clamp_score(&mut self) {
+        self.score = self.score.clamp(0, 100);
+    }
+
+    fn has_medium_crypto_signal(&self) -> bool {
+        self.reasons.iter().any(|reason| {
+            reason.contains("web3")
+                || reason.contains("blockchain")
+                || reason.contains("crypto")
+                || reason.contains("on-chain")
+        })
+    }
+
+    fn has_strong_or_medium_signal(&self) -> bool {
+        self.reasons.iter().any(is_crypto_strength_reason)
+    }
+}
+
 /// Strong onchain/crypto signals — each match adds meaningful score.
 const STRONG_SIGNALS: &[(&str, i32, &str)] = &[
     ("bitcoin", 18, "mentions Bitcoin"),
@@ -95,6 +190,28 @@ const REJECT_CATEGORIES: &[(&str, &str)] = &[
     ("spreadsheet", "productivity MCP"),
 ];
 
+const WEAK_ONLY_KEYWORDS: &[&str] = &["mcp", "sdk", "agent", "gateway", "api"];
+
+const CRYPTO_KEYWORDS: &[&str] = &[
+    "web3",
+    "defi",
+    "wallet",
+    "bridge",
+    "bitcoin",
+    "ethereum",
+    "solana",
+    "crypto",
+    "blockchain",
+    "token",
+    "nft",
+    "staking",
+    "dex",
+    "onchain",
+    "x402",
+    "rwa",
+    "evm",
+];
+
 fn corpus(input: &RelevanceInput<'_>) -> String {
     let mut parts = vec![input.name.to_lowercase()];
     if let Some(d) = input.description {
@@ -109,239 +226,277 @@ fn corpus(input: &RelevanceInput<'_>) -> String {
     parts.join(" ")
 }
 
-fn has_evidence(input: &RelevanceInput<'_>) -> bool {
-    let has_url = input
-        .repo_url
-        .is_some_and(|u| !u.trim().is_empty() && u.starts_with("http"));
-    let has_homepage = input
-        .homepage
-        .is_some_and(|u| !u.trim().is_empty() && u.starts_with("http"));
-    let has_npm = input.npm_package.is_some_and(|p| !p.trim().is_empty());
-    let has_mcp = input
-        .mcp_endpoint
-        .is_some_and(|u| !u.trim().is_empty() && u.starts_with("http"));
-    let has_chains = !input.chains.is_empty();
-    let crypto_registry_source = matches!(input.source, "cryptoskill" | "web3-mcp-hub");
-
-    has_url || has_homepage || has_npm || has_mcp || has_chains || crypto_registry_source
+fn input_has_url(value: Option<&str>) -> bool {
+    value.is_some_and(|url| !url.trim().is_empty() && url.starts_with("http"))
 }
 
-fn count_weak_only_signals(text: &str) -> usize {
-    ["mcp", "sdk", "agent", "gateway", "api"]
-        .iter()
-        .filter(|k| matches_keyword(text, k))
-        .count()
+fn input_has_value(value: Option<&str>) -> bool {
+    value.is_some_and(|text| !text.trim().is_empty())
+}
+
+fn crypto_registry_source(source: &str) -> bool {
+    matches!(source, "cryptoskill" | "web3-mcp-hub")
 }
 
 fn matches_keyword(text: &str, keyword: &str) -> bool {
-    if keyword.contains(' ') || keyword.contains('.') || keyword.contains('-') {
+    if phrase_keyword(keyword) {
         text.contains(keyword)
     } else {
         text.split(|c: char| !c.is_alphanumeric())
-            .any(|w| w == keyword)
+            .any(|word| word == keyword)
     }
 }
 
-fn count_crypto_keyword_hits(text: &str) -> usize {
-    let keywords = [
-        "web3",
-        "defi",
-        "wallet",
-        "bridge",
-        "bitcoin",
-        "ethereum",
-        "solana",
-        "crypto",
-        "blockchain",
-        "token",
-        "nft",
-        "staking",
-        "dex",
-        "onchain",
-        "x402",
-        "rwa",
-        "evm",
-    ];
-    keywords.iter().filter(|k| matches_keyword(text, k)).count()
+fn phrase_keyword(keyword: &str) -> bool {
+    keyword.contains([' ', '.', '-'])
 }
+
+fn is_crypto_strength_reason(reason: &String) -> bool {
+    !GENERIC_REASON_FRAGMENTS
+        .iter()
+        .any(|fragment| reason.contains(fragment))
+}
+
+const GENERIC_REASON_FRAGMENTS: &[&str] = &[
+    "weak alone",
+    "MCP surface",
+    "SDK surface",
+    "agent surface",
+    "gateway surface",
+    "API surface",
+    "trustworthy listing evidence",
+];
 
 /// Assess crypto relevance for a crawled or submitted tool.
 pub fn assess_relevance(input: &RelevanceInput<'_>) -> RelevanceAssessment {
-    let text = corpus(input);
-    let mut score: i32 = 0;
-    let mut reasons: Vec<String> = Vec::new();
-    let mut negative_signals: Vec<String> = Vec::new();
+    let context = RelevanceContext::new(input);
+    let mut scoring = RelevanceScore::default();
 
-    for (keyword, points, reason) in STRONG_SIGNALS {
-        if matches_keyword(&text, keyword) {
-            score += points;
-            if !reasons.iter().any(|r| r == reason) {
-                reasons.push((*reason).to_string());
-            }
-        }
-    }
-
-    for (keyword, points, reason) in MEDIUM_SIGNALS {
-        if matches_keyword(&text, keyword) {
-            score += points;
-            if !reasons.iter().any(|r| r == reason) {
-                reasons.push((*reason).to_string());
-            }
-        }
-    }
-
-    let mut chain_count = 0usize;
-    for chain in input.chains {
-        let c = chain.to_lowercase();
-        if !c.is_empty() {
-            chain_count += 1;
-            score += 14;
-            let reason = format!("supports chain: {c}");
-            if !reasons.contains(&reason) {
-                reasons.push(reason);
-            }
-        }
-    }
-
-    if chain_count >= 2 && reasons.iter().any(|r| r.contains("wallet")) {
-        score += 12;
-        reasons.push("wallet tooling with multi-chain support".into());
-    }
-
-    if input
-        .npm_package
-        .is_some_and(|p| p.contains('@') || p.contains("web3") || p.contains("crypto"))
-    {
-        score += 8;
-        reasons.push("npm package with crypto naming".into());
-    }
-
-    if input.repo_url.is_some_and(|u| {
-        u.contains("github.com")
-            && (u.contains("web3")
-                || u.contains("defi")
-                || u.contains("crypto")
-                || u.contains("wallet")
-                || u.contains("chain")
-                || u.contains("bob"))
-    }) {
-        score += 8;
-        reasons.push("repo URL suggests crypto project".into());
-    }
-
-    if matches!(input.source, "cryptoskill" | "web3-mcp-hub") {
-        score += 15;
-        reasons.push(format!("discovered via crypto registry ({})", input.source));
-    }
-
-    let has_medium_crypto_signal = reasons.iter().any(|r| {
-        r.contains("web3")
-            || r.contains("blockchain")
-            || r.contains("crypto")
-            || r.contains("on-chain")
-    });
-
-    if has_evidence(input) {
-        score += 5;
-        reasons.push("has trustworthy listing evidence".into());
-    } else {
-        negative_signals.push("sparse evidence (no repo/homepage/npm/MCP endpoint)".into());
-        if has_medium_crypto_signal {
-            // Borderline tools with a crypto hint but no URLs stay in manual review range.
-            score = score.max(42);
-        } else {
-            score = score.saturating_sub(10);
-        }
-    }
-
-    for (keyword, label) in REJECT_CATEGORIES {
-        if matches_keyword(&text, keyword) {
-            negative_signals.push(label.to_string());
-            score = score.saturating_sub(35);
-        }
-    }
-
-    let weak_only = count_weak_only_signals(&text);
-    let strong_or_medium = reasons.iter().any(|r| {
-        !r.contains("weak alone")
-            && !r.contains("MCP surface")
-            && !r.contains("SDK surface")
-            && !r.contains("agent surface")
-            && !r.contains("gateway surface")
-            && !r.contains("API surface")
-            && !r.contains("trustworthy listing evidence")
-    });
-
-    if weak_only >= 1 && !strong_or_medium && input.chains.is_empty() {
-        negative_signals.push("only generic MCP/SDK/agent/gateway/api keywords".into());
-        score = score.min(25);
-    }
-
-    let keyword_hits = count_crypto_keyword_hits(&text);
-    if keyword_hits >= 4 && !has_evidence(input) {
-        negative_signals.push("keyword stuffing without listing evidence".into());
-        score = score.min(55);
-    }
-
-    score = score.clamp(0, 100);
-
-    let status = if !negative_signals.is_empty()
-        && negative_signals
-            .iter()
-            .any(|s| s.contains("filesystem") || s.contains("weather") || s.contains("calendar"))
-        && score < 50
-    {
-        "rejected".to_string()
-    } else if score >= 70 {
-        "accepted".to_string()
-    } else if score >= 40 {
-        "needs_review".to_string()
-    } else {
-        "rejected".to_string()
-    };
+    add_signal_matches(&context, &mut scoring, STRONG_SIGNALS);
+    add_signal_matches(&context, &mut scoring, MEDIUM_SIGNALS);
+    add_chain_support(&context, &mut scoring);
+    add_package_name_signal(&context, &mut scoring);
+    add_repo_url_signal(&context, &mut scoring);
+    add_source_signal(&context, &mut scoring);
+    apply_evidence_gate(&context, &mut scoring);
+    apply_reject_categories(&context, &mut scoring);
+    apply_generic_surface_gate(&context, &mut scoring);
+    apply_keyword_stuffing_gate(&context, &mut scoring);
+    scoring.clamp_score();
 
     RelevanceAssessment {
-        score,
-        status,
-        reasons,
-        negative_signals,
+        score: scoring.score,
+        status: status_for(&scoring).to_string(),
+        reasons: scoring.reasons,
+        negative_signals: scoring.negative_signals,
     }
 }
+
+fn add_signal_matches(
+    context: &RelevanceContext<'_>,
+    scoring: &mut RelevanceScore,
+    signals: &[(&str, i32, &str)],
+) {
+    for (keyword, points, reason) in signals {
+        if context.matches(keyword) {
+            scoring.add_points(*points, reason);
+        }
+    }
+}
+
+fn add_chain_support(context: &RelevanceContext<'_>, scoring: &mut RelevanceScore) {
+    let chains = normalized_chains(context.input.chains);
+    for chain in &chains {
+        scoring.add_points(14, &format!("supports chain: {chain}"));
+    }
+    if chains.len() >= 2 && has_wallet_reason(scoring) {
+        scoring.add_points(12, "wallet tooling with multi-chain support");
+    }
+}
+
+fn normalized_chains(chains: &[String]) -> Vec<String> {
+    chains
+        .iter()
+        .map(|chain| chain.to_lowercase())
+        .filter(|chain| !chain.is_empty())
+        .collect()
+}
+
+fn has_wallet_reason(scoring: &RelevanceScore) -> bool {
+    scoring
+        .reasons
+        .iter()
+        .any(|reason| reason.contains("wallet"))
+}
+
+fn add_package_name_signal(context: &RelevanceContext<'_>, scoring: &mut RelevanceScore) {
+    if context.input.npm_package.is_some_and(crypto_named_package) {
+        scoring.add_points(8, "npm package with crypto naming");
+    }
+}
+
+fn crypto_named_package(package: &str) -> bool {
+    package.contains('@') || package.contains("web3") || package.contains("crypto")
+}
+
+fn add_repo_url_signal(context: &RelevanceContext<'_>, scoring: &mut RelevanceScore) {
+    if context.input.repo_url.is_some_and(crypto_named_github_url) {
+        scoring.add_points(8, "repo URL suggests crypto project");
+    }
+}
+
+fn crypto_named_github_url(url: &str) -> bool {
+    url.contains("github.com")
+        && CRYPTO_REPO_MARKERS
+            .iter()
+            .any(|marker| url.contains(marker))
+}
+
+const CRYPTO_REPO_MARKERS: &[&str] = &["web3", "defi", "crypto", "wallet", "chain", "bob"];
+
+fn add_source_signal(context: &RelevanceContext<'_>, scoring: &mut RelevanceScore) {
+    if crypto_registry_source(context.input.source) {
+        scoring.add_points(
+            15,
+            &format!("discovered via crypto registry ({})", context.input.source),
+        );
+    }
+}
+
+fn apply_evidence_gate(context: &RelevanceContext<'_>, scoring: &mut RelevanceScore) {
+    if context.has_evidence() {
+        scoring.add_points(5, "has trustworthy listing evidence");
+        return;
+    }
+
+    scoring.add_negative_signal("sparse evidence (no repo/homepage/npm/MCP endpoint)");
+    if scoring.has_medium_crypto_signal() {
+        scoring.floor_at(42);
+    } else {
+        scoring.subtract(10);
+    }
+}
+
+fn apply_reject_categories(context: &RelevanceContext<'_>, scoring: &mut RelevanceScore) {
+    for (keyword, label) in REJECT_CATEGORIES {
+        if context.matches(keyword) {
+            scoring.add_negative_signal(label);
+            scoring.subtract(35);
+        }
+    }
+}
+
+fn apply_generic_surface_gate(context: &RelevanceContext<'_>, scoring: &mut RelevanceScore) {
+    if context.weak_only_count() == 0 {
+        return;
+    }
+    if scoring.has_strong_or_medium_signal() || !context.input.chains.is_empty() {
+        return;
+    }
+
+    scoring.add_negative_signal("only generic MCP/SDK/agent/gateway/api keywords");
+    scoring.cap_at(25);
+}
+
+fn apply_keyword_stuffing_gate(context: &RelevanceContext<'_>, scoring: &mut RelevanceScore) {
+    if context.keyword_hits() >= 4 && !context.has_evidence() {
+        scoring.add_negative_signal("keyword stuffing without listing evidence");
+        scoring.cap_at(55);
+    }
+}
+
+fn status_for(scoring: &RelevanceScore) -> &'static str {
+    if should_reject_for_negative_signal(scoring) {
+        "rejected"
+    } else if scoring.score >= 70 {
+        "accepted"
+    } else if scoring.score >= 40 {
+        "needs_review"
+    } else {
+        "rejected"
+    }
+}
+
+fn should_reject_for_negative_signal(scoring: &RelevanceScore) -> bool {
+    scoring.score < 50
+        && scoring.negative_signals.iter().any(|signal| {
+            BLOCKING_NEGATIVE_SIGNALS
+                .iter()
+                .any(|label| signal.contains(label))
+        })
+}
+
+const BLOCKING_NEGATIVE_SIGNALS: &[&str] = &["filesystem", "weather", "calendar"];
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn input<'a>(
+    struct TestInput<'a> {
         name: &'a str,
         description: Option<&'a str>,
         chains: &'a [String],
         repo: Option<&'a str>,
         npm: Option<&'a str>,
-    ) -> RelevanceInput<'a> {
-        RelevanceInput {
-            name,
-            description,
-            tool_type: "mcp",
-            repo_url: repo,
-            homepage: None,
-            npm_package: npm,
-            mcp_endpoint: None,
-            chains,
-            source: "github",
+    }
+
+    impl<'a> TestInput<'a> {
+        fn new(name: &'a str, description: Option<&'a str>) -> Self {
+            Self {
+                name,
+                description,
+                chains: &[],
+                repo: None,
+                npm: None,
+            }
         }
+
+        fn chains(mut self, chains: &'a [String]) -> Self {
+            self.chains = chains;
+            self
+        }
+
+        fn repo(mut self, repo: &'a str) -> Self {
+            self.repo = Some(repo);
+            self
+        }
+
+        fn npm(mut self, npm: &'a str) -> Self {
+            self.npm = Some(npm);
+            self
+        }
+
+        fn build(self) -> RelevanceInput<'a> {
+            RelevanceInput {
+                name: self.name,
+                description: self.description,
+                tool_type: "mcp",
+                repo_url: self.repo,
+                homepage: None,
+                npm_package: self.npm,
+                mcp_endpoint: None,
+                chains: self.chains,
+                source: "github",
+            }
+        }
+    }
+
+    fn assess(test_input: TestInput<'_>) -> RelevanceAssessment {
+        assess_relevance(&test_input.build())
     }
 
     #[test]
     fn accepted_bob_gateway_cli() {
         let chains = vec!["bitcoin".into(), "ethereum".into(), "base".into()];
-        let assessment = assess_relevance(&input(
-            "BOB Gateway CLI",
-            Some("Bitcoin to EVM bridge CLI for cross-chain transfers"),
-            &chains,
-            Some("https://github.com/bob-collective/bob"),
-            Some("@gobob/gateway-cli"),
-        ));
+        let assessment = assess(
+            TestInput::new(
+                "BOB Gateway CLI",
+                Some("Bitcoin to EVM bridge CLI for cross-chain transfers"),
+            )
+            .chains(&chains)
+            .repo("https://github.com/bob-collective/bob")
+            .npm("@gobob/gateway-cli"),
+        );
         assert_eq!(assessment.status, "accepted");
         assert!(assessment.score >= 70);
         assert!(assessment
@@ -353,13 +508,14 @@ mod tests {
     #[test]
     fn accepted_wallet_mcp_with_chains() {
         let chains = vec!["ethereum".into(), "polygon".into()];
-        let assessment = assess_relevance(&input(
-            "Chain Wallet MCP",
-            Some("MCP server for wallet operations and chain signing"),
-            &chains,
-            Some("https://github.com/example/wallet-mcp"),
-            None,
-        ));
+        let assessment = assess(
+            TestInput::new(
+                "Chain Wallet MCP",
+                Some("MCP server for wallet operations and chain signing"),
+            )
+            .chains(&chains)
+            .repo("https://github.com/example/wallet-mcp"),
+        );
         assert_eq!(assessment.status, "accepted");
         assert!(assessment.score >= 70);
         assert!(assessment.reasons.iter().any(|r| r.contains("wallet")));
@@ -367,12 +523,9 @@ mod tests {
 
     #[test]
     fn needs_review_generic_web3_helper_sparse_evidence() {
-        let assessment = assess_relevance(&input(
+        let assessment = assess(TestInput::new(
             "Web3 Helper",
             Some("A generic web3 helper utility"),
-            &[],
-            None,
-            None,
         ));
         assert_eq!(assessment.status, "needs_review");
         assert!(assessment.score >= 40 && assessment.score < 70);
@@ -384,12 +537,9 @@ mod tests {
 
     #[test]
     fn rejected_filesystem_mcp_only() {
-        let assessment = assess_relevance(&input(
+        let assessment = assess(TestInput::new(
             "Filesystem MCP",
             Some("MCP server for local file operations"),
-            &[],
-            None,
-            None,
         ));
         assert_eq!(assessment.status, "rejected");
         assert!(assessment
@@ -400,12 +550,9 @@ mod tests {
 
     #[test]
     fn rejected_weather_calendar_mcp() {
-        let weather = assess_relevance(&input(
+        let weather = assess(TestInput::new(
             "Weather MCP",
             Some("MCP server for weather forecasts"),
-            &[],
-            None,
-            None,
         ));
         assert_eq!(weather.status, "rejected");
         assert!(weather
@@ -413,12 +560,9 @@ mod tests {
             .iter()
             .any(|s| s.contains("weather")));
 
-        let calendar = assess_relevance(&input(
+        let calendar = assess(TestInput::new(
             "Calendar MCP",
             Some("MCP integration for calendar events"),
-            &[],
-            None,
-            None,
         ));
         assert_eq!(calendar.status, "rejected");
         assert!(calendar
@@ -429,14 +573,11 @@ mod tests {
 
     #[test]
     fn keyword_stuffing_without_evidence_needs_review_or_rejected() {
-        let assessment = assess_relevance(&input(
+        let assessment = assess(TestInput::new(
             "Crypto Mega Tool",
             Some(
                 "web3 defi wallet bridge bitcoin ethereum solana crypto blockchain token nft staking dex onchain x402 rwa evm",
             ),
-            &[],
-            None,
-            None,
         ));
         assert!(
             assessment.status == "needs_review" || assessment.status == "rejected",
@@ -451,13 +592,7 @@ mod tests {
 
     #[test]
     fn generic_mcp_alone_does_not_auto_accept() {
-        let assessment = assess_relevance(&input(
-            "Generic MCP",
-            Some("An MCP server"),
-            &[],
-            None,
-            None,
-        ));
+        let assessment = assess(TestInput::new("Generic MCP", Some("An MCP server")));
         assert_ne!(assessment.status, "accepted");
         assert!(assessment
             .negative_signals
@@ -468,13 +603,11 @@ mod tests {
     #[test]
     fn cryptoskill_source_boosts_borderline_tool() {
         let chains = vec!["ethereum".into()];
-        let mut inp = input(
-            "Swap Router SDK",
-            Some("SDK for DEX routing on EVM chains"),
-            &chains,
-            Some("https://github.com/example/swap-router"),
-            Some("@example/swap-router"),
-        );
+        let mut inp = TestInput::new("Swap Router SDK", Some("SDK for DEX routing on EVM chains"))
+            .chains(&chains)
+            .repo("https://github.com/example/swap-router")
+            .npm("@example/swap-router")
+            .build();
         inp.source = "cryptoskill";
         let assessment = assess_relevance(&inp);
         assert!(assessment.score >= 40);
@@ -486,59 +619,54 @@ mod tests {
 
     #[test]
     fn accepted_base_network_wallet_agent() {
-        let assessment = assess_relevance(&input(
-            "Base Wallet Agent MCP",
-            Some("Onchain wallet operations for Base network agents"),
-            &[],
-            Some("https://github.com/example/base-wallet-agent"),
-            Some("@example/base-wallet-agent"),
-        ));
+        let assessment = assess(
+            TestInput::new(
+                "Base Wallet Agent MCP",
+                Some("Onchain wallet operations for Base network agents"),
+            )
+            .repo("https://github.com/example/base-wallet-agent")
+            .npm("@example/base-wallet-agent"),
+        );
         assert_eq!(assessment.status, "accepted");
         assert!(assessment.reasons.iter().any(|r| r.contains("Base")));
     }
 
     #[test]
     fn rejects_generic_indexing_without_dex_word() {
-        let assessment = assess_relevance(&input(
-            "codebase-memory-mcp",
-            Some("Indexes codebases into a persistent knowledge graph for AI coding agents"),
-            &[],
-            Some("https://github.com/example/codebase-memory-mcp"),
-            None,
-        ));
+        let assessment = assess(
+            TestInput::new(
+                "codebase-memory-mcp",
+                Some("Indexes codebases into a persistent knowledge graph for AI coding agents"),
+            )
+            .repo("https://github.com/example/codebase-memory-mcp"),
+        );
         assert_ne!(assessment.status, "accepted");
         assert!(!assessment.reasons.iter().any(|r| r.contains("DEX")));
     }
 
     #[test]
     fn rejects_cryptographic_identity_without_onchain_signal() {
-        let assessment = assess_relevance(&input(
-            "osaurus",
-            Some("Native macOS harness for AI agents with cryptographic identity"),
-            &[],
-            Some("https://github.com/example/osaurus"),
-            None,
-        ));
+        let assessment = assess(
+            TestInput::new(
+                "osaurus",
+                Some("Native macOS harness for AI agents with cryptographic identity"),
+            )
+            .repo("https://github.com/example/osaurus"),
+        );
         assert_ne!(assessment.status, "accepted");
         assert!(!assessment.reasons.iter().any(|r| r == "crypto keyword"));
     }
 
     #[test]
     fn repo_url_in_corpus_affects_keyword_matching() {
-        let without_repo = assess_relevance(&input(
+        let without_repo = assess(TestInput::new(
             "Gateway Tool",
             Some("A transfer utility for agents"),
-            &[],
-            None,
-            None,
         ));
-        let with_repo = assess_relevance(&input(
-            "Gateway Tool",
-            Some("A transfer utility for agents"),
-            &[],
-            Some("https://github.com/example/ethereum-bridge"),
-            None,
-        ));
+        let with_repo = assess(
+            TestInput::new("Gateway Tool", Some("A transfer utility for agents"))
+                .repo("https://github.com/example/ethereum-bridge"),
+        );
         assert!(with_repo.score > without_repo.score);
         assert!(with_repo.reasons.iter().any(|r| r.contains("Ethereum")));
         assert!(!without_repo.reasons.iter().any(|r| r.contains("Ethereum")));
