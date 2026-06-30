@@ -121,13 +121,24 @@ async fn count_open_reports(pool: &sqlx::PgPool) -> i64 {
         .unwrap_or(0)
 }
 
+/// Count tools with open reports; returns 0 when the reports table is not migrated yet.
+#[cfg(feature = "ssr")]
+async fn count_reported_tools(pool: &sqlx::PgPool) -> i64 {
+    sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(DISTINCT tool_id)::bigint FROM tool_reports WHERE status = 'open'",
+    )
+    .fetch_one(pool)
+    .await
+    .unwrap_or(0)
+}
+
 /// Operator dashboard stats — queue counts, public tools, crawler source health.
 #[server(GetAdminDashboardStats, "/api")]
 pub async fn get_admin_dashboard_stats() -> Result<AdminDashboardStats, ServerFnError> {
     let (parts, pool, config) = request_context()?;
     require_admin(&parts, &pool, &config).await?;
 
-    let counts = sqlx::query_as::<_, (i64, i64, i64, i64, i64, i64, i64)>(
+    let counts = sqlx::query_as::<_, (i64, i64, i64, i64, i64, i64)>(
         r#"
         SELECT
           COUNT(*) FILTER (
@@ -162,10 +173,6 @@ pub async fn get_admin_dashboard_stats() -> Result<AdminDashboardStats, ServerFn
             WHERE approval_status = 'pending'
               AND relevance_status = 'rejected'
               AND quarantined_at IS NULL
-          )::bigint,
-          COUNT(*) FILTER (
-            WHERE id IN (SELECT DISTINCT tool_id FROM tool_reports WHERE status = 'open')
-              AND quarantined_at IS NULL
           )::bigint
         FROM tools
         "#,
@@ -175,6 +182,7 @@ pub async fn get_admin_dashboard_stats() -> Result<AdminDashboardStats, ServerFn
     .map_err(|e| ServerFnError::new(format!("failed to load dashboard counts: {e}")))?;
 
     let open_reports = count_open_reports(&pool).await;
+    let reported = count_reported_tools(&pool).await;
     let crawler_sources = list_crawler_sources_inner(&pool).await?;
 
     Ok(AdminDashboardStats {
@@ -184,7 +192,7 @@ pub async fn get_admin_dashboard_stats() -> Result<AdminDashboardStats, ServerFn
         public_tool_count: counts.3,
         needs_manual_research: counts.4,
         low_relevance: counts.5,
-        reported: counts.6,
+        reported,
         open_reports,
         crawler_sources,
     })

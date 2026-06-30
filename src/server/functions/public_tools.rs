@@ -51,6 +51,8 @@ pub async fn search_tools(
     let pool = use_context::<sqlx::PgPool>()
         .ok_or_else(|| ServerFnError::new("database pool not available"))?;
 
+    validate_search_tools_input(&query, &function, &chain)?;
+
     let mut sql = SEARCH_APPROVED_TOOLS_BASE_SQL.to_string();
 
     let mut idx = 2;
@@ -116,6 +118,28 @@ pub(crate) fn clamp_list_tools_limit(limit: i64) -> i64 {
 const MAX_TOOL_FILTER_VALUES: usize = 20;
 const MAX_TOOL_FILTER_VALUE_LEN: usize = 64;
 const MAX_TOOL_LIST_QUERY_LEN: usize = 200;
+
+fn validate_search_tools_input(
+    query: &str,
+    function: &Option<String>,
+    chain: &Option<String>,
+) -> Result<(), ServerFnError> {
+    if query.trim().is_empty() {
+        return Err(ServerFnError::new("query must not be empty"));
+    }
+    if query.len() > MAX_TOOL_LIST_QUERY_LEN {
+        return Err(ServerFnError::new(format!(
+            "query must be at most {MAX_TOOL_LIST_QUERY_LEN} characters"
+        )));
+    }
+    if let Some(filter) = function {
+        validate_tool_filter_values("function", &[filter.clone()])?;
+    }
+    if let Some(filter) = chain {
+        validate_tool_filter_values("chain", &[filter.clone()])?;
+    }
+    Ok(())
+}
 
 fn validate_tool_filter_values(axis: &str, values: &[String]) -> Result<(), ServerFnError> {
     if values.len() > MAX_TOOL_FILTER_VALUES {
