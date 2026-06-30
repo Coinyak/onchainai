@@ -647,11 +647,9 @@ body {
   gap: 6px;
   min-width: 0;
   flex: 1;
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: none;
+  flex-wrap: nowrap;
+  overflow: visible;
 }
-.site-top-nav-actions::-webkit-scrollbar { display: none; }
 .site-top-nav-btn {
   display: inline-flex;
   align-items: center;

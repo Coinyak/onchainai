@@ -68,7 +68,7 @@ Expiration Time: 2026-06-25T12:05:00Z
 
 - **JWT**: HS256 서명 (서버 비밀키), 15분 access token + 7일 refresh token
 - **세션 저장**: HttpOnly, Secure, SameSite=Lax 쿠키 (XSS로 접근 차단). Lax는 OAuth/매직링크 리다이렉트(외부 발 top-level GET)에서 세션 쿠키가 전달돼야 로그인 직후 화면에 반영되기 때문 — Strict는 그 첫 착지 요청에 쿠키를 누락시켜 로그아웃처럼 보임. Lax도 cross-site POST/서브리소스에는 쿠키를 보내지 않아 CSRF는 계속 차단 (OAuth state·PKCE 쿠키도 동일 이유로 Lax)
-- **세션 무효화**: 로그아웃 시 서버에서 토큰 jti 블랙리스트 등록
+- **세션 무효화**: 로그아웃 시 쿠키 삭제 (서버사이드 jti 블랙리스트는 아직 미구현 — 향후 과제)
 - **재인증**: 민감한 작업(닉네임 변경, 이메일 변경, x402 결제) 시 재인증 필요 (OWASP)
 - **Risk-based**: 새 IP/기기에서 로그인 시 추가 검증 (나중용)
 
@@ -154,10 +154,10 @@ pub struct ProfileRequest {
 
 ### 3.4 CSRF 방지
 
-- **SameSite=Lax 쿠키**: 인증 쿠키에 SameSite 속성 (Lax는 cross-site POST/서브리소스 전송을 차단해 CSRF를 막으면서, OAuth/매직링크 top-level 리다이렉트 착지에는 쿠키를 전달). 변이는 모두 POST 기반이므로 Lax로 충분 — Origin 검증 + CSRF 토큰이 1차 방어
-- **Origin 헤더 검증**: POST/PUT/DELETE 요청 시 `Origin` 헤더가 `www.onchain-ai.xyz`인지 확인
-- **CSRF 토큰**: Leptos server function 호출 시 CSRF 토큰 검증 (Leptos 내장)
-- **axum_csrf crate**: 추가 CSRF 보호 레이어 (선택적)
+- **SameSite=Lax 쿠키 (v1 1차 방어)**: 인증 쿠키에 SameSite 속성 (Lax는 cross-site POST/서브리소스 전송을 차단해 CSRF를 막으면서, OAuth/매직링크 top-level 리다이렉트 착지에는 쿠키를 전달). 변이는 모두 POST 기반이므로 Lax로 충분. **현재 SameSite=Lax만 구현되어 있음** — Origin 검증 미들웨어, CSRF 토큰, axum_csrf crate는 아직 도입되지 않았음 (P1 과제)
+- **Origin 헤더 검증 (미구현)**: POST/PUT/DELETE 요청 시 `Origin` 헤더 검증은 P1 항목. 현재 CORS는 cross-origin 브라우저 요청 제한용이며 CSRF 방어가 아님
+- **CSRF 토큰 (미구현)**: Leptos server function CSRF 토큰 검증은 P1 항목. Leptos에 내장 CSRF 토큰이 있다는 이전 문서 표기는 정정됨 — 명시적 도입 전까지 SameSite=Lax가 유일한 CSRF 방어
+- **axum_csrf crate (미사용)**: 추가 CSRF 보호 레이어는 선택적 P1 과제
 
 ### 3.5 HTTP 보안 헤더
 
@@ -424,7 +424,7 @@ X402_PAY_TO_ADDRESS=0x...
 - [ ] 입력 검증: 모든 요청 validator crate
 - [ ] SQL: 파라미터화 쿼리만 (sqlx 매크로)
 - [ ] XSS: Leptos 이스케이핑 + CSP 헤더
-- [ ] CSRF: SameSite=Lax (cross-site POST 차단) + Origin 검증 + CSRF 토큰
+- [ ] CSRF: SameSite=Lax (cross-site POST 차단, v1 유일 방어). Origin 검증 + CSRF 토큰은 P1 과제
 - [ ] 보안 헤더: X-Frame-Options, X-Content-Type-Options, CSP, HSTS, Referrer-Policy
 - [ ] CORS: www.onchain-ai.xyz만 허용
 - [ ] Rate limiting: governor crate
@@ -452,11 +452,11 @@ X402_PAY_TO_ADDRESS=0x...
 - [ ] 최소 권한: personal_sign만
 
 ### 관리자
-- [ ] 첫 가입자 자동 is_admin = true (트리거)
+- [ ] 첫 가입자 자동 is_admin = true (트리거) — 프로덕션 비활성화 (migration 023). 로컬에서만 재활성화 가능
 - [ ] `/admin/*` 라우트 서버사이드 is_admin 체크
 - [ ] 비관리자 접근 시 404 (존재 누출 방지)
 - [ ] site_settings: 관리자만 수정 (RLS)
-- [ ] profiles is_admin/is_banned: 관리자만 수정 (RLS + 서버 검증)
+- [ ] profiles is_admin/is_banned: 관리자만 수정 (RLS + 서버 검증 + 컬럼 REVOKE — migration 023)
 - [ ] 도구 승인/거절: 관리자만 (서버사이드 검증)
 - [ ] 댓글 삭제: 작성자 본인 또는 관리자
 - [ ] 관리자 권한 부여/제거: 기존 관리자만

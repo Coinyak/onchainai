@@ -10,7 +10,7 @@ use crate::filter_query::{build_tool_filters, describe_active_filters, ActiveFil
 use crate::models::tool::parse_page_value;
 
 use crate::server::functions::{
-    load_browser_data, BrowserDataPayload, LoadBrowserDataRequest, ToolFilters,
+    get_tool_by_slug, load_browser_data, BrowserDataPayload, LoadBrowserDataRequest, ToolFilters,
     MAX_LIST_TOOLS_LIMIT,
 };
 use leptos::prelude::*;
@@ -301,13 +301,17 @@ fn comment_count_for_slug(comment_counts: &HashMap<String, i64>, slug: &str) -> 
     comment_counts.get(slug).copied().unwrap_or(0)
 }
 
-/// Cache identity for browser list data (excludes `retry_tick`).
+/// Cache identity for browser list data (excludes `selected` and `retry_tick`).
+///
+/// `selected` is intentionally excluded so changing the preview selection does
+/// not invalidate the list payload. The preview tool is loaded by a separate
+/// Resource keyed on `selected` only, so the list stays stable and the scroll
+/// position is preserved.
 #[derive(Clone, PartialEq)]
 pub struct BrowserCacheKey {
     pub sort: String,
     pub filters: ToolFilters,
     pub search_q: Option<String>,
-    pub selected: Option<String>,
     pub page: u32,
 }
 
@@ -423,7 +427,6 @@ pub fn ToolsBrowser(
         sort: sort.get(),
         filters: filters.get(),
         search_q: search_q.get(),
-        selected: selected.get(),
         page: page_number.get(),
     });
     let page_fetch_deps = Memo::new(move |_| (page_cache_key.get(), retry_tick.get()));
@@ -438,7 +441,9 @@ pub fn ToolsBrowser(
                 sort: cache_key.sort.clone(),
                 filters: cache_key.filters.clone(),
                 search_q: cache_key.search_q.clone(),
-                selected: cache_key.selected.clone(),
+                // `selected` is excluded from the list fetch so preview
+                // selection changes do not invalidate the list payload.
+                selected: None,
                 page: cache_key.page,
             })
             .await?;
@@ -449,6 +454,20 @@ pub fn ToolsBrowser(
                 }));
             }
             Ok(data)
+        },
+    );
+
+    // Separate lightweight resource for the preview tool, keyed on `selected`
+    // only. This decouples preview loading from the list so changing the
+    // selected tool does not cause the list to collapse into skeletons or
+    // the scroll position to jump.
+    let preview_tool = Resource::new_blocking(
+        move || selected.get(),
+        move |slug| async move {
+            match slug {
+                Some(s) if !s.is_empty() => get_tool_by_slug(s).await.map(Some),
+                _ => Ok(None),
+            }
         },
     );
 
@@ -683,18 +702,23 @@ pub fn ToolsBrowser(
                                             }}
                                         }.into_any()
                                     }}
-                                    {data.preview_tool.clone().map(|tool| {
-                                        let close = without_selected(&browser_base, &qb);
-                                        let full = format!("/tools/{}", tool.slug);
-                                        view! {
-                                            <div class="preview-desktop">
-                                                <PreviewPanel tool=tool.clone() close_href=close.clone() full_page_href=full.clone()/>
-                                            </div>
-                                            <div class="preview-mobile">
-                                                <BottomSheet tool=tool close_href=close full_page_href=full/>
-                                            </div>
+                                    {match preview_tool.get() {
+                                        Some(Ok(Some(tool))) => {
+                                            let close = without_selected(&browser_base, &qb);
+                                            let full = format!("/tools/{}", tool.slug);
+                                            view! {
+                                                <div class="preview-desktop">
+                                                    <PreviewPanel tool=tool.clone() close_href=close.clone() full_page_href=full.clone()/>
+                                                </div>
+                                                <div class="preview-mobile">
+                                                    <BottomSheet tool=tool close_href=close full_page_href=full/>
+                                                </div>
+                                            }.into_any()
                                         }
-                                    })}
+                                        Some(Ok(None)) => ().into_any(),
+                                        Some(Err(_)) => ().into_any(),
+                                        None => ().into_any(),
+                                    }}
                                 </div>
                             }.into_any()
                         }
@@ -908,7 +932,6 @@ mod tests {
             sort: "hot".into(),
             filters: ToolFilters::default(),
             search_q: None,
-            selected: None,
             page,
         }
     }

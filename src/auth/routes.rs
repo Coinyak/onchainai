@@ -237,9 +237,10 @@ pub async fn oauth_callback(
         // Session cookie is SameSite=Lax: it must be sent on the top-level
         // navigation back from the GitHub/Supabase redirect (Strict withholds
         // it on that cross-site-initiated landing, so the user appears signed
-        // out until the next same-site request). Lax still blocks the cookie on
-        // cross-site POST/subresource requests, and CSRF tokens + Origin checks
-        // remain the primary mutation defense (SECURITY.md).
+        // out until the next same-site request). Lax blocks the cookie on
+        // cross-site POST/subresource requests, which is the primary CSRF
+        // defense for v1. No CSRF token or Origin-check middleware is
+        // implemented yet; see docs/SECURITY.md §3.4 for the current posture.
         set_cookie(
             ACCESS_TOKEN_COOKIE,
             &access_token,

@@ -37,8 +37,10 @@ fn set_cookie(name: &str, value: &str, max_age_secs: i64, secure: bool) -> Strin
     // Session cookie is SameSite=Lax so it is sent on the top-level navigation
     // from the magic-link email back to /auth/callback (Strict withholds it on
     // that cross-site-initiated landing, leaving the user signed out until the
-    // next same-site request). Lax still blocks cross-site POST/subresource
-    // sends; CSRF tokens + Origin checks remain the mutation defense (SECURITY.md).
+    // next same-site request). Lax blocks cross-site POST/subresource sends,
+    // which is the primary CSRF defense for v1. No CSRF token or Origin-check
+    // middleware is implemented yet; see docs/SECURITY.md §3.4 for the current
+    // posture and the v1 SameSite=Lax-only strategy.
     format!("{name}={value}; Path=/; HttpOnly; SameSite=Lax; Max-Age={max_age_secs}{secure_flag}")
 }
 
