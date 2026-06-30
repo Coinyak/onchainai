@@ -37,6 +37,7 @@ Also once after clone (macOS): `./scripts/install-disk-autoclean.sh` schedules a
 - Disk/build cleanup: `docs/DISK_MAINTENANCE.md`
 - x402/referrals/trust signals: `docs/X402_REFERRAL_SPEC.md`
 - Operator/admin behavior: `docs/OPERATOR_GUIDE.md`
+- Promote/take-down highlight carousel cards (+ image sourcing): `docs/FEATURED_CARDS.md`
 
 ## Essential Commands
 
