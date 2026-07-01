@@ -210,6 +210,7 @@ fn normalized_optional_string(value: Option<&str>) -> Option<String> {
     trimmed_optional(value).map(str::to_string)
 }
 
+#[cfg(feature = "ssr")]
 async fn duplicate_submission_count(pool: &sqlx::PgPool, slug: &str) -> Result<i64, ServerFnError> {
     sqlx::query_scalar::<_, i64>(
         r#"

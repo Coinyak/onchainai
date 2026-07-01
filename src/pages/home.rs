@@ -3,6 +3,7 @@
 use crate::components::featured_carousel::FeaturedCarousel;
 use crate::components::promo_cards::PromoCards;
 use crate::components::search_bar::SearchBar;
+use crate::components::tool_finder::ToolFinderPanel;
 use crate::components::tools_browser::{BrowserBase, ToolsBrowser};
 use crate::config::MCP_ENDPOINT_CMD;
 use crate::models::SiteSettings;
@@ -53,6 +54,7 @@ fn HomeHeroContent(
                     {description}
                 </p>
                 <SearchBar/>
+                <ToolFinderPanel/>
             </section>
             <FeaturedCarousel cards=featured/>
             <section class="mb-6">

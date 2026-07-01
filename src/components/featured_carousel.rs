@@ -1,10 +1,71 @@
 //! Featured tool carousel — SSR first card + client auto-advance (harness-round-11).
 
+use crate::components::admin_context::AdminOnly;
+use crate::components::icons::LucideIcon;
 use crate::server::functions::FeaturedCardView;
 use leptos::prelude::*;
 
 #[cfg(feature = "hydrate")]
 use gloo_timers::callback::Interval;
+
+#[derive(Clone, Copy)]
+enum CarouselDirection {
+    Previous,
+    Next,
+}
+
+fn carousel_target_index(current: usize, len: usize, direction: CarouselDirection) -> usize {
+    if len == 0 {
+        return 0;
+    }
+
+    match direction {
+        CarouselDirection::Previous if current == 0 => len - 1,
+        CarouselDirection::Previous => current - 1,
+        CarouselDirection::Next => (current + 1) % len,
+    }
+}
+
+fn featured_edit_href(cards: &[FeaturedCardView], current: usize) -> String {
+    cards
+        .get(current)
+        .map(|card| format!("/admin/featured?edit={}", card.id))
+        .unwrap_or_else(|| "/admin/featured".into())
+}
+
+fn featured_add_href(cards: &[FeaturedCardView], current: usize) -> String {
+    cards
+        .get(current)
+        .map(|card| format!("/admin/featured?new=1&tool={}", card.tool_slug))
+        .unwrap_or_else(|| "/admin/featured?new=1".into())
+}
+
+#[component]
+fn FeaturedCarouselAdminActions(
+    cards: Vec<FeaturedCardView>,
+    current: RwSignal<usize>,
+) -> impl IntoView {
+    let cards = StoredValue::new(cards);
+    view! {
+        <AdminOnly>
+            {move || {
+                let current_idx = current.get();
+                let edit_href = cards.with_value(|c| featured_edit_href(c, current_idx));
+                let add_href = cards.with_value(|c| featured_add_href(c, current_idx));
+                view! {
+                    <div class="featured-admin-actions">
+                        <a class="featured-admin-link" href=edit_href>
+                            "Edit"
+                        </a>
+                        <a class="featured-admin-link" href=add_href>
+                            "Add"
+                        </a>
+                    </div>
+                }.into_any()
+            }}
+        </AdminOnly>
+    }
+}
 
 #[component]
 pub fn FeaturedCarousel(cards: Vec<FeaturedCardView>) -> impl IntoView {
@@ -15,6 +76,8 @@ pub fn FeaturedCarousel(cards: Vec<FeaturedCardView>) -> impl IntoView {
     let len = cards.len();
     let current = RwSignal::new(0usize);
     let paused = RwSignal::new(false);
+    let admin_cards = cards.clone();
+    let dot_cards = cards.clone();
 
     #[cfg(feature = "hydrate")]
     {
@@ -42,7 +105,7 @@ pub fn FeaturedCarousel(cards: Vec<FeaturedCardView>) -> impl IntoView {
             on:mouseleave=move |_| paused.set(false)
             on:focusin=move |_| paused.set(true)
             on:focusout=move |_| paused.set(false)
-        >
+            >
             <div class="featured-carousel-track">
                 {cards.clone().into_iter().enumerate().map(|(idx, card)| {
                     let slug = card.tool_slug.clone();
@@ -80,10 +143,43 @@ pub fn FeaturedCarousel(cards: Vec<FeaturedCardView>) -> impl IntoView {
                     }
                 }).collect_view()}
             </div>
+            <FeaturedCarouselAdminActions cards=admin_cards current=current/>
             {if len > 1 {
                 view! {
+                    <button
+                        type="button"
+                        class="carousel-arrow carousel-arrow-prev"
+                        aria-label="Previous featured card"
+                        on:click=move |ev| {
+                            ev.stop_propagation();
+                            ev.prevent_default();
+                            current.set(carousel_target_index(
+                                current.get_untracked(),
+                                len,
+                                CarouselDirection::Previous,
+                            ));
+                        }
+                    >
+                        <LucideIcon name="chevron-left".to_string() class="carousel-arrow-icon"/>
+                    </button>
+                    <button
+                        type="button"
+                        class="carousel-arrow carousel-arrow-next"
+                        aria-label="Next featured card"
+                        on:click=move |ev| {
+                            ev.stop_propagation();
+                            ev.prevent_default();
+                            current.set(carousel_target_index(
+                                current.get_untracked(),
+                                len,
+                                CarouselDirection::Next,
+                            ));
+                        }
+                    >
+                        <LucideIcon name="chevron-right".to_string() class="carousel-arrow-icon"/>
+                    </button>
                     <div class="featured-carousel-dots" role="tablist" aria-label="Featured slides">
-                        {cards.into_iter().enumerate().map(|(idx, card)| {
+                        {dot_cards.into_iter().enumerate().map(|(idx, card)| {
                             let label = card
                                 .headline
                                 .filter(|h| !h.trim().is_empty())
@@ -115,4 +211,17 @@ pub fn FeaturedCarousel(cards: Vec<FeaturedCardView>) -> impl IntoView {
         </section>
     }
     .into_any()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn carousel_target_index_wraps_cleanly() {
+        assert_eq!(carousel_target_index(0, 0, CarouselDirection::Next), 0);
+        assert_eq!(carousel_target_index(0, 3, CarouselDirection::Previous), 2);
+        assert_eq!(carousel_target_index(2, 3, CarouselDirection::Next), 0);
+        assert_eq!(carousel_target_index(1, 3, CarouselDirection::Previous), 0);
+    }
 }

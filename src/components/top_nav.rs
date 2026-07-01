@@ -1,6 +1,7 @@
 //! Sticky top navigation — logo left, Submit + GitHub + auth on the right.
 
 use crate::auth::session::SessionUser;
+use crate::components::admin_context::use_current_user_resource;
 use crate::components::login_modal::LoginModal;
 use crate::models::tool::monogram_from_name;
 use crate::server::functions::get_current_user;
@@ -149,7 +150,8 @@ pub fn TopNav() -> impl IntoView {
     // assumed to change only via full-page redirects (GitHub OAuth, email magic link,
     // SIWX verify, POST /auth/logout). Do not expect sign-in/out to update TopNav
     // until the next document load.
-    let user = ArcOnceResource::new_blocking(async move { get_current_user().await });
+    let user = use_current_user_resource()
+        .unwrap_or_else(|| ArcOnceResource::new_blocking(async move { get_current_user().await }));
 
     view! {
         <LoginModal show=show_login/>

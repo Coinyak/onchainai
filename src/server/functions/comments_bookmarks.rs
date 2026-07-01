@@ -300,7 +300,11 @@ pub async fn toggle_bookmark(slug: String) -> Result<bool, ServerFnError> {
         .map_err(|e| ServerFnError::new(format!("bookmark toggle failed: {e}")))
 }
 
-async fn resolve_bookmark_tool_id(pool: &sqlx::PgPool, slug: &str) -> Result<Uuid, ServerFnError> {
+#[cfg(feature = "ssr")]
+pub(crate) async fn resolve_bookmark_tool_id(
+    pool: &sqlx::PgPool,
+    slug: &str,
+) -> Result<Uuid, ServerFnError> {
     sqlx::query_scalar::<_, Uuid>(APPROVED_TOOL_ID_BY_SLUG_SQL)
         .bind(slug)
         .fetch_optional(pool)

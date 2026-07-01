@@ -140,6 +140,7 @@ pub fn clear_axis(base_path: impl AsRef<str>, query_base: impl AsRef<str>, key: 
     format!("{base_path}?{}", parts.join("&"))
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn build_tool_filters(
     function: Option<String>,
     asset_class: Option<String>,
@@ -147,6 +148,7 @@ pub fn build_tool_filters(
     tool_type: Option<String>,
     status: Option<String>,
     pricing: Option<String>,
+    install_risk: Option<String>,
     chain: Option<String>,
 ) -> ToolFilters {
     ToolFilters {
@@ -156,6 +158,7 @@ pub fn build_tool_filters(
         tool_type: parse_multi(tool_type.as_deref()),
         status: parse_multi(status.as_deref()),
         pricing: parse_multi(pricing.as_deref()),
+        install_risk: parse_multi(install_risk.as_deref()),
         chain: parse_multi(chain.as_deref()),
     }
 }
@@ -169,6 +172,7 @@ pub struct ActiveFiltersSummary {
     pub tool_type: Vec<String>,
     pub status: Vec<String>,
     pub pricing: Vec<String>,
+    pub install_risk: Vec<String>,
     pub chain: Vec<String>,
     pub search: Option<String>,
     pub sort: String,
@@ -183,6 +187,7 @@ impl Default for ActiveFiltersSummary {
             tool_type: Vec::new(),
             status: Vec::new(),
             pricing: Vec::new(),
+            install_risk: Vec::new(),
             chain: Vec::new(),
             search: None,
             sort: "hot".into(),
@@ -199,6 +204,7 @@ impl ActiveFiltersSummary {
         tool_type: Option<String>,
         status: Option<String>,
         pricing: Option<String>,
+        install_risk: Option<String>,
         chain: Option<String>,
         search: Option<String>,
         sort: Option<String>,
@@ -210,6 +216,7 @@ impl ActiveFiltersSummary {
             tool_type: parse_multi(tool_type.as_deref()),
             status: parse_multi(status.as_deref()),
             pricing: parse_multi(pricing.as_deref()),
+            install_risk: parse_multi(install_risk.as_deref()),
             chain: parse_multi(chain.as_deref()),
             search: search.filter(|s| !s.trim().is_empty()),
             sort: sort.unwrap_or_else(|| "hot".into()),
@@ -223,6 +230,7 @@ impl ActiveFiltersSummary {
             || !self.tool_type.is_empty()
             || !self.status.is_empty()
             || !self.pricing.is_empty()
+            || !self.install_risk.is_empty()
             || !self.chain.is_empty()
             || self.search.is_some()
             || self.sort != "hot"
@@ -303,6 +311,14 @@ pub fn describe_active_filters(
             .map(|id| humanize_filter_id(id))
             .collect();
         lines.push(format!("Pricing: {}", labels.join(", ")));
+    }
+    if !summary.install_risk.is_empty() {
+        let labels: Vec<String> = summary
+            .install_risk
+            .iter()
+            .map(|id| humanize_filter_id(id))
+            .collect();
+        lines.push(format!("Install risk: {}", labels.join(", ")));
     }
     if !summary.chain.is_empty() {
         let labels: Vec<String> = summary.chain.iter().map(|id| id.to_uppercase()).collect();
@@ -440,6 +456,7 @@ mod tests {
             None,
             None,
             None,
+            None,
         );
         assert!(summary.has_active_filters());
 
@@ -456,6 +473,7 @@ mod tests {
             Some("mcp".into()),
             None,
             Some("x402".into()),
+            Some("low".into()),
             Some("eth".into()),
             Some("wallet".into()),
             Some("new".into()),
@@ -468,6 +486,7 @@ mod tests {
         assert!(lines.iter().any(|l| l.contains("Asset class: Crypto")));
         assert!(lines.iter().any(|l| l.contains("Type: MCP")));
         assert!(lines.iter().any(|l| l.contains("Pricing: X402")));
+        assert!(lines.iter().any(|l| l.contains("Install risk: Low")));
         assert!(lines.iter().any(|l| l.contains("Chain: ETH")));
         assert!(lines.iter().any(|l| l.contains("Search: \"wallet\"")));
         assert!(lines.iter().any(|l| l.contains("Sort: New")));

@@ -173,7 +173,8 @@ mod tests {
         tool.x402_pay_to_address = Some("0xproviderpayto".into());
         tool.submitted_by = Some(Uuid::new_v4());
 
-        let payload = build_toolkit_payload(vec![tool]).expect("toolkit payload");
+        let payload =
+            build_toolkit_payload(vec![ToolkitToolView::from_tool(tool)]).expect("toolkit payload");
 
         assert_eq!(payload.total, 1);
         assert_eq!(payload.tools[0].referral_payout_address, None);
@@ -190,6 +191,39 @@ mod tests {
             !payload.json_export.body.contains("approval_status"),
             "JSON export must omit operator fields"
         );
+    }
+
+    #[test]
+    fn toolkit_export_includes_user_notes_and_tags() {
+        let mut tool = sample_review_tool();
+        tool.approval_status = "approved".into();
+        tool.relevance_status = "accepted".into();
+        tool.install_command = Some("npx bridge-mcp".into());
+        let item = ToolkitToolView {
+            tool,
+            note: Some("Use for Base bridge research".into()),
+            tags: vec!["base".into(), "research".into()],
+            saved_at: chrono::Utc::now(),
+            updated_at: chrono::Utc::now(),
+        };
+
+        let payload = build_toolkit_payload(vec![item]).expect("toolkit payload");
+
+        assert_eq!(
+            payload.items[0].note.as_deref(),
+            Some("Use for Base bridge research")
+        );
+        assert_eq!(payload.items[0].tags, vec!["base", "research"]);
+        assert!(payload
+            .markdown_export
+            .body
+            .contains("- Note: Use for Base bridge research"));
+        assert!(payload
+            .markdown_export
+            .body
+            .contains("- Tags: base, research"));
+        assert!(payload.json_export.body.contains("\"note\""));
+        assert!(payload.json_export.body.contains("\"tags\""));
     }
 
     fn sample_review_tool() -> Tool {

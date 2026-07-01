@@ -2,13 +2,15 @@
 
 use crate::auth::session::has_access_token_cookie;
 use crate::chains::{chain_fallback_label, chain_tags_for_tool, ChainTagView};
+use crate::components::admin_context::AdminOnly;
 use crate::components::chain_logo::ChainLogo;
 use crate::components::copy_button::CopyButton;
 use crate::components::icons::LucideIcon;
 use crate::components::login_modal::LoginModal;
 use crate::components::tool_logo::ToolLogo;
+use crate::discovery::compare_href;
 use crate::models::Tool;
-use crate::server::functions::{is_bookmarked, set_bookmark};
+use crate::server::functions::{is_bookmarked, review_tool, set_bookmark, ReviewToolPayload};
 use leptos::prelude::*;
 use leptos::task::spawn_local;
 
@@ -16,6 +18,7 @@ use leptos::task::spawn_local;
 const CHAINS_VISIBLE_DESKTOP: usize = 5;
 /// Mobile tool card: show up to 3 chain tags, then "+N".
 const CHAINS_VISIBLE_MOBILE: usize = 3;
+const QUICK_VERIFY_REASON: &str = "Verified via public-card admin quick action.";
 
 fn badge_class(status: &str) -> &'static str {
     match status {
@@ -88,6 +91,104 @@ fn bookmark_icon(starred: bool) -> impl IntoView {
     }
 }
 
+fn status_badge_label(status: &str) -> &'static str {
+    match status {
+        "verified" => "Verified",
+        "official" => "Official",
+        _ => "Community",
+    }
+}
+
+fn can_mark_verified(status: &str) -> bool {
+    !matches!(status, "verified" | "official")
+}
+
+fn confirm_quick_verify() -> bool {
+    #[cfg(feature = "hydrate")]
+    {
+        web_sys::window()
+            .and_then(|window| window.confirm_with_message("Mark this tool verified?").ok())
+            .unwrap_or(false)
+    }
+    #[cfg(not(feature = "hydrate"))]
+    {
+        true
+    }
+}
+
+#[component]
+fn AdminToolCardActions(slug: String, status: RwSignal<String>) -> impl IntoView {
+    let busy = RwSignal::new(false);
+    let error = RwSignal::new(None::<String>);
+    let review_href = RwSignal::new(format!("/admin/tools?slug={slug}"));
+    let action_slug = RwSignal::new(slug.clone());
+
+    view! {
+        <AdminOnly>
+            {move || {
+                let review_href = review_href.get();
+                view! {
+                    <a
+                        class="card-action-btn admin-card-action-link"
+                        href=review_href
+                        aria-label="Review or edit"
+                        title="Review or edit"
+                        on:click=|ev| ev.stop_propagation()
+                    >
+                        <LucideIcon name="pencil".to_string() class="card-action-icon"/>
+                    </a>
+                    <Show when=move || can_mark_verified(&status.get())>
+                        <button
+                            type="button"
+                            class="card-action-btn admin-card-action-btn"
+                            aria-label="Mark verified"
+                            title="Mark verified"
+                            disabled=move || busy.get()
+                            on:click=move |ev| {
+                                ev.stop_propagation();
+                                if busy.get_untracked() {
+                                    return;
+                                }
+                                if !confirm_quick_verify() {
+                                    return;
+                                }
+                                busy.set(true);
+                                error.set(None);
+                                let slug = action_slug.get_untracked();
+                                spawn_local(async move {
+                                    let result = review_tool(ReviewToolPayload {
+                                        slug,
+                                        action: "mark_verified".into(),
+                                        reason: QUICK_VERIFY_REASON.into(),
+                                        override_reason: None,
+                                        expected_updated_at: None,
+                                        snapshot_id: None,
+                                        recommendation_id: None,
+                                    }).await;
+                                    busy.set(false);
+                                    match result {
+                                        Ok(()) => status.set("verified".into()),
+                                        Err(e) => error.set(Some(e.to_string())),
+                                    }
+                                });
+                            }
+                        >
+                            <LucideIcon name="check".to_string() class="card-action-icon"/>
+                        </button>
+                    </Show>
+                    {move || error.get().map(|msg| view! {
+                        <span class="sr-only" role="status">{msg.clone()}</span>
+                        <span class="admin-card-error" role="alert">
+                            <LucideIcon name="alert-circle".to_string() class="card-action-icon"/>
+                            {msg}
+                        </span>
+                    })}
+                }.into_any()
+            }}
+        </AdminOnly>
+    }
+}
+
 fn render_chain_tags(
     preview: Vec<ChainTagView>,
     extra: usize,
@@ -146,7 +247,7 @@ pub fn ToolCard(
     let detail_href = format!("/tools/{slug}");
     let href = preview_href.unwrap_or(detail_href);
 
-    let status = tool.status.clone();
+    let status = RwSignal::new(tool.status.clone());
     let tool_type = tool.tool_type.clone();
     let chains = tool.chains.clone();
     let (chain_desktop, extra_desktop) = chain_tags_for_tool(&chains, CHAINS_VISIBLE_DESKTOP);
@@ -177,6 +278,7 @@ pub fn ToolCard(
         .unwrap_or_else(|| "—".into());
     let license = tool.license.clone().unwrap_or_default();
     let risk_level = tool.install_risk_level.clone();
+    let compare_url = compare_href(std::slice::from_ref(&slug));
 
     let show_login = RwSignal::new(false);
     let starred = RwSignal::new(initially_starred);
@@ -203,14 +305,8 @@ pub fn ToolCard(
                         <div class="tool-card-header">
                             <h3 class="tool-name">{tool.name.clone()}</h3>
                             <div class="tool-badges">
-                                <span class=badge_class(&status)>
-                                    {if status == "verified" {
-                                        "Verified"
-                                    } else if status == "official" {
-                                        "Official"
-                                    } else {
-                                        "Community"
-                                    }}
+                                <span class=move || badge_class(&status.get())>
+                                    {move || status_badge_label(&status.get())}
                                 </span>
                                 <span class=type_badge_class(&tool_type)>{tool_type.to_uppercase()}</span>
                                 {if tool.claim_state == "claimed" {
@@ -275,6 +371,7 @@ pub fn ToolCard(
                 </div>
             </a>
             <div class="tool-card-actions">
+                <AdminToolCardActions slug=slug.clone() status=status/>
                 <button
                     type="button"
                     class="card-action-btn"
@@ -304,6 +401,15 @@ pub fn ToolCard(
                 >
                     {move || bookmark_icon(starred.get())}
                 </button>
+                <a
+                    class="card-action-btn"
+                    href=compare_url
+                    aria-label="Compare"
+                    title="Compare"
+                    on:click=|ev| ev.stop_propagation()
+                >
+                    <LucideIcon name="arrow-left-right".to_string() class="card-action-icon"/>
+                </a>
             </div>
         </article>
     }
@@ -347,6 +453,12 @@ mod tests {
         assert_eq!(badge_class("community"), "badge badge-community");
         assert_eq!(type_badge_class("x402"), "badge badge-x402");
         assert_eq!(type_badge_class("mcp"), "badge badge-neutral");
+        assert_eq!(status_badge_label("verified"), "Verified");
+        assert_eq!(status_badge_label("official"), "Official");
+        assert_eq!(status_badge_label("community"), "Community");
+        assert!(!can_mark_verified("verified"));
+        assert!(!can_mark_verified("official"));
+        assert!(can_mark_verified("community"));
     }
 
     #[test]

@@ -3,14 +3,16 @@
 //! Defines the top-level router, the HTML shell, and placeholder page
 //! components for all routes required by the website-core milestone.
 
+use crate::components::admin_context::provide_current_user_resource;
 use crate::components::site_shell::SiteShell;
 use crate::components::top_nav::TopNav;
 use crate::pages::{
     AdminCategoriesPage, AdminCommentsPage, AdminCrawlerPage, AdminDashboardPage,
     AdminFeaturedPage, AdminSettingsPage, AdminToolsPage, AdminUsersPage, CategoryPage,
-    DashboardPage, HomePage, LoginPage, OnboardingProfilePage, SubmitPage, ToolDetailPage,
-    ToolkitPage, ToolsListPage,
+    ComparePage, DashboardPage, HomePage, LoginPage, OnboardingProfilePage, SubmitPage,
+    ToolDetailPage, ToolkitPage, ToolsListPage,
 };
+use crate::server::functions::get_current_user;
 use leptos::prelude::*;
 use leptos_meta::{provide_meta_context, Link, Meta, MetaTags, Stylesheet, Title};
 use leptos_router::{
@@ -156,6 +158,8 @@ pub fn shell(options: LeptosOptions) -> impl IntoView {
 #[component]
 pub fn App() -> impl IntoView {
     provide_meta_context();
+    let current_user = ArcOnceResource::new_blocking(async move { get_current_user().await });
+    provide_current_user_resource(current_user.clone());
 
     view! {
         <Title text="OnchainAI"/>
@@ -169,6 +173,7 @@ pub fn App() -> impl IntoView {
                 <FlatRoutes fallback=|| view! { <NotFoundPage/> }.into_view()>
                     <Route path=StaticSegment("") view=HomePage/>
                     <Route path=StaticSegment("tools") view=ToolsListPage/>
+                    <Route path=StaticSegment("compare") view=ComparePage/>
                     <Route path=StaticSegment("dashboard") view=DashboardPage/>
                     <Route path=StaticSegment("toolkit") view=ToolkitPage/>
                     <Route path=(StaticSegment("tools"), ParamSegment("slug")) view=ToolDetailPage/>

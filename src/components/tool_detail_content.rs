@@ -3,14 +3,11 @@
 use crate::chains::{chain_fallback_label, chain_tags_show_all};
 use crate::components::chain_logo::ChainLogo;
 use crate::components::copy_button::CopyButton;
-use crate::components::official_links_list::OfficialLinksList;
 use crate::components::tool_logo::ToolLogo;
-use crate::components::tool_trust_facts::ToolTrustFacts;
 use crate::install_safety::{
     blocks_structured_config, claude_mcp_config, cursor_install_note, install_warning_text,
 };
-use crate::models::Tool;
-use crate::models::ToolOfficialLink;
+use crate::models::{official_link_display_label, Tool, ToolOfficialLink};
 use crate::trust_verification::TrustFact;
 use leptos::prelude::*;
 
@@ -29,6 +26,25 @@ fn risk_badge_class(risk: &str) -> &'static str {
         "high" => "badge badge-risk-high",
         "critical" => "badge badge-risk-critical",
         _ => "badge badge-neutral",
+    }
+}
+
+fn risk_label(risk: &str) -> &'static str {
+    match risk {
+        "low" => "Low",
+        "medium" => "Medium",
+        "high" => "High",
+        "critical" => "Critical",
+        _ => "Review",
+    }
+}
+
+fn claim_label(claim_state: &str) -> &'static str {
+    match claim_state {
+        "claimed" => "Claimed by team",
+        "claim_pending" => "Claim pending review",
+        "revoked" => "Claim revoked",
+        _ => "Unclaimed",
     }
 }
 
@@ -183,6 +199,9 @@ pub fn ToolDetailContent(
     let risk_level = tool.install_risk_level.clone();
     let install_warning = install_warning_text(&risk_level).map(str::to_string);
     let blocks_config = blocks_structured_config(&risk_level);
+    let copy_blocked = risk_level == "critical";
+    let high_risk_copy = risk_level == "high";
+    let copy_revealed = RwSignal::new(risk_level != "high");
 
     let slug = tool.slug.clone();
     let raw_install = tool.install_command.clone().unwrap_or_default();
@@ -231,8 +250,62 @@ pub fn ToolDetailContent(
                 </div>
             </header>
             <p class="detail-desc">{desc}</p>
-            <ToolTrustFacts facts=trust_facts.clone()/>
-            <OfficialLinksList links=official_links.clone()/>
+            <section class="trust-summary" aria-labelledby="trust-summary-title">
+                <h3 id="trust-summary-title">"Why trust this?"</h3>
+                <div class="trust-summary-grid">
+                    <div>
+                        <span class="trust-summary-label">"Install risk"</span>
+                        <strong>{risk_label(&risk_level)}</strong>
+                    </div>
+                    <div>
+                        <span class="trust-summary-label">"Claim status"</span>
+                        <strong>{claim_label(&tool.claim_state)}</strong>
+                    </div>
+                    <div>
+                        <span class="trust-summary-label">"Last reviewed"</span>
+                        <strong>{format_short_date(tool.last_reviewed_at)}</strong>
+                    </div>
+                    <div>
+                        <span class="trust-summary-label">"Recent activity"</span>
+                        <strong>{last_commit.clone()}</strong>
+                    </div>
+                </div>
+                {if trust_facts.is_empty() {
+                    view! {
+                        <p class="trust-summary-gap">"Evidence is still limited. Review official links and install notes before using this tool."</p>
+                    }.into_any()
+                } else {
+                    view! {
+                        <ul class="trust-summary-facts">
+                            {trust_facts.clone().into_iter().map(|fact| view! {
+                                <li>
+                                    <strong>{fact.label}</strong>
+                                    <span>{fact.detail}</span>
+                                </li>
+                            }).collect_view()}
+                        </ul>
+                    }.into_any()
+                }}
+                {if official_links.is_empty() {
+                    view! {
+                        <p class="trust-summary-gap">"No verified official links are listed yet."</p>
+                    }.into_any()
+                } else {
+                    view! {
+                        <div class="trust-summary-links">
+                            {official_links.clone().into_iter().map(|link| {
+                                let label = official_link_display_label(&link);
+                                let href = link.url.clone();
+                                view! {
+                                    <a href=href target="_blank" rel="noopener noreferrer">
+                                        {label}
+                                    </a>
+                                }
+                            }).collect_view()}
+                        </div>
+                    }.into_any()
+                }}
+            </section>
             {if x402_notice.is_some() || referral_notice.is_some() {
                 view! {
                     <section class="x402-notice">
@@ -292,10 +365,15 @@ pub fn ToolDetailContent(
                     ().into_any()
                 }}
             </div>
+            <div class="detail-compare-row">
+                <a href=format!("/compare?tools={}", tool.slug) class="detail-compare-link">
+                    "Compare this tool"
+                </a>
+            </div>
             {if !install.is_empty() || install_warning.is_some() {
                 view! {
                     <section class="install-section">
-                        <h3 class="install-heading">"Install"</h3>
+                        <h3 class="install-heading">"Safe install"</h3>
                         {if let Some(warning) = install_warning.clone() {
                             view! {
                                 <p class="install-warning" role="alert">{warning}</p>
@@ -311,7 +389,7 @@ pub fn ToolDetailContent(
                                         class=move || if active_tab.get() == "generic" { "install-tab active" } else { "install-tab" }
                                         on:click=move |_| active_tab.set("generic".into())
                                     >
-                                        "Generic"
+                                        "Generic MCP"
                                     </button>
                                     <button
                                         type="button"
@@ -344,11 +422,29 @@ pub fn ToolDetailContent(
                                         install.clone()
                                     };
                                     view! {
-                                        <div class="tool-install">
-                                            <code class="install-cmd">
-                                                <span class="install-prefix">"$ "</span>{text.clone()}
-                                            </code>
-                                            <CopyButton text=text/>
+                                        <div class="tool-install-stack">
+                                            <div class="tool-install">
+                                                <code class="install-cmd">
+                                                    <span class="install-prefix">"$ "</span>{text.clone()}
+                                                </code>
+                                                <Show when=move || !copy_blocked && copy_revealed.get()>
+                                                    <CopyButton text=text.clone()/>
+                                                </Show>
+                                            </div>
+                                            <Show when=move || high_risk_copy && !copy_revealed.get()>
+                                                <button
+                                                    type="button"
+                                                    class="install-reveal-btn"
+                                                    on:click=move |_| copy_revealed.set(true)
+                                                >
+                                                    "Reveal copy action"
+                                                </button>
+                                            </Show>
+                                            <Show when=move || copy_blocked>
+                                                <p class="install-warning" role="alert">
+                                                    "Copy is blocked for critical-risk install commands."
+                                                </p>
+                                            </Show>
                                         </div>
                                     }
                                 }}

@@ -6,6 +6,7 @@ use crate::components::{
     error_state::ErrorState, preview_panel::PreviewPanel, search_bar::ToolbarSearch,
     sidebar::Sidebar, skeleton::ToolListSkeleton, tool_card::ToolCard,
 };
+use crate::discovery::{empty_state_suggestions, EmptyRecoverySummary};
 use crate::filter_query::{build_tool_filters, describe_active_filters, ActiveFiltersSummary};
 use crate::models::tool::parse_page_value;
 
@@ -70,6 +71,7 @@ pub struct BrowserQueryParams {
     pub tool_type: Option<String>,
     pub status: Option<String>,
     pub pricing: Option<String>,
+    pub install_risk: Option<String>,
     pub chain: Option<String>,
     pub sort: String,
     pub search_q: Option<String>,
@@ -116,6 +118,7 @@ pub fn build_query_base(base: &BrowserBase, params: &BrowserQueryParams) -> Stri
     append_optional_param(&mut parts, "type", params.tool_type.as_deref());
     append_optional_param(&mut parts, "status", params.status.as_deref());
     append_optional_param(&mut parts, "pricing", params.pricing.as_deref());
+    append_optional_param(&mut parts, "install_risk", params.install_risk.as_deref());
     append_optional_param(&mut parts, "chain", params.chain.as_deref());
     append_sort_param(&mut parts, &params.sort);
     append_search_param(&mut parts, params.search_q.as_deref());
@@ -321,6 +324,8 @@ pub fn ToolsBrowser(
     let tool_type = Memo::new(move |_| query.with(|q| q.get("type").map(|s| s.to_string())));
     let status = Memo::new(move |_| query.with(|q| q.get("status").map(|s| s.to_string())));
     let pricing = Memo::new(move |_| query.with(|q| q.get("pricing").map(|s| s.to_string())));
+    let install_risk =
+        Memo::new(move |_| query.with(|q| q.get("install_risk").map(|s| s.to_string())));
     let chain = Memo::new(move |_| query.with(|q| q.get("chain").map(|s| s.to_string())));
     let sort = Memo::new(move |_| {
         query
@@ -340,6 +345,7 @@ pub fn ToolsBrowser(
         tool_type: tool_type.get(),
         status: status.get(),
         pricing: pricing.get(),
+        install_risk: install_risk.get(),
         chain: chain.get(),
         sort: sort.get(),
         search_q: search_q.get(),
@@ -350,13 +356,14 @@ pub fn ToolsBrowser(
         Memo::new(move |_| build_query_base(&base.get_value(), &browser_query_params.get()));
     let filter_revision = Memo::new(move |_| {
         format!(
-            "f={}|ac={}|a={}|t={}|st={}|p={}|c={}",
+            "f={}|ac={}|a={}|t={}|st={}|p={}|r={}|c={}",
             function.get().unwrap_or_default(),
             asset_class.get().unwrap_or_default(),
             actor.get().unwrap_or_default(),
             tool_type.get().unwrap_or_default(),
             status.get().unwrap_or_default(),
             pricing.get().unwrap_or_default(),
+            install_risk.get().unwrap_or_default(),
             chain.get().unwrap_or_default(),
         )
     });
@@ -372,6 +379,7 @@ pub fn ToolsBrowser(
             tool_type.get(),
             status.get(),
             pricing.get(),
+            install_risk.get(),
             chain.get(),
         )
     });
@@ -460,6 +468,7 @@ pub fn ToolsBrowser(
                         active_type=tool_type.get()
                         active_status=status.get()
                         active_pricing=pricing.get()
+                        active_install_risk=install_risk.get()
                         default_function_open=matches!(browser_base, BrowserBase::Tools)
                     />
                     <div class="tools-main">
@@ -491,6 +500,7 @@ pub fn ToolsBrowser(
                                     active_type=tool_type.get()
                                     active_status=status.get()
                                     active_pricing=pricing.get()
+                                    active_install_risk=install_risk.get()
                                     default_function_open=matches!(browser_base, BrowserBase::Tools)
                                 />
                                 <div class="tools-main">
@@ -518,6 +528,7 @@ pub fn ToolsBrowser(
                                     active_type=tool_type.get()
                                     active_status=status.get()
                                     active_pricing=pricing.get()
+                                    active_install_risk=install_risk.get()
                                     default_function_open=matches!(browser_base, BrowserBase::Tools)
                                 />
                                 <div class="tools-main">
@@ -549,6 +560,7 @@ pub fn ToolsBrowser(
                                             tool_type.get(),
                                             status.get(),
                                             pricing.get(),
+                                            install_risk.get(),
                                             chain.get(),
                                             search_q.get(),
                                             Some(sort.get()),
@@ -556,13 +568,28 @@ pub fn ToolsBrowser(
                                         let function_labels: std::collections::HashMap<String, String> =
                                             data.categories.iter().map(|(c, _)| (c.id.clone(), c.label.clone())).collect();
                                         let filter_lines = describe_active_filters(&filter_summary, &function_labels);
+                                        let suggestions = empty_state_suggestions(
+                                            &browser_base.path(),
+                                            &EmptyRecoverySummary {
+                                                function: filter_summary.function.clone(),
+                                                asset_class: filter_summary.asset_class.clone(),
+                                                actor: filter_summary.actor.clone(),
+                                                tool_type: filter_summary.tool_type.clone(),
+                                                status: filter_summary.status.clone(),
+                                                pricing: filter_summary.pricing.clone(),
+                                                install_risk: filter_summary.install_risk.clone(),
+                                                chain: filter_summary.chain.clone(),
+                                                search: filter_summary.search.clone(),
+                                                sort: filter_summary.sort.clone(),
+                                            },
+                                        );
                                         let clear_href = if filter_summary.has_active_filters() {
                                             browser_base.path()
                                         } else {
                                             String::new()
                                         };
                                         view! {
-                                            <EmptyState filter_lines=filter_lines clear_href=clear_href/>
+                                            <EmptyState filter_lines=filter_lines suggestions=suggestions clear_href=clear_href/>
                                         }.into_any()
                                     } else {
                                         let comment_counts = data.comment_counts.clone();
@@ -645,6 +672,7 @@ pub fn ToolsBrowser(
                                     active_type=tool_type.get()
                                     active_status=status.get()
                                     active_pricing=pricing.get()
+                                    active_install_risk=install_risk.get()
                                     default_function_open=matches!(browser_base, BrowserBase::Tools)
                                 />
                                 <div class="tools-main">
