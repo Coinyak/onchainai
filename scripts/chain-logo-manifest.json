@@ -147,6 +147,36 @@
       "kind": "wrap",
       "source": "plasma_official.svg",
       "markers": ["#0F0F0F", "path"]
+    },
+    {
+      "id": "linea",
+      "label": "Linea",
+      "kind": "inline_linea",
+      "markers": ["#61DFFF"]
+    },
+    {
+      "id": "starknet",
+      "label": "Starknet",
+      "kind": "inline_starknet",
+      "markers": ["#29296E"]
+    },
+    {
+      "id": "aptos",
+      "label": "Aptos",
+      "kind": "inline_aptos",
+      "markers": ["#2DD8A7"]
+    },
+    {
+      "id": "near",
+      "label": "NEAR",
+      "kind": "inline_near",
+      "markers": ["#00C08B"]
+    },
+    {
+      "id": "cosmos",
+      "label": "Cosmos",
+      "kind": "inline_cosmos",
+      "markers": ["#2E3148"]
     }
   ]
 }

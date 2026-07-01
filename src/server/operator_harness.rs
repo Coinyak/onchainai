@@ -43,6 +43,8 @@ pub const HERMES_FORBIDDEN_ACTIONS: &[&str] = &[
     "cleanup",
     "mark_official",
     "mark_verified",
+    "demote_official",
+    "demote_verified",
     "auth_change",
     "rls_change",
     "delete_listing",

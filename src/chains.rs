@@ -165,10 +165,45 @@ pub const CHAIN_CATALOG: &[ChainMeta] = &[
         aliases: &["plasma-mainnet"],
         pinned: false,
     },
+    ChainMeta {
+        id: "linea",
+        label: "Linea",
+        logo: "/chains/linea.svg",
+        aliases: &["linea-mainnet"],
+        pinned: false,
+    },
+    ChainMeta {
+        id: "starknet",
+        label: "Starknet",
+        logo: "/chains/starknet.svg",
+        aliases: &["stark", "starknet-mainnet"],
+        pinned: false,
+    },
+    ChainMeta {
+        id: "aptos",
+        label: "Aptos",
+        logo: "/chains/aptos.svg",
+        aliases: &["apt", "aptos-mainnet"],
+        pinned: false,
+    },
+    ChainMeta {
+        id: "near",
+        label: "NEAR",
+        logo: "/chains/near.svg",
+        aliases: &["near-protocol", "near-mainnet"],
+        pinned: false,
+    },
+    ChainMeta {
+        id: "cosmos",
+        label: "Cosmos",
+        logo: "/chains/cosmos.svg",
+        aliases: &["cosmos-hub", "atom", "cosmos-mainnet"],
+        pinned: false,
+    },
 ];
 
 /// Primary-row chain tiles (excluding the All tile).
-pub const STRIP_PRIMARY_VISIBLE: usize = 10;
+pub const STRIP_PRIMARY_VISIBLE: usize = 20;
 
 /// DB noise values — not real chains; hidden from card tags and strip counts.
 const CHAIN_NOISE: &[&str] = &[
@@ -538,7 +573,7 @@ mod tests {
             );
             assert!(is_chain_noise(noise), "noise value not flagged: {noise}");
         }
-        for unknown in ["fantom", "litecoin", "xrp", "celo", "gnosis", "linea"] {
+        for unknown in ["fantom", "litecoin", "xrp", "celo", "gnosis"] {
             assert!(
                 resolve_chain(unknown).is_none(),
                 "unknown chain should not resolve: {unknown}"
@@ -599,8 +634,8 @@ mod tests {
 
     #[test]
     fn strip_primary_visible_leaves_overflow_for_expand_control() {
-        assert_eq!(STRIP_PRIMARY_VISIBLE, 10);
-        assert_eq!(CHAIN_CATALOG.len(), 20);
+        assert_eq!(STRIP_PRIMARY_VISIBLE, 20);
+        assert_eq!(CHAIN_CATALOG.len(), 25);
 
         let counts: Vec<(String, i64)> = CHAIN_CATALOG
             .iter()

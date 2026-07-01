@@ -38,7 +38,8 @@ use crate::crawler::{self, default_source_registry_url};
 use crate::install_safety::assess_install;
 #[cfg(feature = "ssr")]
 use crate::server::operator_review_transition::{
-    plan_operator_review, validate_review_approval_gate, OperatorReviewGate,
+    plan_operator_review, validate_demote_official_gate, validate_demote_verified_gate,
+    validate_review_approval_gate, OperatorReviewGate,
 };
 #[cfg(feature = "ssr")]
 use crate::server::queries::{

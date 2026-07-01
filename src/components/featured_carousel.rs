@@ -88,7 +88,7 @@ pub fn FeaturedCarousel(cards: Vec<FeaturedCardView>) -> impl IntoView {
                     drop(handle);
                 }
                 if !paused.get() && len > 1 {
-                    *slot = Some(Interval::new(3_000, move || {
+                    *slot = Some(Interval::new(6_000, move || {
                         current.update(|idx| *idx = (*idx + 1) % len);
                     }));
                 }
@@ -96,54 +96,20 @@ pub fn FeaturedCarousel(cards: Vec<FeaturedCardView>) -> impl IntoView {
         });
     }
 
+    let shell_class = if len > 1 {
+        "featured-carousel-shell featured-carousel-shell--controls"
+    } else {
+        "featured-carousel-shell"
+    };
+
     view! {
-        <section
-            class="featured-carousel"
-            aria-label="Featured tools carousel"
-            aria-roledescription="carousel"
+        <div
+            class=shell_class
             on:mouseenter=move |_| paused.set(true)
             on:mouseleave=move |_| paused.set(false)
             on:focusin=move |_| paused.set(true)
             on:focusout=move |_| paused.set(false)
-            >
-            <div class="featured-carousel-track">
-                {cards.clone().into_iter().enumerate().map(|(idx, card)| {
-                    let slug = card.tool_slug.clone();
-                    let href = format!("/tools/{slug}");
-                    let title = card
-                        .headline
-                        .clone()
-                        .filter(|h| !h.trim().is_empty())
-                        .unwrap_or_else(|| card.tool_name.clone());
-                    let subtitle = card.subtitle.clone().unwrap_or_default();
-                    let image_url = card.image_url.clone();
-                    view! {
-                        <a
-                            href=href
-                            class=move || if current.get() == idx {
-                                "featured-carousel-card active"
-                            } else {
-                                "featured-carousel-card pointer-events-none"
-                            }
-                            prop:tabindex=move || if current.get() == idx { 0 } else { -1 }
-                            aria-hidden=move || if current.get() == idx { "false" } else { "true" }
-                        >
-                            <img class="featured-carousel-image" src=image_url alt=title.clone()/>
-                            <div class="featured-carousel-overlay">
-                                <h2 class="featured-carousel-headline">{title}</h2>
-                                {if !subtitle.is_empty() {
-                                    view! {
-                                        <p class="featured-carousel-subtitle">{subtitle}</p>
-                                    }.into_any()
-                                } else {
-                                    ().into_any()
-                                }}
-                            </div>
-                        </a>
-                    }
-                }).collect_view()}
-            </div>
-            <FeaturedCarouselAdminActions cards=admin_cards current=current/>
+        >
             {if len > 1 {
                 view! {
                     <button
@@ -162,6 +128,91 @@ pub fn FeaturedCarousel(cards: Vec<FeaturedCardView>) -> impl IntoView {
                     >
                         <LucideIcon name="chevron-left".to_string() class="carousel-arrow-icon"/>
                     </button>
+                }.into_any()
+            } else {
+                ().into_any()
+            }}
+            <section
+                class="featured-carousel"
+                aria-label="Featured tools carousel"
+                aria-roledescription="carousel"
+            >
+                <div
+                    class="featured-carousel-track"
+                    style:transform=move || format!("translateX(-{}%)", current.get() * 100)
+                >
+                    {cards.clone().into_iter().enumerate().map(|(idx, card)| {
+                        let slug = card.tool_slug.clone();
+                        let href = format!("/tools/{slug}");
+                        let title = card
+                            .headline
+                            .clone()
+                            .filter(|h| !h.trim().is_empty())
+                            .unwrap_or_else(|| card.tool_name.clone());
+                        let subtitle = card.subtitle.clone().unwrap_or_default();
+                        let image_url = card.image_url.clone();
+                        view! {
+                            <a
+                                href=href
+                                class=move || if current.get() == idx {
+                                    "featured-carousel-card active"
+                                } else {
+                                    "featured-carousel-card pointer-events-none"
+                                }
+                                prop:tabindex=move || if current.get() == idx { 0 } else { -1 }
+                                aria-hidden=move || if current.get() == idx { "false" } else { "true" }
+                            >
+                                <img class="featured-carousel-image" src=image_url alt=title.clone()/>
+                                <div class="featured-carousel-overlay">
+                                    <h2 class="featured-carousel-headline">{title}</h2>
+                                    {if !subtitle.is_empty() {
+                                        view! {
+                                            <p class="featured-carousel-subtitle">{subtitle}</p>
+                                        }.into_any()
+                                    } else {
+                                        ().into_any()
+                                    }}
+                                </div>
+                            </a>
+                        }
+                    }).collect_view()}
+                </div>
+                <FeaturedCarouselAdminActions cards=admin_cards current=current/>
+                {if len > 1 {
+                    view! {
+                        <div class="featured-carousel-dots" role="tablist" aria-label="Featured slides">
+                            {dot_cards.into_iter().enumerate().map(|(idx, card)| {
+                                let label = card
+                                    .headline
+                                    .filter(|h| !h.trim().is_empty())
+                                    .unwrap_or(card.tool_name);
+                                view! {
+                                    <button
+                                        type="button"
+                                        class=move || if current.get() == idx {
+                                            "carousel-dot active"
+                                        } else {
+                                            "carousel-dot"
+                                        }
+                                        role="tab"
+                                        aria-label=format!("Show {label}")
+                                        aria-selected=move || if current.get() == idx { "true" } else { "false" }
+                                        on:click=move |ev| {
+                                            ev.stop_propagation();
+                                            ev.prevent_default();
+                                            current.set(idx);
+                                        }
+                                    />
+                                }
+                            }).collect_view()}
+                        </div>
+                    }.into_any()
+                } else {
+                    ().into_any()
+                }}
+            </section>
+            {if len > 1 {
+                view! {
                     <button
                         type="button"
                         class="carousel-arrow carousel-arrow-next"
@@ -178,37 +229,11 @@ pub fn FeaturedCarousel(cards: Vec<FeaturedCardView>) -> impl IntoView {
                     >
                         <LucideIcon name="chevron-right".to_string() class="carousel-arrow-icon"/>
                     </button>
-                    <div class="featured-carousel-dots" role="tablist" aria-label="Featured slides">
-                        {dot_cards.into_iter().enumerate().map(|(idx, card)| {
-                            let label = card
-                                .headline
-                                .filter(|h| !h.trim().is_empty())
-                                .unwrap_or(card.tool_name);
-                            view! {
-                                <button
-                                    type="button"
-                                    class=move || if current.get() == idx {
-                                        "carousel-dot active"
-                                    } else {
-                                        "carousel-dot"
-                                    }
-                                    role="tab"
-                                    aria-label=format!("Show {label}")
-                                    aria-selected=move || if current.get() == idx { "true" } else { "false" }
-                                    on:click=move |ev| {
-                                        ev.stop_propagation();
-                                        ev.prevent_default();
-                                        current.set(idx);
-                                    }
-                                />
-                            }
-                        }).collect_view()}
-                    </div>
                 }.into_any()
             } else {
                 ().into_any()
             }}
-        </section>
+        </div>
     }
     .into_any()
 }

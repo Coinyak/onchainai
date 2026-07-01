@@ -5,6 +5,7 @@ use crate::chains::{chain_fallback_label, chain_tags_for_tool, ChainTagView};
 use crate::components::admin_context::AdminOnly;
 use crate::components::chain_logo::ChainLogo;
 use crate::components::copy_button::CopyButton;
+use crate::components::highlighted_command::HighlightedCommand;
 use crate::components::icons::LucideIcon;
 use crate::components::login_modal::LoginModal;
 use crate::components::tool_logo::ToolLogo;
@@ -19,6 +20,7 @@ const CHAINS_VISIBLE_DESKTOP: usize = 5;
 /// Mobile tool card: show up to 3 chain tags, then "+N".
 const CHAINS_VISIBLE_MOBILE: usize = 3;
 const QUICK_VERIFY_REASON: &str = "Verified via public-card admin quick action.";
+const QUICK_DEMOTE_REASON: &str = "Demoted via public-card admin quick action.";
 
 fn badge_class(status: &str) -> &'static str {
     match status {
@@ -103,6 +105,14 @@ fn can_mark_verified(status: &str) -> bool {
     !matches!(status, "verified" | "official")
 }
 
+fn demote_action_for_status(status: &str) -> Option<&'static str> {
+    match status {
+        "verified" => Some("demote_verified"),
+        "official" => Some("demote_official"),
+        _ => None,
+    }
+}
+
 fn confirm_quick_verify() -> bool {
     #[cfg(feature = "hydrate")]
     {
@@ -113,6 +123,24 @@ fn confirm_quick_verify() -> bool {
     #[cfg(not(feature = "hydrate"))]
     {
         true
+    }
+}
+
+fn confirm_quick_demote(status: &str) -> bool {
+    #[cfg(feature = "hydrate")]
+    {
+        let message = match status {
+            "verified" => "Remove verified status and demote to community?",
+            "official" => "Remove official status and demote to community?",
+            _ => return false,
+        };
+        web_sys::window()
+            .and_then(|window| window.confirm_with_message(message).ok())
+            .unwrap_or(false)
+    }
+    #[cfg(not(feature = "hydrate"))]
+    {
+        matches!(status, "verified" | "official")
     }
 }
 
@@ -174,6 +202,49 @@ fn AdminToolCardActions(slug: String, status: RwSignal<String>) -> impl IntoView
                             }
                         >
                             <LucideIcon name="check".to_string() class="card-action-icon"/>
+                        </button>
+                    </Show>
+                    <Show when=move || demote_action_for_status(&status.get()).is_some()>
+                        <button
+                            type="button"
+                            class="card-action-btn admin-card-action-btn admin-card-action-btn-revoke"
+                            aria-label="Revoke verified/official status"
+                            title="Revoke verified/official status"
+                            disabled=move || busy.get()
+                            on:click=move |ev| {
+                                ev.stop_propagation();
+                                if busy.get_untracked() {
+                                    return;
+                                }
+                                let current_status = status.get_untracked();
+                                let Some(action) = demote_action_for_status(&current_status) else {
+                                    return;
+                                };
+                                if !confirm_quick_demote(&current_status) {
+                                    return;
+                                }
+                                busy.set(true);
+                                error.set(None);
+                                let slug = action_slug.get_untracked();
+                                spawn_local(async move {
+                                    let result = review_tool(ReviewToolPayload {
+                                        slug,
+                                        action: action.into(),
+                                        reason: QUICK_DEMOTE_REASON.into(),
+                                        override_reason: None,
+                                        expected_updated_at: None,
+                                        snapshot_id: None,
+                                        recommendation_id: None,
+                                    }).await;
+                                    busy.set(false);
+                                    match result {
+                                        Ok(()) => status.set("community".into()),
+                                        Err(e) => error.set(Some(e.to_string())),
+                                    }
+                                });
+                            }
+                        >
+                            <LucideIcon name="x".to_string() class="card-action-icon"/>
                         </button>
                     </Show>
                     {move || error.get().map(|msg| view! {
@@ -357,9 +428,7 @@ pub fn ToolCard(
                         {if !install.is_empty() {
                             view! {
                                 <div class="tool-install hidden md:flex">
-                                    <code class="install-cmd">
-                                        <span class="install-prefix">"$ "</span>{install.clone()}
-                                    </code>
+                                    <HighlightedCommand text=install.clone()/>
                                     <CopyButton text=install/>
                                 </div>
                             }
@@ -459,6 +528,15 @@ mod tests {
         assert!(!can_mark_verified("verified"));
         assert!(!can_mark_verified("official"));
         assert!(can_mark_verified("community"));
+        assert_eq!(
+            demote_action_for_status("verified"),
+            Some("demote_verified")
+        );
+        assert_eq!(
+            demote_action_for_status("official"),
+            Some("demote_official")
+        );
+        assert_eq!(demote_action_for_status("community"), None);
     }
 
     #[test]

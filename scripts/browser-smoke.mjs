@@ -165,6 +165,14 @@ if (!signInModal.open) {
   if (!signInModal.hasGitHub) {
     errors.push("interaction:sign-in-modal-missing-github");
   }
+  const modalGitHubRel = await page.evaluate(() => {
+    const dialog = document.querySelector('[role="dialog"]');
+    const link = dialog?.querySelector('a[href="/auth/github"]');
+    return link?.getAttribute("rel") ?? "";
+  });
+  if (!modalGitHubRel.includes("external")) {
+    errors.push(`interaction:sign-in-modal-github-missing-rel-external:${modalGitHubRel}`);
+  }
   if (!signInModal.hasEmail) {
     errors.push("interaction:sign-in-modal-missing-email");
   }
@@ -193,7 +201,7 @@ if (!signInModal.open) {
 }
 await page.keyboard.press("Escape");
 
-for (const path of ["/", "/tools", "/tools?function=bridge&type=mcp"]) {
+for (const path of ["/", "/tools", "/tools?type=mcp"]) {
   await page.goto(`${base}${path}`, { waitUntil: "domcontentloaded" });
   if (path.startsWith("/tools")) {
     await requireToolCards(page, errors, `route${path}`);
@@ -202,6 +210,20 @@ for (const path of ["/", "/tools", "/tools?function=bridge&type=mcp"]) {
   if (/error deserializing|missing field/i.test(text || "")) {
     errors.push(`visible-error:${path}`);
   }
+}
+
+// Filter combo with zero results must render empty state (not hang on skeletons).
+await page.goto(`${base}/tools?function=bridge&type=mcp`, {
+  waitUntil: "domcontentloaded",
+});
+const emptyFilter = await page.evaluate(() => ({
+  empty: !!document.querySelector(".empty-state-panel"),
+  count: document.querySelector(".tool-count")?.textContent?.trim() ?? "",
+}));
+if (!emptyFilter.empty || emptyFilter.count !== "0 tools") {
+  errors.push(
+    `layout:empty-filter-state:empty=${emptyFilter.empty}:count=${emptyFilter.count}`,
+  );
 }
 
 await page.setViewportSize({ width: 1280, height: 900 });
@@ -233,6 +255,22 @@ if (!cssText || cssText.trim().length === 0) {
 await page.setViewportSize({ width: 1280, height: 900 });
 await page.goto(`${base}/tools`, { waitUntil: "domcontentloaded" });
 await requireToolCards(page, errors, "tools-desktop");
+const toolbarState = await page.evaluate(() => ({
+  hasFilterRow: !!document.querySelector(".toolbar-filter-row"),
+  hasVerified: [...document.querySelectorAll(".toolbar-sort-row a, .toolbar-filter-row a")]
+    .some((a) => a.textContent?.trim() === "Verified"),
+  hasOfficial: [...document.querySelectorAll(".toolbar-sort-row a, .toolbar-filter-row a")]
+    .some((a) => a.textContent?.trim() === "Official"),
+  hasMcp: [...document.querySelectorAll(".toolbar-filter-row a")]
+    .some((a) => a.textContent?.trim() === "MCP"),
+  hasCli: [...document.querySelectorAll(".toolbar-filter-row a")]
+    .some((a) => a.textContent?.trim() === "CLI"),
+}));
+if (!toolbarState.hasFilterRow) errors.push("layout:tools-missing-toolbar-filter-row");
+if (!toolbarState.hasVerified) errors.push("layout:tools-missing-verified-tab");
+if (!toolbarState.hasOfficial) errors.push("layout:tools-missing-official-tab");
+if (!toolbarState.hasMcp) errors.push("layout:tools-missing-mcp-tab");
+if (!toolbarState.hasCli) errors.push("layout:tools-missing-cli-tab");
 const toolsLogoStats = await page.evaluate(() => ({
   cards: document.querySelectorAll(".tool-card:not(.skeleton-card)").length,
   imgs: document.querySelectorAll("img.tool-logo-img").length,
@@ -479,19 +517,20 @@ const chainStripState = await page.evaluate(() => {
   }
   const pill = strip.querySelector(".chain-tile-more");
   if (!pill) {
-    // Full catalog (20 chains) fits in the primary row — no overflow + pill.
-    return { hasStrip: true, pillVisible: true };
+    // STRIP_PRIMARY_VISIBLE=20 leaves overflow when catalog > 20; no pill only if all fit.
+    return { hasStrip: true, pillVisible: true, hasOverflowPill: false };
   }
   const style = getComputedStyle(pill);
   return {
     hasStrip: true,
     pillVisible: style.display !== "none" && style.visibility !== "hidden",
+    hasOverflowPill: true,
   };
 });
 if (!chainStripState.hasStrip) {
   errors.push("layout:mobile-chain-strip-missing");
 }
-if (!chainStripState.pillVisible) {
+if (chainStripState.hasOverflowPill && !chainStripState.pillVisible) {
   errors.push("computed-style:chain-strip-more-hidden-on-mobile");
 }
 }

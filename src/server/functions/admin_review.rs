@@ -402,10 +402,12 @@ pub(crate) fn validate_review_action(action: &str, reason: &str) -> Result<(), &
         "quarantine",
         "mark_verified",
         "mark_official",
+        "demote_verified",
+        "demote_official",
     ];
     if !APPROVAL_ACTIONS.contains(&action) {
         return Err(
-            "invalid review action (expected approved|rejected|pending|needs_info|quarantine|mark_verified|mark_official)",
+            "invalid review action (expected approved|rejected|pending|needs_info|quarantine|mark_verified|mark_official|demote_verified|demote_official)",
         );
     }
     if action == "rejected" && reason.trim().is_empty() {
@@ -413,7 +415,12 @@ pub(crate) fn validate_review_action(action: &str, reason: &str) -> Result<(), &
     }
     if matches!(
         action,
-        "needs_info" | "quarantine" | "mark_verified" | "mark_official"
+        "needs_info"
+            | "quarantine"
+            | "mark_verified"
+            | "mark_official"
+            | "demote_verified"
+            | "demote_official"
     ) && reason.trim().is_empty()
     {
         return Err("review action requires a non-empty reason");
@@ -480,6 +487,16 @@ pub(crate) async fn execute_review_tool_in_tx(
             .await
             .map_err(|e| ServerFnError::new(format!("failed to load official links: {e}")))?;
             if let Err(msg) = validate_mark_official_gate(tool, &links) {
+                return Err(ServerFnError::new(msg.to_string()));
+            }
+        }
+        OperatorReviewGate::DemoteVerified => {
+            if let Err(msg) = validate_demote_verified_gate(tool) {
+                return Err(ServerFnError::new(msg.to_string()));
+            }
+        }
+        OperatorReviewGate::DemoteOfficial => {
+            if let Err(msg) = validate_demote_official_gate(tool) {
                 return Err(ServerFnError::new(msg.to_string()));
             }
         }

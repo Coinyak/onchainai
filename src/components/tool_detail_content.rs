@@ -3,6 +3,7 @@
 use crate::chains::{chain_fallback_label, chain_tags_show_all};
 use crate::components::chain_logo::ChainLogo;
 use crate::components::copy_button::CopyButton;
+use crate::components::highlighted_command::HighlightedCommand;
 use crate::components::tool_logo::ToolLogo;
 use crate::install_safety::{
     blocks_structured_config, claude_mcp_config, cursor_install_note, install_warning_text,
@@ -421,12 +422,14 @@ pub fn ToolDetailContent(
                                     } else {
                                         install.clone()
                                     };
+                                    let show_shell_prefix = tab == "generic";
                                     view! {
                                         <div class="tool-install-stack">
                                             <div class="tool-install">
-                                                <code class="install-cmd">
-                                                    <span class="install-prefix">"$ "</span>{text.clone()}
-                                                </code>
+                                                <HighlightedCommand
+                                                    text=text.clone()
+                                                    show_prefix=show_shell_prefix
+                                                />
                                                 <Show when=move || !copy_blocked && copy_revealed.get()>
                                                     <CopyButton text=text.clone()/>
                                                 </Show>

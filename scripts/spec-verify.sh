@@ -145,7 +145,7 @@ manual A4-params2 "MCP tools/list POST로 search_tools inputSchema 확인"
 absent A4-rank "MCP 검색 정렬이 stars 고정 아님" 'ORDER BY stars DESC LIMIT 50' src/server/mcp.rs
 
 echo "[5] 트랙4 채택 동선"
-present D4 "에이전트 연결 CTA(mcpServers 노출)" 'mcpServers|mcp-remote' src/components/promo_cards.rs src/pages/home.rs src/app.rs
+present D4 "에이전트 연결 CTA(npx 명령 노출)" 'mcp-remote|HighlightedCommand' src/components/promo_cards.rs src/pages/home.rs src/app.rs
 exists J1 "OnchainAI Skill 파일" skills/onchainai-crypto-tools/SKILL.md
 present J1-rule "Skill 안전규칙(critical/x402)" 'critical|x402' skills/onchainai-crypto-tools/SKILL.md
 exists J2 "Plugin manifest" .claude-plugin/plugin.json
