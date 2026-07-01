@@ -150,14 +150,15 @@ pub fn LoginForm(
         </a>
         <p class="mt-2 text-center text-[13px] text-[#6B6B6B]">
             "Use a different GitHub account? "
-            <a
-                href="/auth/github/switch"
-                rel="external"
-                data-testid="github-switch-account"
-                class="text-[#1A1A1A] underline hover:no-underline"
-            >
-                "Sign out of GitHub"
-            </a>
+            <form action="/auth/github/switch" method="post" class="inline">
+                <button
+                    type="submit"
+                    data-testid="github-switch-account"
+                    class="text-[#1A1A1A] underline hover:no-underline bg-transparent border-0 p-0 cursor-pointer font-inherit text-[13px]"
+                >
+                    "Sign out of GitHub"
+                </button>
+            </form>
             ", then return here and continue with GitHub."
         </p>
         <form

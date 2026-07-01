@@ -156,6 +156,17 @@ def main() -> None:
             if markers and not any(m in text for m in markers):
                 raise SystemExit(f"{slug} raster tile missing markers")
             out.write_text(text, encoding="utf-8")
+        elif kind == "public_svg":
+            src = OUT / f"{slug}.svg"
+            if not src.exists():
+                raise SystemExit(f"missing public svg for {slug}: {src}")
+            text = src.read_text(encoding="utf-8")
+            if "<svg" not in text:
+                raise SystemExit(f"not svg: {src}")
+            markers = entry.get("markers", [])
+            if markers and not any(m in text for m in markers):
+                raise SystemExit(f"{slug} public svg missing brand markers in {src}")
+            out.write_text(text, encoding="utf-8")
         else:
             raise SystemExit(f"unknown kind for {slug}: {kind}")
 

@@ -39,7 +39,6 @@ fn token_kind(word: &str, prev_runner: bool) -> CommandTokenKind {
     }
     if prev_runner
         || word.starts_with('@')
-        || lower == "mcp-remote"
         || word.contains('/')
         || word.contains(':')
     {

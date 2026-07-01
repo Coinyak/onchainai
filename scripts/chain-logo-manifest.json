@@ -151,31 +151,31 @@
     {
       "id": "linea",
       "label": "Linea",
-      "kind": "inline_linea",
+      "kind": "public_svg",
       "markers": ["#61DFFF"]
     },
     {
       "id": "starknet",
       "label": "Starknet",
-      "kind": "inline_starknet",
+      "kind": "public_svg",
       "markers": ["#29296E"]
     },
     {
       "id": "aptos",
       "label": "Aptos",
-      "kind": "inline_aptos",
+      "kind": "public_svg",
       "markers": ["#2DD8A7"]
     },
     {
       "id": "near",
       "label": "NEAR",
-      "kind": "inline_near",
+      "kind": "public_svg",
       "markers": ["#00C08B"]
     },
     {
       "id": "cosmos",
       "label": "Cosmos",
-      "kind": "inline_cosmos",
+      "kind": "public_svg",
       "markers": ["#2E3148"]
     }
   ]

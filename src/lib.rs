@@ -271,7 +271,7 @@ pub fn build_app(pool: sqlx::PgPool, config: Config) -> axum::Router {
         )
         .route(
             "/auth/github/switch",
-            axum::routing::get(auth::routes::github_switch),
+            axum::routing::post(auth::routes::github_switch),
         )
         .route(
             "/auth/email",

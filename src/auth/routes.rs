@@ -294,7 +294,7 @@ fn clear_session_cookies(
     Ok(())
 }
 
-/// `GET /auth/github/switch` — clear local session and redirect to GitHub logout.
+/// `POST /auth/github/switch` — clear local session and redirect to GitHub logout.
 pub async fn github_switch(State(state): State<AppState>) -> Response {
     let secure_cookie = cookie_secure_for_domain(&state.config.siwx_domain);
     let mut headers = HeaderMap::new();
