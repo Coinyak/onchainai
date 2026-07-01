@@ -21,5 +21,10 @@ else
   python3 scripts/wrap-chain-logos.py --public-fallback
 fi
 
-COUNT="$(ls -1 public/chains/*.svg | wc -l | tr -d ' ')"
+EXPECTED="$(python3 -c "import json; print(len(json.load(open('scripts/chain-logo-manifest.json'))['entries']))")"
+COUNT="$(ls -1 public/chains/*.svg 2>/dev/null | wc -l | tr -d ' ')"
+if [ "$COUNT" -ne "$EXPECTED" ]; then
+  echo "regen-chain-logos: expected ${EXPECTED} SVGs, found ${COUNT}" >&2
+  exit 1
+fi
 echo "regen-chain-logos: wrote ${COUNT} SVGs (manifest-driven, harness-round-11)"

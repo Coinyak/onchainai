@@ -442,6 +442,48 @@ mod tests {
             .unwrap_or_else(|e| panic!("parse manifest {}: {e}", path.display()))
     }
 
+    fn extract_svg_attr(tag: &str, name: &str) -> Option<f64> {
+        let needle = format!("{name}=\"");
+        let start = tag.find(&needle)?;
+        let rest = &tag[start + needle.len()..];
+        let end = rest.find('"')?;
+        rest[..end].parse().ok()
+    }
+
+    #[test]
+    fn catalog_logo_tiles_fit_viewbox() {
+        const TILE_VB: &str = r#"viewBox="0 0 48 48""#;
+        const WRAP_CENTER: &str = "translate(24 24)";
+        const MAX_DIRECT: f64 = 48.0;
+
+        for entry in CHAIN_CATALOG {
+            let text = std::fs::read_to_string(logo_path_on_disk(entry.logo))
+                .unwrap_or_else(|e| panic!("read {}: {e}", entry.logo));
+            assert!(
+                text.contains(TILE_VB),
+                "{} missing 48x48 viewBox",
+                entry.id
+            );
+
+            let wrapped = text.contains(WRAP_CENTER);
+            for fragment in text.split('<').filter(|s| s.starts_with("rect")) {
+                let width = extract_svg_attr(fragment, "width");
+                if width == Some(48.0) {
+                    continue;
+                }
+                let x = extract_svg_attr(fragment, "x");
+                let y = extract_svg_attr(fragment, "y");
+                if let (Some(x), Some(y)) = (x, y) {
+                    assert!(
+                        x <= MAX_DIRECT && y <= MAX_DIRECT || wrapped,
+                        "{}: rect x={x} y={y} outside tile without wrap centering",
+                        entry.id
+                    );
+                }
+            }
+        }
+    }
+
     #[test]
     fn catalog_logos_use_official_brand_markers() {
         let manifest = load_logo_manifest();
