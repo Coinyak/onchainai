@@ -6,8 +6,13 @@ use crate::components::login_modal::LoginModal;
 use crate::components::site_shell::SiteShell;
 use crate::components::skeleton::ToolListSkeleton;
 use crate::components::tool_card::ToolCard;
-use crate::server::functions::{list_my_toolkit, MyToolkitPayload, ToolkitExportPayload};
+use crate::discovery::compare_href;
+use crate::server::functions::{
+    list_my_toolkit, update_toolkit_item, MyToolkitPayload, ToolkitExportPayload, ToolkitToolView,
+    UpdateToolkitItemPayload,
+};
 use leptos::prelude::*;
+use leptos::task::spawn_local;
 
 #[component]
 fn ExportPanel(title: &'static str, export: ToolkitExportPayload) -> impl IntoView {
@@ -25,9 +30,95 @@ fn ExportPanel(title: &'static str, export: ToolkitExportPayload) -> impl IntoVi
     }
 }
 
+fn parse_tags(raw: &str) -> Vec<String> {
+    raw.split(',')
+        .map(str::trim)
+        .filter(|tag| !tag.is_empty())
+        .map(str::to_string)
+        .collect()
+}
+
+#[component]
+fn ToolkitMetadataForm(item: ToolkitToolView, on_saved: Callback<()>) -> impl IntoView {
+    let note = RwSignal::new(item.note.clone().unwrap_or_default());
+    let tags = RwSignal::new(item.tags.join(", "));
+    let busy = RwSignal::new(false);
+    let message = RwSignal::new(None::<String>);
+    let error = RwSignal::new(None::<String>);
+    let slug = item.tool.slug.clone();
+
+    view! {
+        <div class="toolkit-metadata">
+            <label>
+                <span>"Note"</span>
+                <textarea
+                    prop:value=move || note.get()
+                    maxlength="500"
+                    placeholder="Why did you save this?"
+                    on:input=move |ev| note.set(event_target_value(&ev))
+                />
+            </label>
+            <label>
+                <span>"Tags"</span>
+                <input
+                    type="text"
+                    prop:value=move || tags.get()
+                    placeholder="base, research"
+                    on:input=move |ev| tags.set(event_target_value(&ev))
+                />
+            </label>
+            <div class="toolkit-metadata-actions">
+                <button
+                    type="button"
+                    class="toolkit-secondary-link"
+                    disabled=move || busy.get()
+                    on:click=move |_| {
+                        if busy.get_untracked() {
+                            return;
+                        }
+                        busy.set(true);
+                        message.set(None);
+                        error.set(None);
+                        let slug = slug.clone();
+                        let payload = UpdateToolkitItemPayload {
+                            slug,
+                            note: Some(note.get_untracked()),
+                            tags: parse_tags(&tags.get_untracked()),
+                        };
+                        spawn_local(async move {
+                            match update_toolkit_item(payload).await {
+                                Ok(()) => {
+                                    message.set(Some("Saved".into()));
+                                    on_saved.run(());
+                                }
+                                Err(e) => error.set(Some(e.to_string())),
+                            }
+                            busy.set(false);
+                        });
+                    }
+                >
+                    "Save metadata"
+                </button>
+                {move || message.get().map(|text| view! {
+                    <span class="toolkit-save-status" role="status">{text}</span>
+                })}
+                {move || error.get().map(|text| view! {
+                    <span class="toolkit-save-error" role="alert">{text}</span>
+                })}
+            </div>
+        </div>
+    }
+}
+
 #[component]
 fn ToolkitContent(payload: MyToolkitPayload, on_toolkit_changed: Callback<()>) -> impl IntoView {
-    let tools = payload.tools.clone();
+    let items = payload.items.clone();
+    let compare_slugs: Vec<String> = items
+        .iter()
+        .take(3)
+        .map(|item| item.tool.slug.clone())
+        .collect();
+    let compare_url = compare_href(&compare_slugs);
     view! {
         <div class="toolkit-page">
             <section class="toolkit-header">
@@ -38,7 +129,16 @@ fn ToolkitContent(payload: MyToolkitPayload, on_toolkit_changed: Callback<()>) -
                         "Your saved OnchainAI tools stay private to your account and can be copied into an agent setup checklist."
                     </p>
                 </div>
-                <a href="/tools" class="toolkit-browse-link">"Browse tools"</a>
+                <div class="toolkit-header-actions">
+                    <a href="/tools" class="toolkit-browse-link">"Browse tools"</a>
+                    {if !compare_slugs.is_empty() {
+                        view! {
+                            <a href=compare_url class="toolkit-secondary-link">"Compare selected"</a>
+                        }.into_any()
+                    } else {
+                        ().into_any()
+                    }}
+                </div>
             </section>
 
             <section class="toolkit-summary" aria-label="Toolkit summary">
@@ -50,9 +150,13 @@ fn ToolkitContent(payload: MyToolkitPayload, on_toolkit_changed: Callback<()>) -
                     <span>"2"</span>
                     <p>"Export formats"</p>
                 </div>
+                <div>
+                    <span>"Recent"</span>
+                    <p>"Sorted by update"</p>
+                </div>
             </section>
 
-            {if tools.is_empty() {
+            {if items.is_empty() {
                 view! {
                     <section class="toolkit-empty">
                         <h2>"No saved tools yet"</h2>
@@ -64,17 +168,21 @@ fn ToolkitContent(payload: MyToolkitPayload, on_toolkit_changed: Callback<()>) -
                 view! {
                     <div class="toolkit-layout">
                         <section class="toolkit-list" aria-label="Saved tools">
-                            {tools.into_iter().map(|tool| {
+                            {items.into_iter().map(|item| {
+                                let tool = item.tool.clone();
                                 view! {
-                                    <ToolCard
-                                        tool=tool
-                                        initially_starred=true
-                                        on_bookmark_changed=Callback::new(move |starred: bool| {
-                                            if !starred {
-                                                on_toolkit_changed.run(());
-                                            }
-                                        })
-                                    />
+                                    <article class="toolkit-saved-item">
+                                        <ToolCard
+                                            tool=tool
+                                            initially_starred=true
+                                            on_bookmark_changed=Callback::new(move |starred: bool| {
+                                                if !starred {
+                                                    on_toolkit_changed.run(());
+                                                }
+                                            })
+                                        />
+                                        <ToolkitMetadataForm item=item on_saved=on_toolkit_changed/>
+                                    </article>
                                 }
                             }).collect_view()}
                         </section>

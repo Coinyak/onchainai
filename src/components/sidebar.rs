@@ -108,6 +108,21 @@ const PRICING: &[FilterOption] = &[
     },
 ];
 
+const INSTALL_RISK: &[FilterOption] = &[
+    FilterOption {
+        id: "low",
+        label: "Low",
+    },
+    FilterOption {
+        id: "medium",
+        label: "Medium",
+    },
+    FilterOption {
+        id: "high",
+        label: "High",
+    },
+];
+
 fn default_section_state(function_open: bool) -> HashMap<String, bool> {
     [
         ("function", function_open),
@@ -116,6 +131,7 @@ fn default_section_state(function_open: bool) -> HashMap<String, bool> {
         ("type", false),
         ("status", false),
         ("pricing", false),
+        ("install_risk", false),
     ]
     .into_iter()
     .map(|(k, v)| (k.to_string(), v))
@@ -231,6 +247,7 @@ pub fn Sidebar(
     active_type: Option<String>,
     active_status: Option<String>,
     active_pricing: Option<String>,
+    active_install_risk: Option<String>,
     #[prop(default = true)] default_function_open: bool,
 ) -> impl IntoView {
     let base_path = base.path();
@@ -240,6 +257,7 @@ pub fn Sidebar(
     let type_active = parse_multi(active_type.as_deref());
     let status_active = parse_multi(active_status.as_deref());
     let pricing_active = parse_multi(active_pricing.as_deref());
+    let risk_active = parse_multi(active_install_risk.as_deref());
 
     // SSR: collapsed strip on mobile via CSS until storage loads; desktop expanded rail.
     let default_sections = default_section_state(default_function_open);
@@ -341,6 +359,8 @@ pub fn Sidebar(
     let query_for_status = query_base.clone();
     let base_for_pricing = base_path.clone();
     let query_for_pricing = query_base.clone();
+    let base_for_risk = base_path.clone();
+    let query_for_risk = query_base.clone();
 
     let show_mobile_backdrop = move || {
         if !sidebar_storage_loaded.get() || sidebar_collapsed.get() {
@@ -430,6 +450,7 @@ pub fn Sidebar(
                     ("type", "Ty", "Type"),
                     ("status", "St", "Status"),
                     ("pricing", "Pr", "Pricing"),
+                    ("install_risk", "Ri", "Install Risk"),
                 ].into_iter().map(|(id, short, label)| {
                     let section_id = id.to_string();
                     view! {
@@ -570,6 +591,26 @@ pub fn Sidebar(
                         {PRICING.iter().map(|opt| {
                             let href = toggle_multi(&base_for_pricing, &query_for_pricing, "pricing", opt.id, &pricing_active);
                             let is_active = pricing_active.iter().any(|v| v == opt.id);
+                            view! {
+                                <li>
+                                    <a
+                                        href=href
+                                        class=link_class(is_active)
+                                        on:click=move |_| collapse_mobile_sidebar(sidebar_collapsed)
+                                    >
+                                        <span class="sidebar-title-text">{opt.label}</span>
+                                    </a>
+                                </li>
+                            }
+                        }).collect_view()}
+                    </ul>
+                </CollapsibleSection>
+
+                <CollapsibleSection section_id="install_risk" title="Install Risk" open_map=open_map sidebar_collapsed=sidebar_collapsed sidebar_storage_loaded=sidebar_storage_loaded>
+                    <ul class="sidebar-list">
+                        {INSTALL_RISK.iter().map(|opt| {
+                            let href = toggle_multi(&base_for_risk, &query_for_risk, "install_risk", opt.id, &risk_active);
+                            let is_active = risk_active.iter().any(|v| v == opt.id);
                             view! {
                                 <li>
                                     <a

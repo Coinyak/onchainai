@@ -217,6 +217,7 @@ pub async fn report_tool(input: ReportToolInput) -> Result<ToolReport, ServerFnE
     Ok(row)
 }
 
+#[cfg(feature = "ssr")]
 async fn claim_tool_by_slug(pool: &sqlx::PgPool, slug: &str) -> Result<Tool, ServerFnError> {
     sqlx::query_as::<_, Tool>(APPROVED_TOOL_BY_SLUG_SQL)
         .bind(slug.trim())
@@ -236,6 +237,7 @@ fn validate_claim_state_available(tool: &Tool) -> Result<(), ServerFnError> {
     }
 }
 
+#[cfg(feature = "ssr")]
 async fn insert_claim_request_row(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     tool_id: Uuid,
@@ -259,6 +261,7 @@ async fn insert_claim_request_row(
     .map_err(|e| ServerFnError::new(format!("failed to save claim request: {e}")))
 }
 
+#[cfg(feature = "ssr")]
 async fn insert_claim_official_links(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     tool_id: Uuid,
@@ -314,6 +317,7 @@ impl<'a> ClaimOfficialLinkCandidate<'a> {
     }
 }
 
+#[cfg(feature = "ssr")]
 async fn insert_claim_official_link(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     tool_id: Uuid,
@@ -333,6 +337,7 @@ async fn insert_claim_official_link(
     .await
 }
 
+#[cfg(feature = "ssr")]
 async fn mark_claim_pending(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     tool_id: Uuid,

@@ -7,6 +7,13 @@
       "runtimeExecutable": "/bin/sh",
       "runtimeArgs": ["-c", "RUST_MIN_STACK=33554432 exec ./target/debug/onchainai"],
       "port": 3000
+    },
+    {
+      "name": "dev-watch",
+      "autoPort": false,
+      "runtimeExecutable": "/bin/sh",
+      "runtimeArgs": ["-c", "exec ./scripts/dev-watch.sh"],
+      "port": 3000
     }
   ]
 }

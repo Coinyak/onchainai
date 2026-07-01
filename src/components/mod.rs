@@ -1,5 +1,6 @@
 //! Shared UI components for the website-core milestone.
 
+pub mod admin_context;
 pub mod admin_review_decision_panel;
 pub mod admin_review_timeline;
 pub mod admin_shell;
@@ -25,6 +26,7 @@ pub mod site_shell;
 pub mod skeleton;
 pub mod tool_card;
 pub mod tool_detail_content;
+pub mod tool_finder;
 pub mod tool_listing_actions;
 pub mod tool_logo;
 pub mod tool_trust_facts;

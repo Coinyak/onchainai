@@ -10,10 +10,31 @@ use crate::server::functions::{
 use crate::server::functions::{upload_featured_image, UploadFeaturedImageInput};
 use leptos::prelude::*;
 use leptos::task::spawn_local;
+use leptos_router::hooks::use_query_map;
 use uuid::Uuid;
+
+fn normalize_featured_tool_query(value: Option<&str>) -> Option<String> {
+    value
+        .map(str::trim)
+        .filter(|slug| !slug.is_empty())
+        .map(str::to_string)
+}
+
+fn parse_featured_edit_id(value: Option<&str>) -> Option<Uuid> {
+    value
+        .map(str::trim)
+        .filter(|id| !id.is_empty())
+        .and_then(|id| Uuid::parse_str(id).ok())
+}
+
+fn should_open_featured_create(new_value: Option<&str>, tool_value: Option<&str>) -> bool {
+    normalize_featured_tool_query(tool_value).is_some()
+        || matches!(new_value.map(str::trim), Some("1" | "true" | "yes" | "on"))
+}
 
 #[component]
 pub fn AdminFeaturedPage() -> impl IntoView {
+    let query = use_query_map();
     let refresh = RwSignal::new(0u32);
     let cards = Resource::new(
         move || refresh.get(),
@@ -23,6 +44,28 @@ pub fn AdminFeaturedPage() -> impl IntoView {
     let action_busy = RwSignal::new(false);
     let show_create = RwSignal::new(false);
     let editing_id = RwSignal::new(None::<Uuid>);
+    let initial_tool_slug = Memo::new(move |_| {
+        let query = query.get();
+        let tool = query.get("tool");
+        normalize_featured_tool_query(tool.as_deref())
+    });
+
+    Effect::new(move |_| {
+        let query = query.get();
+        let edit = query.get("edit");
+        if let Some(id) = parse_featured_edit_id(edit.as_deref()) {
+            editing_id.set(Some(id));
+            show_create.set(false);
+            return;
+        }
+
+        let new_value = query.get("new");
+        let tool_value = query.get("tool");
+        if should_open_featured_create(new_value.as_deref(), tool_value.as_deref()) {
+            editing_id.set(None);
+            show_create.set(true);
+        }
+    });
 
     admin_page_shell(move || {
         view! {
@@ -53,6 +96,7 @@ pub fn AdminFeaturedPage() -> impl IntoView {
                     <FeaturedCardForm
                         mode="create"
                         initial=None
+                        initial_tool_slug=initial_tool_slug.get()
                         busy=action_busy
                         error=action_error
                         on_done=move || {
@@ -96,6 +140,7 @@ pub fn AdminFeaturedPage() -> impl IntoView {
                                                             <FeaturedCardForm
                                                                 mode="edit"
                                                                 initial=Some(card_for_edit.clone())
+                                                                initial_tool_slug=None
                                                                 busy=action_busy
                                                                 error=action_error
                                                                 on_done=move || {
@@ -188,14 +233,36 @@ fn FeaturedCardRow(
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn featured_query_helpers_normalize_entry_points() {
+        let id = Uuid::new_v4();
+        assert_eq!(
+            normalize_featured_tool_query(Some("  onchain-kit  ")),
+            Some("onchain-kit".into())
+        );
+        assert_eq!(normalize_featured_tool_query(Some("   ")), None);
+        assert_eq!(parse_featured_edit_id(Some(&id.to_string())), Some(id));
+        assert_eq!(parse_featured_edit_id(Some("not-a-uuid")), None);
+        assert!(should_open_featured_create(Some("1"), None));
+        assert!(should_open_featured_create(None, Some("tool-slug")));
+        assert!(!should_open_featured_create(Some("0"), None));
+    }
+}
+
 #[component]
 fn FeaturedCardForm(
     mode: &'static str,
     initial: Option<AdminFeaturedCardView>,
+    initial_tool_slug: Option<String>,
     busy: RwSignal<bool>,
     error: RwSignal<Option<String>>,
     on_done: impl Fn() + Send + Sync + Copy + 'static,
 ) -> impl IntoView {
+    let initial_tool_slug = initial_tool_slug.filter(|_| initial.is_none());
     let card_id = initial.as_ref().map(|c| c.id);
     let tool_id = RwSignal::new(
         initial
@@ -230,7 +297,7 @@ fn FeaturedCardForm(
     let sort_order = RwSignal::new(initial.as_ref().map(|c| c.sort_order).unwrap_or(0));
     let is_active = RwSignal::new(initial.as_ref().map(|c| c.is_active).unwrap_or(true));
 
-    let tool_query = RwSignal::new(String::new());
+    let tool_query = RwSignal::new(initial_tool_slug.clone().unwrap_or_default());
     let picker_results = Resource::new(
         move || tool_query.get(),
         |q| async move {
@@ -247,6 +314,22 @@ fn FeaturedCardForm(
         tool_label.set(format!("{} ({})", item.name, item.slug));
         tool_query.set(String::new());
     };
+    let prefill_done = RwSignal::new(initial_tool_slug.is_none());
+    Effect::new(move |_| {
+        if prefill_done.get() {
+            return;
+        }
+        let Some(slug) = initial_tool_slug.as_ref() else {
+            return;
+        };
+        let Some(Ok(items)) = picker_results.get() else {
+            return;
+        };
+        if let Some(item) = items.iter().find(|item| item.slug == *slug).cloned() {
+            on_pick(item);
+            prefill_done.set(true);
+        }
+    });
 
     let on_upload = move |ev: leptos::ev::Event| {
         #[cfg(feature = "hydrate")]

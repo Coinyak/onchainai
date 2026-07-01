@@ -2,6 +2,7 @@
 
 pub mod admin;
 pub mod category;
+pub mod compare;
 pub mod dashboard;
 pub mod home;
 pub mod login;
@@ -16,6 +17,7 @@ pub use admin::{
     AdminFeaturedPage, AdminSettingsPage, AdminToolsPage, AdminUsersPage,
 };
 pub use category::CategoryPage;
+pub use compare::ComparePage;
 pub use dashboard::DashboardPage;
 pub use home::HomePage;
 pub use login::LoginPage;

@@ -10,6 +10,7 @@ pub mod components;
 pub mod config;
 #[cfg(feature = "ssr")]
 pub mod crawler;
+pub mod discovery;
 pub mod filter_query;
 pub mod install_safety;
 pub mod models;

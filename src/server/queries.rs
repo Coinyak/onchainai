@@ -250,13 +250,17 @@ pub const DASHBOARD_METRICS_SQL: &str = concat!(
 
 pub const USER_TOOLKIT_SQL: &str = concat!(
     r#"
-        SELECT t.*
+        SELECT t.*,
+               b.note AS bookmark_note,
+               b.tags AS bookmark_tags,
+               b.created_at AS bookmark_created_at,
+               b.updated_at AS bookmark_updated_at
         FROM bookmarks b
         JOIN tools t ON t.id = b.tool_id
         WHERE b.user_id = $1 AND "#,
     public_tool_where!(),
     r#"
-        ORDER BY b.created_at DESC
+        ORDER BY b.updated_at DESC, b.created_at DESC
         LIMIT 200
     "#
 );

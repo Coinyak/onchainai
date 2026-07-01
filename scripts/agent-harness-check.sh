@@ -5,6 +5,10 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
+if [[ -x "${HOME}/.cargo/bin/cargo" ]]; then
+  export PATH="${HOME}/.cargo/bin:${PATH}"
+fi
+
 fail() {
   echo "AGENT HARNESS FAIL: $*" >&2
   exit 1
@@ -124,5 +128,6 @@ fi
 ./scripts/ui-change-gate.sh --check-only >/dev/null
 ./scripts/verify-dev-watch.sh --check-only >/dev/null
 ./scripts/configure-branch-protection.sh --check-only >/dev/null
+cargo check --features hydrate --target wasm32-unknown-unknown >/dev/null
 
 echo "AGENT HARNESS PASS (AGENTS.md lines: ${agents_lines})"

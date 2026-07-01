@@ -147,6 +147,7 @@ pub fn validate_tool_filters(filters: &ToolFilters) -> Result<(), ServerFnError>
     validate_tool_filter_values("tool_type", &filters.tool_type)?;
     validate_tool_filter_values("status", &filters.status)?;
     validate_tool_filter_values("pricing", &filters.pricing)?;
+    validate_tool_filter_values("install_risk", &filters.install_risk)?;
     validate_tool_filter_values("chain", &filters.chain)?;
     Ok(())
 }
@@ -205,6 +206,8 @@ pub struct ToolFilters {
     #[serde(default)]
     pub pricing: Vec<String>,
     #[serde(default)]
+    pub install_risk: Vec<String>,
+    #[serde(default)]
     pub chain: Vec<String>,
 }
 
@@ -247,6 +250,12 @@ pub(crate) fn append_tool_filters<'qb>(
         query
             .push(" AND pricing = ANY(")
             .push_bind(&filters.pricing)
+            .push(")");
+    }
+    if !filters.install_risk.is_empty() {
+        query
+            .push(" AND install_risk_level = ANY(")
+            .push_bind(&filters.install_risk)
             .push(")");
     }
     if !filters.chain.is_empty() {
@@ -566,9 +575,34 @@ pub struct ToolkitExportTool {
     pub stars: i32,
     pub claim_state: String,
     pub install_risk_level: String,
+    pub note: Option<String>,
+    pub tags: Vec<String>,
 }
 
-fn tool_to_toolkit_export(tool: &Tool) -> ToolkitExportTool {
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ToolkitToolView {
+    pub tool: Tool,
+    pub note: Option<String>,
+    pub tags: Vec<String>,
+    pub saved_at: chrono::DateTime<chrono::Utc>,
+    pub updated_at: chrono::DateTime<chrono::Utc>,
+}
+
+impl ToolkitToolView {
+    pub fn from_tool(tool: Tool) -> Self {
+        let now = chrono::Utc::now();
+        Self {
+            tool,
+            note: None,
+            tags: Vec::new(),
+            saved_at: now,
+            updated_at: now,
+        }
+    }
+}
+
+fn tool_to_toolkit_export(item: &ToolkitToolView) -> ToolkitExportTool {
+    let tool = &item.tool;
     ToolkitExportTool {
         slug: tool.slug.clone(),
         name: tool.name.clone(),
@@ -590,15 +624,33 @@ fn tool_to_toolkit_export(tool: &Tool) -> ToolkitExportTool {
         stars: tool.stars,
         claim_state: tool.claim_state.clone(),
         install_risk_level: tool.install_risk_level.clone(),
+        note: item.note.clone(),
+        tags: item.tags.clone(),
     }
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct MyToolkitPayload {
     pub total: i64,
+    pub items: Vec<ToolkitToolView>,
     pub tools: Vec<Tool>,
     pub markdown_export: ToolkitExportPayload,
     pub json_export: ToolkitExportPayload,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct UpdateToolkitItemPayload {
+    pub slug: String,
+    pub note: Option<String>,
+    pub tags: Vec<String>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ToolComparisonView {
+    pub tool: Tool,
+    pub official_links: Vec<ToolOfficialLink>,
+    pub trust_facts: Vec<TrustFact>,
+    pub viewer_bookmarked: bool,
 }
 
 /// Request for bundled browser data load.
@@ -821,29 +873,38 @@ pub async fn get_public_dashboard_snapshot(
     fetch_public_dashboard_snapshot(&pool, list_limit).await
 }
 
-fn sanitize_toolkit_tools(tools: Vec<Tool>) -> Vec<Tool> {
-    sanitize_tools_for_public_response(tools)
+fn sanitize_toolkit_items(items: Vec<ToolkitToolView>) -> Vec<ToolkitToolView> {
+    items
         .into_iter()
-        .map(|mut tool| {
+        .map(|mut item| {
+            let mut tool = sanitize_tool_for_public_response(item.tool);
             tool.name = redact_secrets(&tool.name);
             tool.description = tool.description.map(|value| redact_secrets(&value));
             tool.install_command = tool.install_command.map(|value| redact_secrets(&value));
             tool.safe_copy_command = tool.safe_copy_command.map(|value| redact_secrets(&value));
             tool.mcp_endpoint = tool.mcp_endpoint.map(|value| redact_secrets(&value));
-            tool
+            item.tool = tool;
+            item.note = item.note.map(|value| redact_secrets(&value));
+            item.tags = item
+                .tags
+                .into_iter()
+                .map(|value| redact_secrets(&value))
+                .collect();
+            item
         })
         .collect()
 }
 
-fn toolkit_markdown_for_tools(tools: &[Tool]) -> String {
+fn toolkit_markdown_for_items(items: &[ToolkitToolView]) -> String {
     let mut body = String::from("# My OnchainAI Toolkit\n\n");
-    if tools.is_empty() {
+    if items.is_empty() {
         body.push_str("No saved tools yet.\n");
         return body;
     }
 
     body.push_str("Saved tools exported from OnchainAI.\n\n");
-    for tool in tools {
+    for item in items {
+        let tool = &item.tool;
         let chains = if tool.chains.is_empty() {
             "Not listed".into()
         } else {
@@ -865,6 +926,16 @@ fn toolkit_markdown_for_tools(tools: &[Tool]) -> String {
         let _ = writeln!(body, "- Chains: {chains}");
         let _ = writeln!(body, "- Trust: {}", tool.status);
         let _ = writeln!(body, "- Pricing: {}", tool.pricing);
+        if let Some(note) = item
+            .note
+            .as_deref()
+            .filter(|value| !value.trim().is_empty())
+        {
+            let _ = writeln!(body, "- Note: {note}");
+        }
+        if !item.tags.is_empty() {
+            let _ = writeln!(body, "- Tags: {}", item.tags.join(", "));
+        }
         if let Some(price) = tool.x402_price.as_deref().filter(|value| !value.is_empty()) {
             let _ = writeln!(body, "- x402 price: {price}");
         }
@@ -875,15 +946,19 @@ fn toolkit_markdown_for_tools(tools: &[Tool]) -> String {
     body
 }
 
-pub fn build_toolkit_payload(tools: Vec<Tool>) -> Result<MyToolkitPayload, ServerFnError> {
-    let tools = sanitize_toolkit_tools(tools);
-    let markdown_body = toolkit_markdown_for_tools(&tools);
-    let export_tools: Vec<ToolkitExportTool> = tools.iter().map(tool_to_toolkit_export).collect();
+pub fn build_toolkit_payload(
+    items: Vec<ToolkitToolView>,
+) -> Result<MyToolkitPayload, ServerFnError> {
+    let items = sanitize_toolkit_items(items);
+    let tools: Vec<Tool> = items.iter().map(|item| item.tool.clone()).collect();
+    let markdown_body = toolkit_markdown_for_items(&items);
+    let export_tools: Vec<ToolkitExportTool> = items.iter().map(tool_to_toolkit_export).collect();
     let json_body = serde_json::to_string_pretty(&export_tools)
         .map_err(|e| ServerFnError::new(format!("failed to serialize toolkit: {e}")))?;
 
     Ok(MyToolkitPayload {
-        total: tools.len() as i64,
+        total: items.len() as i64,
+        items,
         tools,
         markdown_export: ToolkitExportPayload {
             format: "markdown".into(),
@@ -903,13 +978,40 @@ async fn fetch_user_toolkit(
     pool: &sqlx::PgPool,
     user_id: uuid::Uuid,
 ) -> Result<MyToolkitPayload, ServerFnError> {
-    let tools = sqlx::query_as::<_, Tool>(USER_TOOLKIT_SQL)
+    use sqlx::{FromRow, Row};
+
+    let rows = sqlx::query(USER_TOOLKIT_SQL)
         .bind(user_id)
         .fetch_all(pool)
         .await
         .map_err(|e| ServerFnError::new(format!("failed to load toolkit: {e}")))?;
 
-    build_toolkit_payload(tools)
+    let mut items = Vec::new();
+    for row in rows {
+        let tool = Tool::from_row(&row)
+            .map_err(|e| ServerFnError::new(format!("failed to decode toolkit tool: {e}")))?;
+        let note = row
+            .try_get::<Option<String>, _>("bookmark_note")
+            .map_err(|e| ServerFnError::new(format!("failed to decode toolkit note: {e}")))?;
+        let tags = row
+            .try_get::<Vec<String>, _>("bookmark_tags")
+            .map_err(|e| ServerFnError::new(format!("failed to decode toolkit tags: {e}")))?;
+        let saved_at = row
+            .try_get::<chrono::DateTime<chrono::Utc>, _>("bookmark_created_at")
+            .map_err(|e| ServerFnError::new(format!("failed to decode toolkit saved_at: {e}")))?;
+        let updated_at = row
+            .try_get::<chrono::DateTime<chrono::Utc>, _>("bookmark_updated_at")
+            .map_err(|e| ServerFnError::new(format!("failed to decode toolkit updated_at: {e}")))?;
+        items.push(ToolkitToolView {
+            tool,
+            note,
+            tags,
+            saved_at,
+            updated_at,
+        });
+    }
+
+    build_toolkit_payload(items)
 }
 
 #[server(ListMyToolkit, "/api")]
@@ -917,6 +1019,121 @@ pub async fn list_my_toolkit() -> Result<MyToolkitPayload, ServerFnError> {
     let (parts, pool, config) = request_context()?;
     let user = require_user(&parts, &pool, &config.jwt_secret, &config.jwt_issuer()).await?;
     fetch_user_toolkit(&pool, user.id).await
+}
+
+fn validate_toolkit_tags(tags: &[String]) -> Result<Vec<String>, ServerFnError> {
+    if tags.len() > 8 {
+        return Err(ServerFnError::new("toolkit tags accept at most 8 values"));
+    }
+    let mut seen = std::collections::HashSet::new();
+    let mut normalized = Vec::new();
+    for tag in tags {
+        let tag = tag.trim().trim_start_matches('#').to_ascii_lowercase();
+        if tag.is_empty() {
+            continue;
+        }
+        if tag.len() > 32 {
+            return Err(ServerFnError::new(
+                "toolkit tags must be at most 32 characters",
+            ));
+        }
+        if tag
+            .bytes()
+            .any(|byte| !(byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_'))
+        {
+            return Err(ServerFnError::new(
+                "toolkit tags may contain letters, numbers, hyphens, and underscores",
+            ));
+        }
+        if seen.insert(tag.clone()) {
+            normalized.push(tag);
+        }
+    }
+    Ok(normalized)
+}
+
+fn validate_toolkit_note(note: Option<String>) -> Result<Option<String>, ServerFnError> {
+    let note = note.map(|value| value.trim().to_string());
+    let note = note.filter(|value| !value.is_empty());
+    if note.as_ref().is_some_and(|value| value.len() > 500) {
+        return Err(ServerFnError::new(
+            "toolkit note must be at most 500 characters",
+        ));
+    }
+    Ok(note)
+}
+
+#[server(UpdateToolkitItem, "/api")]
+pub async fn update_toolkit_item(input: UpdateToolkitItemPayload) -> Result<(), ServerFnError> {
+    let (parts, pool, config) = request_context()?;
+    let user = require_user(&parts, &pool, &config.jwt_secret, &config.jwt_issuer()).await?;
+    let note = validate_toolkit_note(input.note)?;
+    let tags = validate_toolkit_tags(&input.tags)?;
+    let tool_id = resolve_bookmark_tool_id(&pool, &input.slug).await?;
+
+    let result = sqlx::query(
+        r#"
+        UPDATE bookmarks
+        SET note = $3, tags = $4, updated_at = now()
+        WHERE tool_id = $1 AND user_id = $2
+        "#,
+    )
+    .bind(tool_id)
+    .bind(user.id)
+    .bind(note)
+    .bind(tags)
+    .execute(&pool)
+    .await
+    .map_err(|e| ServerFnError::new(format!("failed to update toolkit item: {e}")))?;
+
+    if result.rows_affected() == 0 {
+        return Err(ServerFnError::new(
+            "save the tool before editing toolkit metadata",
+        ));
+    }
+
+    Ok(())
+}
+
+/// Compare up to 3 public tools by slug, preserving the requested order.
+#[server(CompareTools, "/api")]
+pub async fn compare_tools(slugs: Vec<String>) -> Result<Vec<ToolComparisonView>, ServerFnError> {
+    let (parts, pool, config) = request_context()?;
+    let viewer = optional_session_result(
+        session_from_parts(&parts, &pool, &config.jwt_secret, &config.jwt_issuer()).await,
+    )?;
+    let normalized = crate::discovery::normalize_compare_slugs(&slugs.join(","));
+    if normalized.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let mut rows = Vec::new();
+    for slug in normalized {
+        let Some(tool) = fetch_tool_by_slug(&pool, &slug).await? else {
+            continue;
+        };
+        let official_links = list_public_official_links(&pool, tool.id).await?;
+        let trust = verify_tool_trust(&tool, &official_links);
+        let viewer_bookmarked = if let Some(user) = viewer.as_ref() {
+            sqlx::query_scalar::<_, i64>(IS_BOOKMARKED_SQL)
+                .bind(&tool.slug)
+                .bind(user.id)
+                .fetch_one(&pool)
+                .await
+                .map(|count| count > 0)
+                .map_err(|e| ServerFnError::new(format!("bookmark lookup failed: {e}")))?
+        } else {
+            false
+        };
+        rows.push(ToolComparisonView {
+            tool,
+            official_links,
+            trust_facts: trust.trust_facts,
+            viewer_bookmarked,
+        });
+    }
+
+    Ok(rows)
 }
 
 /// Batch comment counts for approved tools by slug.

@@ -1,11 +1,13 @@
 //! Empty state with filter summary, clear filters, and submit CTA — UI_UX_DESIGN §6.
 
+use crate::discovery::EmptyStateSuggestion;
 use leptos::prelude::*;
 
 #[component]
 pub fn EmptyState(
     #[prop(default = "No tools match your filters.")] message: &'static str,
     #[prop(default = Vec::new())] filter_lines: Vec<String>,
+    #[prop(default = Vec::new())] suggestions: Vec<EmptyStateSuggestion>,
     #[prop(default = String::new())] clear_href: String,
 ) -> impl IntoView {
     let has_filters = !filter_lines.is_empty();
@@ -43,9 +45,22 @@ pub fn EmptyState(
                     href="/submit"
                     class="empty-state-submit-btn"
                 >
-                    "Suggest a tool →"
+                    "Suggest a tool"
                 </a>
             </div>
+            {if !suggestions.is_empty() {
+                view! {
+                    <div class="empty-state-suggestions" aria-label="Suggested recovery actions">
+                        {suggestions.into_iter().map(|suggestion| view! {
+                            <a href=suggestion.href class="empty-state-suggestion">
+                                {suggestion.label}
+                            </a>
+                        }).collect_view()}
+                    </div>
+                }.into_any()
+            } else {
+                ().into_any()
+            }}
         </div>
     }
 }

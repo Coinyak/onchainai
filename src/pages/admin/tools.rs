@@ -52,6 +52,13 @@ const QUEUE_TABS: &[QueueTab] = &[
     },
 ];
 
+fn normalize_slug_query(value: Option<&str>) -> Option<String> {
+    value
+        .map(str::trim)
+        .filter(|slug| !slug.is_empty())
+        .map(str::to_string)
+}
+
 #[component]
 pub fn AdminToolsPage() -> impl IntoView {
     admin_page_shell(move || view! { <AdminToolsContent/> })
@@ -86,6 +93,12 @@ fn AdminToolsContent() -> impl IntoView {
         |_| async move { get_referral_dashboard_stats().await },
     );
 
+    let direct_slug = Memo::new(move |_| {
+        let query = query.get();
+        let slug = query.get("slug");
+        normalize_slug_query(slug.as_deref())
+    });
+
     let selected_slug = Memo::new(move |_| {
         let selected_param = query.get().get("selected").map(|s| s.to_string());
         let slugs: Vec<String> = queue_items
@@ -95,9 +108,10 @@ fn AdminToolsContent() -> impl IntoView {
             .unwrap_or_default();
         derive_selected_slug(selected_param.as_deref(), &slugs)
     });
+    let workbench_slug = Memo::new(move |_| direct_slug.get().or_else(|| selected_slug.get()));
 
     let workbench = Resource::new(
-        move || (selected_slug.get(), workbench_refresh.get()),
+        move || (workbench_slug.get(), workbench_refresh.get()),
         |(slug, _)| async move {
             match slug {
                 Some(s) => get_admin_tool_workbench(s).await.map(Some),
@@ -189,7 +203,7 @@ fn AdminToolsContent() -> impl IntoView {
                     tabs=QUEUE_TABS
                     active_queue=active_queue
                     queue_items=queue_items
-                    selected_slug=selected_slug
+                    selected_slug=workbench_slug
                 />
 
                 <div class="min-w-0 space-y-4">
@@ -483,5 +497,21 @@ fn ReferralStatSkeleton() -> impl IntoView {
             <p class="text-[12px] text-[#6B6B6B]">"Loading"</p>
             <p class="text-[20px] font-semibold mt-1">"..."</p>
         </div>
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn direct_slug_query_ignores_empty_values() {
+        assert_eq!(normalize_slug_query(None), None);
+        assert_eq!(normalize_slug_query(Some("")), None);
+        assert_eq!(normalize_slug_query(Some("   ")), None);
+        assert_eq!(
+            normalize_slug_query(Some("  hyper-mcp  ")),
+            Some("hyper-mcp".into())
+        );
     }
 }

@@ -1,6 +1,7 @@
 //! Search inputs — debounced URL sync via leptos_router.
 
 use crate::components::tools_browser::{build_query_base, BrowserBase, BrowserQueryParams};
+use crate::discovery::{parse_search_intent, search_intent_href};
 
 use leptos::leptos_dom::helpers::TimeoutHandle;
 use leptos::prelude::*;
@@ -45,7 +46,7 @@ pub fn SearchBar() -> impl IntoView {
         if q.trim().is_empty() {
             return;
         }
-        let url = format!("/tools?q={}", urlencoding::encode(q.trim()));
+        let url = search_intent_href("/tools", &parse_search_intent(q.trim()));
         navigate(&url, Default::default());
     });
 
@@ -68,19 +69,43 @@ fn toolbar_query_params(
     query: &leptos_router::params::ParamsMap,
     q: String,
 ) -> BrowserQueryParams {
+    let intent = parse_search_intent(&q);
+    let search_q = if intent.query_terms.is_empty() {
+        q
+    } else {
+        intent.query_terms.clone()
+    };
     BrowserQueryParams {
-        function: base.function_from_query(query.get("function").map(|s| s.to_string())),
+        function: match base {
+            BrowserBase::Category(_) => {
+                base.function_from_query(query.get("function").map(|s| s.to_string()))
+            }
+            _ => intent
+                .function
+                .clone()
+                .or_else(|| base.function_from_query(query.get("function").map(|s| s.to_string()))),
+        },
         asset_class: query.get("asset_class").map(|s| s.to_string()),
         actor: query.get("actor").map(|s| s.to_string()),
-        tool_type: query.get("type").map(|s| s.to_string()),
+        tool_type: intent
+            .tool_type
+            .clone()
+            .or_else(|| query.get("type").map(|s| s.to_string())),
         status: query.get("status").map(|s| s.to_string()),
         pricing: query.get("pricing").map(|s| s.to_string()),
-        chain: query.get("chain").map(|s| s.to_string()),
+        install_risk: intent
+            .install_risk
+            .clone()
+            .or_else(|| query.get("install_risk").map(|s| s.to_string())),
+        chain: intent
+            .chain
+            .clone()
+            .or_else(|| query.get("chain").map(|s| s.to_string())),
         sort: query
             .get("sort")
             .map(|s| s.to_string())
             .unwrap_or_else(|| "hot".into()),
-        search_q: Some(q).filter(|s| !s.is_empty()),
+        search_q: Some(search_q).filter(|s| !s.is_empty()),
         selected: None,
         page: 1,
     }

@@ -41,7 +41,10 @@ pub struct Bookmark {
     pub id: Uuid,
     pub tool_id: Uuid,
     pub user_id: Uuid,
+    pub note: Option<String>,
+    pub tags: Vec<String>,
     pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
 }
 
 #[cfg(test)]
@@ -93,10 +96,14 @@ mod tests {
             id: Uuid::nil(),
             tool_id: Uuid::nil(),
             user_id: Uuid::nil(),
+            note: Some("remember this".into()),
+            tags: vec!["agent".into()],
             created_at: now,
+            updated_at: now,
         };
         let json = serde_json::to_string(&b).expect("serialize bookmark");
         let back: Bookmark = serde_json::from_str(&json).expect("deserialize bookmark");
         assert_eq!(back.tool_id, Uuid::nil());
+        assert_eq!(back.tags, vec!["agent"]);
     }
 }
