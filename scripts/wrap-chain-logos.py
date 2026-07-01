@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import base64
 import json
+import os
 import re
 import sys
 from pathlib import Path
@@ -115,63 +116,96 @@ def load_manifest() -> dict:
     return json.loads(MANIFEST.read_text(encoding="utf-8"))
 
 
-def main() -> None:
-    if len(sys.argv) > 1:
-        raw_root = Path(sys.argv[1])
-    else:
-        data = load_manifest()
-        scratch = Path(
-            "/var/folders/k7/_r0bjtp12dngr0ncryvtt4mc0000gn/T/grok-goal-11e98898edeb/implementer"
-        )
-        raw_root = scratch / data.get("raw_logos_dir", "raw-logos")
+def validate_public_tile(
+    path: Path,
+    slug: str,
+    markers: list[str],
+    *,
+    require_vector: bool = False,
+) -> str:
+    if not path.exists():
+        raise SystemExit(f"missing public svg for {slug}: {path}")
+    text = path.read_text(encoding="utf-8")
+    if "<svg" not in text:
+        raise SystemExit(f"not svg: {path}")
+    if markers and not any(m in text for m in markers):
+        raise SystemExit(f"{slug} public svg missing brand markers in {path}")
+    if require_vector:
+        body = read_svg_body(path)
+        if not any(m in body for m in markers):
+            raise SystemExit(f"{slug} vector tile missing brand markers in {path}")
+    return text
 
+
+def resolve_raw_root(argv: list[str]) -> Path | None:
+    if "--public-fallback" in argv:
+        return None
+    positional = [arg for arg in argv if not arg.startswith("-")]
+    if positional:
+        return Path(positional[0])
+    scratch = os.environ.get("ONCHAINAI_SCRATCH", "").strip()
+    if scratch:
+        candidate = Path(scratch) / "raw-logos"
+        if candidate.is_dir():
+            return candidate
+    return None
+
+
+def main() -> None:
+    raw_root = resolve_raw_root(sys.argv[1:])
     data = load_manifest()
     OUT.mkdir(parents=True, exist_ok=True)
     written: list[str] = []
+    preserved: list[str] = []
 
     for entry in data["entries"]:
         slug = entry["id"]
         label = entry["label"]
         kind = entry["kind"]
         out = OUT / f"{slug}.svg"
+        markers = entry.get("markers", [])
+        require_vector = bool(entry.get("require_vector"))
 
         if kind in INLINE:
             out.write_text(INLINE[kind], encoding="utf-8")
         elif kind == "wrap":
-            src = raw_root / entry["source"]
-            if not src.exists():
-                raise SystemExit(f"missing source for {slug}: {src}")
-            if entry.get("require_vector"):
-                body = read_svg_body(src)
-                markers = entry.get("markers", [])
-                if not any(m in body for m in markers):
-                    raise SystemExit(f"{slug} svg missing brand markers in {src}")
-            out.write_text(wrap_file(label, src), encoding="utf-8")
+            src = raw_root / entry["source"] if raw_root else None
+            if src and src.exists():
+                if require_vector:
+                    body = read_svg_body(src)
+                    if not any(m in body for m in markers):
+                        raise SystemExit(f"{slug} svg missing brand markers in {src}")
+                out.write_text(wrap_file(label, src), encoding="utf-8")
+            else:
+                text = validate_public_tile(
+                    out, slug, markers, require_vector=require_vector
+                )
+                out.write_text(text, encoding="utf-8")
+                preserved.append(slug)
         elif kind == "wrap_raster":
-            src = raw_root / entry["source"]
-            if not src.exists():
-                raise SystemExit(f"missing raster for {slug}: {src}")
-            text = wrap_raster(label, src)
-            markers = entry.get("markers", [])
-            if markers and not any(m in text for m in markers):
-                raise SystemExit(f"{slug} raster tile missing markers")
-            out.write_text(text, encoding="utf-8")
+            src = raw_root / entry["source"] if raw_root else None
+            if src and src.exists():
+                text = wrap_raster(label, src)
+                if markers and not any(m in text for m in markers):
+                    raise SystemExit(f"{slug} raster tile missing markers")
+                out.write_text(text, encoding="utf-8")
+            else:
+                text = validate_public_tile(out, slug, markers)
+                out.write_text(text, encoding="utf-8")
+                preserved.append(slug)
         elif kind == "public_svg":
-            src = OUT / f"{slug}.svg"
-            if not src.exists():
-                raise SystemExit(f"missing public svg for {slug}: {src}")
-            text = src.read_text(encoding="utf-8")
-            if "<svg" not in text:
-                raise SystemExit(f"not svg: {src}")
-            markers = entry.get("markers", [])
-            if markers and not any(m in text for m in markers):
-                raise SystemExit(f"{slug} public svg missing brand markers in {src}")
+            text = validate_public_tile(out, slug, markers)
             out.write_text(text, encoding="utf-8")
+            preserved.append(slug)
         else:
             raise SystemExit(f"unknown kind for {slug}: {kind}")
 
         written.append(slug)
 
+    mode = "public-fallback" if raw_root is None else f"raw:{raw_root}"
+    print(f"mode: {mode}")
+    if preserved:
+        print("preserved:", ", ".join(sorted(preserved)))
     print("wrapped:", ", ".join(sorted(written)))
 
 
