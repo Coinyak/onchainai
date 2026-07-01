@@ -571,10 +571,16 @@ pub fn ToolsBrowser(
                                         let suggestions = empty_state_suggestions(
                                             &browser_base.path(),
                                             &EmptyRecoverySummary {
-                                                chain: filter_summary.chain.clone(),
+                                                function: filter_summary.function.clone(),
+                                                asset_class: filter_summary.asset_class.clone(),
+                                                actor: filter_summary.actor.clone(),
                                                 tool_type: filter_summary.tool_type.clone(),
+                                                status: filter_summary.status.clone(),
+                                                pricing: filter_summary.pricing.clone(),
                                                 install_risk: filter_summary.install_risk.clone(),
+                                                chain: filter_summary.chain.clone(),
                                                 search: filter_summary.search.clone(),
+                                                sort: filter_summary.sort.clone(),
                                             },
                                         );
                                         let clear_href = if filter_summary.has_active_filters() {

@@ -1107,26 +1107,42 @@ pub async fn compare_tools(slugs: Vec<String>) -> Result<Vec<ToolComparisonView>
         return Ok(Vec::new());
     }
 
+    // Batch-fetch all approved tools by slug in one query.
+    let tools = sqlx::query_as::<_, Tool>(APPROVED_TOOLS_BY_SLUGS_SQL)
+        .bind(&normalized)
+        .fetch_all(&pool)
+        .await
+        .map_err(|e| ServerFnError::new(format!("failed to load tools: {e}")))?;
+    let tools = sanitize_tools_for_public_response(tools);
+
+    // Batch-check bookmarks for all slugs at once (if viewer is signed in).
+    let bookmarked_slugs: std::collections::HashSet<String> = if let Some(user) = viewer.as_ref() {
+        sqlx::query_scalar::<_, String>(BOOKMARKED_SLUGS_SQL)
+            .bind(&normalized)
+            .bind(user.id)
+            .fetch_all(&pool)
+            .await
+            .map_err(|e| ServerFnError::new(format!("bookmark lookup failed: {e}")))?
+            .into_iter()
+            .collect()
+    } else {
+        std::collections::HashSet::new()
+    };
+
+    // Build a slug -> tool map for order-preserving assembly.
+    let tool_map: std::collections::HashMap<String, Tool> =
+        tools.into_iter().map(|t| (t.slug.clone(), t)).collect();
+
     let mut rows = Vec::new();
-    for slug in normalized {
-        let Some(tool) = fetch_tool_by_slug(&pool, &slug).await? else {
+    for slug in &normalized {
+        let Some(tool) = tool_map.get(slug) else {
             continue;
         };
         let official_links = list_public_official_links(&pool, tool.id).await?;
-        let trust = verify_tool_trust(&tool, &official_links);
-        let viewer_bookmarked = if let Some(user) = viewer.as_ref() {
-            sqlx::query_scalar::<_, i64>(IS_BOOKMARKED_SQL)
-                .bind(&tool.slug)
-                .bind(user.id)
-                .fetch_one(&pool)
-                .await
-                .map(|count| count > 0)
-                .map_err(|e| ServerFnError::new(format!("bookmark lookup failed: {e}")))?
-        } else {
-            false
-        };
+        let trust = verify_tool_trust(tool, &official_links);
+        let viewer_bookmarked = bookmarked_slugs.contains(&tool.slug);
         rows.push(ToolComparisonView {
-            tool,
+            tool: tool.clone(),
             official_links,
             trust_facts: trust.trust_facts,
             viewer_bookmarked,

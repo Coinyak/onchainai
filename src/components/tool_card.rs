@@ -2,7 +2,7 @@
 
 use crate::auth::session::has_access_token_cookie;
 use crate::chains::{chain_fallback_label, chain_tags_for_tool, ChainTagView};
-use crate::components::admin_context::{use_current_user_resource, user_is_admin};
+use crate::components::admin_context::AdminOnly;
 use crate::components::chain_logo::ChainLogo;
 use crate::components::copy_button::CopyButton;
 use crate::components::icons::LucideIcon;
@@ -118,28 +118,19 @@ fn confirm_quick_verify() -> bool {
 
 #[component]
 fn AdminToolCardActions(slug: String, status: RwSignal<String>) -> impl IntoView {
-    let Some(user) = use_current_user_resource() else {
-        return ().into_any();
-    };
-
     let busy = RwSignal::new(false);
     let error = RwSignal::new(None::<String>);
-    let review_href = format!("/admin/tools?slug={slug}");
+    let review_href = RwSignal::new(format!("/admin/tools?slug={slug}"));
     let action_slug = RwSignal::new(slug.clone());
 
     view! {
-        <Suspense fallback=|| ()>
+        <AdminOnly>
             {move || {
-                let is_admin = user.get().map(|res| user_is_admin(&res)).unwrap_or(false);
-                if !is_admin {
-                    return ().into_any();
-                }
-                let review_href = review_href.clone();
-
+                let review_href = review_href.get();
                 view! {
                     <a
                         class="card-action-btn admin-card-action-link"
-                        href=move || review_href.clone()
+                        href=review_href
                         aria-label="Review or edit"
                         title="Review or edit"
                         on:click=|ev| ev.stop_propagation()
@@ -186,13 +177,16 @@ fn AdminToolCardActions(slug: String, status: RwSignal<String>) -> impl IntoView
                         </button>
                     </Show>
                     {move || error.get().map(|msg| view! {
-                        <span class="sr-only" role="status">{msg}</span>
+                        <span class="sr-only" role="status">{msg.clone()}</span>
+                        <span class="admin-card-error" role="alert">
+                            <LucideIcon name="alert-circle".to_string() class="card-action-icon"/>
+                            {msg}
+                        </span>
                     })}
                 }.into_any()
             }}
-        </Suspense>
+        </AdminOnly>
     }
-    .into_any()
 }
 
 fn render_chain_tags(

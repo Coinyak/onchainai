@@ -27,10 +27,16 @@ pub struct ToolFinderAnswers {
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct EmptyRecoverySummary {
-    pub chain: Vec<String>,
+    pub function: Vec<String>,
+    pub asset_class: Vec<String>,
+    pub actor: Vec<String>,
     pub tool_type: Vec<String>,
+    pub status: Vec<String>,
+    pub pricing: Vec<String>,
     pub install_risk: Vec<String>,
+    pub chain: Vec<String>,
     pub search: Option<String>,
+    pub sort: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -126,9 +132,7 @@ pub fn parse_search_intent(query: &str) -> SearchIntent {
             intent
                 .tool_type
                 .get_or_insert_with(|| tool_type.to_string());
-            if tool_type == "x402" {
-                continue;
-            }
+            continue;
         }
         if let Some(function) = function_id(token) {
             intent.function.get_or_insert_with(|| function.to_string());
@@ -199,22 +203,59 @@ pub fn empty_state_suggestions(
     summary: &EmptyRecoverySummary,
 ) -> Vec<EmptyStateSuggestion> {
     let mut suggestions = Vec::new();
+
+    // Build a query string from the summary, optionally overriding specific axes.
+    let build_href = |remove_chain: bool, remove_type: bool, risk_override: Option<&str>| {
+        let mut parts = Vec::new();
+        if !remove_chain {
+            push_param(&mut parts, "chain", Some(&summary.chain.join(",")));
+        }
+        if !remove_type {
+            push_param(&mut parts, "type", Some(&summary.tool_type.join(",")));
+        }
+        let risk: String = match risk_override {
+            Some(r) => r.to_string(),
+            None => summary.install_risk.join(","),
+        };
+        push_param(&mut parts, "install_risk", Some(&risk));
+        push_param(&mut parts, "function", Some(&summary.function.join(",")));
+        push_param(
+            &mut parts,
+            "asset_class",
+            Some(&summary.asset_class.join(",")),
+        );
+        push_param(&mut parts, "actor", Some(&summary.actor.join(",")));
+        push_param(&mut parts, "status", Some(&summary.status.join(",")));
+        push_param(&mut parts, "pricing", Some(&summary.pricing.join(",")));
+        if risk_override.is_none() {
+            push_param(&mut parts, "q", summary.search.as_deref());
+        }
+        if summary.sort != "hot" {
+            push_param(&mut parts, "sort", Some(&summary.sort));
+        }
+        if parts.is_empty() {
+            base_path.to_string()
+        } else {
+            format!("{base_path}?{}", parts.join("&"))
+        }
+    };
+
     if !summary.chain.is_empty() {
         suggestions.push(EmptyStateSuggestion {
             label: "Remove chain filter",
-            href: base_path.to_string(),
+            href: build_href(true, false, None),
         });
     }
     if !summary.tool_type.is_empty() {
         suggestions.push(EmptyStateSuggestion {
             label: "Show all types",
-            href: base_path.to_string(),
+            href: build_href(false, true, None),
         });
     }
     if summary.install_risk.iter().any(|risk| risk == "low") {
         suggestions.push(EmptyStateSuggestion {
             label: "Include medium risk",
-            href: format!("{base_path}?install_risk=low%2Cmedium"),
+            href: build_href(false, false, Some("low,medium")),
         });
     }
     if let Some(search) = summary.search.as_deref().filter(|q| !q.trim().is_empty()) {
@@ -241,10 +282,23 @@ mod tests {
         let intent = parse_search_intent("base wallet mcp");
         assert_eq!(intent.chain.as_deref(), Some("base"));
         assert_eq!(intent.tool_type.as_deref(), Some("mcp"));
-        assert_eq!(intent.query_terms, "wallet mcp");
+        assert_eq!(intent.query_terms, "wallet");
 
         let href = search_intent_href("/tools", &intent);
-        assert_eq!(href, "/tools?chain=base&type=mcp&q=wallet%20mcp");
+        assert_eq!(href, "/tools?chain=base&type=mcp&q=wallet");
+    }
+
+    #[test]
+    fn search_intent_strips_tool_type_tokens_from_query() {
+        let intent = parse_search_intent("mcp wallet");
+        assert_eq!(intent.tool_type.as_deref(), Some("mcp"));
+        assert_eq!(intent.query_terms, "wallet");
+
+        let intent_api = parse_search_intent("api bridge tool");
+        assert_eq!(intent_api.tool_type.as_deref(), Some("api"));
+        assert_eq!(intent_api.function.as_deref(), Some("bridge"));
+        // function tokens stay in query_terms (only tool_type tokens are removed)
+        assert_eq!(intent_api.query_terms, "bridge tool");
     }
 
     #[test]
@@ -287,6 +341,7 @@ mod tests {
             tool_type: vec!["mcp".into()],
             install_risk: vec!["low".into()],
             search: Some("wallet".into()),
+            ..Default::default()
         };
         let suggestions = empty_state_suggestions("/tools", &summary);
         let labels: Vec<_> = suggestions.iter().map(|s| s.label).collect();
@@ -297,5 +352,43 @@ mod tests {
         assert!(suggestions
             .iter()
             .all(|s| !s.href.contains("install_risk=critical")));
+    }
+
+    #[test]
+    fn empty_state_recovery_preserves_other_filters() {
+        let summary = EmptyRecoverySummary {
+            chain: vec!["solana".into()],
+            tool_type: vec!["cli".into()],
+            install_risk: vec!["low".into()],
+            ..Default::default()
+        };
+        let suggestions = empty_state_suggestions("/tools", &summary);
+
+        // "Remove chain filter" must keep type and install_risk
+        let remove_chain = suggestions
+            .iter()
+            .find(|s| s.label == "Remove chain filter")
+            .unwrap();
+        assert!(!remove_chain.href.contains("chain="));
+        assert!(remove_chain.href.contains("type=cli"));
+        assert!(remove_chain.href.contains("install_risk=low"));
+
+        // "Show all types" must keep chain and install_risk
+        let show_all_types = suggestions
+            .iter()
+            .find(|s| s.label == "Show all types")
+            .unwrap();
+        assert!(!show_all_types.href.contains("type="));
+        assert!(show_all_types.href.contains("chain=solana"));
+        assert!(show_all_types.href.contains("install_risk=low"));
+
+        // "Include medium risk" must keep chain and type
+        let include_medium = suggestions
+            .iter()
+            .find(|s| s.label == "Include medium risk")
+            .unwrap();
+        assert!(include_medium.href.contains("chain=solana"));
+        assert!(include_medium.href.contains("type=cli"));
+        assert!(include_medium.href.contains("install_risk=low%2Cmedium"));
     }
 }

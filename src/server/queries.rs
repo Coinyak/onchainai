@@ -286,6 +286,20 @@ pub const IS_BOOKMARKED_SQL: &str = concat!(
     public_tool_where!()
 );
 
+pub const APPROVED_TOOLS_BY_SLUGS_SQL: &str = concat!(
+    "SELECT * FROM tools WHERE slug = ANY($1) AND ",
+    public_tool_where!()
+);
+
+pub const BOOKMARKED_SLUGS_SQL: &str = concat!(
+    r#"
+        SELECT t.slug
+        FROM bookmarks b
+        JOIN tools t ON t.id = b.tool_id
+        WHERE t.slug = ANY($1) AND b.user_id = $2 AND "#,
+    public_tool_where!()
+);
+
 pub const TOOL_COMMENT_COUNT_BY_SLUG_SQL: &str = concat!(
     r#"
         SELECT COUNT(*)::bigint

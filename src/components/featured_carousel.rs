@@ -1,6 +1,6 @@
 //! Featured tool carousel — SSR first card + client auto-advance (harness-round-11).
 
-use crate::components::admin_context::{use_current_user_resource, user_is_admin};
+use crate::components::admin_context::AdminOnly;
 use crate::components::icons::LucideIcon;
 use crate::server::functions::FeaturedCardView;
 use leptos::prelude::*;
@@ -45,32 +45,26 @@ fn FeaturedCarouselAdminActions(
     cards: Vec<FeaturedCardView>,
     current: RwSignal<usize>,
 ) -> impl IntoView {
-    let Some(user) = use_current_user_resource() else {
-        return ().into_any();
-    };
-
+    let cards = StoredValue::new(cards);
     view! {
-        <Suspense fallback=|| ()>
+        <AdminOnly>
             {move || {
-                let is_admin = user.get().map(|res| user_is_admin(&res)).unwrap_or(false);
-                if !is_admin {
-                    return ().into_any();
-                }
                 let current_idx = current.get();
+                let edit_href = cards.with_value(|c| featured_edit_href(c, current_idx));
+                let add_href = cards.with_value(|c| featured_add_href(c, current_idx));
                 view! {
                     <div class="featured-admin-actions">
-                        <a class="featured-admin-link" href=featured_edit_href(&cards, current_idx)>
+                        <a class="featured-admin-link" href=edit_href>
                             "Edit"
                         </a>
-                        <a class="featured-admin-link" href=featured_add_href(&cards, current_idx)>
+                        <a class="featured-admin-link" href=add_href>
                             "Add"
                         </a>
                     </div>
                 }.into_any()
             }}
-        </Suspense>
+        </AdminOnly>
     }
-    .into_any()
 }
 
 #[component]

@@ -71,7 +71,7 @@ fn toolbar_query_params(
 ) -> BrowserQueryParams {
     let intent = parse_search_intent(&q);
     let search_q = if intent.query_terms.is_empty() {
-        q
+        String::new()
     } else {
         intent.query_terms.clone()
     };
@@ -80,27 +80,27 @@ fn toolbar_query_params(
             BrowserBase::Category(_) => {
                 base.function_from_query(query.get("function").map(|s| s.to_string()))
             }
-            _ => intent
-                .function
-                .clone()
-                .or_else(|| base.function_from_query(query.get("function").map(|s| s.to_string()))),
+            _ => query
+                .get("function")
+                .map(|s| s.to_string())
+                .or_else(|| intent.function.clone()),
         },
         asset_class: query.get("asset_class").map(|s| s.to_string()),
         actor: query.get("actor").map(|s| s.to_string()),
-        tool_type: intent
-            .tool_type
-            .clone()
-            .or_else(|| query.get("type").map(|s| s.to_string())),
+        tool_type: query
+            .get("type")
+            .map(|s| s.to_string())
+            .or_else(|| intent.tool_type.clone()),
         status: query.get("status").map(|s| s.to_string()),
         pricing: query.get("pricing").map(|s| s.to_string()),
-        install_risk: intent
-            .install_risk
-            .clone()
-            .or_else(|| query.get("install_risk").map(|s| s.to_string())),
-        chain: intent
-            .chain
-            .clone()
-            .or_else(|| query.get("chain").map(|s| s.to_string())),
+        install_risk: query
+            .get("install_risk")
+            .map(|s| s.to_string())
+            .or_else(|| intent.install_risk.clone()),
+        chain: query
+            .get("chain")
+            .map(|s| s.to_string())
+            .or_else(|| intent.chain.clone()),
         sort: query
             .get("sort")
             .map(|s| s.to_string())

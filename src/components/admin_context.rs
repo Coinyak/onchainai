@@ -20,3 +20,25 @@ pub fn use_current_user_resource() -> Option<ArcOnceResource<CurrentUserResult>>
 pub fn user_is_admin(user_res: &CurrentUserResult) -> bool {
     matches!(user_res, Ok(Some(session)) if session.is_admin)
 }
+
+/// Wrapper that renders `children` only when the current user is an admin.
+///
+/// If no current-user resource is in context, renders nothing.
+/// During Suspense pending, renders nothing.
+#[component]
+pub fn AdminOnly(children: ChildrenFn) -> impl IntoView {
+    let Some(user) = use_current_user_resource() else {
+        return ().into_any();
+    };
+
+    view! {
+        <Suspense fallback=|| ()>
+            <Show when=move || {
+                user.get().map(|res| user_is_admin(&res)).unwrap_or(false)
+            }>
+                {children()}
+            </Show>
+        </Suspense>
+    }
+    .into_any()
+}
