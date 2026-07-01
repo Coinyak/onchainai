@@ -30,6 +30,7 @@ pub fn AdminReviewDecisionPanel(
     on_links_updated: RwSignal<u32>,
 ) -> impl IntoView {
     let slug = tool.slug.clone();
+    let listing_status = tool.status.clone();
     let gaps = trust.evidence_gaps.clone();
     let facts = trust.trust_facts.clone();
     let official_title = if official_promotion_allowed {
@@ -240,6 +241,37 @@ pub fn AdminReviewDecisionPanel(
                     </button>
                         }.into_any()
                     }
+                    {if listing_status == "verified" {
+                        view! {
+                            <ActionButton
+                                label="Revoke verified"
+                                class="border border-[#C0392B] text-[#C0392B] hover:bg-[#C0392B]/5"
+                                slug=slug.clone()
+                                action="demote_verified"
+                                title="Demote verified listing to community"
+                                placeholder="Why revoke verified status?"
+                                confirm="Revoke verified"
+                                on_open_reason=on_open_reason
+                                action_busy=action_busy
+                            />
+                        }.into_any()
+                    } else if listing_status == "official" {
+                        view! {
+                            <ActionButton
+                                label="Revoke official"
+                                class="border border-[#C0392B] text-[#C0392B] hover:bg-[#C0392B]/5"
+                                slug=slug.clone()
+                                action="demote_official"
+                                title="Demote official listing to community"
+                                placeholder="Why revoke official status?"
+                                confirm="Revoke official"
+                                on_open_reason=on_open_reason
+                                action_busy=action_busy
+                            />
+                        }.into_any()
+                    } else {
+                        ().into_any()
+                    }}
                     <ActionButton
                         label="Quarantine"
                         class="border border-[#C0392B] text-[#C0392B] hover:bg-[#C0392B]/5"

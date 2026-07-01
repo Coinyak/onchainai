@@ -97,6 +97,36 @@ impl BrowserQueryParams {
         }
     }
 
+    /// Single-value status toolbar tab — toggles off when the same value is active.
+    pub fn for_status_filter(&self, status: Option<&str>) -> Self {
+        let next_status = match status {
+            Some(value) if self.status.as_deref() == Some(value) => None,
+            Some(value) => Some(value.to_string()),
+            None => None,
+        };
+        Self {
+            status: next_status,
+            selected: None,
+            page: 1,
+            ..self.clone()
+        }
+    }
+
+    /// Single-value type toolbar tab — toggles off when the same value is active.
+    pub fn for_type_filter(&self, tool_type: Option<&str>) -> Self {
+        let next_type = match tool_type {
+            Some(value) if self.tool_type.as_deref() == Some(value) => None,
+            Some(value) => Some(value.to_string()),
+            None => None,
+        };
+        Self {
+            tool_type: next_type,
+            selected: None,
+            page: 1,
+            ..self.clone()
+        }
+    }
+
     pub fn for_next_page(&self) -> Self {
         Self {
             selected: None,
@@ -239,6 +269,22 @@ pub fn with_selected(base_path: &BrowserBase, base: &str, slug: &str) -> String 
 /// Sort toolbar link — rebuilds query via `build_query_base` (no duplicate `sort=` params).
 pub fn build_sort_href(base: &BrowserBase, params: &BrowserQueryParams, sort: &str) -> String {
     build_query_base(base, &params.for_sort(sort))
+}
+
+pub fn build_status_filter_href(
+    base: &BrowserBase,
+    params: &BrowserQueryParams,
+    status: &str,
+) -> String {
+    build_query_base(base, &params.for_status_filter(Some(status)))
+}
+
+pub fn build_type_filter_href(
+    base: &BrowserBase,
+    params: &BrowserQueryParams,
+    tool_type: &str,
+) -> String {
+    build_query_base(base, &params.for_type_filter(Some(tool_type)))
 }
 
 pub fn build_load_more_href(base: &BrowserBase, params: &BrowserQueryParams) -> String {
@@ -449,6 +495,30 @@ pub fn ToolsBrowser(
     let sort_comments = Memo::new(move |_| {
         build_sort_href(&base.get_value(), &browser_query_params.get(), "comments")
     });
+    let status_verified = Memo::new(move |_| {
+        build_status_filter_href(&base.get_value(), &browser_query_params.get(), "verified")
+    });
+    let status_official = Memo::new(move |_| {
+        build_status_filter_href(&base.get_value(), &browser_query_params.get(), "official")
+    });
+    let type_mcp = Memo::new(move |_| {
+        build_type_filter_href(&base.get_value(), &browser_query_params.get(), "mcp")
+    });
+    let type_cli = Memo::new(move |_| {
+        build_type_filter_href(&base.get_value(), &browser_query_params.get(), "cli")
+    });
+    let type_api = Memo::new(move |_| {
+        build_type_filter_href(&base.get_value(), &browser_query_params.get(), "api")
+    });
+    let type_sdk = Memo::new(move |_| {
+        build_type_filter_href(&base.get_value(), &browser_query_params.get(), "sdk")
+    });
+    let type_skill = Memo::new(move |_| {
+        build_type_filter_href(&base.get_value(), &browser_query_params.get(), "skill")
+    });
+    let type_x402 = Memo::new(move |_| {
+        build_type_filter_href(&base.get_value(), &browser_query_params.get(), "x402")
+    });
 
     let children_fallback = children.clone();
 
@@ -545,10 +615,22 @@ pub fn ToolsBrowser(
                                         } else {
                                             ().into_any()
                                         }}
-                                        <div class="toolbar-sort">
-                                            <a href=move || sort_hot.get() class=move || if sort.get() == "hot" { "sort-link active" } else { "sort-link" }>"HOT ↓"</a>
-                                            <a href=move || sort_new.get() class=move || if sort.get() == "new" { "sort-link active" } else { "sort-link" }>"New"</a>
-                                            <a href=move || sort_comments.get() class=move || if sort.get() == "comments" { "sort-link active" } else { "sort-link" }>"Comments"</a>
+                                        <div class="toolbar-rows">
+                                            <div class="toolbar-sort-row">
+                                                <a href=move || sort_hot.get() class=move || if sort.get() == "hot" { "sort-link active" } else { "sort-link" }>"HOT ↓"</a>
+                                                <a href=move || sort_new.get() class=move || if sort.get() == "new" { "sort-link active" } else { "sort-link" }>"New"</a>
+                                                <a href=move || sort_comments.get() class=move || if sort.get() == "comments" { "sort-link active" } else { "sort-link" }>"Comments"</a>
+                                                <a href=move || status_verified.get() class=move || if status.get().as_deref() == Some("verified") { "sort-link active" } else { "sort-link" }>"Verified"</a>
+                                                <a href=move || status_official.get() class=move || if status.get().as_deref() == Some("official") { "sort-link active" } else { "sort-link" }>"Official"</a>
+                                            </div>
+                                            <div class="toolbar-filter-row">
+                                                <a href=move || type_mcp.get() class=move || if tool_type.get().as_deref() == Some("mcp") { "sort-link active" } else { "sort-link" }>"MCP"</a>
+                                                <a href=move || type_cli.get() class=move || if tool_type.get().as_deref() == Some("cli") { "sort-link active" } else { "sort-link" }>"CLI"</a>
+                                                <a href=move || type_api.get() class=move || if tool_type.get().as_deref() == Some("api") { "sort-link active" } else { "sort-link" }>"API"</a>
+                                                <a href=move || type_sdk.get() class=move || if tool_type.get().as_deref() == Some("sdk") { "sort-link active" } else { "sort-link" }>"SDK"</a>
+                                                <a href=move || type_skill.get() class=move || if tool_type.get().as_deref() == Some("skill") { "sort-link active" } else { "sort-link" }>"Skill"</a>
+                                                <a href=move || type_x402.get() class=move || if tool_type.get().as_deref() == Some("x402") { "sort-link active" } else { "sort-link" }>"x402"</a>
+                                            </div>
                                         </div>
                                         <span class="tool-count">{data.total}" tools"</span>
                                     </div>
@@ -1015,6 +1097,88 @@ mod tests {
     fn sort_href_omits_selected_preview() {
         let href = build_sort_href(&BrowserBase::Tools, &query_params(), "new");
         assert!(!href.contains("selected="));
+    }
+
+    #[test]
+    fn status_filter_href_sets_single_status_and_resets_page() {
+        let href = build_status_filter_href(
+            &BrowserBase::Tools,
+            &BrowserQueryParams {
+                chain: Some("base".into()),
+                sort: "comments".into(),
+                search_q: Some("wallet".into()),
+                selected: Some("zapper".into()),
+                page: 3,
+                ..query_params()
+            },
+            "verified",
+        );
+        assert_eq!(
+            href,
+            "/tools?status=verified&chain=base&sort=comments&q=wallet"
+        );
+        assert!(!href.contains("selected="));
+        assert!(!href.contains("page="));
+    }
+
+    #[test]
+    fn status_filter_href_toggles_off_when_already_active() {
+        let href = build_status_filter_href(
+            &BrowserBase::Tools,
+            &BrowserQueryParams {
+                status: Some("official".into()),
+                sort: "new".into(),
+                ..query_params()
+            },
+            "official",
+        );
+        assert_eq!(href, "/tools?sort=new");
+        assert!(!href.contains("status="));
+    }
+
+    #[test]
+    fn status_filter_href_replaces_existing_status() {
+        let href = build_status_filter_href(
+            &BrowserBase::Tools,
+            &BrowserQueryParams {
+                status: Some("verified".into()),
+                ..query_params()
+            },
+            "official",
+        );
+        assert_eq!(href, "/tools?status=official");
+    }
+
+    #[test]
+    fn type_filter_href_sets_single_type_and_preserves_other_filters() {
+        let href = build_type_filter_href(
+            &BrowserBase::Home,
+            &BrowserQueryParams {
+                function: Some("bridge".into()),
+                status: Some("verified".into()),
+                sort: "new".into(),
+                page: 2,
+                ..query_params()
+            },
+            "mcp",
+        );
+        assert_eq!(href, "/?function=bridge&type=mcp&status=verified&sort=new");
+        assert!(!href.contains("page="));
+    }
+
+    #[test]
+    fn type_filter_href_toggles_off_when_already_active() {
+        let href = build_type_filter_href(
+            &BrowserBase::Tools,
+            &BrowserQueryParams {
+                tool_type: Some("cli".into()),
+                chain: Some("ethereum".into()),
+                ..query_params()
+            },
+            "cli",
+        );
+        assert_eq!(href, "/tools?chain=ethereum");
+        assert!(!href.contains("type="));
     }
 
     #[test]

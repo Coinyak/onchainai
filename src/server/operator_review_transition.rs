@@ -9,6 +9,8 @@ pub enum OperatorReviewGate {
     None,
     PublicationApproval,
     MarkOfficial,
+    DemoteVerified,
+    DemoteOfficial,
 }
 
 /// SQL fields to update on `tools` for one operator action.
@@ -79,11 +81,30 @@ pub fn validate_review_approval_gate(
     Ok(())
 }
 
+/// Gate for demoting a verified listing back to community.
+pub fn validate_demote_verified_gate(tool: &Tool) -> Result<(), &'static str> {
+    if tool.status == "verified" {
+        Ok(())
+    } else {
+        Err("demote_verified requires listing status verified")
+    }
+}
+
+/// Gate for demoting an official listing back to community.
+pub fn validate_demote_official_gate(tool: &Tool) -> Result<(), &'static str> {
+    if tool.status == "official" {
+        Ok(())
+    } else {
+        Err("demote_official requires listing status official")
+    }
+}
+
 /// Audit before/after labels for legacy `tool_review_events`.
 pub fn review_audit_statuses(tool: &Tool, action: &str) -> (String, String) {
     match action {
         "mark_verified" => (tool.status.clone(), "verified".into()),
         "mark_official" => (tool.status.clone(), "official".into()),
+        "demote_verified" | "demote_official" => (tool.status.clone(), "community".into()),
         "quarantine" => (
             if tool.quarantined_at.is_some() {
                 "quarantined".into()
@@ -168,6 +189,15 @@ fn tool_update_for_action(tool: &Tool, action: &str, reason: &str) -> ToolReview
             claim_state: None,
             touch_last_reviewed: true,
         },
+        "demote_verified" | "demote_official" => ToolReviewSqlUpdate {
+            approval_status: None,
+            rejection_reason: None,
+            relevance_status: None,
+            listing_status: Some("community".into()),
+            quarantine: false,
+            claim_state: None,
+            touch_last_reviewed: true,
+        },
         _ => ToolReviewSqlUpdate {
             approval_status: None,
             rejection_reason: None,
@@ -184,6 +214,8 @@ fn gate_for_action(action: &str) -> OperatorReviewGate {
     match action {
         "approved" => OperatorReviewGate::PublicationApproval,
         "mark_official" => OperatorReviewGate::MarkOfficial,
+        "demote_verified" => OperatorReviewGate::DemoteVerified,
+        "demote_official" => OperatorReviewGate::DemoteOfficial,
         _ => OperatorReviewGate::None,
     }
 }
@@ -373,5 +405,46 @@ mod tests {
         assert_eq!(effect.gate, OperatorReviewGate::None);
         assert_eq!(effect.legacy_audit_before, "community");
         assert_eq!(effect.legacy_audit_after, "verified");
+    }
+
+    #[test]
+    fn demote_verified_updates_listing_status_to_community() {
+        let tool = sample_tool("claimed", "verified", "approved");
+        let effect = plan_operator_review(&tool, "demote_verified", "trust revoked", None);
+        assert_eq!(
+            effect.tool_update.listing_status.as_deref(),
+            Some("community")
+        );
+        assert_eq!(effect.gate, OperatorReviewGate::DemoteVerified);
+        assert_eq!(effect.legacy_audit_before, "verified");
+        assert_eq!(effect.legacy_audit_after, "community");
+    }
+
+    #[test]
+    fn demote_official_updates_listing_status_to_community() {
+        let tool = sample_tool("claimed", "official", "approved");
+        let effect = plan_operator_review(&tool, "demote_official", "badge revoked", None);
+        assert_eq!(
+            effect.tool_update.listing_status.as_deref(),
+            Some("community")
+        );
+        assert_eq!(effect.gate, OperatorReviewGate::DemoteOfficial);
+        assert_eq!(effect.legacy_audit_before, "official");
+        assert_eq!(effect.legacy_audit_after, "community");
+    }
+
+    #[test]
+    fn demote_gates_require_matching_listing_status() {
+        let verified = sample_tool("claimed", "verified", "approved");
+        assert!(validate_demote_verified_gate(&verified).is_ok());
+        assert!(validate_demote_official_gate(&verified).is_err());
+
+        let official = sample_tool("claimed", "official", "approved");
+        assert!(validate_demote_official_gate(&official).is_ok());
+        assert!(validate_demote_verified_gate(&official).is_err());
+
+        let community = sample_tool("unclaimed", "community", "approved");
+        assert!(validate_demote_verified_gate(&community).is_err());
+        assert!(validate_demote_official_gate(&community).is_err());
     }
 }

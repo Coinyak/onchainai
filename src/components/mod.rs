@@ -14,6 +14,7 @@ pub mod copy_button;
 pub mod empty_state;
 pub mod error_state;
 pub mod featured_carousel;
+pub mod highlighted_command;
 pub mod icons;
 pub mod login_form;
 pub mod login_modal;

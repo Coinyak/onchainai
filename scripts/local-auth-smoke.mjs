@@ -379,6 +379,13 @@ if (!signInBtn) {
     fail("auth-modal-not-open");
   } else {
     if (!modal.hasGitHub) fail("auth-modal-missing-github");
+    const githubRel = await page.evaluate(() => {
+      const link = document.querySelector('a[href="/auth/github"]');
+      return link?.getAttribute("rel") ?? "";
+    });
+    if (!githubRel.includes("external")) {
+      fail("auth-modal-github-missing-rel-external", githubRel);
+    }
     if (!modal.hasEmail) fail("auth-modal-missing-email");
     if (!modal.hasWallet) fail("auth-modal-missing-wallet");
     if (!modal.title.includes("Sign in")) {
@@ -392,6 +399,27 @@ if (!signInBtn) {
 
   await page.keyboard.press("Escape");
 }
+
+// --- /login: standalone page GitHub link rel=external ------------------------
+const loginPage = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+watchConsole(loginPage, "login-page");
+await loginPage.goto(`${base}/login`, { waitUntil: "domcontentloaded" });
+const loginGitHub = await loginPage.evaluate(() => {
+  const link = document.querySelector('[data-testid="github-sign-in"]');
+  return {
+    present: !!link,
+    rel: link?.getAttribute("rel") ?? "",
+    href: link?.getAttribute("href") ?? "",
+  };
+});
+if (!loginGitHub.present) {
+  fail("login-page-missing-github-sign-in");
+} else if (loginGitHub.href !== "/auth/github") {
+  fail("login-page-github-href", loginGitHub.href);
+} else if (!loginGitHub.rel.includes("external")) {
+  fail("login-page-github-rel-external", loginGitHub.rel);
+}
+await loginPage.close();
 
 // --- /auth/github: 307 + localhost callback (no real OAuth) ------------------
 const githubRes = await page.request.get(`${base}/auth/github`, {

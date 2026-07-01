@@ -165,10 +165,45 @@ pub const CHAIN_CATALOG: &[ChainMeta] = &[
         aliases: &["plasma-mainnet"],
         pinned: false,
     },
+    ChainMeta {
+        id: "linea",
+        label: "Linea",
+        logo: "/chains/linea.svg",
+        aliases: &["linea-mainnet"],
+        pinned: false,
+    },
+    ChainMeta {
+        id: "starknet",
+        label: "Starknet",
+        logo: "/chains/starknet.svg",
+        aliases: &["stark", "starknet-mainnet"],
+        pinned: false,
+    },
+    ChainMeta {
+        id: "aptos",
+        label: "Aptos",
+        logo: "/chains/aptos.svg",
+        aliases: &["apt", "aptos-mainnet"],
+        pinned: false,
+    },
+    ChainMeta {
+        id: "near",
+        label: "NEAR",
+        logo: "/chains/near.svg",
+        aliases: &["near-protocol", "near-mainnet"],
+        pinned: false,
+    },
+    ChainMeta {
+        id: "cosmos",
+        label: "Cosmos",
+        logo: "/chains/cosmos.svg",
+        aliases: &["cosmos-hub", "atom", "cosmos-mainnet"],
+        pinned: false,
+    },
 ];
 
 /// Primary-row chain tiles (excluding the All tile).
-pub const STRIP_PRIMARY_VISIBLE: usize = 10;
+pub const STRIP_PRIMARY_VISIBLE: usize = 20;
 
 /// DB noise values — not real chains; hidden from card tags and strip counts.
 const CHAIN_NOISE: &[&str] = &[
@@ -407,6 +442,48 @@ mod tests {
             .unwrap_or_else(|e| panic!("parse manifest {}: {e}", path.display()))
     }
 
+    fn extract_svg_attr(tag: &str, name: &str) -> Option<f64> {
+        let needle = format!("{name}=\"");
+        let start = tag.find(&needle)?;
+        let rest = &tag[start + needle.len()..];
+        let end = rest.find('"')?;
+        rest[..end].parse().ok()
+    }
+
+    #[test]
+    fn catalog_logo_tiles_fit_viewbox() {
+        const TILE_VB: &str = r#"viewBox="0 0 48 48""#;
+        const WRAP_CENTER: &str = "translate(24 24)";
+        const MAX_DIRECT: f64 = 48.0;
+
+        for entry in CHAIN_CATALOG {
+            let text = std::fs::read_to_string(logo_path_on_disk(entry.logo))
+                .unwrap_or_else(|e| panic!("read {}: {e}", entry.logo));
+            assert!(
+                text.contains(TILE_VB),
+                "{} missing 48x48 viewBox",
+                entry.id
+            );
+
+            let wrapped = text.contains(WRAP_CENTER);
+            for fragment in text.split('<').filter(|s| s.starts_with("rect")) {
+                let width = extract_svg_attr(fragment, "width");
+                if width == Some(48.0) {
+                    continue;
+                }
+                let x = extract_svg_attr(fragment, "x");
+                let y = extract_svg_attr(fragment, "y");
+                if let (Some(x), Some(y)) = (x, y) {
+                    assert!(
+                        x <= MAX_DIRECT && y <= MAX_DIRECT || wrapped,
+                        "{}: rect x={x} y={y} outside tile without wrap centering",
+                        entry.id
+                    );
+                }
+            }
+        }
+    }
+
     #[test]
     fn catalog_logos_use_official_brand_markers() {
         let manifest = load_logo_manifest();
@@ -538,7 +615,7 @@ mod tests {
             );
             assert!(is_chain_noise(noise), "noise value not flagged: {noise}");
         }
-        for unknown in ["fantom", "litecoin", "xrp", "celo", "gnosis", "linea"] {
+        for unknown in ["fantom", "litecoin", "xrp", "celo", "gnosis"] {
             assert!(
                 resolve_chain(unknown).is_none(),
                 "unknown chain should not resolve: {unknown}"
@@ -599,8 +676,8 @@ mod tests {
 
     #[test]
     fn strip_primary_visible_leaves_overflow_for_expand_control() {
-        assert_eq!(STRIP_PRIMARY_VISIBLE, 10);
-        assert_eq!(CHAIN_CATALOG.len(), 20);
+        assert_eq!(STRIP_PRIMARY_VISIBLE, 20);
+        assert_eq!(CHAIN_CATALOG.len(), 25);
 
         let counts: Vec<(String, i64)> = CHAIN_CATALOG
             .iter()

@@ -142,10 +142,25 @@ pub fn LoginForm(
         </p>
         <a
             href="/auth/github"
+            rel="external"
+            data-testid="github-sign-in"
             class="flex items-center justify-center w-full px-4 py-2.5 rounded-lg bg-[#1A1A1A] text-white text-[14px] font-medium hover:opacity-90 no-underline"
         >
             "Continue with GitHub"
         </a>
+        <p class="mt-2 text-center text-[13px] text-[#6B6B6B]">
+            "Use a different GitHub account? "
+            <form action="/auth/github/switch" method="post" class="inline">
+                <button
+                    type="submit"
+                    data-testid="github-switch-account"
+                    class="text-[#1A1A1A] underline hover:no-underline bg-transparent border-0 p-0 cursor-pointer font-inherit text-[13px]"
+                >
+                    "Sign out of GitHub"
+                </button>
+            </form>
+            ", then return here and continue with GitHub."
+        </p>
         <form
             class="mt-3 flex gap-2"
             on:submit=move |ev| {

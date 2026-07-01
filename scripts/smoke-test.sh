@@ -47,10 +47,21 @@ grep -q 'site-top-nav-link-dashboard' "$home_body" && fail "GET / unexpected top
 grep -q 'site-top-nav-link-toolkit' "$home_body" && fail "GET / unexpected top-nav Toolkit link when signed out"
 login_body="$(check_get "/login")"
 grep -q 'Continue with GitHub' "$login_body" || fail "GET /login missing GitHub sign-in option"
+grep -q 'data-testid="github-sign-in"' "$login_body" || fail "GET /login missing github-sign-in test id"
+grep -q 'href="/auth/github"[^>]*rel="external"' "$login_body" || fail "GET /login missing rel=external on GitHub sign-in link"
 grep -q 'wallet-sign-in' "$login_body" || fail "GET /login missing wallet sign-in option"
 grep -q 'category-grid' "$home_body" && fail "GET / unexpected category-grid markup"
 
 tools_body="$(check_get "/tools")"
+grep -q 'toolbar-filter-row' "$tools_body" || fail "GET /tools missing toolbar-filter-row markup"
+grep -q '>Verified<' "$tools_body" || fail "GET /tools missing Verified status tab"
+grep -q '>Official<' "$tools_body" || fail "GET /tools missing Official status tab"
+grep -q '>MCP<' "$tools_body" || fail "GET /tools missing MCP type tab"
+grep -q '>CLI<' "$tools_body" || fail "GET /tools missing CLI type tab"
+grep -q '>API<' "$tools_body" || fail "GET /tools missing API type tab"
+grep -q '>SDK<' "$tools_body" || fail "GET /tools missing SDK type tab"
+grep -q '>Skill<' "$tools_body" || fail "GET /tools missing Skill type tab"
+grep -q '>x402<' "$tools_body" || fail "GET /tools missing x402 type tab"
 if echo "$tools_body" | grep -q 'class="tool-list"'; then
   tool_cards="$(echo "$tools_body" | grep -c 'tool-card' || true)"
   if [[ "$tool_cards" -ge 50 ]] || [[ ${#tools_body} -gt 20000 ]]; then

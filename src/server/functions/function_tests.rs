@@ -592,7 +592,10 @@ mod tests {
         assert!(validate_review_action("quarantine", "unsafe install").is_ok());
         assert!(validate_review_action("mark_verified", "checked repo").is_ok());
         assert!(validate_review_action("mark_official", "official domain").is_ok());
+        assert!(validate_review_action("demote_verified", "trust revoked").is_ok());
+        assert!(validate_review_action("demote_official", "badge revoked").is_ok());
         assert!(validate_review_action("needs_info", "   ").is_err());
+        assert!(validate_review_action("demote_verified", "   ").is_err());
     }
 
     #[test]
@@ -607,8 +610,26 @@ mod tests {
             ("community".into(), "official".into())
         );
         assert_eq!(
+            review_audit_statuses(&tool, "demote_verified"),
+            ("community".into(), "community".into())
+        );
+        assert_eq!(
             review_audit_statuses(&tool, "needs_info"),
             ("pending".into(), "needs_info".into())
+        );
+
+        let mut verified = sample_review_tool();
+        verified.status = "verified".into();
+        assert_eq!(
+            review_audit_statuses(&verified, "demote_verified"),
+            ("verified".into(), "community".into())
+        );
+
+        let mut official = sample_review_tool();
+        official.status = "official".into();
+        assert_eq!(
+            review_audit_statuses(&official, "demote_official"),
+            ("official".into(), "community".into())
         );
     }
 

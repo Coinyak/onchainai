@@ -413,11 +413,20 @@ body {
   outline: 2px solid #E76F00;
   outline-offset: 2px;
 }
-.featured-carousel {
+.featured-carousel-shell {
   position: relative;
-  /* Shrink the card so a 16:9 banner is not over-tall, and center it. */
   margin: 0 auto 2.5rem;
   max-width: 720px;
+}
+.featured-carousel-shell--controls {
+  /* Horizontal padding reserves space for arrows outside the bordered card. */
+  max-width: 824px;
+  padding: 0 52px;
+  box-sizing: border-box;
+}
+.featured-carousel {
+  position: relative;
+  width: 100%;
   border-radius: 16px;
   overflow: hidden;
   border: 1px solid #E5E5E5;
@@ -425,16 +434,16 @@ body {
   background: transparent;
 }
 .featured-carousel-track {
-  position: relative;
+  display: flex;
+  width: 100%;
+  transition: transform 0.45s ease;
+  will-change: transform;
 }
 .featured-carousel-card {
-  display: none;
+  flex: 0 0 100%;
   position: relative;
   text-decoration: none;
   color: #FFFFFF;
-}
-.featured-carousel-card.active {
-  display: block;
 }
 .pointer-events-none {
   pointer-events: none;
@@ -500,23 +509,23 @@ body {
   z-index: 3;
   width: 40px;
   height: 40px;
-  border: 1px solid rgba(255, 255, 255, 0.72);
+  border: 1px solid #D1D1D1;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.88);
+  background: #FFFFFF;
   color: #1A1A1A;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.16);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
 }
-.carousel-arrow:hover { background: #FFFFFF; }
+.carousel-arrow:hover { background: #FAFAFA; border-color: #E5E5E5; }
 .carousel-arrow:focus-visible {
   outline: 2px solid #E76F00;
   outline-offset: 2px;
 }
-.carousel-arrow-prev { left: 12px; }
-.carousel-arrow-next { right: 12px; }
+.carousel-arrow-prev { left: 0; }
+.carousel-arrow-next { right: 0; }
 .carousel-arrow-icon {
   width: 20px;
   height: 20px;
@@ -553,11 +562,15 @@ body {
 @media (min-width: 768px) {
   .featured-carousel-headline { font-size: 28px; }
 }
+@media (prefers-reduced-motion: reduce) {
+  .featured-carousel-track {
+    transition: none;
+  }
+}
 @media (max-width: 767px) {
-  /* Short mobile cards (16:9 at mobile width) can shrink enough that a
-     card-centered arrow (top: 50%) lands on top of the bottom-anchored
-     overlay text. Clamp headline/subtitle to bound the overlay's height,
-     and anchor the arrows near the top of the image, clear of that zone. */
+  .featured-carousel-shell--controls {
+    padding: 0 44px;
+  }
   .featured-carousel-headline {
     display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden;
   }
@@ -565,13 +578,15 @@ body {
     display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden;
   }
   .carousel-arrow {
-    top: 14px;
-    transform: none;
+    width: 44px;
+    height: 44px;
   }
-  /* The admin edit/add row and the repositioned arrows both claim the top
-     corners at this width and collide. Admin management already has a
-     dedicated /admin/featured entry point, so drop the on-image shortcut
-     here rather than crowd a ~40px-tall image strip on mobile. */
+  .carousel-arrow-icon {
+    width: 18px;
+    height: 18px;
+  }
+  /* Admin management has a dedicated /admin/featured entry point; hide the
+     on-image shortcut on narrow viewports. */
   .featured-admin-actions {
     display: none;
   }
@@ -584,6 +599,12 @@ body {
   scrollbar-width: thin;
 }
 .install-prefix { color: #999999; margin-right: 6px; }
+.cmd-token-runner { color: #1A1A1A; font-weight: 600; }
+.cmd-token-package { color: var(--accent-text); }
+.cmd-token-url { color: #2B6CB0; text-decoration: underline; text-underline-offset: 2px; }
+.cmd-token-flag { color: #5C6BC0; }
+.cmd-token-op { color: #6B6B6B; }
+.cmd-token-arg { color: #1A1A1A; }
 .copy-btn {
   height: 40px; padding: 0 12px; border-radius: 8px;
   border: 1px solid #E5E5E5; background: #FFFFFF;
@@ -1007,7 +1028,7 @@ body {
 .admin-nav-list { margin: 0; }
 
 .tools-toolbar {
-  display: flex; flex-wrap: wrap; gap: 12px; align-items: center;
+  display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-start;
   padding: 12px 0; border-bottom: 1px solid #E5E5E5; margin-bottom: 16px;
 }
 .sticky-toolbar { position: sticky; top: var(--site-header-height); background: #FFFFFF; z-index: 90; }
@@ -1015,11 +1036,21 @@ body {
   height: 40px; padding: 0 12px; border: 1px solid #E5E5E5; border-radius: 8px;
   font-size: 14px; min-width: 200px;
 }
-.toolbar-sort { display: flex; gap: 4px; align-items: center; }
+.toolbar-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+}
+.toolbar-sort-row,
+.toolbar-filter-row,
+.toolbar-sort { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.toolbar-filter-row { padding-top: 2px; border-top: 1px solid #F0F0F0; }
 .sort-link { font-size: 13px; color: #6B6B6B; text-decoration: none; padding: 6px 10px; border-radius: 6px; }
 .sort-link:hover { color: #1A1A1A; background: #FAFAFA; }
 .sort-link.active { color: #1A1A1A; font-weight: 600; background: #F5F5F0; }
-.tool-count { font-size: 13px; color: #6B6B6B; margin-left: auto; }
+.tool-count { font-size: 13px; color: #6B6B6B; margin-left: auto; align-self: center; }
 .load-more-row {
   display: flex;
   flex-wrap: wrap;
@@ -1202,8 +1233,18 @@ body {
     width: 100%;
   }
   .tools-toolbar { gap: 8px; padding: 10px 0; margin-bottom: 12px; }
-  .toolbar-sort { width: 100%; order: 2; overflow-x: auto; white-space: nowrap; }
-  .tool-count { width: 100%; margin-left: 0; order: 3; }
+  .toolbar-rows { width: 100%; order: 2; gap: 4px; }
+  .toolbar-sort-row,
+  .toolbar-filter-row,
+  .toolbar-sort {
+    width: 100%;
+    flex-wrap: wrap;
+    overflow-x: visible;
+    white-space: normal;
+    row-gap: 4px;
+  }
+  .toolbar-filter-row { padding-top: 4px; }
+  .tool-count { width: 100%; margin-left: 0; order: 3; align-self: flex-start; }
   .sort-link { padding: 6px 8px; min-height: 44px; display: inline-flex; align-items: center; }
   .tool-card-inner { padding: 16px; gap: 12px; }
   .tool-card-body { padding-right: 36px; }
@@ -1424,6 +1465,14 @@ body {
 .admin-card-action-btn {
   color: #1A7F4B;
   border-color: #D8E8DE;
+}
+.admin-card-action-btn-revoke {
+  color: #C0392B;
+  border-color: #E8C4C0;
+}
+.admin-card-action-btn-revoke:hover {
+  background: #FDF5F4;
+  border-color: #D9A8A3;
 }
 .admin-card-error {
   display: inline-flex;
