@@ -8,6 +8,15 @@ use leptos::prelude::*;
 #[cfg(feature = "hydrate")]
 use gloo_timers::callback::Interval;
 
+#[cfg(feature = "hydrate")]
+fn prefers_reduced_motion() -> bool {
+    web_sys::window()
+        .and_then(|window| window.match_media("(prefers-reduced-motion: reduce)").ok())
+        .flatten()
+        .map(|query| query.matches())
+        .unwrap_or(false)
+}
+
 #[derive(Clone, Copy)]
 enum CarouselDirection {
     Previous,
@@ -81,13 +90,14 @@ pub fn FeaturedCarousel(cards: Vec<FeaturedCardView>) -> impl IntoView {
 
     #[cfg(feature = "hydrate")]
     {
+        let reduced_motion = StoredValue::new_local(prefers_reduced_motion());
         let interval = StoredValue::new_local(None::<Interval>);
         Effect::new(move |_| {
             interval.update_value(|slot| {
                 if let Some(handle) = slot.take() {
                     drop(handle);
                 }
-                if !paused.get() && len > 1 {
+                if !paused.get() && len > 1 && !reduced_motion.get_value() {
                     *slot = Some(Interval::new(6_000, move || {
                         current.update(|idx| *idx = (*idx + 1) % len);
                     }));
