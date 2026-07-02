@@ -2,6 +2,8 @@
 /target
 target/
 node_modules/
+frontend/node_modules/
+frontend/.next/
 style/node_modules/
 
 # Environment

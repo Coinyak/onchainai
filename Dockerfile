@@ -1,5 +1,8 @@
 # OnchainAI — multi-stage Docker build (SSR server + WASM hydration bundle).
 # cargo-chef caches dependency compilation across UI-only source changes.
+#
+# Production Railway (railway.json) uses this file while Leptos SSR is still served.
+# API-only image (no WASM/style): see Dockerfile.api — switch dockerfilePath after Step 17.
 # Cache-bust: 2026-07-02T00:00Z
 
 FROM rust:1.90-slim AS chef
