@@ -50,7 +50,25 @@ try {
   const cardCount = await tools.locator(".tool-card").count();
   log("B2", `tools list cards=${cardCount}`);
 
-  const addUrl = `${base}/tools?type=mcp&selected=okx-agent-trade-kit&intent=add-mcp`;
+  // Dynamically derive the slug from the loaded tool cards instead of hardcoding,
+  // so the flow stays valid across datasets/seeds.
+  const slugLinks = await tools.locator('[data-testid="tool-card-link"]').all();
+  let selectedSlug = null;
+  for (const link of slugLinks) {
+    const href = await link.getAttribute("href");
+    if (!href) continue;
+    const m = href.match(/\/tools\/([^/?]+)/);
+    if (m && m[1]) {
+      selectedSlug = m[1];
+      break;
+    }
+  }
+  if (!selectedSlug) {
+    throw new Error("could not derive any tool slug from /tools?type=mcp tool-card links");
+  }
+  log("B2b", `derived slug=${selectedSlug}`);
+
+  const addUrl = `${base}/tools?type=mcp&selected=${selectedSlug}&intent=add-mcp`;
   log("B3", `GET ${addUrl}`);
   await tools.goto(addUrl, wait);
   await tools.waitForSelector(".install-guide-panel", { timeout: 15000 });
@@ -76,9 +94,10 @@ try {
   await tools.screenshot({ path: join(snapDir, "04-add-mode-mobile-375x812.png") });
   await tools.close();
 
-  log("C1", `GET ${base}/compare?tools=okx-agent-trade-kit`);
+  log("C1", `GET ${base}/compare?tools=${selectedSlug}`);
   const compare = await browser.newPage({ viewport: { width: 1280, height: 900 } });
-  await compare.goto(`${base}/compare?tools=okx-agent-trade-kit`, wait);
+  await compare.goto(`${base}/compare?tools=${selectedSlug}`, wait);
+  await compare.waitForSelector(".add-mcp-inline-btn", { timeout: 15000 });
   const addLink = compare.locator(".add-mcp-inline-btn").first();
   const href = await addLink.getAttribute("href");
   log("C2", `compare AddMcpAction href=${href}`);

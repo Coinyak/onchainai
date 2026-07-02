@@ -84,9 +84,36 @@ pub(crate) async fn fetch_tool_by_slug(
 pub async fn get_tool_by_slug(slug: String) -> Result<Tool, ServerFnError> {
     let pool = use_context::<sqlx::PgPool>()
         .ok_or_else(|| ServerFnError::new("database pool not available"))?;
+    validate_slug(&slug)?;
     fetch_tool_by_slug(&pool, &slug)
         .await?
         .ok_or_else(|| ServerFnError::new(format!("tool not found: {slug}")))
+}
+
+/// Maximum length for a tool slug accepted at server boundaries.
+const MAX_SLUG_LEN: usize = 128;
+
+/// Validate an externally-supplied slug at the server boundary: non-empty,
+/// bounded length, allowed charset (URL-safe slug characters only).
+fn validate_slug(slug: &str) -> Result<(), ServerFnError> {
+    let slug = slug.trim();
+    if slug.is_empty() {
+        return Err(ServerFnError::new("slug must not be empty"));
+    }
+    if slug.len() > MAX_SLUG_LEN {
+        return Err(ServerFnError::new(format!(
+            "slug must be at most {MAX_SLUG_LEN} characters"
+        )));
+    }
+    if !slug
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'))
+    {
+        return Err(ServerFnError::new(
+            "slug contains invalid characters; only a-z, 0-9, '-', '_', '.' allowed",
+        ));
+    }
+    Ok(())
 }
 
 /// Fetch an approved tool and build its public install guide (shared server/MCP path).
@@ -96,6 +123,7 @@ pub(crate) async fn fetch_public_install_guide(
     slug: &str,
     platform: &str,
 ) -> Result<crate::public_install_guide::PublicInstallGuide, ServerFnError> {
+    validate_slug(slug)?;
     let tool = fetch_tool_by_slug(pool, slug)
         .await?
         .ok_or_else(|| ServerFnError::new(format!("tool not found: {slug}")))?;
@@ -1298,7 +1326,7 @@ mod fetch_install_guide_tests {
 }
 
 /// Server-fn test helpers — same `Owner` + `provide_context` path as production RPC.
-#[cfg(feature = "ssr")]
+#[cfg(all(feature = "ssr", any(test, feature = "test-helpers")))]
 pub mod server_fn_context_tests {
     use super::{fetch_tool_by_slug, get_public_install_guide, get_tool_by_slug};
     use crate::components::install_guide_panel::resolve_install_guide;

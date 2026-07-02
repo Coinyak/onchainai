@@ -42,7 +42,7 @@ pub fn current_install_step(
 pub fn InstallProgressIndicator(
     #[allow(unused_variables)] platform: RwSignal<InstallPlatform>,
     risk_state: InstallRiskState,
-    has_warning: bool,
+    has_warning: Signal<bool>,
     platform_interacted: RwSignal<bool>,
     copy_revealed: RwSignal<bool>,
     #[prop(optional, default = Signal::derive(|| false))] bookmarked: Signal<bool>,
@@ -50,7 +50,7 @@ pub fn InstallProgressIndicator(
     let current = move || {
         current_install_step(
             risk_state,
-            has_warning,
+            has_warning.get(),
             platform_interacted.get(),
             copy_revealed.get(),
             bookmarked.get(),

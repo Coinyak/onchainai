@@ -382,6 +382,7 @@ PublicInstallGuide {
   risk_reasons: Vec<String>,
   warning: Option<String>,
   blocked: bool,
+  copy_gate: CopyGate,
   command: Option<String>,
   config_json: Option<String>,
   copy_text: Option<String>,
@@ -393,13 +394,15 @@ PublicInstallGuide {
 }
 
 InstallPlatform = Claude | Cursor | GenericMcp | CliSdk
+CopyGate = Allow | RevealFirst | Blocked
 ```
 
 Generation rules:
 
 - Prefer `safe_copy_command`.
 - If no install command exists but `mcp_endpoint` is an HTTP(S) URL, generate a Generic MCP remote command/config using the known safe `mcp-remote` pattern.
-- If a command has high/critical risk, do not generate structured Claude/Cursor config.
+- If a command has high risk, set `copy_gate = RevealFirst` and do not generate structured Claude/Cursor config.
+- If a command has critical risk, set `blocked = true`, `copy_gate = Blocked`, and withhold copy text.
 - Never invent install commands that are not derivable from stored fields.
 - Never expose secrets, service keys, JWT secrets, or admin-only fields.
 - x402/referral output is disclosure only. It must not create payment instructions or custody flows.
@@ -636,8 +639,8 @@ Targeted tests to add:
 
 - `PublicInstallGuide` generation:
   - low-risk `npx` -> Claude config copy allowed.
-  - high-risk shell wrapper -> structured config blocked.
-  - critical command -> copy blocked.
+  - high-risk shell wrapper -> structured config blocked and `copy_gate = RevealFirst`.
+  - critical command -> copy blocked with `copy_gate = Blocked`.
   - HTTP MCP endpoint without install command -> Generic MCP remote command generated.
 - URL state:
   - `selected` + `intent=add-mcp` preserved when opening add mode.

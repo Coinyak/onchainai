@@ -422,6 +422,7 @@ mod tests {
             risk_reasons: vec!["requires API key".into()],
             warning: Some("Medium-risk install command.".into()),
             blocked: false,
+            copy_gate: crate::public_install_guide::CopyGate::Allow,
             config_json: None,
             x402_notice: None,
             referral: None,
@@ -432,6 +433,7 @@ mod tests {
         assert_eq!(json["risk_reasons"][0], "requires API key");
         assert_eq!(json["warning"], "Medium-risk install command.");
         assert_eq!(json["blocked"], false);
+        assert_eq!(json["copy_gate"], "allow");
     }
 
     #[test]
@@ -442,6 +444,7 @@ mod tests {
             risk_reasons: vec!["destructive".into()],
             warning: Some("blocked".into()),
             blocked: true,
+            copy_gate: crate::public_install_guide::CopyGate::Blocked,
             config_json: None,
             x402_notice: None,
             referral: None,
@@ -525,9 +528,10 @@ mod tests {
             risk_reasons: vec![],
             warning: None,
             blocked: false,
+            copy_gate: crate::public_install_guide::CopyGate::Allow,
             config_json: None,
             x402_notice: Some(
-                "This tool may request x402 payment (0.01 USDC). Connect an agent wallet before calling it. Payment details are not operator verified yet.".into(),
+                "This tool may request x402 payment (0.01 USDC). Payment details are not operator verified yet.".into(),
             ),
             referral: Some(ReferralMetadata {
                 enabled: true,

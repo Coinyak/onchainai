@@ -5,7 +5,7 @@ use crate::components::highlighted_command::HighlightedCommand;
 use crate::components::install_progress_indicator::InstallProgressIndicator;
 use crate::components::install_risk_gate::InstallRiskState;
 use crate::models::Tool;
-use crate::public_install_guide::{copy_label_aria, InstallPlatform, PublicInstallGuide};
+use crate::public_install_guide::{copy_label_aria, CopyGate, InstallPlatform, PublicInstallGuide};
 use leptos::prelude::*;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
@@ -61,6 +61,7 @@ pub fn InstallGuidePanel(
     let copy_text = Memo::new(move |_| display_text(&guide.get()));
     let aria_label = Memo::new(move |_| copy_label_aria(&guide.get().copy_label));
     let has_warning = Memo::new(move |_| guide.get().warning.is_some());
+    let copy_gate = Memo::new(move |_| guide.get().copy_gate);
     let show_shell_prefix = move || platform.get() == InstallPlatform::GenericMcp;
 
     let on_platform_select = move |value: InstallPlatform| {
@@ -73,7 +74,7 @@ pub fn InstallGuidePanel(
             <InstallProgressIndicator
                 platform=platform
                 risk_state=risk_state
-                has_warning=has_warning.get()
+                has_warning=has_warning.into()
                 platform_interacted=platform_interacted
                 copy_revealed=copy_revealed
                 bookmarked=bookmarked
@@ -106,15 +107,15 @@ pub fn InstallGuidePanel(
                 <p class="install-warning" role="alert">{text}</p>
             })}
             <Show
-                when=move || risk_state.copy_allowed(copy_revealed.get())
+                when=move || copy_gate.get().copy_allowed(copy_revealed.get())
                 fallback=move || {
-                    if risk_state.copy_blocked {
+                    if copy_gate.get() == CopyGate::Blocked {
                         view! {
                             <p class="install-warning" role="alert">
                                 "Copy is blocked for critical-risk install commands."
                             </p>
                         }.into_any()
-                    } else if risk_state.high_risk_reveal_required {
+                    } else if copy_gate.get() == CopyGate::RevealFirst {
                         view! {
                             <button
                                 type="button"
@@ -219,6 +220,7 @@ mod tests {
         let guide = build_public_install_guide(&tool, "test", InstallPlatform::Claude);
         assert!(guide.warning.is_some());
         assert!(guide.config_json.is_none());
+        assert_eq!(guide.copy_gate, CopyGate::RevealFirst);
     }
 
     #[test]

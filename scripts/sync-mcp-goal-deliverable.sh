@@ -8,7 +8,23 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
-BASE_COMMIT="${1:-7efad21}"
+default_base_commit() {
+  if git rev-parse --verify origin/main >/dev/null 2>&1; then
+    if base="$(git merge-base HEAD origin/main 2>/dev/null)" && [[ -n "$base" ]]; then
+      echo "$base"
+      return
+    fi
+  fi
+  if git rev-parse --verify HEAD^ >/dev/null 2>&1; then
+    git rev-parse HEAD^
+    return
+  fi
+  # Shallow / single-commit clone: diff against an empty-tree sentinel
+  # so the full working-tree-vs-nothing diff is still well-defined.
+  echo "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
+}
+
+BASE_COMMIT="${1:-$(default_base_commit)}"
 DELIVERABLE="${HOME}/.grok/projects/Users-love/onchainai-mcp-deliverable"
 
 mkdir -p "$DELIVERABLE"

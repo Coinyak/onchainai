@@ -59,6 +59,32 @@ impl InstallPlatform {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CopyGate {
+    Allow,
+    RevealFirst,
+    Blocked,
+}
+
+impl CopyGate {
+    pub fn for_risk(risk_level: &str) -> Self {
+        match risk_level {
+            "critical" => Self::Blocked,
+            "high" => Self::RevealFirst,
+            _ => Self::Allow,
+        }
+    }
+
+    pub fn copy_allowed(self, copy_revealed: bool) -> bool {
+        match self {
+            Self::Allow => true,
+            Self::RevealFirst => copy_revealed,
+            Self::Blocked => false,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct GuideLink {
     pub label: String,
@@ -75,6 +101,7 @@ pub struct PublicInstallGuide {
     pub risk_reasons: Vec<String>,
     pub warning: Option<String>,
     pub blocked: bool,
+    pub copy_gate: CopyGate,
     pub command: Option<String>,
     pub config_json: Option<String>,
     pub copy_text: Option<String>,
@@ -156,11 +183,24 @@ pub fn copy_label_aria(copy_label: &str) -> &'static str {
 
 fn generic_mcp_remote_command(endpoint: &str) -> Option<String> {
     let endpoint = endpoint.trim();
-    if endpoint.starts_with("http://") || endpoint.starts_with("https://") {
-        Some(format!("npx mcp-remote {endpoint}"))
-    } else {
-        None
+    // Validate scheme via url parsing, then reject any shell metacharacters
+    // so a pasted `npx mcp-remote {endpoint}` can't be turned into multiple
+    // shell commands. Only http(s) URLs with a host are accepted.
+    let parsed = url::Url::parse(endpoint).ok()?;
+    if !matches!(parsed.scheme(), "http" | "https") {
+        return None;
     }
+    parsed.host_str()?;
+    // Reject if the raw endpoint contains shell control characters.
+    if endpoint.chars().any(|c| {
+        matches!(
+            c,
+            ';' | '&' | '|' | '`' | '$' | '(' | ')' | '<' | '>' | '\n' | '\r'
+        )
+    }) {
+        return None;
+    }
+    Some(format!("npx mcp-remote '{endpoint}'"))
 }
 
 fn primary_install_command(tool: &Tool) -> Option<String> {
@@ -216,7 +256,7 @@ fn docs_links_for_tool(tool: &Tool) -> Vec<GuideLink> {
     links
 }
 
-fn x402_notice_for_tool(tool: &Tool) -> Option<String> {
+pub(crate) fn x402_notice_for_tool(tool: &Tool) -> Option<String> {
     if tool.pricing != "x402" && tool.x402_price.is_none() && !tool.referral_enabled {
         return None;
     }
@@ -226,11 +266,11 @@ fn x402_notice_for_tool(tool: &Tool) -> Option<String> {
         .filter(|p| !p.trim().is_empty())
         .unwrap_or("the provider's x402 price");
     Some(format!(
-        "Calls may request x402 payment ({price}). Connect an agent wallet before use."
+        "Calls may request x402 payment ({price}). OnchainAI discloses payment metadata only and does not connect wallets or process payments."
     ))
 }
 
-fn referral_disclosure_for_tool(tool: &Tool) -> Option<String> {
+pub(crate) fn referral_disclosure_for_tool(tool: &Tool) -> Option<String> {
     if !tool.referral_enabled {
         return None;
     }
@@ -261,7 +301,11 @@ fn blocked_guide(tool: &Tool, slug: &str, platform: InstallPlatform) -> PublicIn
         risk_reasons: tool.install_risk_reasons.clone(),
         warning: Some("Install guidance blocked: critical risk pending operator review.".into()),
         blocked: true,
-        command: tool.install_command.clone(),
+        copy_gate: CopyGate::Blocked,
+        // Withhold the raw install command for blocked critical-risk guides so
+        // unsafe shell guidance is never serialized through the public surface
+        // or the MCP response. Operators review the listing first.
+        command: None,
         config_json: None,
         copy_text: None,
         copy_label: "Copy blocked".into(),
@@ -287,6 +331,7 @@ pub fn build_public_install_guide(
     }
 
     let risk_level = tool.install_risk_level.clone();
+    let copy_gate = CopyGate::for_risk(&risk_level);
     let config_blocked = blocks_structured_config(&risk_level);
     let command = primary_install_command(tool);
     let raw_install = tool
@@ -378,6 +423,7 @@ pub fn build_public_install_guide(
         risk_reasons: tool.install_risk_reasons.clone(),
         warning: install_warning_text(&risk_level).map(str::to_string),
         blocked: false,
+        copy_gate,
         command,
         config_json,
         copy_text,
@@ -427,6 +473,7 @@ pub fn build_onchainai_connect_guide(
         risk_reasons: vec!["documented package manager install".into()],
         warning: None,
         blocked: false,
+        copy_gate: CopyGate::Allow,
         command: Some(endpoint_cmd.to_string()),
         config_json,
         copy_text,
@@ -520,6 +567,7 @@ mod tests {
         );
         let guide = build_public_install_guide(&tool, "test-tool", InstallPlatform::Claude);
         assert!(!guide.blocked);
+        assert_eq!(guide.copy_gate, CopyGate::Allow);
         assert!(guide.config_json.is_some());
         assert!(guide.copy_text.is_some());
         assert!(guide.config_json.unwrap().contains("npx"));
@@ -536,6 +584,7 @@ mod tests {
         );
         let guide = build_public_install_guide(&tool, "test-tool", InstallPlatform::Claude);
         assert!(!guide.blocked);
+        assert_eq!(guide.copy_gate, CopyGate::RevealFirst);
         assert!(guide.config_json.is_none());
         assert!(guide.warning.is_some());
         assert!(guide.copy_text.is_some());
@@ -552,6 +601,7 @@ mod tests {
         );
         let guide = build_public_install_guide(&tool, "test-tool", InstallPlatform::GenericMcp);
         assert!(guide.blocked);
+        assert_eq!(guide.copy_gate, CopyGate::Blocked);
         assert!(guide.copy_text.is_none());
     }
 
@@ -567,11 +617,34 @@ mod tests {
         let guide = build_public_install_guide(&tool, "test-tool", InstallPlatform::GenericMcp);
         assert_eq!(
             guide.command.as_deref(),
-            Some("npx mcp-remote https://api.example.com/mcp")
+            Some("npx mcp-remote 'https://api.example.com/mcp'")
         );
         assert_eq!(
             guide.copy_text.as_deref(),
-            Some("npx mcp-remote https://api.example.com/mcp")
+            Some("npx mcp-remote 'https://api.example.com/mcp'")
+        );
+    }
+
+    #[test]
+    fn generic_mcp_remote_command_rejects_shell_metacharacters() {
+        // Shell metacharacters in the endpoint must not produce a copy command.
+        for evil in [
+            "https://x.com/mcp;rm -rf /",
+            "https://x.com/mcp&whoami",
+            "https://x.com/mcp|cat",
+            "https://x.com/mcp`whoami`",
+            "https://x.com/mcp$(id)",
+            "https://x.com/mcp\nwhoami",
+        ] {
+            assert!(
+                generic_mcp_remote_command(evil).is_none(),
+                "endpoint with shell metacharacter should be rejected: {evil}"
+            );
+        }
+        // Valid endpoint still produces a quoted command.
+        assert_eq!(
+            generic_mcp_remote_command("https://api.example.com/mcp"),
+            Some("npx mcp-remote 'https://api.example.com/mcp'".into())
         );
     }
 
@@ -619,6 +692,18 @@ mod tests {
     fn copy_label_aria_maps_guide_labels() {
         assert_eq!(copy_label_aria("Copy config"), "Copy config");
         assert_eq!(copy_label_aria("Copy command"), "Copy command");
+    }
+
+    #[test]
+    fn copy_gate_maps_risk_levels_to_copy_behavior() {
+        assert_eq!(CopyGate::for_risk("low"), CopyGate::Allow);
+        assert_eq!(CopyGate::for_risk("medium"), CopyGate::Allow);
+        assert_eq!(CopyGate::for_risk("high"), CopyGate::RevealFirst);
+        assert_eq!(CopyGate::for_risk("critical"), CopyGate::Blocked);
+        assert!(CopyGate::Allow.copy_allowed(false));
+        assert!(!CopyGate::RevealFirst.copy_allowed(false));
+        assert!(CopyGate::RevealFirst.copy_allowed(true));
+        assert!(!CopyGate::Blocked.copy_allowed(true));
     }
 
     #[test]

@@ -108,7 +108,7 @@ fn toolbar_query_params(
         search_q: Some(search_q).filter(|s| !s.is_empty()),
         selected: None,
         intent: None,
-        compare_tools: None,
+        compare_tools: query.get("compare_tools").map(|s| s.to_string()),
         page: 1,
     }
 }
@@ -116,6 +116,29 @@ fn toolbar_query_params(
 fn clear_timer(timer: StoredValue<Option<TimeoutHandle>>) {
     if let Some(handle) = timer.get_value() {
         handle.clear();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use leptos_router::params::ParamsMap;
+
+    #[test]
+    fn toolbar_search_preserves_compare_tools_but_clears_add_mode() {
+        let mut query = ParamsMap::new();
+        query.insert("compare_tools", "aave,uniswap".into());
+        query.insert("selected", "old-tool".into());
+        query.insert("intent", "add-mcp".into());
+        query.insert("type", "mcp".into());
+
+        let params = toolbar_query_params(&BrowserBase::Tools, &query, "wallet".into());
+
+        assert_eq!(params.compare_tools.as_deref(), Some("aave,uniswap"));
+        assert_eq!(params.selected, None);
+        assert_eq!(params.intent, None);
+        assert_eq!(params.tool_type.as_deref(), Some("mcp"));
+        assert_eq!(params.search_q.as_deref(), Some("wallet"));
     }
 }
 

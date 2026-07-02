@@ -186,8 +186,8 @@ if [[ "$TIER" == "smoke" ]]; then
   fi
   if [[ -n "${ONCHAINAI_SCRATCH:-}" ]]; then
     mkdir -p "${ONCHAINAI_SCRATCH}/ui-snapshots"
-    cp -R "${MCP_SCRATCH}/ui-snapshots/." "${ONCHAINAI_SCRATCH}/ui-snapshots/" 2>/dev/null || true
-    cp "${MCP_SCRATCH}/mcp-add-interactive-transcript.log" "${ONCHAINAI_SCRATCH}/" 2>/dev/null || true
+    cp -R "${MCP_SCRATCH}/ui-snapshots/." "${ONCHAINAI_SCRATCH}/ui-snapshots/" 2>/dev/null
+    cp "${MCP_SCRATCH}/mcp-add-interactive-transcript.log" "${ONCHAINAI_SCRATCH}/" 2>/dev/null
   fi
   echo ""
   echo "UI CHANGE GATE PASS (tier=smoke: build + curl smoke + MCP add flow)"

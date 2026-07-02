@@ -64,11 +64,11 @@ pub fn InstallGuideRemoteLoader(
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "ssr"))]
 mod loader_tests {
+    use crate::server::functions::server_fn_context_tests::run_install_guide_panel_chain_matches_server_fn_for_approved_tool;
     #[tokio::test(flavor = "multi_thread")]
     async fn install_guide_remote_loader_chain_matches_server_fn() {
-        use crate::server::functions::server_fn_context_tests::run_install_guide_panel_chain_matches_server_fn_for_approved_tool;
         run_install_guide_panel_chain_matches_server_fn_for_approved_tool().await;
     }
 }

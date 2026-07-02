@@ -16,7 +16,23 @@ fi
 
 mkdir -p "$SCRATCH/ui-snapshots"
 
-BASE_COMMIT="${MCP_VERIFY_BASE_COMMIT:-7efad21}"
+default_base_commit() {
+  if git rev-parse --verify origin/main >/dev/null 2>&1; then
+    if base="$(git merge-base HEAD origin/main 2>/dev/null)" && [[ -n "$base" ]]; then
+      echo "$base"
+      return
+    fi
+  fi
+  if git rev-parse --verify HEAD^ >/dev/null 2>&1; then
+    git rev-parse HEAD^
+    return
+  fi
+  # Shallow / single-commit clone: diff against an empty-tree sentinel
+  # so the full working-tree-vs-nothing diff is still well-defined.
+  echo "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
+}
+
+BASE_COMMIT="${MCP_VERIFY_BASE_COMMIT:-$(default_base_commit)}"
 export RUSTFLAGS="${RUSTFLAGS:--C symbol-mangling-version=v0}"
 export ONCHAINAI_SCRATCH="$SCRATCH"
 
@@ -81,12 +97,15 @@ append_mcp_gate_evidence() {
       echo "MCP_INTERACTIVE_MARKER: transcript missing"
       exit 1
     fi
+    # Count only canonical 01-06 MCP flow snapshots (post-flatten shape).
+    # Filtering here guards against stale/unrelated PNGs inflating the count
+    # before the explicit prune step runs later in the orchestrator.
     local snap_count
-    snap_count="$(find "$SCRATCH/ui-snapshots" -maxdepth 1 -name '*.png' 2>/dev/null | wc -l | tr -d ' ')"
+    snap_count="$(find "$SCRATCH/ui-snapshots" -maxdepth 1 -name '0[1-6]-*.png' 2>/dev/null | wc -l | tr -d ' ')"
     echo "MCP_SNAPSHOT_PNG_COUNT: ${snap_count}"
-    find "$SCRATCH/ui-snapshots" -maxdepth 1 -name '*.png' 2>/dev/null | sort || true
+    find "$SCRATCH/ui-snapshots" -maxdepth 1 -name '0[1-6]-*.png' 2>/dev/null | sort || true
     if [[ "${snap_count}" -lt 6 ]]; then
-      echo "MCP_SNAPSHOT_PNG_COUNT: expected >= 6, got ${snap_count}"
+      echo "MCP_SNAPSHOT_PNG_COUNT: expected >= 6 canonical 01-06 snapshots, got ${snap_count}"
       exit 1
     fi
   } >>"$gate_log"

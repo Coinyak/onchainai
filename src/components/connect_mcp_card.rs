@@ -61,7 +61,7 @@ pub fn ConnectOnchainAiMcpCard(mcp_endpoint: String) -> impl IntoView {
                     }
                 }).collect_view()}
             </div>
-            <div class="flex items-center gap-2 min-w-0 mt-3">
+            <div class="flex items-center gap-2 min-w-0 mt-4">
                 <HighlightedCommand text=copy_text() show_prefix=false/>
                 <CopyButton text=copy_text() label=copy_aria()/>
             </div>

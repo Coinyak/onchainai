@@ -138,7 +138,7 @@ mod site_settings;
 pub use site_settings::*;
 
 mod public_tools;
-#[cfg(feature = "ssr")]
+#[cfg(all(feature = "ssr", any(test, feature = "test-helpers")))]
 pub use public_tools::server_fn_context_tests;
 pub use public_tools::*;
 

@@ -8,7 +8,9 @@ use crate::components::install_guide_remote_loader::InstallGuideRemoteLoader;
 use crate::components::tool_logo::ToolLogo;
 use crate::components::trust_evidence_strip::TrustEvidenceStrip;
 use crate::models::{official_link_display_label, Tool, ToolOfficialLink};
-use crate::public_install_guide::tool_has_install_path;
+use crate::public_install_guide::{
+    referral_disclosure_for_tool, tool_has_install_path, x402_notice_for_tool,
+};
 use crate::server::functions::is_bookmarked;
 use crate::trust_verification::TrustFact;
 use leptos::prelude::*;
@@ -62,44 +64,12 @@ fn display_install_command(tool: &Tool) -> String {
         .unwrap_or_default()
 }
 
-fn x402_payment_notice(tool: &Tool) -> Option<String> {
-    if tool.pricing != "x402" && tool.x402_price.is_none() && !tool.referral_enabled {
-        return None;
-    }
-    let price = tool
-        .x402_price
-        .as_deref()
-        .filter(|p| !p.trim().is_empty())
-        .unwrap_or("the provider's x402 price");
-    Some(format!(
-        "Calls may request x402 payment ({price}). Connect an agent wallet before use."
-    ))
-}
-
 fn x402_verification_notice(tool: &Tool) -> &'static str {
     if tool.payment_verified && tool.x402_endpoint_verified && tool.price_verified {
         "Payment details operator verified."
     } else {
         "Payment details not operator verified yet."
     }
-}
-
-fn referral_disclosure(tool: &Tool) -> Option<String> {
-    if !tool.referral_enabled {
-        return None;
-    }
-    let bps = tool
-        .referral_bps
-        .map(|value| format!("{} bps", value))
-        .unwrap_or_else(|| "an operator-configured share".into());
-    let model = tool
-        .referral_model
-        .as_deref()
-        .filter(|value| !value.trim().is_empty())
-        .unwrap_or("attribution");
-    Some(format!(
-        "OnchainAI may receive {bps} through {model} referral attribution."
-    ))
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -211,8 +181,8 @@ pub fn ToolDetailContent(
 
     let last_commit = format_short_date(tool.last_commit_at);
     let last_crawl = format_short_date(Some(tool.updated_at));
-    let x402_notice = x402_payment_notice(&tool);
-    let referral_notice = referral_disclosure(&tool);
+    let x402_notice = x402_notice_for_tool(&tool);
+    let referral_notice = referral_disclosure_for_tool(&tool);
     let x402_verification = x402_verification_notice(&tool).to_string();
     let links = detail_links(&tool);
 
@@ -232,7 +202,7 @@ pub fn ToolDetailContent(
                     rel="noopener noreferrer"
                     class="external-link"
                 >
-                    "Agent wallet guide"
+                    "External agent wallet docs"
                 </a>
             </section>
         }
@@ -579,8 +549,10 @@ mod tests {
         tool.x402_endpoint_verified = false;
         tool.price_verified = false;
 
-        assert!(x402_payment_notice(&tool).unwrap().contains("0.01 USDC"));
-        assert!(referral_disclosure(&tool).unwrap().contains("250 bps"));
+        assert!(x402_notice_for_tool(&tool).unwrap().contains("0.01 USDC"));
+        assert!(referral_disclosure_for_tool(&tool)
+            .unwrap()
+            .contains("250 bps"));
         assert_eq!(
             x402_verification_notice(&tool),
             "Payment details not operator verified yet."
