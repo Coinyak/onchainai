@@ -9,5 +9,11 @@ command = "railway"
 args = ["mcp"]
 enabled = true
 
+# stdio via npx (remote MCP); Grok project config supports command/args like railway.
+[mcp_servers.onchainai]
+command = "npx"
+args = ["mcp-remote", "https://www.onchain-ai.xyz/mcp"]
+enabled = true
+
 [plugins]
-enabled = ["vercel", "railway"]
+enabled = ["vercel", "railway", "onchainai"]

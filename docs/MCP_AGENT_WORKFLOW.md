@@ -4,6 +4,27 @@
 
 Executable gates (`./scripts/*`) are **proof**. MCP (Vercel, Railway, GitHub, onchainai) is **observability** — read logs and status first; never substitute MCP for gate scripts.
 
+## MCP config files (repo)
+
+| File | Consumer | Transport |
+|------|----------|-----------|
+| `.mcp.json` | MCP standard / plugin bundles | `vercel` URL; `railway` + `onchainai` stdio |
+| `.cursor/mcp.json` | Cursor IDE | same canonical servers |
+| `.grok/config.toml` | Grok CLI (project-scoped) | `vercel` URL; `railway` + `onchainai` command/args |
+
+Canonical servers (must match across all three):
+
+- `vercel` → `https://mcp.vercel.com/onchain-ai/onchainai`
+- `railway` → `railway mcp` (CLI on PATH)
+- `onchainai` → `npx mcp-remote https://www.onchain-ai.xyz/mcp`
+
+Parity gate: `./scripts/check-mcp-config-parity.sh` (also run from `agent-harness-check.sh`).
+
+### Prerequisites
+
+- **Railway CLI** — `railway` on `PATH`; run `railway login` once per machine before `railway` MCP works.
+- **OAuth is per-machine** — Vercel/Railway/GitHub MCP tokens live in local credential stores (e.g. `~/.grok/mcp_credentials.json`). Re-auth on each device; never copy tokens into the repo or CI.
+
 ## Stack split
 
 | Surface | Host | MCP | Agent edits |
