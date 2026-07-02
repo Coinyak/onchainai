@@ -61,6 +61,10 @@ fn AdminSettingsForm(initial: SiteSettings) -> impl IntoView {
     let default_referral_payout_address =
         RwSignal::new(initial.default_referral_payout_address.unwrap_or_default());
     let x402_builder_code = RwSignal::new(initial.x402_builder_code.unwrap_or_default());
+    let hero_title = initial.hero_title.clone();
+    let hero_subtitle = initial.hero_subtitle.clone();
+    let about_content = initial.about_content.clone();
+    let footer_links = initial.footer_links.clone();
 
     let save_error = RwSignal::new(None::<String>);
     let save_ok = RwSignal::new(false);
@@ -100,6 +104,10 @@ fn AdminSettingsForm(initial: SiteSettings) -> impl IntoView {
             default_bps,
             default_referral_payout_address.get_untracked(),
             x402_builder_code.get_untracked(),
+            hero_title.clone(),
+            hero_subtitle.clone(),
+            about_content.clone(),
+            footer_links.clone(),
         );
 
         spawn_local(async move {
@@ -115,6 +123,10 @@ fn AdminSettingsForm(initial: SiteSettings) -> impl IntoView {
                 default_referral_bps: payload.8,
                 default_referral_payout_address: Some(payload.9).filter(|s| !s.trim().is_empty()),
                 x402_builder_code: Some(payload.10).filter(|s| !s.trim().is_empty()),
+                hero_title: payload.11,
+                hero_subtitle: payload.12,
+                about_content: payload.13,
+                footer_links: payload.14,
             })
             .await;
             saving.set(false);

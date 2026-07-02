@@ -1,5 +1,7 @@
 use super::*;
 
+use crate::models::FooterLink;
+
 /// Row shape for category listings with live approved-tool counts.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(feature = "ssr", derive(sqlx::FromRow))]
@@ -76,6 +78,10 @@ pub(crate) struct SiteSettingsValidationInput<'a> {
     pub default_referral_bps: Option<i32>,
     pub default_referral_payout_address: Option<&'a str>,
     pub x402_builder_code: Option<&'a str>,
+    pub hero_title: Option<&'a str>,
+    pub hero_subtitle: Option<&'a str>,
+    pub about_content: Option<&'a str>,
+    pub footer_links: &'a [FooterLink],
 }
 
 pub(crate) fn validate_update_site_settings_input(
@@ -104,7 +110,45 @@ pub(crate) fn validate_update_site_settings_input(
         input.x402_builder_code,
         100,
         "x402 builder code must be 100 characters or fewer",
-    )
+    )?;
+    validate_optional_text_len(
+        input.hero_title,
+        200,
+        "hero title must be 200 characters or fewer",
+    )?;
+    validate_optional_text_len(
+        input.hero_subtitle,
+        300,
+        "hero subtitle must be 300 characters or fewer",
+    )?;
+    validate_optional_text_len(
+        input.about_content,
+        10_000,
+        "about content must be 10000 characters or fewer",
+    )?;
+    validate_footer_links(input.footer_links)
+}
+
+fn validate_footer_links(footer_links: &[FooterLink]) -> Result<(), &'static str> {
+    (footer_links.len() <= 20)
+        .then_some(())
+        .ok_or("footer links must be 20 or fewer")?;
+    footer_links
+        .iter()
+        .try_for_each(|link| validate_footer_link(link))
+}
+
+fn validate_footer_link(link: &FooterLink) -> Result<(), &'static str> {
+    validate_required_text(
+        &link.label,
+        100,
+        "each footer link label must be 1–100 characters",
+    )?;
+    let url = link.url.trim();
+    validate_required_text(url, 500, "each footer link url must be 1–500 characters")?;
+    (url.starts_with("http://") || url.starts_with("https://"))
+        .then_some(())
+        .ok_or("footer link urls must start with http:// or https://")
 }
 
 fn validate_required_text(
@@ -179,6 +223,10 @@ pub struct UpdateSiteSettingsPayload {
     pub default_referral_bps: Option<i32>,
     pub default_referral_payout_address: Option<String>,
     pub x402_builder_code: Option<String>,
+    pub hero_title: Option<String>,
+    pub hero_subtitle: Option<String>,
+    pub about_content: Option<String>,
+    pub footer_links: Vec<FooterLink>,
 }
 
 /// Admin-only update of the `site_settings` singleton (id = 1).
@@ -196,6 +244,10 @@ pub async fn update_site_settings(
         default_referral_bps: payload.default_referral_bps,
         default_referral_payout_address: payload.default_referral_payout_address.as_deref(),
         x402_builder_code: payload.x402_builder_code.as_deref(),
+        hero_title: payload.hero_title.as_deref(),
+        hero_subtitle: payload.hero_subtitle.as_deref(),
+        about_content: payload.about_content.as_deref(),
+        footer_links: &payload.footer_links,
     }) {
         return Err(ServerFnError::new(msg.to_string()));
     }
@@ -219,6 +271,10 @@ pub async fn update_site_settings(
             default_referral_bps = $9,
             default_referral_payout_address = $10,
             x402_builder_code = $11,
+            hero_title = $12,
+            hero_subtitle = $13,
+            about_content = $14,
+            footer_links = $15,
             updated_at = now()
         WHERE id = 1
         RETURNING *
@@ -240,6 +296,10 @@ pub async fn update_site_settings(
             .map(str::trim),
     )
     .bind(payload.x402_builder_code.as_deref().map(str::trim))
+    .bind(payload.hero_title.as_deref().map(str::trim))
+    .bind(payload.hero_subtitle.as_deref().map(str::trim))
+    .bind(payload.about_content.as_deref().map(str::trim))
+    .bind(sqlx::types::Json(&payload.footer_links))
     .fetch_one(&pool)
     .await
     .map_err(|e| ServerFnError::new(format!("failed to update site settings: {e}")))?;

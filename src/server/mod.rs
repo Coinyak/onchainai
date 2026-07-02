@@ -3,6 +3,8 @@
 pub mod functions;
 
 #[cfg(feature = "ssr")]
+pub mod api_v2;
+#[cfg(feature = "ssr")]
 pub mod mcp;
 #[cfg(feature = "ssr")]
 pub mod mcp_search;
