@@ -57,7 +57,11 @@ for path in \
   scripts/sync-ui-watch-paths.mjs \
   scripts/ui-watch-paths.inc.sh \
   scripts/ui-browser-gate.mjs \
-  scripts/verify-dev-watch.sh
+  scripts/verify-dev-watch.sh \
+  scripts/check-mcp-config-parity.sh \
+  .mcp.json \
+  .cursor/mcp.json \
+  .grok/config.toml
 do
   [[ -e "$path" ]] || fail "missing required route/gate file: ${path}"
 done
@@ -89,6 +93,7 @@ grep -Fq './scripts/agent-readiness-report.sh' AGENTS.md || \
 [[ -x scripts/test-disk-guard.sh ]] || fail "scripts/test-disk-guard.sh must be executable"
 [[ -x scripts/ui-change-gate.sh ]] || fail "scripts/ui-change-gate.sh must be executable"
 [[ -x scripts/verify-dev-watch.sh ]] || fail "scripts/verify-dev-watch.sh must be executable"
+[[ -x scripts/check-mcp-config-parity.sh ]] || fail "scripts/check-mcp-config-parity.sh must be executable"
 [[ -x scripts/configure-branch-protection.sh ]] || fail "scripts/configure-branch-protection.sh must be executable"
 [[ -x .cursor/hooks/ui-staleness-stop.sh ]] || fail ".cursor/hooks/ui-staleness-stop.sh must be executable"
 bash -n scripts/agent-readiness-report.sh
@@ -111,6 +116,8 @@ node --check scripts/click-test.mjs >/dev/null
 bash -n scripts/ui-change-gate.sh
 bash -n scripts/verify-dev-watch.sh
 bash -n scripts/configure-branch-protection.sh
+bash -n scripts/check-mcp-config-parity.sh
+./scripts/check-mcp-config-parity.sh
 node scripts/sync-ui-watch-paths.mjs --check
 grep -Fq 'disable_auto_feedback = true' .pr_agent.toml || \
   fail ".pr_agent.toml must disable Qodo auto feedback (disable_auto_feedback = true)"

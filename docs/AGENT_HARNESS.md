@@ -123,6 +123,17 @@ Branch protection and review routing (CODEOWNERS, PR template, `ci-success` merg
 - `docs/BRANCH_PROTECTION.md` — require **`ci-success`** on `main`
 - `./scripts/configure-branch-protection.sh --check-only` — validate `gh` auth and print admin steps
 
+## Multi-Agent + MCP
+
+When work spans `frontend/`, `src/`, and `migrations/`, spawn up to five subagents with exclusive path ownership. Coordinator merges handoffs and runs the full gate.
+
+- Roster, DAG, verification matrix: [[MULTI_AGENT_COORDINATION]]
+- Handoff packet template: [[handoff-packet-template]]
+- MCP routing (observe logs/deploys; scripts prove deploys): [[MCP_AGENT_WORKFLOW]]
+- Skill entry: `.agents/skills/multi-agent-coordination/SKILL.md`
+
+**MCP vs scripts:** Vercel/Railway/GitHub MCP for read-only investigation. Production deploys stay on `./scripts/deploy-railway.sh` and `./scripts/post-deploy-verify.sh` unless the user explicitly requests a deploy in-session.
+
 ## Operator Note
 
 After a passing local gate, SSR HTML should revalidate and auth/API responses are not stored. An already-open browser tab can still hold an old in-memory WASM bundle until reload; use hard refresh (`Cmd+Shift+R`) only if that tab still looks stale after reload.
