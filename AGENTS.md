@@ -30,6 +30,8 @@ Also once after clone (macOS): `./scripts/install-disk-autoclean.sh` schedules a
 ## Topic Routing
 
 - Agent workflow and gates: `docs/AGENT_HARNESS.md`
+- MCP observability (Vercel/Railway): `docs/MCP_AGENT_WORKFLOW.md`
+- Multi-agent coordination (5 roles): `docs/MULTI_AGENT_COORDINATION.md`
 - UI/design/layout: `DESIGN.md`, `docs/UI_UX_DESIGN.md`, `.agents/skills/onchainai-ui-workflow/SKILL.md`
 - Build/deploy/SSR-WASM coherence: `docs/BUILD_DEPLOY_RULES.md`
 - Security/auth/RLS/secrets: `docs/SECURITY.md`

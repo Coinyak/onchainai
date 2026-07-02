@@ -22,6 +22,9 @@
 
 - [[../AGENTS.md]] — Short routing entry point for all coding agents
 - [[AGENT_HARNESS]] — Wiki-style agent workflow and executable UI/auth/routing gates
+- [[MCP_AGENT_WORKFLOW]] — Vercel/Railway/GitHub/onchainai MCP routing and deploy observability
+- [[MULTI_AGENT_COORDINATION]] — Five-subagent roster, DAG, verification matrix
+- [[handoff-packet-template]] — Copy-paste handoff between subagents
 - [[AGENT_READINESS_REPORT]] — Environment readiness report for coding agents
 - [[../CLAUDE.md]] — Claude Code entry point (imports AGENTS.md)
 

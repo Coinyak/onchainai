@@ -2,7 +2,14 @@
   "mcpServers": {
     "onchainai": {
       "command": "npx",
-      "args": ["mcp-remote", "https://www.onchain-ai.xyz/mcp"]
+      "args": [
+        "mcp-remote",
+        "https://www.onchain-ai.xyz/mcp"
+      ]
+    },
+    "vercel": {
+      "type": "http",
+      "url": "https://mcp.vercel.com"
     }
   }
 }

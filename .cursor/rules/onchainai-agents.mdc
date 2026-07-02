@@ -12,3 +12,5 @@ Read [AGENTS.md](AGENTS.md) first, then [docs/AGENT_HARNESS.md](docs/AGENT_HARNE
 3. Before handoff: `./scripts/ui-change-gate.sh` (or `--tier smoke` for a faster gate)
 
 Do not finish UI work with `cargo build --features ssr` or `cargo run --features ssr`. Git pre-commit and pre-push run `ui-staleness-check.sh`.
+
+**Multi-agent:** five roles + Coordinator — see [docs/MULTI_AGENT_COORDINATION.md](docs/MULTI_AGENT_COORDINATION.md). **MCP:** observe via Vercel/Railway; deploy via scripts — see [docs/MCP_AGENT_WORKFLOW.md](docs/MCP_AGENT_WORKFLOW.md).

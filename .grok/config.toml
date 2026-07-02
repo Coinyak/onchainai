@@ -1,0 +1,13 @@
+# Project-scoped MCP for OnchainAI (Vercel frontend + Railway API)
+
+[mcp_servers.vercel]
+url = "https://mcp.vercel.com/onchain-ai/onchainai"
+enabled = true
+
+[mcp_servers.railway]
+command = "railway"
+args = ["mcp"]
+enabled = true
+
+[plugins]
+enabled = ["vercel", "railway"]

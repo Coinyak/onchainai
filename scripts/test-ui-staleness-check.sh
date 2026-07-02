@@ -42,18 +42,18 @@ setup_repo() {
   git config user.email "test@example.com"
   git config user.name "Test User"
 
-  mkdir -p src/components src/pages target/site/pkg
-  cat > src/lib.rs <<'EOF'
-pub fn hello() -> &'static str {
-    "hello"
+  mkdir -p frontend/components frontend/.next src/crawler
+  cat > frontend/components/Sidebar.tsx <<'EOF'
+export function Sidebar() {
+  return <nav>sidebar</nav>;
 }
 EOF
-  cat > src/components/sidebar.rs <<'EOF'
-pub fn sidebar() -> &'static str {
-    "sidebar"
+  echo "build-1" > frontend/.next/BUILD_ID
+  cat > src/crawler/mod.rs <<'EOF'
+pub fn crawler_only() -> &'static str {
+    "crawler"
 }
 EOF
-  touch target/site/pkg/onchainai.wasm
 
   git add .
   git commit -q -m "initial"
@@ -68,69 +68,67 @@ pass "clean worktree with fresh bundle"
 
 # Staged UI newer than bundle should fail.
 sleep 1
-echo "// staged change" >> src/components/sidebar.rs
-git add src/components/sidebar.rs
+echo "// staged change" >> frontend/components/Sidebar.tsx
+git add frontend/components/Sidebar.tsx
 assert_exit 2 env -u ONCHAINAI_SKIP_STALENESS "$CHECKER" --staged
 pass "staged UI newer than bundle"
 
-git reset -q HEAD src/components/sidebar.rs
-git checkout -q -- src/components/sidebar.rs
+git reset -q HEAD frontend/components/Sidebar.tsx
+git checkout -q -- frontend/components/Sidebar.tsx
 
 # Worktree UI newer than bundle should fail.
 sleep 1
-echo "// worktree change" >> src/components/sidebar.rs
+echo "// worktree change" >> frontend/components/Sidebar.tsx
 assert_exit 2 env -u ONCHAINAI_SKIP_STALENESS "$CHECKER" --worktree
 pass "worktree UI newer than bundle"
 
-git checkout -q -- src/components/sidebar.rs
-touch -r target/site/pkg/onchainai.wasm src/components/sidebar.rs
+git checkout -q -- frontend/components/Sidebar.tsx
+touch -r frontend/.next/BUILD_ID frontend/components/Sidebar.tsx
 
 # Missing bundle with staged UI should fail.
-rm -f target/site/pkg/onchainai.wasm
-echo "// missing bundle staged" >> src/components/sidebar.rs
-git add src/components/sidebar.rs
+rm -f frontend/.next/BUILD_ID
+echo "// missing bundle staged" >> frontend/components/Sidebar.tsx
+git add frontend/components/Sidebar.tsx
 assert_exit 2 env -u ONCHAINAI_SKIP_STALENESS "$CHECKER" --staged
 pass "missing bundle with staged UI"
 
-git reset -q HEAD src/components/sidebar.rs
-git checkout -q -- src/components/sidebar.rs
+git reset -q HEAD frontend/components/Sidebar.tsx
+git checkout -q -- frontend/components/Sidebar.tsx
+echo "build-1" > frontend/.next/BUILD_ID
 
 # Missing bundle with worktree UI change should fail.
-echo "// missing bundle worktree" >> src/components/sidebar.rs
+rm -f frontend/.next/BUILD_ID
+echo "// missing bundle worktree" >> frontend/components/Sidebar.tsx
 assert_exit 2 env -u ONCHAINAI_SKIP_STALENESS "$CHECKER" --worktree
 pass "missing bundle with worktree UI change"
 
-git checkout -q -- src/components/sidebar.rs
+git checkout -q -- frontend/components/Sidebar.tsx
+echo "build-1" > frontend/.next/BUILD_ID
 
 # Bypass should succeed even when stale.
 sleep 1
-echo "// bypass change" >> src/components/sidebar.rs
+echo "// bypass change" >> frontend/components/Sidebar.tsx
 assert_exit 0 env ONCHAINAI_SKIP_STALENESS=1 "$CHECKER" --worktree
 pass "ONCHAINAI_SKIP_STALENESS bypass"
 
-git checkout -q -- src/components/sidebar.rs
+git checkout -q -- frontend/components/Sidebar.tsx
 
-# SSR-only staged change should pass when WASM exists.
-mkdir -p src/crawler
-cat > src/crawler/mod.rs <<'EOF'
-pub fn crawler_only() -> &'static str {
-    "crawler"
-}
-EOF
+# Backend-only staged change should pass when frontend bundle exists.
 git add src/crawler/mod.rs
 assert_exit 0 env -u ONCHAINAI_SKIP_STALENESS "$CHECKER" --staged
-pass "staged SSR-only file with existing WASM bundle"
+pass "staged backend-only file with existing frontend bundle"
 
-# Hydrate-only path (client_storage) should fail when newer than bundle.
-cat > src/client_storage.rs <<'EOF'
-pub fn storage_key() -> &'static str {
-    "sidebar"
+# Frontend lib path should fail when newer than bundle.
+mkdir -p frontend/lib
+cat > frontend/lib/browser-query.ts <<'EOF'
+export function queryKey() {
+  return "sidebar";
 }
 EOF
-git add src/client_storage.rs
+git add frontend/lib/browser-query.ts
 sleep 1
-touch src/client_storage.rs
+touch frontend/lib/browser-query.ts
 assert_exit 2 env -u ONCHAINAI_SKIP_STALENESS "$CHECKER" --staged
-pass "staged client_storage newer than bundle"
+pass "staged frontend/lib newer than bundle"
 
 echo "UI STALENESS TESTS PASS"
