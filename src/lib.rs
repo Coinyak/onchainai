@@ -15,6 +15,7 @@ pub mod filter_query;
 pub mod install_safety;
 pub mod models;
 pub mod pages;
+pub mod public_install_guide;
 pub mod server;
 pub mod trust_verification;
 pub mod workbench;

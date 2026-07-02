@@ -1271,6 +1271,9 @@ body {
 /* Detail content shared */
 .detail-content.compact .detail-title { font-size: 20px; }
 .detail-header { display: flex; gap: 16px; margin-bottom: 12px; }
+.detail-header-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.detail-compare-return-link { display: inline-block; margin-bottom: 8px; font-size: 13px; color: var(--accent-text); text-decoration: none; }
+.detail-compare-return-link:hover { text-decoration: underline; }
 .detail-logo {
   position: relative;
   width: 64px; height: 64px; border-radius: 8px; background: #F5F5F0;
@@ -1313,6 +1316,43 @@ body {
   border-radius: 8px; padding: 10px 12px; margin: 0 0 12px;
 }
 .install-tab:disabled { opacity: 0.45; cursor: not-allowed; }
+.install-platform-group {
+  display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px;
+}
+.install-platform-btn {
+  min-height: 44px; min-width: 44px; padding: 8px 12px; font-size: 13px;
+  border-radius: 8px; border: 1px solid #E5E5E5; background: #FFFFFF; color: #1A1A1A;
+}
+.install-platform-btn.active {
+  border-color: var(--accent); color: var(--accent-text); background: #FFF8F0;
+}
+.install-platform-btn[aria-pressed="true"] { font-weight: 600; }
+.trust-evidence-strip {
+  margin: 12px 0; padding: 12px; border: 1px solid #E5E5E5; border-radius: 8px; background: #FAFAFA;
+}
+.trust-evidence-grid {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 12px; font-size: 12px;
+}
+.trust-evidence-links { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; font-size: 12px; }
+.install-progress {
+  display: flex; flex-wrap: wrap; gap: 8px; list-style: none; margin: 0 0 12px; padding: 0; font-size: 11px;
+}
+.install-progress-step {
+  padding: 4px 8px; border-radius: 6px; border: 1px solid #E5E5E5; color: #6B6B6B;
+}
+.install-progress-step.is-active { border-color: var(--accent); color: var(--accent-text); font-weight: 600; }
+.install-progress-step.is-blocked { border-color: #EF9A9A; color: #C62828; background: #FFEBEE; }
+.install-progress-step.is-complete { border-color: #C8E6C9; color: #2E7D32; background: #F1F8E9; }
+.install-steps { margin: 8px 0 0; padding-left: 18px; font-size: 12px; color: #6B6B6B; }
+.detail-content.add-mode .detail-desc { font-size: 13px; margin-top: 12px; }
+.add-mcp-disabled { font-size: 11px; color: #999999; padding: 8px; }
+.add-mcp-inline-btn, .add-mcp-primary-btn {
+  display: inline-flex; align-items: center; justify-content: center; min-height: 44px;
+  padding: 8px 12px; border-radius: 8px; font-size: 13px; text-decoration: none;
+  border: 1px solid #E5E5E5; color: #1A1A1A; background: #FFFFFF;
+}
+.add-mcp-primary-btn { background: var(--accent); border-color: var(--accent); color: #FFFFFF; }
+.connect-mcp-platforms { margin-bottom: 0; }
 .full-page-link {
   display: inline-block; margin-top: 16px; font-size: 14px; color: #1A1A1A; text-decoration: none;
 }

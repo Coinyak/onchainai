@@ -1,14 +1,17 @@
 //! Shared tool detail body — install tabs, trust, chains, links.
 
 use crate::chains::{chain_fallback_label, chain_tags_show_all};
+use crate::components::add_mcp_action::{AddMcpAction, AddMcpHrefSource, AddMcpVariant};
 use crate::components::chain_logo::ChainLogo;
-use crate::components::copy_button::CopyButton;
-use crate::components::highlighted_command::HighlightedCommand;
+use crate::components::install_guide_panel::InstallGuideSource;
+use crate::components::install_guide_remote_loader::InstallGuideRemoteLoader;
 use crate::components::tool_logo::ToolLogo;
-use crate::install_safety::{
-    blocks_structured_config, claude_mcp_config, cursor_install_note, install_warning_text,
-};
+use crate::components::trust_evidence_strip::TrustEvidenceStrip;
 use crate::models::{official_link_display_label, Tool, ToolOfficialLink};
+use crate::public_install_guide::{
+    referral_disclosure_for_tool, tool_has_install_path, x402_notice_for_tool,
+};
+use crate::server::functions::is_bookmarked;
 use crate::trust_verification::TrustFact;
 use leptos::prelude::*;
 
@@ -61,44 +64,12 @@ fn display_install_command(tool: &Tool) -> String {
         .unwrap_or_default()
 }
 
-fn x402_payment_notice(tool: &Tool) -> Option<String> {
-    if tool.pricing != "x402" && tool.x402_price.is_none() && !tool.referral_enabled {
-        return None;
-    }
-    let price = tool
-        .x402_price
-        .as_deref()
-        .filter(|p| !p.trim().is_empty())
-        .unwrap_or("the provider's x402 price");
-    Some(format!(
-        "Calls may request x402 payment ({price}). Connect an agent wallet before use."
-    ))
-}
-
 fn x402_verification_notice(tool: &Tool) -> &'static str {
     if tool.payment_verified && tool.x402_endpoint_verified && tool.price_verified {
         "Payment details operator verified."
     } else {
         "Payment details not operator verified yet."
     }
-}
-
-fn referral_disclosure(tool: &Tool) -> Option<String> {
-    if !tool.referral_enabled {
-        return None;
-    }
-    let bps = tool
-        .referral_bps
-        .map(|value| format!("{} bps", value))
-        .unwrap_or_else(|| "an operator-configured share".into());
-    let model = tool
-        .referral_model
-        .as_deref()
-        .filter(|value| !value.trim().is_empty())
-        .unwrap_or("attribution");
-    Some(format!(
-        "OnchainAI may receive {bps} through {model} referral attribution."
-    ))
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -187,8 +158,18 @@ pub fn ToolDetailContent(
     #[prop(optional)] full_page_href: Option<String>,
     #[prop(optional)] trust_facts: Vec<TrustFact>,
     #[prop(optional)] official_links: Vec<ToolOfficialLink>,
+    #[prop(optional)] add_mode: bool,
+    #[prop(optional, default = String::new())] add_mcp_query_base: String,
+    #[prop(optional, default = String::new())] compare_return_href: String,
 ) -> impl IntoView {
-    let install = display_install_command(&tool);
+    let slug_bookmark = tool.slug.clone();
+    let bookmarked_res = Resource::new(
+        move || slug_bookmark.clone(),
+        |slug| async move { is_bookmarked(slug).await.unwrap_or(false) },
+    );
+    let bookmarked_signal = Signal::derive(move || bookmarked_res.get().unwrap_or(false));
+
+    let _install = display_install_command(&tool);
     let desc = tool
         .description
         .clone()
@@ -196,36 +177,135 @@ pub fn ToolDetailContent(
 
     let status = tool.status.clone();
     let tool_type = tool.tool_type.clone();
-    let active_tab = RwSignal::new("generic".to_string());
     let risk_level = tool.install_risk_level.clone();
-    let install_warning = install_warning_text(&risk_level).map(str::to_string);
-    let blocks_config = blocks_structured_config(&risk_level);
-    let copy_blocked = risk_level == "critical";
-    let high_risk_copy = risk_level == "high";
-    let copy_revealed = RwSignal::new(risk_level != "high");
-
-    let slug = tool.slug.clone();
-    let raw_install = tool.install_command.clone().unwrap_or_default();
-    let claude = if blocks_config {
-        String::new()
-    } else {
-        claude_mcp_config(&slug, &raw_install, &risk_level).unwrap_or_default()
-    };
-    let cursor = cursor_install_note(&raw_install, &risk_level);
 
     let last_commit = format_short_date(tool.last_commit_at);
     let last_crawl = format_short_date(Some(tool.updated_at));
-    let x402_notice = x402_payment_notice(&tool);
-    let referral_notice = referral_disclosure(&tool);
+    let x402_notice = x402_notice_for_tool(&tool);
+    let referral_notice = referral_disclosure_for_tool(&tool);
     let x402_verification = x402_verification_notice(&tool).to_string();
     let links = detail_links(&tool);
 
+    let trust_strip = view! {
+        <TrustEvidenceStrip tool=tool.clone() official_links=official_links.clone()/>
+    };
+
+    let x402_block = if x402_notice.is_some() || referral_notice.is_some() {
+        view! {
+            <section class="x402-notice">
+                {x402_notice.clone().map(|notice| view! { <p>{notice}</p> })}
+                {referral_notice.clone().map(|notice| view! { <p>{notice}</p> })}
+                <p class="x402-verification">{x402_verification.clone()}</p>
+                <a
+                    href="https://docs.cdp.coinbase.com/agentkit/docs/welcome"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="external-link"
+                >
+                    "External agent wallet docs"
+                </a>
+            </section>
+        }
+        .into_any()
+    } else {
+        ().into_any()
+    };
+
+    let compare_row = view! {
+        <div class="detail-compare-row">
+            <a href=format!("/compare?tools={}", tool.slug) class="detail-compare-link">
+                "Compare this tool"
+            </a>
+        </div>
+    };
+
+    let description_block = view! { <p class="detail-desc">{desc.clone()}</p> };
+
+    let trust_summary_block = view! {
+        <section class="trust-summary" aria-labelledby="trust-summary-title">
+            <h3 id="trust-summary-title">"Why trust this?"</h3>
+            <div class="trust-summary-grid">
+                <div>
+                    <span class="trust-summary-label">"Install risk"</span>
+                    <strong>{risk_label(&risk_level)}</strong>
+                </div>
+                <div>
+                    <span class="trust-summary-label">"Claim status"</span>
+                    <strong>{claim_label(&tool.claim_state)}</strong>
+                </div>
+                <div>
+                    <span class="trust-summary-label">"Last reviewed"</span>
+                    <strong>{format_short_date(tool.last_reviewed_at)}</strong>
+                </div>
+                <div>
+                    <span class="trust-summary-label">"Recent activity"</span>
+                    <strong>{last_commit.clone()}</strong>
+                </div>
+            </div>
+            {if trust_facts.is_empty() {
+                view! {
+                    <p class="trust-summary-gap">"Evidence is still limited. Review official links and install notes before using this tool."</p>
+                }.into_any()
+            } else {
+                view! {
+                    <ul class="trust-summary-facts">
+                        {trust_facts.clone().into_iter().map(|fact| view! {
+                            <li>
+                                <strong>{fact.label}</strong>
+                                <span>{fact.detail}</span>
+                            </li>
+                        }).collect_view()}
+                    </ul>
+                }.into_any()
+            }}
+            {if official_links.is_empty() {
+                view! {
+                    <p class="trust-summary-gap">"No verified official links are listed yet."</p>
+                }.into_any()
+            } else {
+                view! {
+                    <div class="trust-summary-links">
+                        {official_links.clone().into_iter().map(|link| {
+                            let label = official_link_display_label(&link);
+                            let href = link.url.clone();
+                            view! {
+                                <a href=href target="_blank" rel="noopener noreferrer">
+                                    {label}
+                                </a>
+                            }
+                        }).collect_view()}
+                    </div>
+                }.into_any()
+            }}
+        </section>
+    };
+
     view! {
-        <div class=if compact { "detail-content compact" } else { "detail-content" }>
+        <div class=move || {
+            if add_mode {
+                if compact { "detail-content compact add-mode" } else { "detail-content add-mode" }
+            } else if compact {
+                "detail-content compact"
+            } else {
+                "detail-content"
+            }
+        }>
             <header class="detail-header">
                 <ToolLogo tool=tool.clone() class="detail-logo" img_class="tool-logo-img detail-logo-img"/>
                 <div class="detail-header-text">
-                    <h2 class="detail-title">{tool.name.clone()}</h2>
+                    <div class="detail-header-row">
+                        <h2 class="detail-title">{tool.name.clone()}</h2>
+                        {(!add_mode && !add_mcp_query_base.is_empty()).then(|| {
+                            let base = add_mcp_query_base.clone();
+                            view! {
+                                <AddMcpAction
+                                    tool=tool.clone()
+                                    href_source=AddMcpHrefSource::QueryBase(base)
+                                    variant=AddMcpVariant::DetailPrimary
+                                />
+                            }
+                        })}
+                    </div>
                     <div class="tool-badges">
                         <span class=badge_class(&status)>
                             {if status == "verified" {
@@ -250,85 +330,32 @@ pub fn ToolDetailContent(
                     </div>
                 </div>
             </header>
-            <p class="detail-desc">{desc}</p>
-            <section class="trust-summary" aria-labelledby="trust-summary-title">
-                <h3 id="trust-summary-title">"Why trust this?"</h3>
-                <div class="trust-summary-grid">
-                    <div>
-                        <span class="trust-summary-label">"Install risk"</span>
-                        <strong>{risk_label(&risk_level)}</strong>
-                    </div>
-                    <div>
-                        <span class="trust-summary-label">"Claim status"</span>
-                        <strong>{claim_label(&tool.claim_state)}</strong>
-                    </div>
-                    <div>
-                        <span class="trust-summary-label">"Last reviewed"</span>
-                        <strong>{format_short_date(tool.last_reviewed_at)}</strong>
-                    </div>
-                    <div>
-                        <span class="trust-summary-label">"Recent activity"</span>
-                        <strong>{last_commit.clone()}</strong>
-                    </div>
-                </div>
-                {if trust_facts.is_empty() {
-                    view! {
-                        <p class="trust-summary-gap">"Evidence is still limited. Review official links and install notes before using this tool."</p>
-                    }.into_any()
-                } else {
-                    view! {
-                        <ul class="trust-summary-facts">
-                            {trust_facts.clone().into_iter().map(|fact| view! {
-                                <li>
-                                    <strong>{fact.label}</strong>
-                                    <span>{fact.detail}</span>
-                                </li>
-                            }).collect_view()}
-                        </ul>
-                    }.into_any()
-                }}
-                {if official_links.is_empty() {
-                    view! {
-                        <p class="trust-summary-gap">"No verified official links are listed yet."</p>
-                    }.into_any()
-                } else {
-                    view! {
-                        <div class="trust-summary-links">
-                            {official_links.clone().into_iter().map(|link| {
-                                let label = official_link_display_label(&link);
-                                let href = link.url.clone();
-                                view! {
-                                    <a href=href target="_blank" rel="noopener noreferrer">
-                                        {label}
-                                    </a>
-                                }
-                            }).collect_view()}
-                        </div>
-                    }.into_any()
-                }}
-            </section>
-            {if x402_notice.is_some() || referral_notice.is_some() {
+            {if add_mode {
                 view! {
-                    <section class="x402-notice">
-                        {x402_notice.clone().map(|notice| view! {
-                            <p>{notice}</p>
-                        })}
-                        {referral_notice.clone().map(|notice| view! {
-                            <p>{notice}</p>
-                        })}
-                        <p class="x402-verification">{x402_verification.clone()}</p>
-                        <a
-                            href="https://docs.cdp.coinbase.com/agentkit/docs/welcome"
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            class="external-link"
-                        >
-                            "Agent wallet guide"
-                        </a>
-                    </section>
+                    {(!compare_return_href.is_empty()).then(|| {
+                        let href = compare_return_href.clone();
+                        view! {
+                            <a href=href class="detail-compare-return-link">"← Back to compare"</a>
+                        }
+                    })}
+                    {trust_strip}
+                    <InstallGuideRemoteLoader
+                        tool=tool.clone()
+                        compact=compact
+                        source=InstallGuideSource::Preview
+                        show_progress=true
+                        bookmarked=bookmarked_signal
+                    />
+                    {x402_block}
+                    {compare_row.clone()}
+                    {description_block}
                 }.into_any()
             } else {
-                ().into_any()
+                view! {
+                    {description_block}
+                    {trust_summary_block}
+                    {x402_block}
+                }.into_any()
             }}
             <div class="detail-meta detail-meta-wrap">
                 <span>{"★ "}{tool.stars}</span>
@@ -366,102 +393,19 @@ pub fn ToolDetailContent(
                     ().into_any()
                 }}
             </div>
-            <div class="detail-compare-row">
-                <a href=format!("/compare?tools={}", tool.slug) class="detail-compare-link">
-                    "Compare this tool"
-                </a>
-            </div>
-            {if !install.is_empty() || install_warning.is_some() {
+            {if !add_mode && tool_has_install_path(&tool) {
                 view! {
-                    <section class="install-section">
-                        <h3 class="install-heading">"Safe install"</h3>
-                        {if let Some(warning) = install_warning.clone() {
-                            view! {
-                                <p class="install-warning" role="alert">{warning}</p>
-                            }.into_any()
-                        } else {
-                            ().into_any()
-                        }}
-                        {if !install.is_empty() {
-                            view! {
-                                <div class="install-tabs">
-                                    <button
-                                        type="button"
-                                        class=move || if active_tab.get() == "generic" { "install-tab active" } else { "install-tab" }
-                                        on:click=move |_| active_tab.set("generic".into())
-                                    >
-                                        "Generic MCP"
-                                    </button>
-                                    <button
-                                        type="button"
-                                        class=move || if active_tab.get() == "claude" { "install-tab active" } else { "install-tab" }
-                                        on:click=move |_| active_tab.set("claude".into())
-                                        disabled=blocks_config
-                                    >
-                                        "Claude"
-                                    </button>
-                                    <button
-                                        type="button"
-                                        class=move || if active_tab.get() == "cursor" { "install-tab active" } else { "install-tab" }
-                                        on:click=move |_| active_tab.set("cursor".into())
-                                        disabled=blocks_config
-                                    >
-                                        "Cursor"
-                                    </button>
-                                </div>
-                                {move || {
-                                    let tab = active_tab.get();
-                                    let text = if tab == "claude" {
-                                        if claude.is_empty() {
-                                            "Structured Claude config is not available for this install command.".into()
-                                        } else {
-                                            claude.clone()
-                                        }
-                                    } else if tab == "cursor" {
-                                        cursor.clone()
-                                    } else {
-                                        install.clone()
-                                    };
-                                    let show_shell_prefix = tab == "generic";
-                                    view! {
-                                        <div class="tool-install-stack">
-                                            <div class="tool-install">
-                                                <HighlightedCommand
-                                                    text=text.clone()
-                                                    show_prefix=show_shell_prefix
-                                                />
-                                                <Show when=move || !copy_blocked && copy_revealed.get()>
-                                                    <CopyButton text=text.clone()/>
-                                                </Show>
-                                            </div>
-                                            <Show when=move || high_risk_copy && !copy_revealed.get()>
-                                                <button
-                                                    type="button"
-                                                    class="install-reveal-btn"
-                                                    on:click=move |_| copy_revealed.set(true)
-                                                >
-                                                    "Reveal copy action"
-                                                </button>
-                                            </Show>
-                                            <Show when=move || copy_blocked>
-                                                <p class="install-warning" role="alert">
-                                                    "Copy is blocked for critical-risk install commands."
-                                                </p>
-                                            </Show>
-                                        </div>
-                                    }
-                                }}
-                            }.into_any()
-                        } else {
-                            view! {
-                                <p class="install-warning" role="alert">
-                                    "No safe copy command is available for this tool."
-                                </p>
-                            }.into_any()
-                        }}
-                    </section>
-                }
-                .into_any()
+                    <InstallGuideRemoteLoader
+                        tool=tool.clone()
+                        compact=compact
+                        source=InstallGuideSource::Detail
+                    />
+                }.into_any()
+            } else {
+                ().into_any()
+            }}
+            {if !add_mode {
+                compare_row.into_any()
             } else {
                 ().into_any()
             }}
@@ -512,6 +456,7 @@ pub fn ToolDetailContent(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::install_safety::{blocks_structured_config, claude_mcp_config};
     use crate::models::tool::default_review_fields;
 
     fn tool_with_install(install: &str, risk: &str) -> Tool {
@@ -604,8 +549,10 @@ mod tests {
         tool.x402_endpoint_verified = false;
         tool.price_verified = false;
 
-        assert!(x402_payment_notice(&tool).unwrap().contains("0.01 USDC"));
-        assert!(referral_disclosure(&tool).unwrap().contains("250 bps"));
+        assert!(x402_notice_for_tool(&tool).unwrap().contains("0.01 USDC"));
+        assert!(referral_disclosure_for_tool(&tool)
+            .unwrap()
+            .contains("250 bps"));
         assert_eq!(
             x402_verification_notice(&tool),
             "Payment details not operator verified yet."

@@ -1,5 +1,6 @@
 //! Shared UI components for the website-core milestone.
 
+pub mod add_mcp_action;
 pub mod admin_context;
 pub mod admin_review_decision_panel;
 pub mod admin_review_timeline;
@@ -10,12 +11,17 @@ pub mod chain_logo;
 pub mod chain_strip;
 pub mod claim_status_timeline;
 pub mod comments_section;
+pub mod connect_mcp_card;
 pub mod copy_button;
 pub mod empty_state;
 pub mod error_state;
 pub mod featured_carousel;
 pub mod highlighted_command;
 pub mod icons;
+pub mod install_guide_panel;
+pub mod install_guide_remote_loader;
+pub mod install_progress_indicator;
+pub mod install_risk_gate;
 pub mod login_form;
 pub mod login_modal;
 pub mod official_links_list;
@@ -33,3 +39,4 @@ pub mod tool_logo;
 pub mod tool_trust_facts;
 pub mod tools_browser;
 pub mod top_nav;
+pub mod trust_evidence_strip;

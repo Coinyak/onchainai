@@ -142,9 +142,9 @@ if [[ "$TIER" == "smoke" ]]; then
   SKIP_SNAPSHOTS=true
 fi
 
-total_steps=6
+total_steps=7
 if [[ "$TIER" == "smoke" ]]; then
-  total_steps=3
+  total_steps=4
 fi
 
 echo "UI change gate starting for ${BASE} (tier=${TIER})"
@@ -162,8 +162,35 @@ echo "Step 3/${total_steps}: bundle coherence"
 ./scripts/verify-bundle.sh
 
 if [[ "$TIER" == "smoke" ]]; then
+  echo "Step 4/${total_steps}: MCP add flow interactive verification (smoke tier)"
+  MCP_SCRATCH="${ONCHAINAI_SCRATCH:-${SNAPSHOT_DIR%/ui-snapshots}}/mcp-add-flow"
+  mkdir -p "${MCP_SCRATCH}/ui-snapshots"
+  node scripts/mcp-add-flow-interactive.mjs "$BASE" "$MCP_SCRATCH"
+  if [[ -f "${MCP_SCRATCH}/mcp-add-interactive-transcript.log" ]]; then
+    echo "--- mcp-add-flow-interactive transcript (inline) ---"
+    cat "${MCP_SCRATCH}/mcp-add-interactive-transcript.log"
+    if ! grep -q "INTERACTIVE_PASS" "${MCP_SCRATCH}/mcp-add-interactive-transcript.log"; then
+      echo "MCP add flow interactive verification failed (no INTERACTIVE_PASS)" >&2
+      exit 1
+    fi
+    echo "MCP_INTERACTIVE_MARKER: INTERACTIVE_PASS"
+  else
+    echo "MCP add flow interactive transcript missing" >&2
+    exit 1
+  fi
+  MCP_SNAP_COUNT="$(find "${MCP_SCRATCH}/ui-snapshots" -maxdepth 1 -name '*.png' 2>/dev/null | wc -l | tr -d ' ')"
+  echo "MCP_SNAPSHOT_PNG_COUNT: ${MCP_SNAP_COUNT}"
+  if [[ "${MCP_SNAP_COUNT}" -lt 6 ]]; then
+    echo "MCP add flow expected >= 6 screenshots, got ${MCP_SNAP_COUNT}" >&2
+    exit 1
+  fi
+  if [[ -n "${ONCHAINAI_SCRATCH:-}" ]]; then
+    mkdir -p "${ONCHAINAI_SCRATCH}/ui-snapshots"
+    cp -R "${MCP_SCRATCH}/ui-snapshots/." "${ONCHAINAI_SCRATCH}/ui-snapshots/" 2>/dev/null
+    cp "${MCP_SCRATCH}/mcp-add-interactive-transcript.log" "${ONCHAINAI_SCRATCH}/" 2>/dev/null
+  fi
   echo ""
-  echo "UI CHANGE GATE PASS (tier=smoke: build + curl smoke only)"
+  echo "UI CHANGE GATE PASS (tier=smoke: build + curl smoke + MCP add flow)"
   echo "For browser/auth/visual QA run: ./scripts/ui-change-gate.sh --tier full"
   exit 0
 fi
@@ -171,19 +198,23 @@ fi
 echo "Step 4/${total_steps}: browser smoke + click test (single Playwright session)"
 ONCHAINAI_SCRATCH="${SNAPSHOT_DIR%/ui-snapshots}" node scripts/ui-browser-gate.mjs "$BASE"
 
+echo "Step 5/${total_steps}: MCP add flow interactive verification"
+MCP_SCRATCH="${SNAPSHOT_DIR%/ui-snapshots}/mcp-add-flow"
+node scripts/mcp-add-flow-interactive.mjs "$BASE" "$MCP_SCRATCH"
+
 if [[ "$SKIP_AUTH" == "true" ]]; then
-  echo "Step 5/${total_steps}: local auth smoke skipped"
+  echo "Step 6/${total_steps}: local auth smoke skipped"
 elif [[ -f scripts/local-auth-smoke.mjs ]]; then
-  echo "Step 5/${total_steps}: local auth smoke"
+  echo "Step 6/${total_steps}: local auth smoke"
   node scripts/local-auth-smoke.mjs "$BASE"
 else
-  echo "Step 5/${total_steps}: local auth smoke not present; skipped"
+  echo "Step 6/${total_steps}: local auth smoke not present; skipped"
 fi
 
 if [[ "$SKIP_SNAPSHOTS" == "true" ]]; then
-  echo "Step 6/${total_steps}: visual snapshots skipped"
+  echo "Step 7/${total_steps}: visual snapshots skipped"
 else
-  echo "Step 6/${total_steps}: desktop/mobile visual snapshots"
+  echo "Step 7/${total_steps}: desktop/mobile visual snapshots"
   node scripts/visual-snapshots.mjs "$BASE" --out "$SNAPSHOT_DIR"
 fi
 

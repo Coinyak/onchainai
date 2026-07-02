@@ -459,11 +459,7 @@ mod tests {
         for entry in CHAIN_CATALOG {
             let text = std::fs::read_to_string(logo_path_on_disk(entry.logo))
                 .unwrap_or_else(|e| panic!("read {}: {e}", entry.logo));
-            assert!(
-                text.contains(TILE_VB),
-                "{} missing 48x48 viewBox",
-                entry.id
-            );
+            assert!(text.contains(TILE_VB), "{} missing 48x48 viewBox", entry.id);
 
             let wrapped = text.contains(WRAP_CENTER);
             for fragment in text.split('<').filter(|s| s.starts_with("rect")) {

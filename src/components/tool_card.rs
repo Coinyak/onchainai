@@ -2,6 +2,7 @@
 
 use crate::auth::session::has_access_token_cookie;
 use crate::chains::{chain_fallback_label, chain_tags_for_tool, ChainTagView};
+use crate::components::add_mcp_action::{AddMcpAction, AddMcpHrefSource, AddMcpVariant};
 use crate::components::admin_context::AdminOnly;
 use crate::components::chain_logo::ChainLogo;
 use crate::components::copy_button::CopyButton;
@@ -308,6 +309,7 @@ fn render_chain_tags(
 pub fn ToolCard(
     tool: Tool,
     #[prop(optional)] preview_href: Option<String>,
+    #[prop(optional)] query_base: Option<String>,
     #[prop(optional)] is_selected: bool,
     #[prop(optional)] comment_count: i64,
     #[prop(optional)] initially_starred: bool,
@@ -441,6 +443,13 @@ pub fn ToolCard(
             </a>
             <div class="tool-card-actions">
                 <AdminToolCardActions slug=slug.clone() status=status/>
+                {query_base.clone().map(|base| view! {
+                    <AddMcpAction
+                        tool=tool.clone()
+                        href_source=AddMcpHrefSource::QueryBase(base)
+                        variant=AddMcpVariant::CardIcon
+                    />
+                })}
                 <button
                     type="button"
                     class="card-action-btn"

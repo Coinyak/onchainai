@@ -44,6 +44,7 @@ Thumbs.db
 # Playwright CLI artifacts
 .playwright-cli/
 .playwright-*.yaml
+undefined/
 
 # Stray Railway IaC pull scratch dirs
 .railway-config-*

@@ -1,11 +1,13 @@
 //! Public tool comparison route.
 
+use crate::components::add_mcp_action::{AddMcpAction, AddMcpHrefSource, AddMcpVariant};
 use crate::components::error_state::ErrorState;
 use crate::components::official_links_list::OfficialLinksList;
 use crate::components::site_shell::SiteShell;
 use crate::components::skeleton::ToolCardSkeleton;
 use crate::components::tool_logo::ToolLogo;
 use crate::discovery::normalize_compare_slugs;
+use crate::public_install_guide::tool_has_install_path;
 use crate::server::functions::{compare_tools, ToolComparisonView};
 use leptos::prelude::*;
 use leptos_router::hooks::use_query_map;
@@ -29,7 +31,7 @@ fn status_label(status: &str) -> &'static str {
 }
 
 #[component]
-fn CompareCard(row: ToolComparisonView) -> impl IntoView {
+fn CompareCard(row: ToolComparisonView, compare_slugs: Vec<String>) -> impl IntoView {
     let tool = row.tool.clone();
     let chains = if tool.chains.is_empty() {
         "Not listed".into()
@@ -41,12 +43,7 @@ fn CompareCard(row: ToolComparisonView) -> impl IntoView {
             .collect::<Vec<_>>()
             .join(", ")
     };
-    let install_available = tool
-        .safe_copy_command
-        .as_deref()
-        .or(tool.install_command.as_deref())
-        .filter(|value| !value.trim().is_empty())
-        .is_some();
+    let install_available = tool_has_install_path(&tool);
     let updated = tool
         .last_commit_at
         .map(|value| value.format("%Y-%m-%d").to_string())
@@ -89,7 +86,18 @@ fn CompareCard(row: ToolComparisonView) -> impl IntoView {
             </section>
             <div class="compare-card-actions">
                 <a href=format!("/tools/{}", tool.slug)>"Open details"</a>
-                <a href=format!("/toolkit")>"Open toolkit"</a>
+                {if install_available {
+                    view! {
+                        <AddMcpAction
+                            tool=tool.clone()
+                            href_source=AddMcpHrefSource::CompareSlugs(compare_slugs.clone())
+                            variant=AddMcpVariant::InlineButton
+                        />
+                    }.into_any()
+                } else {
+                    ().into_any()
+                }}
+                <a href="/toolkit">"Open toolkit"</a>
             </div>
         </article>
     }
@@ -129,11 +137,16 @@ pub fn ComparePage() -> impl IntoView {
                                 <a href="/tools" class="compare-primary-link">"Find tools"</a>
                             </section>
                         }.into_any(),
-                        Some(Ok(rows)) => view! {
-                            <div class="compare-grid">
-                                {rows.into_iter().map(|row| view! { <CompareCard row=row/> }).collect_view()}
-                            </div>
-                        }.into_any(),
+                        Some(Ok(rows)) => {
+                            let compare_slugs = slugs.get();
+                            view! {
+                                <div class="compare-grid">
+                                    {rows.into_iter().map(|row| view! {
+                                        <CompareCard row=row compare_slugs=compare_slugs.clone()/>
+                                    }).collect_view()}
+                                </div>
+                            }.into_any()
+                        }
                         Some(Err(error)) => view! {
                             <ErrorState
                                 message=format!("Compare failed: {error}")

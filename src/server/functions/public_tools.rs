@@ -84,9 +84,62 @@ pub(crate) async fn fetch_tool_by_slug(
 pub async fn get_tool_by_slug(slug: String) -> Result<Tool, ServerFnError> {
     let pool = use_context::<sqlx::PgPool>()
         .ok_or_else(|| ServerFnError::new("database pool not available"))?;
+    validate_slug(&slug)?;
     fetch_tool_by_slug(&pool, &slug)
         .await?
         .ok_or_else(|| ServerFnError::new(format!("tool not found: {slug}")))
+}
+
+/// Maximum length for a tool slug accepted at server boundaries.
+const MAX_SLUG_LEN: usize = 128;
+
+/// Validate an externally-supplied slug at the server boundary: non-empty,
+/// bounded length, allowed charset (URL-safe slug characters only).
+fn validate_slug(slug: &str) -> Result<(), ServerFnError> {
+    let slug = slug.trim();
+    if slug.is_empty() {
+        return Err(ServerFnError::new("slug must not be empty"));
+    }
+    if slug.len() > MAX_SLUG_LEN {
+        return Err(ServerFnError::new(format!(
+            "slug must be at most {MAX_SLUG_LEN} characters"
+        )));
+    }
+    if !slug
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'))
+    {
+        return Err(ServerFnError::new(
+            "slug contains invalid characters; only a-z, 0-9, '-', '_', '.' allowed",
+        ));
+    }
+    Ok(())
+}
+
+/// Fetch an approved tool and build its public install guide (shared server/MCP path).
+#[cfg(feature = "ssr")]
+pub(crate) async fn fetch_public_install_guide(
+    pool: &sqlx::PgPool,
+    slug: &str,
+    platform: &str,
+) -> Result<crate::public_install_guide::PublicInstallGuide, ServerFnError> {
+    validate_slug(slug)?;
+    let tool = fetch_tool_by_slug(pool, slug)
+        .await?
+        .ok_or_else(|| ServerFnError::new(format!("tool not found: {slug}")))?;
+    crate::public_install_guide::build_install_guide_for_platform(&tool, slug, platform)
+        .map_err(ServerFnError::new)
+}
+
+/// Public install guide for a listed tool and client platform.
+#[server(GetPublicInstallGuide, "/api")]
+pub async fn get_public_install_guide(
+    slug: String,
+    platform: String,
+) -> Result<crate::public_install_guide::PublicInstallGuide, ServerFnError> {
+    let pool = use_context::<sqlx::PgPool>()
+        .ok_or_else(|| ServerFnError::new("database pool not available"))?;
+    fetch_public_install_guide(&pool, &slug, &platform).await
 }
 
 /// Maximum tools returned by `list_tools` / browser "load more" (matches UI cap).
@@ -1179,4 +1232,296 @@ pub async fn get_tool_comment_counts(
     let pool = use_context::<sqlx::PgPool>()
         .ok_or_else(|| ServerFnError::new("database pool not available"))?;
     fetch_tool_comment_counts(&pool, &slugs).await
+}
+
+#[cfg(all(test, feature = "ssr"))]
+mod fetch_install_guide_tests {
+    use super::*;
+
+    fn require_db_tests() -> bool {
+        std::env::var("ONCHAINAI_REQUIRE_DB_TESTS")
+            .ok()
+            .is_some_and(|value| value == "1" || value.eq_ignore_ascii_case("true"))
+    }
+
+    async fn test_pool() -> Option<sqlx::PgPool> {
+        let database_url = std::env::var("SUPABASE_URL_TEST")
+            .or_else(|_| std::env::var("DATABASE_URL"))
+            .ok()?;
+        sqlx::PgPool::connect(&database_url).await.ok()
+    }
+
+    #[tokio::test]
+    async fn fetch_public_install_guide_loads_approved_tool_from_db() {
+        let Some(pool) = test_pool().await else {
+            if require_db_tests() {
+                panic!("ONCHAINAI_REQUIRE_DB_TESTS=1 but DATABASE_URL is unavailable");
+            }
+            eprintln!("SKIP: DATABASE_URL not set — fetch_public_install_guide DB test");
+            return;
+        };
+
+        let slug: Option<String> = sqlx::query_scalar(
+            "SELECT slug FROM tools \
+             WHERE approval_status = 'approved' \
+               AND quarantined_at IS NULL \
+               AND install_risk_level <> 'critical' \
+               AND (install_command IS NOT NULL OR mcp_endpoint IS NOT NULL) \
+             LIMIT 1",
+        )
+        .fetch_optional(&pool)
+        .await
+        .expect("query approved tool slug");
+
+        let Some(slug) = slug else {
+            if require_db_tests() {
+                panic!("ONCHAINAI_REQUIRE_DB_TESTS=1 but no eligible approved tool found");
+            }
+            eprintln!("SKIP: no eligible approved tool in database");
+            return;
+        };
+
+        let guide = fetch_public_install_guide(&pool, &slug, "claude")
+            .await
+            .unwrap_or_else(|error| {
+                panic!("fetch_public_install_guide failed for {slug}: {error}")
+            });
+
+        assert_eq!(guide.slug, slug);
+        assert_eq!(guide.platform, "claude");
+        assert!(!guide.blocked);
+        assert!(
+            guide.copy_text.is_some() || guide.config_json.is_some(),
+            "expected copy output for low/medium-risk tool"
+        );
+
+        let local = crate::public_install_guide::build_install_guide_for_platform(
+            &fetch_tool_by_slug(&pool, &slug)
+                .await
+                .expect("reload tool")
+                .expect("tool exists"),
+            &slug,
+            "claude",
+        )
+        .expect("local builder");
+        assert_eq!(guide.copy_text, local.copy_text);
+        assert_eq!(guide.config_json, local.config_json);
+    }
+
+    #[tokio::test]
+    async fn fetch_public_install_guide_returns_not_found_for_missing_slug() {
+        let Some(pool) = test_pool().await else {
+            eprintln!("SKIP: DATABASE_URL not set — missing slug test");
+            return;
+        };
+
+        let missing = format!("missing-mcp-tool-{}", uuid::Uuid::new_v4());
+        let result = fetch_public_install_guide(&pool, &missing, "claude").await;
+        assert!(result.is_err());
+        assert!(
+            result.unwrap_err().to_string().contains("tool not found"),
+            "expected not-found error"
+        );
+    }
+}
+
+/// Server-fn test helpers — same `Owner` + `provide_context` path as production RPC.
+#[cfg(all(feature = "ssr", any(test, feature = "test-helpers")))]
+pub mod server_fn_context_tests {
+    use super::{fetch_tool_by_slug, get_public_install_guide, get_tool_by_slug};
+    use crate::components::install_guide_panel::resolve_install_guide;
+    use crate::public_install_guide::{
+        build_install_guide_for_platform, build_public_install_guide, InstallPlatform,
+    };
+    use leptos::prelude::{provide_context, Owner};
+    use sqlx::postgres::PgPoolOptions;
+    use std::fmt::Display;
+
+    pub fn db_tests_required() -> bool {
+        std::env::var("ONCHAINAI_REQUIRE_DB_TESTS")
+            .ok()
+            .is_some_and(|value| {
+                matches!(
+                    value.trim().to_ascii_lowercase().as_str(),
+                    "1" | "true" | "yes" | "on"
+                )
+            })
+    }
+
+    pub fn skip_or_panic(context: &str, err: impl Display) {
+        if db_tests_required() {
+            panic!("{context}: {err}");
+        }
+        eprintln!("SKIP: {context}: {err}");
+    }
+
+    pub async fn test_pool() -> Result<sqlx::PgPool, String> {
+        let _ = dotenvy::dotenv();
+        let database_url = std::env::var("SUPABASE_URL_TEST")
+            .ok()
+            .filter(|value| !value.trim().is_empty())
+            .or_else(|| {
+                std::env::var("DATABASE_URL")
+                    .ok()
+                    .filter(|value| !value.trim().is_empty())
+            })
+            .ok_or_else(|| "missing SUPABASE_URL_TEST or DATABASE_URL".to_string())?;
+        PgPoolOptions::new()
+            .max_connections(1)
+            .acquire_timeout(std::time::Duration::from_secs(15))
+            .connect(&database_url)
+            .await
+            .map_err(|error| format!("failed to connect test database: {error}"))
+    }
+
+    pub async fn with_pool_context<T>(
+        pool: sqlx::PgPool,
+        fut: impl std::future::Future<Output = T>,
+    ) -> T {
+        let owner = Owner::new();
+        owner.with(|| {
+            provide_context(pool);
+            tokio::task::block_in_place(|| tokio::runtime::Handle::current().block_on(fut))
+        })
+    }
+
+    pub async fn call_get_public_install_guide_server_fn(
+        pool: sqlx::PgPool,
+        slug: String,
+        platform: String,
+    ) -> Result<crate::public_install_guide::PublicInstallGuide, leptos::prelude::ServerFnError>
+    {
+        with_pool_context(pool, get_public_install_guide(slug, platform)).await
+    }
+
+    pub async fn eligible_approved_slug(pool: &sqlx::PgPool) -> Option<String> {
+        sqlx::query_scalar(
+            "SELECT slug FROM tools \
+             WHERE approval_status = 'approved' \
+               AND quarantined_at IS NULL \
+               AND install_risk_level <> 'critical' \
+               AND (install_command IS NOT NULL OR mcp_endpoint IS NOT NULL) \
+             LIMIT 1",
+        )
+        .fetch_optional(pool)
+        .await
+        .ok()?
+    }
+
+    pub async fn run_get_public_install_guide_server_fn_loads_approved_tool() {
+        let pool = match test_pool().await {
+            Ok(value) => value,
+            Err(err) => {
+                skip_or_panic("get_public_install_guide server fn DB setup failed", err);
+                return;
+            }
+        };
+
+        let Some(slug) = eligible_approved_slug(&pool).await else {
+            skip_or_panic(
+                "get_public_install_guide server fn DB setup failed",
+                "no eligible approved tool found",
+            );
+            return;
+        };
+
+        let guide =
+            call_get_public_install_guide_server_fn(pool.clone(), slug.clone(), "claude".into())
+                .await
+                .unwrap_or_else(|error| {
+                    panic!("get_public_install_guide() failed for {slug}: {error}")
+                });
+
+        assert_eq!(guide.slug, slug);
+        assert_eq!(guide.platform, "claude");
+        assert!(!guide.blocked);
+        assert!(
+            guide.copy_text.is_some() || guide.config_json.is_some(),
+            "expected copy output for eligible tool"
+        );
+    }
+
+    #[cfg(test)]
+    #[tokio::test(flavor = "multi_thread")]
+    async fn get_public_install_guide_server_fn_loads_approved_tool() {
+        run_get_public_install_guide_server_fn_loads_approved_tool().await;
+    }
+
+    pub async fn run_get_public_install_guide_server_fn_returns_not_found_for_missing_slug() {
+        let pool = match test_pool().await {
+            Ok(value) => value,
+            Err(err) => {
+                skip_or_panic("get_public_install_guide missing slug test", err);
+                return;
+            }
+        };
+
+        let missing = format!("missing-mcp-tool-{}", uuid::Uuid::new_v4());
+        let result =
+            call_get_public_install_guide_server_fn(pool, missing.clone(), "claude".into()).await;
+
+        assert!(result.is_err());
+        assert!(
+            result.unwrap_err().to_string().contains("tool not found"),
+            "expected not-found error for {missing}"
+        );
+    }
+
+    #[cfg(test)]
+    #[tokio::test(flavor = "multi_thread")]
+    async fn get_public_install_guide_server_fn_returns_not_found_for_missing_slug() {
+        run_get_public_install_guide_server_fn_returns_not_found_for_missing_slug().await;
+    }
+
+    pub async fn run_install_guide_panel_chain_matches_server_fn_for_approved_tool() {
+        let pool = match test_pool().await {
+            Ok(value) => value,
+            Err(err) => {
+                skip_or_panic("install guide panel chain DB setup failed", err);
+                return;
+            }
+        };
+
+        let Some(slug) = eligible_approved_slug(&pool).await else {
+            skip_or_panic(
+                "install guide panel chain DB setup failed",
+                "no eligible approved tool found",
+            );
+            return;
+        };
+
+        let tool = with_pool_context(pool.clone(), get_tool_by_slug(slug.clone()))
+            .await
+            .expect("get_tool_by_slug must succeed for approved tool");
+
+        let remote =
+            call_get_public_install_guide_server_fn(pool.clone(), slug.clone(), "claude".into())
+                .await
+                .expect("server fn must succeed for approved tool");
+
+        let local = build_public_install_guide(&tool, &slug, InstallPlatform::Claude);
+        let resolved = resolve_install_guide(Some(Ok(remote.clone())), local.clone());
+
+        assert_eq!(resolved, remote);
+        assert_eq!(resolved.copy_text, local.copy_text);
+        assert_eq!(resolved.config_json, local.config_json);
+
+        let direct = build_install_guide_for_platform(
+            &fetch_tool_by_slug(&pool, &slug)
+                .await
+                .expect("reload tool")
+                .expect("tool exists"),
+            &slug,
+            "claude",
+        )
+        .expect("platform builder must match server fn body");
+        assert_eq!(resolved.copy_text, direct.copy_text);
+        assert_eq!(resolved.config_json, direct.config_json);
+    }
+
+    #[cfg(test)]
+    #[tokio::test(flavor = "multi_thread")]
+    async fn install_guide_panel_chain_matches_server_fn_for_approved_tool() {
+        run_install_guide_panel_chain_matches_server_fn_for_approved_tool().await;
+    }
 }

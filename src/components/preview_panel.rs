@@ -5,7 +5,14 @@ use crate::models::Tool;
 use leptos::prelude::*;
 
 #[component]
-pub fn PreviewPanel(tool: Tool, close_href: String, full_page_href: String) -> impl IntoView {
+pub fn PreviewPanel(
+    tool: Tool,
+    close_href: String,
+    full_page_href: String,
+    #[prop(optional)] add_mode: bool,
+    #[prop(optional, default = String::new())] add_mcp_query_base: String,
+    #[prop(optional, default = String::new())] compare_return_href: String,
+) -> impl IntoView {
     let close_backdrop = close_href.clone();
     let close_button = close_href.clone();
     view! {
@@ -33,7 +40,14 @@ pub fn PreviewPanel(tool: Tool, close_href: String, full_page_href: String) -> i
                 </a>
             </div>
             <div class="preview-panel-body">
-                <ToolDetailContent tool=tool compact=true full_page_href=full_page_href/>
+                <ToolDetailContent
+                    tool=tool
+                    compact=true
+                    full_page_href=full_page_href
+                    add_mode=add_mode
+                    add_mcp_query_base=add_mcp_query_base
+                    compare_return_href=compare_return_href
+                />
             </div>
         </aside>
     }

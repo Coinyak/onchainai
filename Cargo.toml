@@ -26,12 +26,21 @@ name = "onchainai"
 path = "src/main.rs"
 required-features = ["ssr"]
 
+[[test]]
+name = "mcp_add_flow_install_guide"
+path = "tests/mcp_add_flow_install_guide.rs"
+required-features = ["ssr", "test-helpers"]
+
 [features]
 # Empty default: cargo-leptos builds the server with `ssr` (bin-features) and the
 # wasm client with `hydrate` (lib-features) explicitly. Keeping `ssr` out of the
 # default prevents it leaking into the wasm/hydrate build (which pulls tokio's net
 # backend -> mio, unsupported on wasm). Local cargo commands need `--features ssr`.
 default = []
+# Exposes test-only server-fn helpers (e.g. `server_fn_context_tests`) so
+# integration test binaries can call them. Enabled by `cargo test --features ssr`
+# via `dev-dependencies` / `[[test]]` required-features; never enabled in bin builds.
+test-helpers = []
 ssr = [
     "dep:leptos_axum",
     "dep:axum",
