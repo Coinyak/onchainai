@@ -101,7 +101,7 @@ function ContentForm({ initial }: { initial: SiteSettings }) {
       <label className="block">
         <span className="text-body-sm text-secondary">Hero title</span>
         <input
-          className="mt-1 w-full min-h-touch px-4 rounded-md border border-border"
+          className="mt-2 w-full min-h-touch px-4 rounded-md border border-border"
           value={heroTitle}
           onChange={(e) => setHeroTitle(e.target.value)}
         />
@@ -110,7 +110,7 @@ function ContentForm({ initial }: { initial: SiteSettings }) {
       <label className="block">
         <span className="text-body-sm text-secondary">Hero subtitle</span>
         <input
-          className="mt-1 w-full min-h-touch px-4 rounded-md border border-border"
+          className="mt-2 w-full min-h-touch px-4 rounded-md border border-border"
           value={heroSubtitle}
           onChange={(e) => setHeroSubtitle(e.target.value)}
         />
@@ -119,7 +119,7 @@ function ContentForm({ initial }: { initial: SiteSettings }) {
       <label className="block">
         <span className="text-body-sm text-secondary">About content</span>
         <textarea
-          className="mt-1 w-full min-h-[160px] p-4 rounded-md border border-border"
+          className="mt-2 w-full min-h-[160px] p-4 rounded-md border border-border"
           value={aboutContent}
           onChange={(e) => setAboutContent(e.target.value)}
         />
@@ -127,11 +127,11 @@ function ContentForm({ initial }: { initial: SiteSettings }) {
 
       <label className="block">
         <span className="text-body-sm text-secondary">Footer links (JSON)</span>
-        <p className="mt-1 text-body-sm text-secondary">
+        <p className="mt-2 text-body-sm text-secondary">
           Array of objects with label and url, e.g. [{"{"}&quot;label&quot;:&quot;Docs&quot;,&quot;url&quot;:&quot;https://...&quot;{"}"}]
         </p>
         <textarea
-          className="mt-1 w-full min-h-[128px] p-4 rounded-md border border-border font-mono text-code"
+          className="mt-2 w-full min-h-[128px] p-4 rounded-md border border-border font-mono text-code"
           value={footerLinksRaw}
           onChange={(e) => setFooterLinksRaw(e.target.value)}
         />

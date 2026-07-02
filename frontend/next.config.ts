@@ -1,12 +1,11 @@
 import type { NextConfig } from "next";
 
 const API_PROXY_TARGET =
-  process.env.API_PROXY_TARGET ?? "https://onchainai-production.up.railway.app";
+  process.env.API_PROXY_TARGET ?? "http://localhost:3000";
 
 const nextConfig: NextConfig = {
   env: {
-    NEXT_PUBLIC_API_URL:
-      process.env.NEXT_PUBLIC_API_URL ?? "https://www.onchain-ai.xyz",
+    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL ?? "",
   },
   async rewrites() {
     return [

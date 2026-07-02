@@ -128,7 +128,7 @@ function genericMcpRemoteCommand(endpoint: string): string | null {
   } catch {
     return null;
   }
-  if (/[;&|`$()<>\n\r]/.test(trimmed)) return null;
+  if (/[;&|`$()<>\n\r'\\]/.test(trimmed)) return null;
   return `npx mcp-remote '${trimmed}'`;
 }
 

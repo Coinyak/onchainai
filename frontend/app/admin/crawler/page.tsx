@@ -61,21 +61,21 @@ function CrawlerSourceRow({ source }: { source: CrawlerSourceView }) {
           {source.crawl_status} · {source.items_found} items ·{" "}
           {source.last_crawled_at ? timeAgo(source.last_crawled_at) : "never"}
         </div>
-        <div className="text-body-sm text-secondary mt-1">
+        <div className="text-body-sm text-secondary mt-2">
           Schedule: every {source.schedule_minutes} min · {source.enabled ? "enabled" : "disabled"}
         </div>
         {source.error_message && (
-          <p className="text-body-sm text-error mt-1">{source.error_message}</p>
+          <p className="text-body-sm text-error mt-2">{source.error_message}</p>
         )}
       </div>
 
-      <div className="flex flex-wrap items-end gap-3">
+      <div className="flex flex-wrap items-end gap-4">
         <label className="block">
           <span className="text-body-sm text-secondary">Interval (minutes)</span>
           <input
             type="number"
             min={1}
-            className="mt-1 w-28 min-h-touch px-4 rounded-md border border-border"
+            className="mt-2 w-full min-h-touch px-4 rounded-md border border-border"
             value={scheduleMinutes}
             onChange={(e) => setScheduleMinutes(Number(e.target.value))}
             disabled={!source.id || busy}
@@ -85,7 +85,7 @@ function CrawlerSourceRow({ source }: { source: CrawlerSourceView }) {
         <label className="flex min-h-touch items-center gap-2 text-body-sm">
           <input
             type="checkbox"
-            className="h-4 w-4 rounded border-border"
+            className="size-4 rounded border-border"
             checked={enabled}
             onChange={(e) => setEnabled(e.target.checked)}
             disabled={!source.id || busy}
