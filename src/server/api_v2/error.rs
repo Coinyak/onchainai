@@ -48,16 +48,16 @@ impl ApiError {
         }
     }
 
-    /// Map Leptos `ServerFnError` messages to HTTP API errors.
-    pub fn from_server_fn(err: leptos::server_fn::ServerFnError) -> Self {
+    /// Map shared `FnError` messages to HTTP API errors.
+    pub fn from_server_fn(err: crate::server::fn_error::FnError) -> Self {
         let msg = err.to_string();
         let lower = msg.to_ascii_lowercase();
-        if lower.contains("not found") {
+        if lower == "not found" {
+            Self::Forbidden(msg)
+        } else if lower.contains("not found") {
             Self::NotFound(msg)
         } else if lower.contains("sign in required") {
             Self::Unauthorized(msg)
-        } else if lower == "not found" {
-            Self::Forbidden(msg)
         } else {
             Self::BadRequest(msg)
         }

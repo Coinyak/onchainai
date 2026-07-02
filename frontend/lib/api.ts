@@ -1,4 +1,4 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
 
 export async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
   const headers: Record<string, string> = {};
@@ -267,7 +267,10 @@ export interface MyToolkitPayload {
 }
 
 export interface ToolComparisonView {
-  tools: Tool[];
+  tool: Tool;
+  official_links: ToolOfficialLink[];
+  trust_facts: TrustFact[];
+  viewer_bookmarked: boolean;
 }
 
 export interface ToolSubmission {
@@ -443,8 +446,8 @@ export async function getPublicDashboard(limit = 12): Promise<PublicDashboardSna
   return apiFetch<PublicDashboardSnapshot>(`/api/v2/dashboard?limit=${limit}`);
 }
 
-export async function compareTools(slugs: string[]): Promise<ToolComparisonView> {
-  return apiFetch<ToolComparisonView>(
+export async function compareTools(slugs: string[]): Promise<ToolComparisonView[]> {
+  return apiFetch<ToolComparisonView[]>(
     `/api/v2/tools/compare?slugs=${encodeURIComponent(slugs.join(","))}`,
   );
 }

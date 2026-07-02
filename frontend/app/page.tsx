@@ -14,6 +14,8 @@ const DEFAULT_SETTINGS = {
   description:
     "Discover, install, and share crypto MCP, CLI, SDK, API, x402, RWA, and AI agent tools — all in one place.",
   mcp_endpoint: "npx mcp-remote www.onchain-ai.xyz/mcp",
+  hero_title: null as string | null,
+  hero_subtitle: null as string | null,
 };
 
 function HomeHero() {
@@ -29,15 +31,17 @@ function HomeHero() {
 
   const settings = settingsQuery.data ?? DEFAULT_SETTINGS;
   const featured = featuredQuery.data ?? [];
+  const heroTitle = settings.hero_title?.trim() || settings.slogan;
+  const heroSubtitle = settings.hero_subtitle?.trim() || settings.description;
 
   return (
     <div className="home-page px-gutter md:px-6 py-8 md:py-10">
       <section className="hero mb-8">
         <h1 className="text-h1 md:text-[36px] font-bold tracking-tight leading-tight mb-3">
-          {settings.slogan}
+          {heroTitle}
         </h1>
         <p className="text-secondary text-body-md md:text-mobile-body leading-relaxed mb-6 max-w-[720px]">
-          {settings.description}
+          {heroSubtitle}
         </p>
         <SearchBar />
       </section>

@@ -2,6 +2,7 @@
 
 use crate::models::Tool;
 use crate::server::review_persistence::InsertOperatorVerdictInput;
+use crate::trust_verification::identity_cluster_aligned;
 
 /// Gate enforced in `review_tool` before applying the effect.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -250,6 +251,137 @@ pub fn plan_operator_review(
     }
 }
 
+// ── 3-tier auto-approval model ──
+
+/// Auto-approval tier assigned when a tool passes automated gates.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AutoApprovalTier {
+    /// Not eligible for auto-approval — needs human review.
+    Manual,
+    /// Auto-approved with no badge (safe + relevant, but unverified).
+    Community,
+    /// Auto-approved with verified badge (identity aligned + prior publisher approvals).
+    Verified,
+    // Official is never auto-assigned — always requires human action.
+}
+
+impl AutoApprovalTier {
+    /// True when this tier represents an auto-actionable approval.
+    pub fn is_auto_actionable(self) -> bool {
+        matches!(self, Self::Community | Self::Verified)
+    }
+}
+
+/// Result of evaluating a tool against auto-approval gates.
+#[derive(Debug, Clone, PartialEq)]
+pub struct AutoApprovalResult {
+    pub tier: AutoApprovalTier,
+    pub reason: String,
+}
+
+/// Evaluate a pending tool against 3-tier auto-approval gates.
+///
+/// - `prior_approvals_by_publisher` = count of already-approved tools from the same
+///   identity cluster (GitHub org / npm scope / homepage domain).  0 means new publisher.
+///
+/// Returns `Manual` when any blocking condition is hit (critical risk, rejected
+/// relevance, no trustworthy URL).  Returns `Community` when safe but the publisher is
+/// new or identity is not aligned.  Returns `Verified` only when identity is aligned
+/// **and** the publisher already has at least one prior approval.
+pub fn evaluate_auto_approval(
+    tool: &Tool,
+    prior_approvals_by_publisher: i64,
+) -> AutoApprovalResult {
+    if tool.install_risk_level == "critical" {
+        return AutoApprovalResult {
+            tier: AutoApprovalTier::Manual,
+            reason: "critical install risk requires manual review".into(),
+        };
+    }
+    if tool.relevance_status == "rejected" {
+        return AutoApprovalResult {
+            tier: AutoApprovalTier::Manual,
+            reason: "rejected crypto relevance requires manual review".into(),
+        };
+    }
+    if tool.relevance_status == "needs_review" {
+        return AutoApprovalResult {
+            tier: AutoApprovalTier::Manual,
+            reason: "relevance needs human review before auto-approval".into(),
+        };
+    }
+    if !tool_has_trustworthy_url(tool) {
+        return AutoApprovalResult {
+            tier: AutoApprovalTier::Manual,
+            reason: "no trustworthy URL (repo, homepage, npm, or MCP endpoint)".into(),
+        };
+    }
+
+    // Base gate passed — at minimum this tool can be auto-approved as community.
+    if prior_approvals_by_publisher > 0 && identity_aligned(tool) {
+        return AutoApprovalResult {
+            tier: AutoApprovalTier::Verified,
+            reason: "identity aligned and publisher has prior approvals".into(),
+        };
+    }
+
+    AutoApprovalResult {
+        tier: AutoApprovalTier::Community,
+        reason: "safe and relevant but no prior publisher approvals or identity not aligned".into(),
+    }
+}
+
+/// Check whether GitHub org, npm scope, and homepage domain refer to the same identity.
+fn identity_aligned(tool: &Tool) -> bool {
+    let repo = tool.repo_url.as_deref().unwrap_or("");
+    let homepage = tool.homepage.as_deref().unwrap_or("");
+    let npm = tool.npm_package.as_deref().unwrap_or("");
+    identity_cluster_aligned(repo, homepage, npm)
+}
+
+/// Build the `OperatorReviewEffect` for an auto-approval action.
+///
+/// `tier` must be `Community` or `Verified` (never `Manual` or `Official`).
+pub fn plan_auto_approval(
+    tool: &Tool,
+    result: &AutoApprovalResult,
+) -> Option<OperatorReviewEffect> {
+    let listing_status = match result.tier {
+        AutoApprovalTier::Manual => return None,
+        AutoApprovalTier::Community => "community",
+        AutoApprovalTier::Verified => "verified",
+    };
+
+    let tool_update = ToolReviewSqlUpdate {
+        approval_status: Some("approved".into()),
+        rejection_reason: Some(None),
+        relevance_status: None,
+        listing_status: Some(listing_status.into()),
+        quarantine: false,
+        claim_state: None,
+        touch_last_reviewed: true,
+    };
+
+    Some(OperatorReviewEffect {
+        gate: OperatorReviewGate::None,
+        tool_update,
+        verdict: InsertOperatorVerdictInput {
+            tool_id: tool.id,
+            review_run_id: None,
+            action: "auto_approved".into(),
+            from_status: tool.status.clone(),
+            to_status: listing_status.into(),
+            from_claim_state: tool.claim_state.clone(),
+            to_claim_state: None,
+            reason_codes: vec![],
+            note: Some(result.reason.clone()),
+        },
+        legacy_audit_before: tool.approval_status.clone(),
+        legacy_audit_after: "approved".into(),
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -446,5 +578,87 @@ mod tests {
         let community = sample_tool("unclaimed", "community", "approved");
         assert!(validate_demote_verified_gate(&community).is_err());
         assert!(validate_demote_official_gate(&community).is_err());
+    }
+
+    // ── 3-tier auto-approval tests ──
+
+    #[test]
+    fn auto_approval_community_passes_safe_tool() {
+        let tool = sample_tool("unclaimed", "community", "pending");
+        let result = evaluate_auto_approval(&tool, 0);
+        assert_eq!(result.tier, AutoApprovalTier::Community);
+    }
+
+    #[test]
+    fn auto_approval_rejects_critical_install_risk() {
+        let mut tool = sample_tool("unclaimed", "community", "pending");
+        tool.install_risk_level = "critical".into();
+        let result = evaluate_auto_approval(&tool, 0);
+        assert_eq!(result.tier, AutoApprovalTier::Manual);
+        assert!(result.reason.contains("critical"));
+    }
+
+    #[test]
+    fn auto_approval_rejects_rejected_relevance() {
+        let mut tool = sample_tool("unclaimed", "community", "pending");
+        tool.relevance_status = "rejected".into();
+        let result = evaluate_auto_approval(&tool, 0);
+        assert_eq!(result.tier, AutoApprovalTier::Manual);
+        assert!(result.reason.contains("relevance"));
+    }
+
+    #[test]
+    fn auto_approval_rejects_needs_review_relevance() {
+        let mut tool = sample_tool("unclaimed", "community", "pending");
+        tool.relevance_status = "needs_review".into();
+        let result = evaluate_auto_approval(&tool, 0);
+        assert_eq!(result.tier, AutoApprovalTier::Manual);
+        assert!(result.reason.contains("human review"));
+    }
+
+    #[test]
+    fn auto_approval_rejects_no_trustworthy_url() {
+        let mut tool = sample_tool("unclaimed", "community", "pending");
+        tool.repo_url = None;
+        tool.homepage = None;
+        tool.npm_package = None;
+        tool.mcp_endpoint = None;
+        let result = evaluate_auto_approval(&tool, 0);
+        assert_eq!(result.tier, AutoApprovalTier::Manual);
+        assert!(result.reason.contains("trustworthy"));
+    }
+
+    #[test]
+    fn auto_approval_verified_requires_identity_and_prior_approval() {
+        let mut tool = sample_tool("unclaimed", "community", "pending");
+        tool.homepage = Some("https://org.dev".into());
+        let result = evaluate_auto_approval(&tool, 1);
+        assert_eq!(result.tier, AutoApprovalTier::Verified);
+    }
+
+    #[test]
+    fn auto_approval_verified_blocked_without_prior_approvals() {
+        let mut tool = sample_tool("unclaimed", "community", "pending");
+        tool.homepage = Some("https://org.dev".into());
+        let result = evaluate_auto_approval(&tool, 0);
+        assert_eq!(result.tier, AutoApprovalTier::Community);
+    }
+
+    #[test]
+    fn auto_approval_verified_blocked_when_identity_not_aligned() {
+        let mut tool = sample_tool("unclaimed", "community", "pending");
+        tool.repo_url = Some("https://github.com/org-a/repo".into());
+        tool.homepage = Some("https://different-site.com".into());
+        tool.npm_package = Some("@other-scope/pkg".into());
+        let result = evaluate_auto_approval(&tool, 5);
+        assert_eq!(result.tier, AutoApprovalTier::Community);
+    }
+
+    #[test]
+    fn auto_approval_never_returns_official() {
+        let mut tool = sample_tool("unclaimed", "community", "pending");
+        tool.homepage = Some("https://org.dev".into());
+        let result = evaluate_auto_approval(&tool, 100);
+        assert_eq!(result.tier, AutoApprovalTier::Verified);
     }
 }

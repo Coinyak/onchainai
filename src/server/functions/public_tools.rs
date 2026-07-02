@@ -1,67 +1,14 @@
 use super::*;
 
-/// Returns the most recently added **approved** tools.
-///
-/// HOT order = higher `stars` first, then more recent `created_at`.
-#[server(GetRecentTools, "/api")]
-pub async fn get_recent_tools(limit: i64) -> Result<Vec<Tool>, ServerFnError> {
-    let pool = use_context::<sqlx::PgPool>()
-        .ok_or_else(|| ServerFnError::new("database pool not available"))?;
-
-    let limit = limit.clamp(1, 100);
-    let tools = sqlx::query_as::<_, Tool>(RECENT_APPROVED_TOOLS_SQL)
-        .bind(limit)
-        .fetch_all(&pool)
-        .await
-        .map_err(|e| ServerFnError::new(format!("failed to load tools: {e}")))?;
-
-    Ok(sanitize_tools_for_public_response(tools))
-}
-
 /// Returns all function categories with live **approved** tool counts.
 #[cfg(feature = "ssr")]
-pub(crate) async fn fetch_categories(
-    pool: &sqlx::PgPool,
-) -> Result<Vec<(Category, i64)>, ServerFnError> {
+pub(crate) async fn fetch_categories(pool: &sqlx::PgPool) -> Result<Vec<(Category, i64)>, FnError> {
     let rows = sqlx::query_as::<_, CategoryWithCount>(CATEGORIES_WITH_COUNTS_SQL)
         .fetch_all(pool)
         .await
-        .map_err(|e| ServerFnError::new(format!("failed to load categories: {e}")))?;
+        .map_err(|e| FnError::new(format!("failed to load categories: {e}")))?;
 
     Ok(rows.into_iter().map(CategoryWithCount::into_pair).collect())
-}
-
-/// Returns all function categories with live **approved** tool counts.
-#[server(GetCategories, "/api")]
-pub async fn get_categories() -> Result<Vec<(Category, i64)>, ServerFnError> {
-    let pool = use_context::<sqlx::PgPool>()
-        .ok_or_else(|| ServerFnError::new("database pool not available"))?;
-    fetch_categories(&pool).await
-}
-
-/// Searches **approved** tools using Postgres full-text search.
-///
-/// Optional filters narrow by `function` and any chain in `chains`.
-#[server(SearchTools, "/api")]
-pub async fn search_tools(
-    query: String,
-    function: Option<String>,
-    chain: Option<String>,
-) -> Result<Vec<Tool>, ServerFnError> {
-    let pool = use_context::<sqlx::PgPool>()
-        .ok_or_else(|| ServerFnError::new("database pool not available"))?;
-
-    validate_search_tools_input(&query, &function, &chain)?;
-
-    let tools = sqlx::query_as::<_, Tool>(SEARCH_APPROVED_TOOLS_SQL)
-        .bind(&query)
-        .bind(function.as_deref())
-        .bind(chain.as_deref())
-        .fetch_all(&pool)
-        .await
-        .map_err(|e| ServerFnError::new(format!("search failed: {e}")))?;
-
-    Ok(sanitize_tools_for_public_response(tools))
 }
 
 /// Fetch a single **approved** tool by slug, if present.
@@ -69,25 +16,14 @@ pub async fn search_tools(
 pub(crate) async fn fetch_tool_by_slug(
     pool: &sqlx::PgPool,
     slug: &str,
-) -> Result<Option<Tool>, ServerFnError> {
+) -> Result<Option<Tool>, FnError> {
     let tool = sqlx::query_as::<_, Tool>(APPROVED_TOOL_BY_SLUG_SQL)
         .bind(slug)
         .fetch_optional(pool)
         .await
-        .map_err(|e| ServerFnError::new(format!("failed to load tool: {e}")))?;
+        .map_err(|e| FnError::new(format!("failed to load tool: {e}")))?;
 
     Ok(tool.map(sanitize_tool_for_public_response))
-}
-
-/// Fetch a single **approved** tool by slug (404-style error if missing or not approved).
-#[server(GetToolBySlug, "/api")]
-pub async fn get_tool_by_slug(slug: String) -> Result<Tool, ServerFnError> {
-    let pool = use_context::<sqlx::PgPool>()
-        .ok_or_else(|| ServerFnError::new("database pool not available"))?;
-    validate_slug(&slug)?;
-    fetch_tool_by_slug(&pool, &slug)
-        .await?
-        .ok_or_else(|| ServerFnError::new(format!("tool not found: {slug}")))
 }
 
 /// Maximum length for a tool slug accepted at server boundaries.
@@ -95,13 +31,13 @@ const MAX_SLUG_LEN: usize = 128;
 
 /// Validate an externally-supplied slug at the server boundary: non-empty,
 /// bounded length, allowed charset (URL-safe slug characters only).
-fn validate_slug(slug: &str) -> Result<(), ServerFnError> {
+fn validate_slug(slug: &str) -> Result<(), FnError> {
     let slug = slug.trim();
     if slug.is_empty() {
-        return Err(ServerFnError::new("slug must not be empty"));
+        return Err(FnError::new("slug must not be empty"));
     }
     if slug.len() > MAX_SLUG_LEN {
-        return Err(ServerFnError::new(format!(
+        return Err(FnError::new(format!(
             "slug must be at most {MAX_SLUG_LEN} characters"
         )));
     }
@@ -109,7 +45,7 @@ fn validate_slug(slug: &str) -> Result<(), ServerFnError> {
         .chars()
         .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'))
     {
-        return Err(ServerFnError::new(
+        return Err(FnError::new(
             "slug contains invalid characters; only a-z, 0-9, '-', '_', '.' allowed",
         ));
     }
@@ -122,24 +58,13 @@ pub(crate) async fn fetch_public_install_guide(
     pool: &sqlx::PgPool,
     slug: &str,
     platform: &str,
-) -> Result<crate::public_install_guide::PublicInstallGuide, ServerFnError> {
+) -> Result<crate::public_install_guide::PublicInstallGuide, FnError> {
     validate_slug(slug)?;
     let tool = fetch_tool_by_slug(pool, slug)
         .await?
-        .ok_or_else(|| ServerFnError::new(format!("tool not found: {slug}")))?;
+        .ok_or_else(|| FnError::new(format!("tool not found: {slug}")))?;
     crate::public_install_guide::build_install_guide_for_platform(&tool, slug, platform)
-        .map_err(ServerFnError::new)
-}
-
-/// Public install guide for a listed tool and client platform.
-#[server(GetPublicInstallGuide, "/api")]
-pub async fn get_public_install_guide(
-    slug: String,
-    platform: String,
-) -> Result<crate::public_install_guide::PublicInstallGuide, ServerFnError> {
-    let pool = use_context::<sqlx::PgPool>()
-        .ok_or_else(|| ServerFnError::new("database pool not available"))?;
-    fetch_public_install_guide(&pool, &slug, &platform).await
+        .map_err(FnError::new)
 }
 
 /// Maximum tools returned by `list_tools` / browser "load more" (matches UI cap).
@@ -158,12 +83,12 @@ pub(crate) fn validate_search_tools_input(
     query: &str,
     function: &Option<String>,
     chain: &Option<String>,
-) -> Result<(), ServerFnError> {
+) -> Result<(), FnError> {
     if query.trim().is_empty() {
-        return Err(ServerFnError::new("query must not be empty"));
+        return Err(FnError::new("query must not be empty"));
     }
     if query.len() > MAX_TOOL_LIST_QUERY_LEN {
-        return Err(ServerFnError::new(format!(
+        return Err(FnError::new(format!(
             "query must be at most {MAX_TOOL_LIST_QUERY_LEN} characters"
         )));
     }
@@ -176,15 +101,15 @@ pub(crate) fn validate_search_tools_input(
     Ok(())
 }
 
-fn validate_tool_filter_values(axis: &str, values: &[String]) -> Result<(), ServerFnError> {
+fn validate_tool_filter_values(axis: &str, values: &[String]) -> Result<(), FnError> {
     if values.len() > MAX_TOOL_FILTER_VALUES {
-        return Err(ServerFnError::new(format!(
+        return Err(FnError::new(format!(
             "filter `{axis}` accepts at most {MAX_TOOL_FILTER_VALUES} values"
         )));
     }
     for value in values {
         if value.len() > MAX_TOOL_FILTER_VALUE_LEN {
-            return Err(ServerFnError::new(format!(
+            return Err(FnError::new(format!(
                 "filter `{axis}` values must be at most {MAX_TOOL_FILTER_VALUE_LEN} characters"
             )));
         }
@@ -193,7 +118,7 @@ fn validate_tool_filter_values(axis: &str, values: &[String]) -> Result<(), Serv
 }
 
 /// Validates multi-axis tool filters for list/count queries.
-pub fn validate_tool_filters(filters: &ToolFilters) -> Result<(), ServerFnError> {
+pub fn validate_tool_filters(filters: &ToolFilters) -> Result<(), FnError> {
     validate_tool_filter_values("function", &filters.function)?;
     validate_tool_filter_values("asset_class", &filters.asset_class)?;
     validate_tool_filter_values("actor", &filters.actor)?;
@@ -205,27 +130,27 @@ pub fn validate_tool_filters(filters: &ToolFilters) -> Result<(), ServerFnError>
     Ok(())
 }
 
-fn validate_tool_sort(sort: &str) -> Result<(), ServerFnError> {
+fn validate_tool_sort(sort: &str) -> Result<(), FnError> {
     matches!(sort, "hot" | "new" | "comments")
         .then_some(())
-        .ok_or_else(|| ServerFnError::new("sort must be one of: hot, new, comments"))
+        .ok_or_else(|| FnError::new("sort must be one of: hot, new, comments"))
 }
 
 /// Validates browser tool-list request bounds (rejects out-of-range instead of clamping).
-pub fn validate_tool_list_request(req: &ToolListRequest) -> Result<(), ServerFnError> {
+pub fn validate_tool_list_request(req: &ToolListRequest) -> Result<(), FnError> {
     validate_tool_sort(&req.sort)?;
     validate_tool_filters(&req.filters)?;
     if req.offset < 0 {
-        return Err(ServerFnError::new("offset must be >= 0"));
+        return Err(FnError::new("offset must be >= 0"));
     }
     if !(1..=MAX_LIST_TOOLS_LIMIT).contains(&req.limit) {
-        return Err(ServerFnError::new(format!(
+        return Err(FnError::new(format!(
             "limit must be between 1 and {MAX_LIST_TOOLS_LIMIT}"
         )));
     }
     if let Some(query) = req.query.as_ref() {
         if query.len() > MAX_TOOL_LIST_QUERY_LEN {
-            return Err(ServerFnError::new(format!(
+            return Err(FnError::new(format!(
                 "query must be at most {MAX_TOOL_LIST_QUERY_LEN} characters"
             )));
         }
@@ -362,7 +287,7 @@ fn push_list_order_offset_limit(
 pub(crate) async fn fetch_count_tools(
     pool: &sqlx::PgPool,
     filters: &ToolFilters,
-) -> Result<i64, ServerFnError> {
+) -> Result<i64, FnError> {
     let mut q = sqlx::QueryBuilder::new(COUNT_APPROVED_TOOLS_SQL);
     append_tool_filters(&mut q, filters);
 
@@ -370,18 +295,9 @@ pub(crate) async fn fetch_count_tools(
         .build_query_as::<(i64,)>()
         .fetch_one(pool)
         .await
-        .map_err(|e| ServerFnError::new(format!("count failed: {e}")))?;
+        .map_err(|e| FnError::new(format!("count failed: {e}")))?;
 
     Ok(count.0)
-}
-
-/// Count approved tools with optional multi-axis filters.
-#[server(CountTools, "/api")]
-pub async fn count_tools(filters: ToolFilters) -> Result<i64, ServerFnError> {
-    validate_tool_filters(&filters)?;
-    let pool = use_context::<sqlx::PgPool>()
-        .ok_or_else(|| ServerFnError::new("database pool not available"))?;
-    fetch_count_tools(&pool, &filters).await
 }
 
 /// Top chains by approved-tool count for sidebar filters.
@@ -389,23 +305,15 @@ pub async fn count_tools(filters: ToolFilters) -> Result<i64, ServerFnError> {
 pub(crate) async fn fetch_chain_counts(
     pool: &sqlx::PgPool,
     limit: i64,
-) -> Result<Vec<(String, i64)>, ServerFnError> {
+) -> Result<Vec<(String, i64)>, FnError> {
     let limit = limit.clamp(1, 100);
     let rows = sqlx::query_as::<_, (String, i64)>(CHAIN_COUNTS_SQL)
         .bind(limit)
         .fetch_all(pool)
         .await
-        .map_err(|e| ServerFnError::new(format!("chain counts failed: {e}")))?;
+        .map_err(|e| FnError::new(format!("chain counts failed: {e}")))?;
 
     Ok(rows)
-}
-
-/// Top chains by approved-tool count for sidebar filters.
-#[server(GetChainCounts, "/api")]
-pub async fn get_chain_counts(limit: i64) -> Result<Vec<(String, i64)>, ServerFnError> {
-    let pool = use_context::<sqlx::PgPool>()
-        .ok_or_else(|| ServerFnError::new("database pool not available"))?;
-    fetch_chain_counts(&pool, limit).await
 }
 
 /// List approved tools with sort, pagination, FTS query, and optional filters.
@@ -417,7 +325,7 @@ pub(crate) async fn fetch_list_tools(
     limit: i64,
     filters: &ToolFilters,
     query: Option<&str>,
-) -> Result<Vec<Tool>, ServerFnError> {
+) -> Result<Vec<Tool>, FnError> {
     let offset = offset.max(0);
     let limit = clamp_list_tools_limit(limit);
     let mut q = sqlx::QueryBuilder::new(LIST_APPROVED_TOOLS_SQL);
@@ -429,48 +337,9 @@ pub(crate) async fn fetch_list_tools(
         .build_query_as::<Tool>()
         .fetch_all(pool)
         .await
-        .map_err(|e| ServerFnError::new(format!("list tools failed: {e}")))?;
+        .map_err(|e| FnError::new(format!("list tools failed: {e}")))?;
 
     Ok(sanitize_tools_for_public_response(tools))
-}
-
-/// List approved tools with sort, pagination, FTS query, and optional filters.
-#[server(ListTools, "/api")]
-pub async fn list_tools(
-    sort: String,
-    offset: i64,
-    limit: i64,
-    filters: ToolFilters,
-    query: Option<String>,
-) -> Result<Vec<Tool>, ServerFnError> {
-    let req = ToolListRequest {
-        sort: sort.clone(),
-        offset,
-        limit,
-        filters: filters.clone(),
-        query: query.clone(),
-    };
-    validate_tool_list_request(&req)?;
-    let pool = use_context::<sqlx::PgPool>()
-        .ok_or_else(|| ServerFnError::new("database pool not available"))?;
-    fetch_list_tools(&pool, &sort, offset, limit, &filters, query.as_deref()).await
-}
-
-/// Stable browser-facing tool list — wraps positional `list_tools` with a struct payload.
-#[server(ListToolsV1, "/api")]
-pub async fn list_tools_v1(req: ToolListRequest) -> Result<Vec<Tool>, ServerFnError> {
-    validate_tool_list_request(&req)?;
-    let pool = use_context::<sqlx::PgPool>()
-        .ok_or_else(|| ServerFnError::new("database pool not available"))?;
-    fetch_list_tools(
-        &pool,
-        &req.sort,
-        req.offset,
-        req.limit,
-        &req.filters,
-        req.query.as_deref(),
-    )
-    .await
 }
 
 /// Tools browser page size (must match `tools_browser::TOOL_PAGE_SIZE`).
@@ -719,72 +588,6 @@ pub struct LoadBrowserDataRequest {
     pub page: u32,
 }
 
-/// Load all data required by `ToolsBrowser` in **one** server round-trip (one DB pool checkout
-/// sequence per HTTP request; internal queries still run concurrently on the server).
-#[server(LoadBrowserData, "/api")]
-pub async fn load_browser_data(
-    req: LoadBrowserDataRequest,
-) -> Result<BrowserDataPayload, ServerFnError> {
-    validate_tool_filters(&req.filters)?;
-    let pool = use_context::<sqlx::PgPool>()
-        .ok_or_else(|| ServerFnError::new("database pool not available"))?;
-
-    let page = clamp_browser_page_param(req.page);
-    let list_req = ToolListRequest {
-        sort: req.sort.clone(),
-        offset: 0,
-        limit: browser_visible_limit_for_page(page),
-        filters: req.filters.clone(),
-        query: req.search_q.clone(),
-    };
-    validate_tool_list_request(&list_req)?;
-
-    let preview_slug = req.selected.filter(|s| !s.is_empty());
-
-    let (categories, chains, total, tools, preview_tool) = futures::join!(
-        fetch_categories(&pool),
-        fetch_chain_counts(&pool, 12),
-        fetch_count_tools(&pool, &req.filters),
-        fetch_list_tools(
-            &pool,
-            &list_req.sort,
-            list_req.offset,
-            list_req.limit,
-            &list_req.filters,
-            list_req.query.as_deref(),
-        ),
-        async {
-            match preview_slug.as_deref() {
-                Some(s) => fetch_tool_by_slug(&pool, s).await.ok().flatten(),
-                None => None,
-            }
-        },
-    );
-    let categories = categories?;
-    let chains = chains?;
-    let total = total?;
-    let tools = tools?;
-
-    let slugs: Vec<String> = tools.iter().map(|t| t.slug.clone()).collect();
-    let comment_counts: HashMap<String, i64> = if slugs.is_empty() {
-        HashMap::new()
-    } else {
-        fetch_tool_comment_counts(&pool, &slugs)
-            .await?
-            .into_iter()
-            .collect()
-    };
-
-    Ok(BrowserDataPayload {
-        categories,
-        chains,
-        total,
-        tools,
-        comment_counts,
-        preview_tool,
-    })
-}
-
 #[cfg_attr(feature = "ssr", derive(sqlx::FromRow))]
 struct DashboardValueCountRow {
     id: String,
@@ -803,13 +606,13 @@ async fn fetch_dashboard_value_counts(
     pool: &sqlx::PgPool,
     axis: DashboardCountAxis,
     limit: i64,
-) -> Result<Vec<DashboardBucket>, ServerFnError> {
+) -> Result<Vec<DashboardBucket>, FnError> {
     let rows = sqlx::query_as::<_, DashboardValueCountRow>(axis.count_sql())
         .bind(limit)
         .fetch_all(pool)
         .await
         .map_err(|e| {
-            ServerFnError::new(format!(
+            FnError::new(format!(
                 "{} dashboard counts failed: {e}",
                 axis.bucket_axis()
             ))
@@ -825,12 +628,12 @@ async fn fetch_dashboard_value_counts(
 async fn fetch_dashboard_function_counts(
     pool: &sqlx::PgPool,
     limit: i64,
-) -> Result<Vec<DashboardBucket>, ServerFnError> {
+) -> Result<Vec<DashboardBucket>, FnError> {
     let rows = sqlx::query_as::<_, DashboardCategoryCountRow>(DASHBOARD_FUNCTION_COUNTS_SQL)
         .bind(limit)
         .fetch_all(pool)
         .await
-        .map_err(|e| ServerFnError::new(format!("function dashboard counts failed: {e}")))?;
+        .map_err(|e| FnError::new(format!("function dashboard counts failed: {e}")))?;
 
     Ok(rows
         .into_iter()
@@ -839,25 +642,22 @@ async fn fetch_dashboard_function_counts(
 }
 
 #[cfg(feature = "ssr")]
-async fn fetch_dashboard_x402_tools(
-    pool: &sqlx::PgPool,
-    limit: i64,
-) -> Result<Vec<Tool>, ServerFnError> {
+async fn fetch_dashboard_x402_tools(pool: &sqlx::PgPool, limit: i64) -> Result<Vec<Tool>, FnError> {
     let tools = sqlx::query_as::<_, Tool>(DASHBOARD_X402_TOOLS_SQL)
         .bind(limit)
         .fetch_all(pool)
         .await
-        .map_err(|e| ServerFnError::new(format!("x402 dashboard tools failed: {e}")))?;
+        .map_err(|e| FnError::new(format!("x402 dashboard tools failed: {e}")))?;
     Ok(sanitize_tools_for_public_response(tools))
 }
 
 #[cfg(feature = "ssr")]
-async fn fetch_dashboard_metrics(pool: &sqlx::PgPool) -> Result<DashboardMetrics, ServerFnError> {
+async fn fetch_dashboard_metrics(pool: &sqlx::PgPool) -> Result<DashboardMetrics, FnError> {
     let row =
         sqlx::query_as::<_, (i64, i64, i64, i64, i64, i64, i64, i64, i64)>(DASHBOARD_METRICS_SQL)
             .fetch_one(pool)
             .await
-            .map_err(|e| ServerFnError::new(format!("dashboard metrics failed: {e}")))?;
+            .map_err(|e| FnError::new(format!("dashboard metrics failed: {e}")))?;
 
     Ok(DashboardMetrics {
         public_tools: row.0,
@@ -876,7 +676,7 @@ async fn fetch_dashboard_metrics(pool: &sqlx::PgPool) -> Result<DashboardMetrics
 pub(crate) async fn fetch_public_dashboard_snapshot(
     pool: &sqlx::PgPool,
     list_limit: i64,
-) -> Result<PublicDashboardSnapshot, ServerFnError> {
+) -> Result<PublicDashboardSnapshot, FnError> {
     let limit = clamp_dashboard_list_limit(list_limit);
     let empty_filters = ToolFilters::default();
     let high_trust_filters = ToolFilters {
@@ -915,15 +715,6 @@ pub(crate) async fn fetch_public_dashboard_snapshot(
         high_trust_tools: high_trust_tools?,
         as_of: chrono::Utc::now(),
     })
-}
-
-#[server(GetPublicDashboardSnapshot, "/api")]
-pub async fn get_public_dashboard_snapshot(
-    list_limit: i64,
-) -> Result<PublicDashboardSnapshot, ServerFnError> {
-    let pool = use_context::<sqlx::PgPool>()
-        .ok_or_else(|| ServerFnError::new("database pool not available"))?;
-    fetch_public_dashboard_snapshot(&pool, list_limit).await
 }
 
 fn sanitize_toolkit_items(items: Vec<ToolkitToolView>) -> Vec<ToolkitToolView> {
@@ -999,15 +790,13 @@ fn toolkit_markdown_for_items(items: &[ToolkitToolView]) -> String {
     body
 }
 
-pub fn build_toolkit_payload(
-    items: Vec<ToolkitToolView>,
-) -> Result<MyToolkitPayload, ServerFnError> {
+pub fn build_toolkit_payload(items: Vec<ToolkitToolView>) -> Result<MyToolkitPayload, FnError> {
     let items = sanitize_toolkit_items(items);
     let tools: Vec<Tool> = items.iter().map(|item| item.tool.clone()).collect();
     let markdown_body = toolkit_markdown_for_items(&items);
     let export_tools: Vec<ToolkitExportTool> = items.iter().map(tool_to_toolkit_export).collect();
     let json_body = serde_json::to_string_pretty(&export_tools)
-        .map_err(|e| ServerFnError::new(format!("failed to serialize toolkit: {e}")))?;
+        .map_err(|e| FnError::new(format!("failed to serialize toolkit: {e}")))?;
 
     Ok(MyToolkitPayload {
         total: items.len() as i64,
@@ -1030,31 +819,31 @@ pub fn build_toolkit_payload(
 async fn fetch_user_toolkit(
     pool: &sqlx::PgPool,
     user_id: uuid::Uuid,
-) -> Result<MyToolkitPayload, ServerFnError> {
+) -> Result<MyToolkitPayload, FnError> {
     use sqlx::{FromRow, Row};
 
     let rows = sqlx::query(USER_TOOLKIT_SQL)
         .bind(user_id)
         .fetch_all(pool)
         .await
-        .map_err(|e| ServerFnError::new(format!("failed to load toolkit: {e}")))?;
+        .map_err(|e| FnError::new(format!("failed to load toolkit: {e}")))?;
 
     let mut items = Vec::new();
     for row in rows {
         let tool = Tool::from_row(&row)
-            .map_err(|e| ServerFnError::new(format!("failed to decode toolkit tool: {e}")))?;
+            .map_err(|e| FnError::new(format!("failed to decode toolkit tool: {e}")))?;
         let note = row
             .try_get::<Option<String>, _>("bookmark_note")
-            .map_err(|e| ServerFnError::new(format!("failed to decode toolkit note: {e}")))?;
+            .map_err(|e| FnError::new(format!("failed to decode toolkit note: {e}")))?;
         let tags = row
             .try_get::<Vec<String>, _>("bookmark_tags")
-            .map_err(|e| ServerFnError::new(format!("failed to decode toolkit tags: {e}")))?;
+            .map_err(|e| FnError::new(format!("failed to decode toolkit tags: {e}")))?;
         let saved_at = row
             .try_get::<chrono::DateTime<chrono::Utc>, _>("bookmark_created_at")
-            .map_err(|e| ServerFnError::new(format!("failed to decode toolkit saved_at: {e}")))?;
+            .map_err(|e| FnError::new(format!("failed to decode toolkit saved_at: {e}")))?;
         let updated_at = row
             .try_get::<chrono::DateTime<chrono::Utc>, _>("bookmark_updated_at")
-            .map_err(|e| ServerFnError::new(format!("failed to decode toolkit updated_at: {e}")))?;
+            .map_err(|e| FnError::new(format!("failed to decode toolkit updated_at: {e}")))?;
         items.push(ToolkitToolView {
             tool,
             note,
@@ -1067,16 +856,9 @@ async fn fetch_user_toolkit(
     build_toolkit_payload(items)
 }
 
-#[server(ListMyToolkit, "/api")]
-pub async fn list_my_toolkit() -> Result<MyToolkitPayload, ServerFnError> {
-    let (parts, pool, config) = request_context()?;
-    let user = require_user(&parts, &pool, &config.jwt_secret, &config.jwt_issuer()).await?;
-    fetch_user_toolkit(&pool, user.id).await
-}
-
-fn validate_toolkit_tags(tags: &[String]) -> Result<Vec<String>, ServerFnError> {
+fn validate_toolkit_tags(tags: &[String]) -> Result<Vec<String>, FnError> {
     if tags.len() > 8 {
-        return Err(ServerFnError::new("toolkit tags accept at most 8 values"));
+        return Err(FnError::new("toolkit tags accept at most 8 values"));
     }
     let mut seen = std::collections::HashSet::new();
     let mut normalized = Vec::new();
@@ -1086,15 +868,13 @@ fn validate_toolkit_tags(tags: &[String]) -> Result<Vec<String>, ServerFnError> 
             continue;
         }
         if tag.len() > 32 {
-            return Err(ServerFnError::new(
-                "toolkit tags must be at most 32 characters",
-            ));
+            return Err(FnError::new("toolkit tags must be at most 32 characters"));
         }
         if tag
             .bytes()
             .any(|byte| !(byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_'))
         {
-            return Err(ServerFnError::new(
+            return Err(FnError::new(
                 "toolkit tags may contain letters, numbers, hyphens, and underscores",
             ));
         }
@@ -1105,104 +885,13 @@ fn validate_toolkit_tags(tags: &[String]) -> Result<Vec<String>, ServerFnError> 
     Ok(normalized)
 }
 
-fn validate_toolkit_note(note: Option<String>) -> Result<Option<String>, ServerFnError> {
+fn validate_toolkit_note(note: Option<String>) -> Result<Option<String>, FnError> {
     let note = note.map(|value| value.trim().to_string());
     let note = note.filter(|value| !value.is_empty());
     if note.as_ref().is_some_and(|value| value.len() > 500) {
-        return Err(ServerFnError::new(
-            "toolkit note must be at most 500 characters",
-        ));
+        return Err(FnError::new("toolkit note must be at most 500 characters"));
     }
     Ok(note)
-}
-
-#[server(UpdateToolkitItem, "/api")]
-pub async fn update_toolkit_item(input: UpdateToolkitItemPayload) -> Result<(), ServerFnError> {
-    let (parts, pool, config) = request_context()?;
-    let user = require_user(&parts, &pool, &config.jwt_secret, &config.jwt_issuer()).await?;
-    let note = validate_toolkit_note(input.note)?;
-    let tags = validate_toolkit_tags(&input.tags)?;
-    let tool_id = resolve_bookmark_tool_id(&pool, &input.slug).await?;
-
-    let result = sqlx::query(
-        r#"
-        UPDATE bookmarks
-        SET note = $3, tags = $4, updated_at = now()
-        WHERE tool_id = $1 AND user_id = $2
-        "#,
-    )
-    .bind(tool_id)
-    .bind(user.id)
-    .bind(note)
-    .bind(tags)
-    .execute(&pool)
-    .await
-    .map_err(|e| ServerFnError::new(format!("failed to update toolkit item: {e}")))?;
-
-    if result.rows_affected() == 0 {
-        return Err(ServerFnError::new(
-            "save the tool before editing toolkit metadata",
-        ));
-    }
-
-    Ok(())
-}
-
-/// Compare up to 3 public tools by slug, preserving the requested order.
-#[server(CompareTools, "/api")]
-pub async fn compare_tools(slugs: Vec<String>) -> Result<Vec<ToolComparisonView>, ServerFnError> {
-    let (parts, pool, config) = request_context()?;
-    let viewer = optional_session_result(
-        session_from_parts(&parts, &pool, &config.jwt_secret, &config.jwt_issuer()).await,
-    )?;
-    let normalized = crate::discovery::normalize_compare_slugs(&slugs.join(","));
-    if normalized.is_empty() {
-        return Ok(Vec::new());
-    }
-
-    // Batch-fetch all approved tools by slug in one query.
-    let tools = sqlx::query_as::<_, Tool>(APPROVED_TOOLS_BY_SLUGS_SQL)
-        .bind(&normalized)
-        .fetch_all(&pool)
-        .await
-        .map_err(|e| ServerFnError::new(format!("failed to load tools: {e}")))?;
-    let tools = sanitize_tools_for_public_response(tools);
-
-    // Batch-check bookmarks for all slugs at once (if viewer is signed in).
-    let bookmarked_slugs: std::collections::HashSet<String> = if let Some(user) = viewer.as_ref() {
-        sqlx::query_scalar::<_, String>(BOOKMARKED_SLUGS_SQL)
-            .bind(&normalized)
-            .bind(user.id)
-            .fetch_all(&pool)
-            .await
-            .map_err(|e| ServerFnError::new(format!("bookmark lookup failed: {e}")))?
-            .into_iter()
-            .collect()
-    } else {
-        std::collections::HashSet::new()
-    };
-
-    // Build a slug -> tool map for order-preserving assembly.
-    let tool_map: std::collections::HashMap<String, Tool> =
-        tools.into_iter().map(|t| (t.slug.clone(), t)).collect();
-
-    let mut rows = Vec::new();
-    for slug in &normalized {
-        let Some(tool) = tool_map.get(slug) else {
-            continue;
-        };
-        let official_links = list_public_official_links(&pool, tool.id).await?;
-        let trust = verify_tool_trust(tool, &official_links);
-        let viewer_bookmarked = bookmarked_slugs.contains(&tool.slug);
-        rows.push(ToolComparisonView {
-            tool: tool.clone(),
-            official_links,
-            trust_facts: trust.trust_facts,
-            viewer_bookmarked,
-        });
-    }
-
-    Ok(rows)
 }
 
 /// Batch comment counts for approved tools by slug.
@@ -1210,7 +899,7 @@ pub async fn compare_tools(slugs: Vec<String>) -> Result<Vec<ToolComparisonView>
 pub(crate) async fn fetch_tool_comment_counts(
     pool: &sqlx::PgPool,
     slugs: &[String],
-) -> Result<Vec<(String, i64)>, ServerFnError> {
+) -> Result<Vec<(String, i64)>, FnError> {
     if slugs.is_empty() {
         return Ok(Vec::new());
     }
@@ -1219,19 +908,9 @@ pub(crate) async fn fetch_tool_comment_counts(
         .bind(slugs)
         .fetch_all(pool)
         .await
-        .map_err(|e| ServerFnError::new(format!("comment counts failed: {e}")))?;
+        .map_err(|e| FnError::new(format!("comment counts failed: {e}")))?;
 
     Ok(rows)
-}
-
-/// Batch comment counts for approved tools by slug.
-#[server(GetToolCommentCounts, "/api")]
-pub async fn get_tool_comment_counts(
-    slugs: Vec<String>,
-) -> Result<Vec<(String, i64)>, ServerFnError> {
-    let pool = use_context::<sqlx::PgPool>()
-        .ok_or_else(|| ServerFnError::new("database pool not available"))?;
-    fetch_tool_comment_counts(&pool, &slugs).await
 }
 
 #[cfg(all(test, feature = "ssr"))]
@@ -1325,15 +1004,14 @@ mod fetch_install_guide_tests {
     }
 }
 
-/// Server-fn test helpers — same `Owner` + `provide_context` path as production RPC.
+/// Install-guide integration test helpers (direct fetch path, no Leptos RPC).
 #[cfg(all(feature = "ssr", any(test, feature = "test-helpers")))]
 pub mod server_fn_context_tests {
-    use super::{fetch_tool_by_slug, get_public_install_guide, get_tool_by_slug};
-    use crate::components::install_guide_panel::resolve_install_guide;
+    use super::{fetch_public_install_guide, fetch_tool_by_slug};
     use crate::public_install_guide::{
-        build_install_guide_for_platform, build_public_install_guide, InstallPlatform,
+        build_install_guide_for_platform, build_public_install_guide, resolve_install_guide,
+        InstallPlatform,
     };
-    use leptos::prelude::{provide_context, Owner};
     use sqlx::postgres::PgPoolOptions;
     use std::fmt::Display;
 
@@ -1374,24 +1052,13 @@ pub mod server_fn_context_tests {
             .map_err(|error| format!("failed to connect test database: {error}"))
     }
 
-    pub async fn with_pool_context<T>(
-        pool: sqlx::PgPool,
-        fut: impl std::future::Future<Output = T>,
-    ) -> T {
-        let owner = Owner::new();
-        owner.with(|| {
-            provide_context(pool);
-            tokio::task::block_in_place(|| tokio::runtime::Handle::current().block_on(fut))
-        })
-    }
-
-    pub async fn call_get_public_install_guide_server_fn(
-        pool: sqlx::PgPool,
-        slug: String,
-        platform: String,
-    ) -> Result<crate::public_install_guide::PublicInstallGuide, leptos::prelude::ServerFnError>
+    pub async fn call_fetch_public_install_guide(
+        pool: &sqlx::PgPool,
+        slug: &str,
+        platform: &str,
+    ) -> Result<crate::public_install_guide::PublicInstallGuide, crate::server::fn_error::FnError>
     {
-        with_pool_context(pool, get_public_install_guide(slug, platform)).await
+        fetch_public_install_guide(pool, slug, platform).await
     }
 
     pub async fn eligible_approved_slug(pool: &sqlx::PgPool) -> Option<String> {
@@ -1425,12 +1092,11 @@ pub mod server_fn_context_tests {
             return;
         };
 
-        let guide =
-            call_get_public_install_guide_server_fn(pool.clone(), slug.clone(), "claude".into())
-                .await
-                .unwrap_or_else(|error| {
-                    panic!("get_public_install_guide() failed for {slug}: {error}")
-                });
+        let guide = call_fetch_public_install_guide(&pool, &slug, "claude")
+            .await
+            .unwrap_or_else(|error| {
+                panic!("fetch_public_install_guide() failed for {slug}: {error}")
+            });
 
         assert_eq!(guide.slug, slug);
         assert_eq!(guide.platform, "claude");
@@ -1457,8 +1123,7 @@ pub mod server_fn_context_tests {
         };
 
         let missing = format!("missing-mcp-tool-{}", uuid::Uuid::new_v4());
-        let result =
-            call_get_public_install_guide_server_fn(pool, missing.clone(), "claude".into()).await;
+        let result = call_fetch_public_install_guide(&pool, &missing, "claude").await;
 
         assert!(result.is_err());
         assert!(
@@ -1490,14 +1155,14 @@ pub mod server_fn_context_tests {
             return;
         };
 
-        let tool = with_pool_context(pool.clone(), get_tool_by_slug(slug.clone()))
+        let tool = fetch_tool_by_slug(&pool, &slug)
             .await
-            .expect("get_tool_by_slug must succeed for approved tool");
+            .expect("fetch_tool_by_slug must succeed for approved tool")
+            .expect("approved tool must exist");
 
-        let remote =
-            call_get_public_install_guide_server_fn(pool.clone(), slug.clone(), "claude".into())
-                .await
-                .expect("server fn must succeed for approved tool");
+        let remote = call_fetch_public_install_guide(&pool, &slug, "claude")
+            .await
+            .expect("fetch must succeed for approved tool");
 
         let local = build_public_install_guide(&tool, &slug, InstallPlatform::Claude);
         let resolved = resolve_install_guide(Some(Ok(remote.clone())), local.clone());

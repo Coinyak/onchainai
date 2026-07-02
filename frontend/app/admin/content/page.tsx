@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useAuth } from "@/lib/auth";
+import { useState } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import {
   getAdminSiteSettings,
   updateSiteSettings,
@@ -10,12 +10,15 @@ import {
   type UpdateSiteSettingsPayload,
 } from "@/lib/api";
 
-function toPayload(settings: SiteSettings, content: {
-  hero_title: string;
-  hero_subtitle: string;
-  about_content: string;
-  footer_links: FooterLink[];
-}): UpdateSiteSettingsPayload {
+function toPayload(
+  settings: SiteSettings,
+  content: {
+    hero_title: string;
+    hero_subtitle: string;
+    about_content: string;
+    footer_links: FooterLink[];
+  },
+): UpdateSiteSettingsPayload {
   return {
     site_name: settings.site_name,
     slogan: settings.slogan,
@@ -56,127 +59,124 @@ function parseFooterLinks(raw: string): FooterLink[] {
   });
 }
 
-export default function AdminContentPage() {
-  const { isLoading, isAdmin } = useAuth();
-  const [settings, setSettings] = useState<SiteSettings | null>(null);
-  const [heroTitle, setHeroTitle] = useState("");
-  const [heroSubtitle, setHeroSubtitle] = useState("");
-  const [aboutContent, setAboutContent] = useState("");
-  const [footerLinksRaw, setFooterLinksRaw] = useState("[]");
-  const [error, setError] = useState<string | null>(null);
-  const [saved, setSaved] = useState(false);
-  const [saving, setSaving] = useState(false);
+function ContentForm({ initial }: { initial: SiteSettings }) {
+  const [heroTitle, setHeroTitle] = useState(initial.hero_title ?? "");
+  const [heroSubtitle, setHeroSubtitle] = useState(initial.hero_subtitle ?? "");
+  const [aboutContent, setAboutContent] = useState(initial.about_content ?? "");
+  const [footerLinksRaw, setFooterLinksRaw] = useState(
+    JSON.stringify(initial.footer_links ?? [], null, 2),
+  );
+  const [parseError, setParseError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!isAdmin) return;
-    void getAdminSiteSettings()
-      .then((data) => {
-        setSettings(data);
-        setHeroTitle(data.hero_title ?? "");
-        setHeroSubtitle(data.hero_subtitle ?? "");
-        setAboutContent(data.about_content ?? "");
-        setFooterLinksRaw(JSON.stringify(data.footer_links ?? [], null, 2));
-      })
-      .catch((e: Error) => setError(e.message));
-  }, [isAdmin]);
-
-  if (isLoading) {
-    return <p className="p-margin text-body-md text-secondary">Loading...</p>;
-  }
-
-  if (!isAdmin) {
-    return (
-      <p className="p-margin text-body-md text-error">Admin access required.</p>
-    );
-  }
-
-  const onSave = async (event: React.FormEvent) => {
-    event.preventDefault();
-    if (!settings) return;
-    setSaving(true);
-    setError(null);
-    setSaved(false);
-    try {
+  const saveMut = useMutation({
+    mutationFn: async () => {
       const footer_links = parseFooterLinks(footerLinksRaw);
-      const updated = await updateSiteSettings(
-        toPayload(settings, {
+      return updateSiteSettings(
+        toPayload(initial, {
           hero_title: heroTitle,
           hero_subtitle: heroSubtitle,
           about_content: aboutContent,
           footer_links,
         }),
       );
-      setSettings(updated);
-      setSaved(true);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to save content");
-    } finally {
-      setSaving(false);
-    }
-  };
+    },
+    onError: (error) => {
+      setParseError(error instanceof Error ? error.message : "Failed to save content");
+    },
+    onSuccess: (updated) => {
+      setParseError(null);
+      setFooterLinksRaw(JSON.stringify(updated.footer_links ?? [], null, 2));
+    },
+  });
 
   return (
-    <main className="mx-auto max-w-3xl p-margin">
-      <h1 className="text-h2 text-primary">Content Management</h1>
-      <p className="mt-sm text-body-md text-secondary">
+    <form
+      className="space-y-4"
+      onSubmit={(e) => {
+        e.preventDefault();
+        setParseError(null);
+        saveMut.mutate();
+      }}
+    >
+      <label className="block">
+        <span className="text-body-sm text-secondary">Hero title</span>
+        <input
+          className="mt-2 w-full min-h-touch px-4 rounded-md border border-border"
+          value={heroTitle}
+          onChange={(e) => setHeroTitle(e.target.value)}
+        />
+      </label>
+
+      <label className="block">
+        <span className="text-body-sm text-secondary">Hero subtitle</span>
+        <input
+          className="mt-2 w-full min-h-touch px-4 rounded-md border border-border"
+          value={heroSubtitle}
+          onChange={(e) => setHeroSubtitle(e.target.value)}
+        />
+      </label>
+
+      <label className="block">
+        <span className="text-body-sm text-secondary">About content</span>
+        <textarea
+          className="mt-2 w-full min-h-[160px] p-4 rounded-md border border-border"
+          value={aboutContent}
+          onChange={(e) => setAboutContent(e.target.value)}
+        />
+      </label>
+
+      <label className="block">
+        <span className="text-body-sm text-secondary">Footer links (JSON)</span>
+        <p className="mt-2 text-body-sm text-secondary">
+          Array of objects with label and url, e.g. [{"{"}&quot;label&quot;:&quot;Docs&quot;,&quot;url&quot;:&quot;https://...&quot;{"}"}]
+        </p>
+        <textarea
+          className="mt-2 w-full min-h-[128px] p-4 rounded-md border border-border font-mono text-code"
+          value={footerLinksRaw}
+          onChange={(e) => setFooterLinksRaw(e.target.value)}
+        />
+      </label>
+
+      {parseError ? <p className="text-body-sm text-error">{parseError}</p> : null}
+      {saveMut.isSuccess && !saveMut.isPending && (
+        <p className="text-success text-body-sm">Content saved.</p>
+      )}
+
+      <button
+        type="submit"
+        className="min-h-touch px-6 rounded-md bg-tertiary text-on-tertiary font-medium disabled:opacity-50"
+        disabled={saveMut.isPending}
+      >
+        {saveMut.isPending ? "Saving..." : "Save content"}
+      </button>
+    </form>
+  );
+}
+
+export default function AdminContentPage() {
+  const settingsQuery = useQuery({
+    queryKey: ["admin-settings"],
+    queryFn: getAdminSiteSettings,
+  });
+
+  return (
+    <div className="px-gutter md:px-6 py-8 max-w-[720px] mx-auto">
+      <h1 className="text-h2 mb-6">Content management</h1>
+      <p className="text-secondary text-body-md mb-6">
         Edit hero copy, about page content, and footer links.
       </p>
 
-      {!settings ? (
-        <p className="mt-md text-body-md text-secondary">Loading settings...</p>
-      ) : (
-        <form className="mt-lg space-y-md" onSubmit={onSave}>
-          <label className="block">
-            <span className="text-body-md font-medium">Hero title</span>
-            <input
-              className="mt-xs w-full rounded-md border border-border px-sm py-sm text-body-md"
-              value={heroTitle}
-              onChange={(e) => setHeroTitle(e.target.value)}
-            />
-          </label>
-
-          <label className="block">
-            <span className="text-body-md font-medium">Hero subtitle</span>
-            <input
-              className="mt-xs w-full rounded-md border border-border px-sm py-sm text-body-md"
-              value={heroSubtitle}
-              onChange={(e) => setHeroSubtitle(e.target.value)}
-            />
-          </label>
-
-          <label className="block">
-            <span className="text-body-md font-medium">About content</span>
-            <textarea
-              className="mt-xs min-h-40 w-full rounded-md border border-border px-sm py-sm text-body-md"
-              value={aboutContent}
-              onChange={(e) => setAboutContent(e.target.value)}
-            />
-          </label>
-
-          <label className="block">
-            <span className="text-body-md font-medium">Footer links (JSON)</span>
-            <p className="mt-xs text-body-sm text-secondary">
-              Array of objects with label and url, e.g. [{"{"}&quot;label&quot;:&quot;Docs&quot;,&quot;url&quot;:&quot;https://...&quot;{"}"}]
-            </p>
-            <textarea
-              className="mt-xs min-h-32 w-full rounded-md border border-border px-sm py-sm font-mono text-body-sm"
-              value={footerLinksRaw}
-              onChange={(e) => setFooterLinksRaw(e.target.value)}
-            />
-          </label>
-
-          {error ? <p className="text-body-md text-error">{error}</p> : null}
-          {saved ? <p className="text-body-md text-success">Content saved.</p> : null}
-
-          <button
-            type="submit"
-            disabled={saving}
-            className="rounded-md bg-primary px-md py-sm text-body-md text-neutral-bg disabled:opacity-50"
-          >
-            {saving ? "Saving..." : "Save content"}
-          </button>
-        </form>
+      {settingsQuery.isLoading && <p className="text-secondary">Loading settings...</p>}
+      {settingsQuery.isError && (
+        <p className="text-error text-body-md">
+          {settingsQuery.error instanceof Error
+            ? settingsQuery.error.message
+            : "Failed to load settings"}
+        </p>
       )}
-    </main>
+      {settingsQuery.data && (
+        <ContentForm key={settingsQuery.data.updated_at} initial={settingsQuery.data} />
+      )}
+    </div>
   );
 }

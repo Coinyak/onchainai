@@ -2,8 +2,6 @@
 
 pub mod session;
 
-pub mod siwx_client;
-
 #[cfg(feature = "ssr")]
 pub mod email;
 #[cfg(feature = "ssr")]

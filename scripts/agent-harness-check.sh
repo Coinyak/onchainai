@@ -128,6 +128,7 @@ fi
 ./scripts/ui-change-gate.sh --check-only >/dev/null
 ./scripts/verify-dev-watch.sh --check-only >/dev/null
 ./scripts/configure-branch-protection.sh --check-only >/dev/null
-cargo check --features hydrate --target wasm32-unknown-unknown >/dev/null
+cargo check --features ssr >/dev/null
+(cd frontend && npm run build) >/dev/null
 
 echo "AGENT HARNESS PASS (AGENTS.md lines: ${agents_lines})"

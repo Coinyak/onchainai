@@ -6,20 +6,8 @@ rust-version = "1.85"
 description = "Crypto tool directory — auto-discover, normalize, and expose fragmented crypto tools for humans and agents."
 license = "MIT"
 
-[package.metadata.leptos]
-output-name = "onchainai"
-site-root = "target/site"
-site-pkg-dir = "pkg"
-site-addr = "127.0.0.1:3000"
-reload-port = 3001
-bin-features = ["ssr"]
-bin-default-features = false
-lib-features = ["hydrate"]
-lib-default-features = false
-lib-profile-release = "wasm-release"
-
 [lib]
-crate-type = ["cdylib", "rlib"]
+crate-type = ["rlib"]
 
 [[bin]]
 name = "onchainai"
@@ -32,17 +20,10 @@ path = "tests/mcp_add_flow_install_guide.rs"
 required-features = ["ssr", "test-helpers"]
 
 [features]
-# Empty default: cargo-leptos builds the server with `ssr` (bin-features) and the
-# wasm client with `hydrate` (lib-features) explicitly. Keeping `ssr` out of the
-# default prevents it leaking into the wasm/hydrate build (which pulls tokio's net
-# backend -> mio, unsupported on wasm). Local cargo commands need `--features ssr`.
 default = []
-# Exposes test-only server-fn helpers (e.g. `server_fn_context_tests`) so
-# integration test binaries can call them. Enabled by `cargo test --features ssr`
-# via `dev-dependencies` / `[[test]]` required-features; never enabled in bin builds.
+# Exposes test-only helpers so integration test binaries can call them.
 test-helpers = []
 ssr = [
-    "dep:leptos_axum",
     "dep:axum",
     "dep:tower",
     "dep:tower-http",
@@ -63,48 +44,16 @@ ssr = [
     "dep:base64",
     "dep:tracing",
     "dep:tracing-subscriber",
-    "dep:gloo-net",
-    "dep:gloo-timers",
-    "leptos/ssr",
-    "leptos_meta/ssr",
-    "leptos_router/ssr",
-]
-hydrate = [
-    "leptos/hydrate",
-    "dep:console_error_panic_hook",
-    "dep:wasm-bindgen",
-    "dep:wasm-bindgen-futures",
-    "dep:js-sys",
-    "dep:gloo-net",
-    "dep:gloo-timers",
-    "dep:web-sys",
-    # Shared config helpers (from_env) are compiled into the WASM bundle.
-    "dep:dotenvy",
 ]
 
 [profile.dev]
-# Disk control: full DWARF in debug builds is the main `target/debug` bloat
-# source. Keep line-number backtraces, drop the rest.
 debug = "line-tables-only"
 
 [profile.dev.package."*"]
-# Dependencies rarely need source-level debugging — strip their debug info
-# entirely (the bulk of the debug-artifact size).
 debug = false
 
-[profile.wasm-release]
-inherits = "release"
-opt-level = "z"
-lto = true
-codegen-units = 1
-panic = "abort"
-
 [dependencies]
-leptos = { version = "0.8", default-features = false }
 futures = { version = "0.3", default-features = false, features = ["async-await"] }
-leptos_meta = { version = "0.8", default-features = false }
-leptos_router = { version = "0.8", default-features = false }
-leptos_axum = { version = "0.8", optional = true }
 axum = { version = "0.8", features = ["multipart"], optional = true }
 tower = { version = "0.5", optional = true }
 tower-http = { version = "0.6", features = ["fs", "cors", "trace", "set-header", "limit", "compression-gzip"], optional = true }
@@ -119,7 +68,7 @@ tokio-cron-scheduler = { version = "0.14", optional = true }
 async-trait = "0.1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-uuid = { version = "1", features = ["v4", "serde", "js"] }
+uuid = { version = "1", features = ["v4", "serde"] }
 chrono = { version = "0.4", features = ["serde"] }
 slug = "0.1"
 anyhow = "1"
@@ -135,13 +84,6 @@ solana-sdk = { version = "2", optional = true }
 validator = { version = "0.18", features = ["derive"] }
 governor = { version = "0.6", features = ["dashmap"], optional = true }
 tower_governor = { version = "0.8.0", features = ["tracing"], optional = true }
-wasm-bindgen = { version = "0.2", optional = true }
-console_error_panic_hook = { version = "0.1", optional = true }
-gloo-net = { version = "0.6", optional = true }
-gloo-timers = { version = "0.3", features = ["futures"], optional = true }
-js-sys = { version = "0.3", optional = true }
-wasm-bindgen-futures = { version = "0.4", optional = true }
-web-sys = { version = "0.3", features = ["RequestCredentials", "Window", "Navigator", "Clipboard", "Storage", "Location", "File", "FileList", "FileReader", "HtmlInputElement", "Event", "Document", "HtmlDocument", "MediaQueryList"], optional = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }

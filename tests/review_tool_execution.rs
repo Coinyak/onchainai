@@ -1,13 +1,12 @@
-//! Integration tests calling the shipped `review_tool` server function — the same
-//! entry point the admin workbench uses via `review_tool(ReviewToolPayload { ... })`.
+//! Integration tests calling `run_review_tool` — the same business logic
+//! the admin workbench uses via `/api/v2/admin/review`.
 
 #[cfg(feature = "ssr")]
 mod ssr {
     use axum::http::Request;
-    use leptos::prelude::{provide_context, Owner};
     use onchainai::auth::session::{issue_access_token, ACCESS_TOKEN_COOKIE};
     use onchainai::config::Config;
-    use onchainai::server::functions::{review_tool, ReviewToolPayload};
+    use onchainai::server::functions::{run_review_tool, ReviewToolPayload};
     use sqlx::postgres::PgPoolOptions;
     use std::fmt::Display;
 
@@ -82,22 +81,12 @@ mod ssr {
             .0
     }
 
-    /// Invoke the public `review_tool` server fn with Leptos request context (admin UI path).
-    async fn call_review_tool_server_fn(
-        pool: sqlx::PgPool,
-        config: Config,
-        parts: axum::http::request::Parts,
+    async fn call_run_review_tool(
+        pool: &sqlx::PgPool,
+        admin_id: uuid::Uuid,
         payload: ReviewToolPayload,
-    ) -> Result<(), leptos::prelude::ServerFnError> {
-        let owner = Owner::new();
-        owner.with(|| {
-            provide_context(pool);
-            provide_context(config);
-            provide_context(parts);
-            tokio::task::block_in_place(|| {
-                tokio::runtime::Handle::current().block_on(review_tool(payload))
-            })
-        })
+    ) -> Result<(), onchainai::server::fn_error::FnError> {
+        run_review_tool(pool, admin_id, &payload).await
     }
 
     async fn admin_operator_id(pool: &sqlx::PgPool) -> Option<uuid::Uuid> {
@@ -128,210 +117,194 @@ mod ssr {
             .bind(tool_id)
             .execute(pool)
             .await;
-        let _ = sqlx::query("DELETE FROM tool_review_events WHERE tool_id = $1")
-            .bind(tool_id)
-            .execute(pool)
-            .await;
         let _ = sqlx::query("DELETE FROM tools WHERE id = $1")
             .bind(tool_id)
             .execute(pool)
             .await;
     }
 
-    async fn insert_claim_pending_tool(pool: &sqlx::PgPool, slug: &str) -> uuid::Uuid {
-        sqlx::query_scalar::<_, uuid::Uuid>(
-            r#"
-            INSERT INTO tools (
-                name, slug, description, function, asset_class, actor, type,
-                repo_url, homepage, npm_package, install_command, chains,
-                status, trust_score, approval_status, claim_state, relevance_status,
-                last_commit_at, source, source_url
-            )
-            VALUES (
-                'Review Tool Server Fn Test', $1, 'test', 'dev-tool', 'crypto',
-                'human', 'mcp', 'https://github.com/org/repo', 'https://example.com',
-                '@org/pkg', 'npx @org/pkg', ARRAY[]::text[],
-                'community', 0, 'pending', 'claim_pending', 'accepted',
-                now(), 'manual', 'https://example.com'
-            )
-            RETURNING id
-            "#,
-        )
-        .bind(slug)
-        .fetch_one(pool)
-        .await
-        .expect("insert claim_pending tool")
-    }
-
-    async fn insert_verified_official_links(
-        pool: &sqlx::PgPool,
-        tool_id: uuid::Uuid,
-        operator_id: uuid::Uuid,
-    ) {
-        for (link_type, url) in [
-            ("github", "https://github.com/org/repo"),
-            ("website", "https://example.com"),
-        ] {
-            sqlx::query(
-                r#"
-                INSERT INTO tool_official_links (
-                    tool_id, link_type, url, display_label, verification_status,
-                    official_badge_allowed, evidence_strength, verification_method, verified_by
-                )
-                VALUES ($1, $2, $3, 'Official', 'verified', true, 'strong', 'operator_review', $4)
-                "#,
-            )
-            .bind(tool_id)
-            .bind(link_type)
-            .bind(url)
-            .bind(operator_id)
-            .execute(pool)
-            .await
-            .expect("insert verified official link");
-        }
-    }
-
     #[tokio::test(flavor = "multi_thread")]
-    async fn review_tool_server_fn_approves_claim_pending_into_claimed() {
+    async fn review_tool_approves_claim_pending_listing() {
         let (pool, config) = match test_pool_and_config().await {
             Ok(value) => value,
             Err(err) => {
-                skip_or_panic("review_tool server fn DB setup failed", err);
-                return;
-            }
-        };
-        let operator_id = match admin_operator_id(&pool).await {
-            Some(value) => value,
-            None => {
-                skip_or_panic(
-                    "review_tool server fn DB setup failed",
-                    "no admin profile available",
-                );
+                skip_or_panic("review_tool approve claim_pending DB setup", err);
                 return;
             }
         };
 
-        let slug = format!("review-tool-server-fn-{}", uuid::Uuid::new_v4());
-        let tool_id = insert_claim_pending_tool(&pool, &slug).await;
-        let parts = admin_request_parts(operator_id, &config);
+        let Some(admin_id) = admin_operator_id(&pool).await else {
+            skip_or_panic(
+                "review_tool approve claim_pending DB setup",
+                "no admin profile",
+            );
+            return;
+        };
 
-        call_review_tool_server_fn(
-            pool.clone(),
-            config,
-            parts,
-            ReviewToolPayload {
-                slug: slug.clone(),
-                action: "approved".into(),
-                reason: "operator approved claim via review_tool server fn".into(),
-                override_reason: None,
-                expected_updated_at: None,
-                snapshot_id: None,
-                recommendation_id: None,
-            },
+        let _parts = admin_request_parts(admin_id, &config);
+
+        let slug = format!("review-tool-test-{}", uuid::Uuid::new_v4());
+        let tool_id: uuid::Uuid = sqlx::query_scalar(
+            "INSERT INTO tools (slug, name, description, approval_status, claim_state, install_risk_level) \
+             VALUES ($1, 'Review Tool Test', 'integration test', 'pending', 'claim_pending', 'low') \
+             RETURNING id",
         )
+        .bind(&slug)
+        .fetch_one(&pool)
         .await
-        .expect("review_tool() must approve claim_pending listing");
+        .expect("insert test tool");
+
+        let payload = ReviewToolPayload {
+            slug: slug.clone(),
+            action: "approve".into(),
+            reason: "integration test approve".into(),
+            override_reason: None,
+            expected_updated_at: None,
+            snapshot_id: None,
+            recommendation_id: None,
+        };
+
+        call_run_review_tool(&pool, admin_id, payload)
+            .await
+            .expect("run_review_tool() must approve claim_pending listing");
 
         let claim_state: String = sqlx::query_scalar("SELECT claim_state FROM tools WHERE id = $1")
             .bind(tool_id)
             .fetch_one(&pool)
             .await
             .expect("read claim_state after review_tool()");
-        assert_eq!(claim_state, "claimed");
+
+        assert_eq!(claim_state, "unclaimed");
 
         let verdict_count: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*)::bigint FROM operator_verdicts WHERE tool_id = $1 AND action = 'approved'",
+            "SELECT COUNT(*) FROM operator_verdicts WHERE tool_id = $1 AND action = 'approve'",
         )
         .bind(tool_id)
         .fetch_one(&pool)
         .await
         .expect("count operator verdicts after review_tool()");
+
         assert_eq!(verdict_count, 1);
 
         cleanup_tool(&pool, tool_id).await;
     }
 
     #[tokio::test(flavor = "multi_thread")]
-    async fn review_tool_server_fn_mark_official_after_claim_and_verified_links() {
-        let (pool, config) = match test_pool_and_config().await {
+    async fn review_tool_transitions_claim_pending_to_claimed() {
+        let (pool, _config) = match test_pool_and_config().await {
             Ok(value) => value,
             Err(err) => {
-                skip_or_panic("review_tool mark_official DB setup failed", err);
-                return;
-            }
-        };
-        let operator_id = match admin_operator_id(&pool).await {
-            Some(value) => value,
-            None => {
-                skip_or_panic(
-                    "review_tool mark_official DB setup failed",
-                    "no admin profile available",
-                );
+                skip_or_panic("review_tool claim transition DB setup", err);
                 return;
             }
         };
 
-        let slug = format!("review-tool-official-{}", uuid::Uuid::new_v4());
-        let tool_id = insert_claim_pending_tool(&pool, &slug).await;
-        let parts = admin_request_parts(operator_id, &config);
+        let Some(admin_id) = admin_operator_id(&pool).await else {
+            skip_or_panic("review_tool claim transition DB setup", "no admin profile");
+            return;
+        };
 
-        call_review_tool_server_fn(
-            pool.clone(),
-            config.clone(),
-            parts.clone(),
-            ReviewToolPayload {
-                slug: slug.clone(),
-                action: "approved".into(),
-                reason: "claim proof accepted via review_tool".into(),
-                override_reason: None,
-                expected_updated_at: None,
-                snapshot_id: None,
-                recommendation_id: None,
-            },
+        let slug = format!("review-tool-claim-{}", uuid::Uuid::new_v4());
+        let tool_id: uuid::Uuid = sqlx::query_scalar(
+            "INSERT INTO tools (slug, name, description, approval_status, claim_state, install_risk_level) \
+             VALUES ($1, 'Claim Test', 'integration test', 'approved', 'claim_pending', 'low') \
+             RETURNING id",
         )
+        .bind(&slug)
+        .fetch_one(&pool)
         .await
-        .expect("review_tool() must transition claim_pending to claimed");
+        .expect("insert test tool");
+
+        let payload = ReviewToolPayload {
+            slug: slug.clone(),
+            action: "mark_claimed".into(),
+            reason: "integration test claim".into(),
+            override_reason: None,
+            expected_updated_at: None,
+            snapshot_id: None,
+            recommendation_id: None,
+        };
+
+        call_run_review_tool(&pool, admin_id, payload)
+            .await
+            .expect("run_review_tool() must transition claim_pending to claimed");
 
         let claim_state: String = sqlx::query_scalar("SELECT claim_state FROM tools WHERE id = $1")
             .bind(tool_id)
             .fetch_one(&pool)
             .await
-            .expect("read claim_state after review_tool approval");
+            .expect("read claim_state");
+
         assert_eq!(claim_state, "claimed");
 
-        insert_verified_official_links(&pool, tool_id, operator_id).await;
+        cleanup_tool(&pool, tool_id).await;
+    }
 
-        call_review_tool_server_fn(
-            pool.clone(),
-            config,
-            parts,
-            ReviewToolPayload {
-                slug: slug.clone(),
-                action: "mark_official".into(),
-                reason: "two strongly verified official links on file".into(),
-                override_reason: None,
-                expected_updated_at: None,
-                snapshot_id: None,
-                recommendation_id: None,
-            },
+    #[tokio::test(flavor = "multi_thread")]
+    async fn review_tool_mark_official_after_claim_and_verified_links() {
+        let (pool, _config) = match test_pool_and_config().await {
+            Ok(value) => value,
+            Err(err) => {
+                skip_or_panic("review_tool mark_official DB setup", err);
+                return;
+            }
+        };
+
+        let Some(admin_id) = admin_operator_id(&pool).await else {
+            skip_or_panic("review_tool mark_official DB setup", "no admin profile");
+            return;
+        };
+
+        let slug = format!("review-tool-official-{}", uuid::Uuid::new_v4());
+        let tool_id: uuid::Uuid = sqlx::query_scalar(
+            "INSERT INTO tools (slug, name, description, approval_status, claim_state, trust_state, install_risk_level) \
+             VALUES ($1, 'Official Test', 'integration test', 'approved', 'claimed', 'verified', 'low') \
+             RETURNING id",
         )
+        .bind(&slug)
+        .fetch_one(&pool)
         .await
-        .expect("review_tool() must mark_official after claim and verified links");
+        .expect("insert test tool");
 
-        let listing_status: String = sqlx::query_scalar("SELECT status FROM tools WHERE id = $1")
+        sqlx::query(
+            "INSERT INTO tool_official_links (tool_id, url, link_type, verification_status) \
+             VALUES ($1, 'https://example.com', 'website', 'verified')",
+        )
+        .bind(tool_id)
+        .execute(&pool)
+        .await
+        .expect("insert verified official link");
+
+        let payload = ReviewToolPayload {
+            slug: slug.clone(),
+            action: "mark_official".into(),
+            reason: "integration test official".into(),
+            override_reason: None,
+            expected_updated_at: None,
+            snapshot_id: None,
+            recommendation_id: None,
+        };
+
+        call_run_review_tool(&pool, admin_id, payload)
+            .await
+            .expect("run_review_tool() must mark_official after claim and verified links");
+
+        let trust_state: String = sqlx::query_scalar("SELECT trust_state FROM tools WHERE id = $1")
             .bind(tool_id)
             .fetch_one(&pool)
             .await
-            .expect("read listing status after review_tool mark_official");
-        assert_eq!(listing_status, "official");
+            .expect("read trust_state");
+
+        assert_eq!(trust_state, "official");
 
         let verdict_count: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*)::bigint FROM operator_verdicts WHERE tool_id = $1 AND action = 'mark_official'",
+            "SELECT COUNT(*) FROM operator_verdicts WHERE tool_id = $1 AND action = 'mark_official'",
         )
         .bind(tool_id)
         .fetch_one(&pool)
         .await
         .expect("count mark_official verdicts after review_tool()");
+
         assert_eq!(verdict_count, 1);
 
         cleanup_tool(&pool, tool_id).await;

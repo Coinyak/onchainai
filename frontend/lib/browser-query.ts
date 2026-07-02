@@ -2,6 +2,8 @@ import type { ToolFilters } from "@/lib/api";
 
 export type BrowserBase = "home" | "tools" | { category: string };
 
+export const ADD_MCP_INTENT = "add-mcp";
+
 export interface BrowserQueryParams {
   function?: string;
   asset_class?: string;
@@ -14,10 +16,12 @@ export interface BrowserQueryParams {
   sort: string;
   q?: string;
   selected?: string;
+  intent?: string;
+  compare_tools?: string;
   page: number;
 }
 
-const SCALAR_KEYS = new Set(["q", "sort", "selected"]);
+const SCALAR_KEYS = new Set(["q", "sort", "selected", "intent", "compare_tools"]);
 export const TOOL_PAGE_SIZE = 50;
 export const MAX_VISIBLE_TOOLS = 500;
 export const MAX_BROWSER_PAGE = MAX_VISIBLE_TOOLS / TOOL_PAGE_SIZE;
@@ -159,6 +163,8 @@ export function buildQueryBase(base: BrowserBase, params: BrowserQueryParams): s
   if (params.sort && params.sort !== "hot") map.set("sort", [params.sort]);
   if (params.q?.trim()) map.set("q", [params.q.trim()]);
   if (params.selected) map.set("selected", [params.selected]);
+  if (params.intent === ADD_MCP_INTENT) map.set("intent", [ADD_MCP_INTENT]);
+  if (params.compare_tools?.trim()) map.set("compare_tools", [params.compare_tools.trim()]);
   if (params.page > 1) map.set("page", [String(params.page)]);
 
   return buildFromMap(path, map);
@@ -169,6 +175,7 @@ export function paramsFromSearchParams(
   searchParams: URLSearchParams,
 ): BrowserQueryParams {
   const categoryFn = typeof base === "object" ? base.category : undefined;
+  const intent = searchParams.get("intent") ?? undefined;
   return {
     function: categoryFn ?? searchParams.get("function") ?? undefined,
     asset_class: searchParams.get("asset_class") ?? undefined,
@@ -181,48 +188,114 @@ export function paramsFromSearchParams(
     sort: searchParams.get("sort") ?? "hot",
     q: searchParams.get("q") ?? undefined,
     selected: searchParams.get("selected") ?? undefined,
+    intent: intent === ADD_MCP_INTENT ? ADD_MCP_INTENT : undefined,
+    compare_tools: searchParams.get("compare_tools") ?? undefined,
     page: parsePageParam(searchParams.get("page")),
   };
 }
 
 export function forFilterNavigation(params: BrowserQueryParams): BrowserQueryParams {
-  return { ...params, selected: undefined, page: 1 };
+  return { ...params, selected: undefined, intent: undefined, page: 1 };
 }
 
 export function forSort(params: BrowserQueryParams, sort: string): BrowserQueryParams {
-  return { ...params, sort, selected: undefined, page: 1 };
+  return { ...params, sort, selected: undefined, intent: undefined, page: 1 };
 }
 
 export function forStatusFilter(params: BrowserQueryParams, status?: string): BrowserQueryParams {
   const next =
     status && params.status === status ? undefined : status;
-  return { ...params, status: next, selected: undefined, page: 1 };
+  return { ...params, status: next, selected: undefined, intent: undefined, page: 1 };
 }
 
 export function forTypeFilter(params: BrowserQueryParams, toolType?: string): BrowserQueryParams {
   const next = toolType && params.type === toolType ? undefined : toolType;
-  return { ...params, type: next, selected: undefined, page: 1 };
+  return { ...params, type: next, selected: undefined, intent: undefined, page: 1 };
 }
 
 export function forNextPage(params: BrowserQueryParams): BrowserQueryParams {
-  return { ...params, selected: undefined, page: params.page + 1 };
+  return { ...params, selected: undefined, intent: undefined, page: params.page + 1 };
+}
+
+export function stripPreviewParams(basePath: string, queryBase: string): string {
+  const query = queryBase.startsWith(basePath)
+    ? queryBase.slice(basePath.length).replace(/^\?/, "")
+    : queryBase.replace(/^\?/, "");
+  const parts = query
+    .split("&")
+    .filter(
+      (p) =>
+        p &&
+        !p.startsWith("selected=") &&
+        !p.startsWith("intent="),
+    );
+  return parts.length ? `${basePath}?${parts.join("&")}` : basePath;
 }
 
 export function withSelected(base: BrowserBase, queryBase: string, slug: string): string {
   const root = browserBasePath(base);
-  if (queryBase === root || !queryBase) return `${root}?selected=${encodeURIComponent(slug)}`;
-  return queryBase.includes("?")
-    ? `${queryBase}&selected=${encodeURIComponent(slug)}`
-    : `${queryBase}?selected=${encodeURIComponent(slug)}`;
+  const cleaned = stripPreviewParams(root, queryBase);
+  const separator = cleaned.includes("?") ? "&" : "?";
+  return `${cleaned}${separator}selected=${encodeURIComponent(slug)}`;
 }
 
 export function withoutSelected(base: BrowserBase, queryBase: string): string {
-  const root = browserBasePath(base);
-  const query = queryBase.startsWith(root)
-    ? queryBase.slice(root.length).replace(/^\?/, "")
-    : queryBase.replace(/^\?/, "");
-  const parts = query.split("&").filter((p) => p && !p.startsWith("selected="));
-  return parts.length ? `${root}?${parts.join("&")}` : root;
+  return stripPreviewParams(browserBasePath(base), queryBase);
+}
+
+export function stripAddModeParams(queryBase: string): string {
+  const path = queryBase.split("?")[0] || queryBase;
+  return stripPreviewParams(path, queryBase);
+}
+
+export function addMcpHref(queryBase: string, slug: string): string {
+  const base = stripAddModeParams(queryBase);
+  const separator = base.includes("?") ? "&" : "?";
+  return `${base}${separator}selected=${encodeURIComponent(slug)}&intent=${ADD_MCP_INTENT}`;
+}
+
+export function addMcpHrefFromCompare(compareSlugs: string[], toolSlug: string): string {
+  const base =
+    compareSlugs.length === 0
+      ? "/tools"
+      : `/tools?compare_tools=${encodeURIComponent(compareSlugs.join(","))}`;
+  return addMcpHref(base, toolSlug);
+}
+
+export function compareHref(slugs: string[]): string {
+  if (slugs.length === 0) return "/compare";
+  return `/compare?tools=${encodeURIComponent(slugs.join(","))}`;
+}
+
+export function compareReturnHref(compareTools?: string): string | undefined {
+  if (!compareTools?.trim()) return undefined;
+  return `/compare?tools=${encodeURIComponent(compareTools.trim())}`;
+}
+
+export function buildFilterRevision(params: BrowserQueryParams): string {
+  return [
+    `f=${params.function ?? ""}`,
+    `ac=${params.asset_class ?? ""}`,
+    `a=${params.actor ?? ""}`,
+    `t=${params.type ?? ""}`,
+    `st=${params.status ?? ""}`,
+    `p=${params.pricing ?? ""}`,
+    `r=${params.install_risk ?? ""}`,
+    `c=${params.chain ?? ""}`,
+  ].join("|");
+}
+
+export function sidebarDefaultCollapsedForViewport(): boolean {
+  if (typeof window === "undefined") return false;
+  return window.innerWidth < 1024;
+}
+
+export function shouldCollapseMobileSidebarOnRouteChange(
+  prevRoute: string,
+  nextRoute: string,
+  mobileViewport: boolean,
+): boolean {
+  return mobileViewport && prevRoute.length > 0 && prevRoute !== nextRoute;
 }
 
 export function categoryHref(catId: string, queryBase: string): string {

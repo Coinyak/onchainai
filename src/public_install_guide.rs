@@ -171,6 +171,14 @@ pub fn build_install_guide_for_platform(
     Ok(build_public_install_guide(tool, slug, platform))
 }
 
+/// Prefer a successful remote guide; fall back to the local builder on load/error.
+pub fn resolve_install_guide(
+    remote: Option<Result<PublicInstallGuide, crate::server::fn_error::FnError>>,
+    local: PublicInstallGuide,
+) -> PublicInstallGuide {
+    remote.and_then(|result| result.ok()).unwrap_or(local)
+}
+
 /// Map guide copy labels to stable accessible button names.
 pub fn copy_label_aria(copy_label: &str) -> &'static str {
     match copy_label {

@@ -1,5 +1,6 @@
-//! Server-side modules: Axum handlers, Leptos server functions, MCP handler.
+//! Server-side modules: Axum handlers, shared business logic, MCP handler.
 
+pub mod fn_error;
 pub mod functions;
 
 #[cfg(feature = "ssr")]

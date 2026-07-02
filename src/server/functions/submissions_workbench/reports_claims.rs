@@ -167,72 +167,20 @@ fn normalized_claim_optional(value: Option<&str>) -> Option<&str> {
     value.map(str::trim).filter(|s| !s.is_empty())
 }
 
-/// Report a published listing (authenticated).
-#[server(ReportTool, "/api")]
-pub async fn report_tool(input: ReportToolInput) -> Result<ToolReport, ServerFnError> {
-    if let Err(msg) = validate_report_reason(input.reason.trim()) {
-        return Err(ServerFnError::new(msg.to_string()));
-    }
-    if let Err(msg) = validate_report_details(input.details.as_deref()) {
-        return Err(ServerFnError::new(msg.to_string()));
-    }
-
-    let slug = input.slug.trim();
-    if slug.is_empty() {
-        return Err(ServerFnError::new("tool slug is required"));
-    }
-
-    let (parts, pool, config) = request_context()?;
-    let user = require_user(&parts, &pool, &config.jwt_secret, &config.jwt_issuer()).await?;
-
-    let tool_id = sqlx::query_scalar::<_, Uuid>(APPROVED_TOOL_ID_BY_SLUG_SQL)
-        .bind(slug)
-        .fetch_optional(&pool)
-        .await
-        .map_err(|e| ServerFnError::new(format!("failed to resolve tool: {e}")))?
-        .ok_or_else(|| ServerFnError::new("tool not found"))?;
-
-    let details = input
-        .details
-        .as_deref()
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .map(str::to_string);
-
-    let row = sqlx::query_as::<_, ToolReport>(
-        r#"
-        INSERT INTO tool_reports (tool_id, reported_by, reason, details, status)
-        VALUES ($1, $2, $3, $4, 'open')
-        RETURNING *
-        "#,
-    )
-    .bind(tool_id)
-    .bind(user.id)
-    .bind(input.reason.trim())
-    .bind(details)
-    .fetch_one(&pool)
-    .await
-    .map_err(|e| ServerFnError::new(format!("failed to save report: {e}")))?;
-
-    Ok(row)
-}
-
 #[cfg(feature = "ssr")]
-async fn claim_tool_by_slug(pool: &sqlx::PgPool, slug: &str) -> Result<Tool, ServerFnError> {
+async fn claim_tool_by_slug(pool: &sqlx::PgPool, slug: &str) -> Result<Tool, FnError> {
     sqlx::query_as::<_, Tool>(APPROVED_TOOL_BY_SLUG_SQL)
         .bind(slug.trim())
         .fetch_optional(pool)
         .await
-        .map_err(|e| ServerFnError::new(format!("failed to resolve tool: {e}")))?
-        .ok_or_else(|| ServerFnError::new("tool not found"))
+        .map_err(|e| FnError::new(format!("failed to resolve tool: {e}")))?
+        .ok_or_else(|| FnError::new("tool not found"))
 }
 
-fn validate_claim_state_available(tool: &Tool) -> Result<(), ServerFnError> {
+fn validate_claim_state_available(tool: &Tool) -> Result<(), FnError> {
     match tool.claim_state.as_str() {
-        "claimed" => Err(ServerFnError::new("this listing is already claimed")),
-        "claim_pending" => Err(ServerFnError::new(
-            "a claim request is already pending review",
-        )),
+        "claimed" => Err(FnError::new("this listing is already claimed")),
+        "claim_pending" => Err(FnError::new("a claim request is already pending review")),
         _ => Ok(()),
     }
 }
@@ -244,7 +192,7 @@ async fn insert_claim_request_row(
     user_id: Uuid,
     proof_note: &str,
     contact_email: Option<String>,
-) -> Result<ToolClaimRequest, ServerFnError> {
+) -> Result<ToolClaimRequest, FnError> {
     sqlx::query_as::<_, ToolClaimRequest>(
         r#"
         INSERT INTO tool_claim_requests (tool_id, requested_by, verification_note, contact_email, status)
@@ -258,7 +206,7 @@ async fn insert_claim_request_row(
     .bind(contact_email)
     .fetch_one(&mut **tx)
     .await
-    .map_err(|e| ServerFnError::new(format!("failed to save claim request: {e}")))
+    .map_err(|e| FnError::new(format!("failed to save claim request: {e}")))
 }
 
 #[cfg(feature = "ssr")]
@@ -266,7 +214,7 @@ async fn insert_claim_official_links(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     tool_id: Uuid,
     input: &ClaimToolInput,
-) -> Result<(), ServerFnError> {
+) -> Result<(), FnError> {
     insert_claim_official_link(tx, tool_id, ClaimOfficialLinkCandidate::github(input)).await?;
     insert_claim_official_link(tx, tool_id, ClaimOfficialLinkCandidate::website(input)).await?;
     insert_claim_official_link(tx, tool_id, ClaimOfficialLinkCandidate::x(input)).await
@@ -322,7 +270,7 @@ async fn insert_claim_official_link(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     tool_id: Uuid,
     candidate: ClaimOfficialLinkCandidate<'_>,
-) -> Result<(), ServerFnError> {
+) -> Result<(), FnError> {
     let Some(url) = normalized_claim_optional(candidate.url) else {
         return Ok(());
     };
@@ -341,43 +289,11 @@ async fn insert_claim_official_link(
 async fn mark_claim_pending(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     tool_id: Uuid,
-) -> Result<(), ServerFnError> {
+) -> Result<(), FnError> {
     sqlx::query("UPDATE tools SET claim_state = 'claim_pending', updated_at = now() WHERE id = $1")
         .bind(tool_id)
         .execute(&mut **tx)
         .await
-        .map_err(|e| ServerFnError::new(format!("failed to update claim state: {e}")))?;
+        .map_err(|e| FnError::new(format!("failed to update claim state: {e}")))?;
     Ok(())
-}
-
-/// Request project claim for a listing (skeleton — sets claim_pending).
-#[server(RequestToolClaim, "/api")]
-pub async fn request_tool_claim(input: ClaimToolInput) -> Result<ToolClaimRequest, ServerFnError> {
-    if let Err(msg) = validate_claim_tool_input(&input) {
-        return Err(ServerFnError::new(msg.to_string()));
-    }
-
-    let (parts, pool, config) = request_context()?;
-    let user = require_user(&parts, &pool, &config.jwt_secret, &config.jwt_issuer()).await?;
-
-    let tool = claim_tool_by_slug(&pool, &input.slug).await?;
-    validate_claim_state_available(&tool)?;
-    let contact_email =
-        normalized_claim_optional(input.contact_email.as_deref()).map(str::to_string);
-    let proof_note =
-        build_claim_proof_note(&input).map_err(|msg| ServerFnError::new(msg.to_string()))?;
-
-    let mut tx = pool
-        .begin()
-        .await
-        .map_err(|e| ServerFnError::new(format!("transaction failed: {e}")))?;
-    let claim =
-        insert_claim_request_row(&mut tx, tool.id, user.id, &proof_note, contact_email).await?;
-    insert_claim_official_links(&mut tx, tool.id, &input).await?;
-    mark_claim_pending(&mut tx, tool.id).await?;
-    tx.commit()
-        .await
-        .map_err(|e| ServerFnError::new(format!("commit failed: {e}")))?;
-
-    Ok(claim)
 }

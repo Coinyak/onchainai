@@ -1,8 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { Menu } from "lucide-react";
 import type { CategoryWithCount } from "@/lib/api";
 import { SidebarBrand } from "@/components/layout/SidebarBrand";
 import { CategoryList } from "@/components/layout/CategoryList";
@@ -13,7 +12,12 @@ import {
   parseMulti,
   clearAxis,
   browserBasePath,
+  sidebarDefaultCollapsedForViewport,
+  shouldCollapseMobileSidebarOnRouteChange,
 } from "@/lib/browser-query";
+
+const SIDEBAR_COLLAPSED_KEY = "onchain-ai-sidebar-collapsed";
+const SIDEBAR_SECTIONS_KEY = "onchain-ai-sidebar-sections";
 
 const ASSET_CLASSES = [
   { id: "crypto", label: "Crypto" },
@@ -55,8 +59,17 @@ const INSTALL_RISK = [
   { id: "high", label: "High" },
 ];
 
+const RAIL_ICONS: { id: string; short: string; label: string }[] = [
+  { id: "function", short: "Fn", label: "Function" },
+  { id: "asset_class", short: "Ac", label: "Asset Class" },
+  { id: "actor", short: "Hu", label: "Actor" },
+  { id: "type", short: "Ty", label: "Type" },
+  { id: "status", short: "St", label: "Status" },
+  { id: "pricing", short: "Pr", label: "Pricing" },
+  { id: "install_risk", short: "Ri", label: "Install Risk" },
+];
+
 interface SidebarSectionProps {
-  id: string;
   title: string;
   open: boolean;
   collapsed: boolean;
@@ -85,10 +98,22 @@ function SidebarSection({ title, open, collapsed, onToggle, children }: SidebarS
   );
 }
 
+function readCollapsed(defaultValue: boolean): boolean {
+  const raw = localStorage.getItem(SIDEBAR_COLLAPSED_KEY);
+  if (raw === "1" || raw === "true") return true;
+  if (raw === "0" || raw === "false") return false;
+  return defaultValue;
+}
+
+function writeCollapsed(value: boolean) {
+  localStorage.setItem(SIDEBAR_COLLAPSED_KEY, value ? "1" : "0");
+}
+
 interface SidebarProps {
   base: BrowserBase;
   categories: CategoryWithCount[];
   queryBase: string;
+  filterRevision?: string;
   activeFunction?: string;
   activeAssetClass?: string;
   activeActor?: string;
@@ -103,6 +128,7 @@ export function Sidebar({
   base,
   categories,
   queryBase,
+  filterRevision = "",
   activeFunction,
   activeAssetClass,
   activeActor,
@@ -124,13 +150,14 @@ export function Sidebar({
     pricing: false,
     install_risk: false,
   });
+  const revisionRef = useRef("");
+  const backdropRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
-    const storedCollapsed = localStorage.getItem("sidebar-collapsed");
-    const storedSections = localStorage.getItem("sidebar-sections");
-    const isNarrow = window.innerWidth < 1024;
+    const isNarrow = sidebarDefaultCollapsedForViewport();
+    const storedSections = localStorage.getItem(SIDEBAR_SECTIONS_KEY);
     const id = window.setTimeout(() => {
-      setCollapsed(storedCollapsed !== null ? storedCollapsed === "true" : isNarrow);
+      setCollapsed(readCollapsed(isNarrow));
       if (storedSections) {
         try {
           setSections((s) => ({ ...s, ...JSON.parse(storedSections) }));
@@ -143,24 +170,75 @@ export function Sidebar({
     return () => window.clearTimeout(id);
   }, []);
 
+  useEffect(() => {
+    if (!loaded) return;
+    const mobile = sidebarDefaultCollapsedForViewport();
+    if (mobile && !collapsed) {
+      document.body.classList.add("sidebar-scroll-locked");
+    } else {
+      document.body.classList.remove("sidebar-scroll-locked");
+    }
+    return () => document.body.classList.remove("sidebar-scroll-locked");
+  }, [collapsed, loaded]);
+
+  useEffect(() => {
+    if (!loaded || !filterRevision) return;
+    const prev = revisionRef.current;
+    if (!prev) {
+      revisionRef.current = filterRevision;
+      return;
+    }
+    if (
+      shouldCollapseMobileSidebarOnRouteChange(
+        prev,
+        filterRevision,
+        sidebarDefaultCollapsedForViewport(),
+      )
+    ) {
+      persistCollapsed(true);
+    }
+    revisionRef.current = filterRevision;
+  }, [filterRevision, loaded]);
+
+  useEffect(() => {
+    if (!loaded || collapsed || !sidebarDefaultCollapsedForViewport()) return;
+    backdropRef.current?.focus();
+  }, [collapsed, loaded]);
+
   function persistCollapsed(next: boolean) {
     setCollapsed(next);
-    localStorage.setItem("sidebar-collapsed", String(next));
+    writeCollapsed(next);
   }
 
   function toggleSection(id: string) {
     setSections((prev) => {
       const next = { ...prev, [id]: !prev[id] };
-      localStorage.setItem("sidebar-sections", JSON.stringify(next));
+      localStorage.setItem(SIDEBAR_SECTIONS_KEY, JSON.stringify(next));
+      return next;
+    });
+  }
+
+  function openRailSection(sectionId: string) {
+    persistCollapsed(false);
+    setSections((prev) => {
+      const next = { ...prev, [sectionId]: true };
+      if (loaded) {
+        localStorage.setItem(SIDEBAR_SECTIONS_KEY, JSON.stringify(next));
+      }
       return next;
     });
   }
 
   function collapseMobile() {
-    if (window.innerWidth < 1024) persistCollapsed(true);
+    if (sidebarDefaultCollapsedForViewport()) persistCollapsed(true);
+  }
+
+  function handleEscape() {
+    if (!collapsed) persistCollapsed(true);
   }
 
   const clearHref = typeof base === "object" ? "/tools" : basePath;
+  const showBackdrop = loaded && !collapsed && sidebarDefaultCollapsedForViewport();
 
   function renderOptions(
     key: string,
@@ -183,30 +261,37 @@ export function Sidebar({
     );
   }
 
-  const [isNarrow, setIsNarrow] = useState(false);
-  useEffect(() => {
-    const check = () => setIsNarrow(window.innerWidth < 1024);
-    check();
-    window.addEventListener("resize", check);
-    return () => window.removeEventListener("resize", check);
-  }, []);
-  const showBackdrop = loaded && !collapsed && isNarrow;
-
   return (
     <div className="tools-sidebar-shell">
       {showBackdrop && (
         <button
+          ref={backdropRef}
           type="button"
           className="sidebar-mobile-backdrop"
           aria-label="Close filters"
+          tabIndex={-1}
           onClick={() => persistCollapsed(true)}
+          onKeyDown={(ev) => {
+            if (ev.key === "Escape") {
+              ev.stopPropagation();
+              handleEscape();
+            }
+          }}
         />
       )}
       <aside
         className={collapsed ? "tools-sidebar tools-sidebar-collapsed" : "tools-sidebar"}
         data-sidebar-ready=""
+        data-filter-revision={filterRevision}
         data-sidebar-storage-loaded={loaded ? "" : undefined}
+        data-testid="tools-sidebar"
         aria-busy={!loaded}
+        onKeyDown={(ev) => {
+          if (ev.key === "Escape" && !collapsed) {
+            ev.stopPropagation();
+            handleEscape();
+          }
+        }}
       >
         <SidebarBrand />
         <div className="sidebar-controls">
@@ -216,12 +301,29 @@ export function Sidebar({
             aria-label="Toggle filters sidebar"
             aria-expanded={!collapsed}
             onClick={() => {
+              const wasCollapsed = collapsed;
               const next = !collapsed;
               persistCollapsed(next);
-              if (!next) setSections((s) => ({ ...s, function: true }));
+              if (wasCollapsed) {
+                setSections((s) => ({ ...s, function: true }));
+              }
             }}
           >
-            <Menu className="sidebar-rail-toggle-icon" size={20} aria-hidden />
+            <svg
+              className="sidebar-rail-toggle-icon"
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              aria-hidden="true"
+            >
+              <line x1="4" y1="7" x2="20" y2="7" />
+              <line x1="4" y1="12" x2="20" y2="12" />
+              <line x1="4" y1="17" x2="20" y2="17" />
+            </svg>
           </button>
           <Link
             href={clearAxis(clearHref, queryBase, "function")}
@@ -232,9 +334,23 @@ export function Sidebar({
           </Link>
         </div>
 
-        <div className="sidebar-filters">
+        <div className="sidebar-rail-icons">
+          {RAIL_ICONS.map(({ id, short, label }) => (
+            <button
+              key={id}
+              type="button"
+              className="sidebar-rail-icon"
+              title={label}
+              aria-label={label}
+              onClick={() => openRailSection(id)}
+            >
+              {short}
+            </button>
+          ))}
+        </div>
+
+        <div className="sidebar-body">
           <SidebarSection
-            id="function"
             title="Function"
             open={sections.function}
             collapsed={collapsed}
@@ -250,7 +366,6 @@ export function Sidebar({
           </SidebarSection>
 
           <SidebarSection
-            id="asset_class"
             title="Asset Class"
             open={sections.asset_class}
             collapsed={collapsed}
@@ -260,7 +375,6 @@ export function Sidebar({
           </SidebarSection>
 
           <SidebarSection
-            id="actor"
             title="Actor"
             open={sections.actor}
             collapsed={collapsed}
@@ -270,7 +384,6 @@ export function Sidebar({
           </SidebarSection>
 
           <SidebarSection
-            id="type"
             title="Type"
             open={sections.type}
             collapsed={collapsed}
@@ -280,7 +393,6 @@ export function Sidebar({
           </SidebarSection>
 
           <SidebarSection
-            id="status"
             title="Status"
             open={sections.status}
             collapsed={collapsed}
@@ -290,7 +402,6 @@ export function Sidebar({
           </SidebarSection>
 
           <SidebarSection
-            id="pricing"
             title="Pricing"
             open={sections.pricing}
             collapsed={collapsed}
@@ -300,7 +411,6 @@ export function Sidebar({
           </SidebarSection>
 
           <SidebarSection
-            id="install_risk"
             title="Install Risk"
             open={sections.install_risk}
             collapsed={collapsed}

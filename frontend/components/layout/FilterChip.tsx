@@ -16,7 +16,6 @@ export function FilterChip({ href, label, active, count, onNavigate }: FilterChi
         className={active ? "sidebar-link active" : "sidebar-link"}
         onClick={onNavigate}
       >
-        {active && <span className="sidebar-active-dot" aria-hidden />}
         <span className="sidebar-title-text">{label}</span>
         {count !== undefined && <span className="sidebar-count">{count}</span>}
       </Link>

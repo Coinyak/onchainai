@@ -103,7 +103,7 @@ async fn list_my_submissions(
 async fn duplicate_submission_count(
     pool: &sqlx::PgPool,
     slug: &str,
-) -> Result<i64, leptos::server_fn::ServerFnError> {
+) -> Result<i64, crate::server::fn_error::FnError> {
     sqlx::query_scalar::<_, i64>(
         r#"
         SELECT COUNT(*)::bigint FROM (
@@ -118,7 +118,7 @@ async fn duplicate_submission_count(
     .bind(slug)
     .fetch_one(pool)
     .await
-    .map_err(|e| leptos::server_fn::ServerFnError::new(format!("duplicate check failed: {e}")))
+    .map_err(|e| crate::server::fn_error::FnError::new(format!("duplicate check failed: {e}")))
 }
 
 fn normalized_optional_string(value: Option<&str>) -> Option<String> {
