@@ -61,13 +61,13 @@ stale_reason=""
 stale_path=""
 
 collect_staged_ui_paths() {
-  git diff --cached --name-only --diff-filter=ACMR | grep -E "$ui_path_re" || true
+  git diff --cached --name-only --diff-filter=ACDMR | grep -E "$ui_path_re" || true
 }
 
 collect_worktree_ui_paths() {
   {
-    git diff --name-only --diff-filter=ACMR
-    git diff --cached --name-only --diff-filter=ACMR
+    git diff --name-only --diff-filter=ACDMR
+    git diff --cached --name-only --diff-filter=ACDMR
     git ls-files --others --exclude-standard
   } | grep -E "$ui_path_re" | sort -u || true
 }

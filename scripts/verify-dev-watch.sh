@@ -7,7 +7,7 @@
 #   ./scripts/verify-dev-watch.sh --check-only
 #   ./scripts/verify-dev-watch.sh --port 3000 --timeout 420
 #
-# Requires: .env with DB, cargo-leptos, and a cold/warm toolchain. Slow on first run.
+# Requires: frontend npm deps installed. Slow on first run.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -65,11 +65,6 @@ if [[ "$CHECK_ONLY" == "true" ]]; then
   exit 0
 fi
 
-if [[ ! -f .env ]]; then
-  echo "VERIFY DEV WATCH FAIL: missing .env" >&2
-  exit 1
-fi
-
 if [[ ! -f "$PROBE_FILE" ]]; then
   echo "VERIFY DEV WATCH FAIL: missing probe file ${PROBE_FILE}" >&2
   exit 1
@@ -98,27 +93,39 @@ cleanup() {
 }
 trap cleanup EXIT
 
+run_with_timeout() {
+  local secs="$1"
+  shift
+  if command -v timeout >/dev/null 2>&1; then
+    timeout "$secs" "$@"
+  elif command -v gtimeout >/dev/null 2>&1; then
+    gtimeout "$secs" "$@"
+  else
+    "$@"
+  fi
+}
+
 echo "Running frontend build verify (timeout ${TIMEOUT_SEC}s)"
-(cd frontend && npm run build) >/dev/null
+run_with_timeout "$TIMEOUT_SEC" bash -c 'cd frontend && npm run build' >/dev/null
 
 if [[ ! -f "$BUNDLE" ]]; then
   echo "VERIFY DEV WATCH FAIL: ${BUNDLE} missing after initial build" >&2
   exit 1
 fi
 
-bundle_before="$(stat -f %m "$BUNDLE" 2>/dev/null || stat -c %Y "$BUNDLE")"
+bundle_before="$(<"$BUNDLE")"
 
 PROBE_BACKUP="$(mktemp -t onchainai-dev-watch-probe.XXXXXX.bak)"
 cp "$PROBE_FILE" "$PROBE_BACKUP"
 printf '\n// verify-dev-watch-probe %s\n' "$(date +%s)" >>"$PROBE_FILE"
 
 echo "Rebuilding frontend after editing ${PROBE_FILE}"
-(cd frontend && npm run build) >/dev/null
+run_with_timeout "$TIMEOUT_SEC" bash -c 'cd frontend && npm run build' >/dev/null
 
-bundle_after="$(stat -f %m "$BUNDLE" 2>/dev/null || stat -c %Y "$BUNDLE")"
-if [[ "$bundle_after" -ge "$bundle_before" ]]; then
+bundle_after="$(<"$BUNDLE")"
+if [[ "$bundle_after" != "$bundle_before" ]]; then
   restore_probe_file
-  echo "VERIFY DEV WATCH PASS (frontend/.next/BUILD_ID ${bundle_before} -> ${bundle_after})"
+  echo "VERIFY DEV WATCH PASS (frontend/.next/BUILD_ID changed)"
   exit 0
 fi
 

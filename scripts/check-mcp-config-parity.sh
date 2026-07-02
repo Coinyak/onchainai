@@ -73,19 +73,16 @@ if [[ "$grok_keys" != "$CANONICAL_SERVERS" ]]; then
   fail ".grok/config.toml servers mismatch (expected: ${CANONICAL_SERVERS}, got: ${grok_keys})"
 fi
 
-mcp_vercel="$(json_vercel_url "$MCP_JSON")"
-cursor_vercel="$(json_vercel_url "$CURSOR_MCP_JSON")"
-grok_vercel="$(grok_vercel_url "$GROK_CONFIG")"
-
-for label_url in \
-  ".mcp.json:${mcp_vercel}" \
-  ".cursor/mcp.json:${cursor_vercel}" \
-  ".grok/config.toml:${grok_vercel}"; do
-  file="${label_url%%:*}"
-  url="${label_url#*:}"
+check_vercel_url() {
+  local file="$1"
+  local url="$2"
   if [[ "$url" != "$CANONICAL_VERCEL_URL" ]]; then
     fail "${file} vercel URL mismatch (expected: ${CANONICAL_VERCEL_URL}, got: ${url:-<empty>})"
   fi
-done
+}
+
+check_vercel_url ".mcp.json" "$(json_vercel_url "$MCP_JSON")"
+check_vercel_url ".cursor/mcp.json" "$(json_vercel_url "$CURSOR_MCP_JSON")"
+check_vercel_url ".grok/config.toml" "$(grok_vercel_url "$GROK_CONFIG")"
 
 echo "MCP CONFIG PARITY PASS (servers: ${CANONICAL_SERVERS}; vercel: ${CANONICAL_VERCEL_URL})"
