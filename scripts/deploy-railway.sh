@@ -125,10 +125,10 @@ sync_vars
 echo "Deploying from Dockerfile with production env..."
 railway up -y --detach -s "${SERVICE_NAME}"
 
-DEPLOY_WAIT_ATTEMPTS="${DEPLOY_WAIT_ATTEMPTS:-90}"
-DEPLOY_WAIT_INTERVAL="${DEPLOY_WAIT_INTERVAL:-10}"
-DEPLOY_SMOKE_ATTEMPTS="${DEPLOY_SMOKE_ATTEMPTS:-60}"
-DEPLOY_SMOKE_INTERVAL="${DEPLOY_SMOKE_INTERVAL:-10}"
+DEPLOY_WAIT_ATTEMPTS="${DEPLOY_WAIT_ATTEMPTS:-120}"
+DEPLOY_WAIT_INTERVAL="${DEPLOY_WAIT_INTERVAL:-5}"
+DEPLOY_SMOKE_ATTEMPTS="${DEPLOY_SMOKE_ATTEMPTS:-30}"
+DEPLOY_SMOKE_INTERVAL="${DEPLOY_SMOKE_INTERVAL:-5}"
 
 latest_deployment_status() {
   railway deployment list --json -s "${SERVICE_NAME}" --limit 1 2>/dev/null \
@@ -136,7 +136,7 @@ latest_deployment_status() {
     || true
 }
 
-echo "Waiting for Railway deployment to succeed (up to ${DEPLOY_WAIT_ATTEMPTS} checks)..."
+echo "Waiting for Railway deployment to succeed (up to ${DEPLOY_WAIT_ATTEMPTS} checks, ${DEPLOY_WAIT_INTERVAL}s interval)..."
 for attempt in $(seq 1 "${DEPLOY_WAIT_ATTEMPTS}"); do
   deploy_status="$(latest_deployment_status)"
   case "${deploy_status}" in
@@ -154,7 +154,10 @@ for attempt in $(seq 1 "${DEPLOY_WAIT_ATTEMPTS}"); do
         echo "Timed out waiting for Railway deployment (last status=${deploy_status:-unknown})." >&2
         exit 1
       fi
-      echo "Deployment status: ${deploy_status:-unknown} (${attempt}/${DEPLOY_WAIT_ATTEMPTS}); retrying in ${DEPLOY_WAIT_INTERVAL}s..."
+      # Only log every 4th check (~20s) to reduce noise.
+      if [[ $((attempt % 4)) -eq 0 ]]; then
+        echo "  ... still ${deploy_status:-building} (${attempt}/${DEPLOY_WAIT_ATTEMPTS})"
+      fi
       sleep "${DEPLOY_WAIT_INTERVAL}"
       ;;
   esac
@@ -163,15 +166,15 @@ done
 echo "Waiting for production deployment to become reachable..."
 PROD_URL="https://${SIWX_DOMAIN}"
 for attempt in $(seq 1 "${DEPLOY_SMOKE_ATTEMPTS}"); do
-  if ./scripts/smoke-test.sh "${PROD_URL}"; then
+  if ./scripts/smoke-test.sh "${PROD_URL}" 2>/dev/null; then
     echo "Production smoke passed."
     break
   fi
   if [[ "${attempt}" -eq "${DEPLOY_SMOKE_ATTEMPTS}" ]]; then
     echo "Production smoke failed after ${DEPLOY_SMOKE_ATTEMPTS} attempts." >&2
+    echo "The app may still be starting. Check: curl -sS -o /dev/null -w '%{http_code}' ${PROD_URL}" >&2
     exit 1
   fi
-  echo "Smoke attempt ${attempt}/${DEPLOY_SMOKE_ATTEMPTS} failed; retrying in ${DEPLOY_SMOKE_INTERVAL}s..."
   sleep "${DEPLOY_SMOKE_INTERVAL}"
 done
 
