@@ -45,6 +45,14 @@ case "${1:-}" in
     shift
     [[ "${1:-}" == "set" ]] || exit 2
     shift
+    for arg in "$@"; do
+      case "$arg" in
+        *=)
+          echo "Invalid variable format: ${arg}" >&2
+          exit 3
+          ;;
+      esac
+    done
     printf '%s\n' "$@" >> "${FAKE_RAILWAY_ARGS:?}"
     ;;
   *)

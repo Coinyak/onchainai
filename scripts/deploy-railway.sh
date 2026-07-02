@@ -80,7 +80,7 @@ fi
 
 sync_vars() {
   echo "Syncing environment variables (SIWX_DOMAIN=${SIWX_DOMAIN})..."
-  railway variable set -s "${SERVICE_NAME}" --skip-deploys \
+  vars=(
     "DATABASE_URL=${DATABASE_URL}" \
     "SUPABASE_URL=${SUPABASE_URL}" \
     "SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}" \
@@ -95,9 +95,15 @@ sync_vars() {
     "RUST_LOG=${RUST_LOG}" \
     "DATABASE_MAX_CONNECTIONS=${DATABASE_MAX_CONNECTIONS:-10}" \
     "SKIP_CRAWLER=${SKIP_CRAWLER:-1}" \
-    "RUST_MIN_STACK=${RUST_MIN_STACK:-8388608}" \
-    "ADMIN_GITHUB_LOGINS=${ADMIN_GITHUB_LOGINS:-}" \
-    "GITHUB_REDIRECT_URI=${GITHUB_REDIRECT_URI:-}"
+    "RUST_MIN_STACK=${RUST_MIN_STACK:-8388608}"
+  )
+  if [[ -n "${ADMIN_GITHUB_LOGINS:-}" ]]; then
+    vars+=("ADMIN_GITHUB_LOGINS=${ADMIN_GITHUB_LOGINS}")
+  fi
+  if [[ -n "${GITHUB_REDIRECT_URI:-}" ]]; then
+    vars+=("GITHUB_REDIRECT_URI=${GITHUB_REDIRECT_URI}")
+  fi
+  railway variable set -s "${SERVICE_NAME}" --skip-deploys "${vars[@]}"
 }
 
 if [[ "${VARS_ONLY}" == true ]]; then
