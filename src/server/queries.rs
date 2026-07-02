@@ -78,6 +78,19 @@ pub const SEARCH_APPROVED_TOOLS_SQL: &str = concat!(
     "#
 );
 
+pub const MCP_SEARCH_TOOLS_COUNT_SQL: &str = concat!(
+    r#"
+        SELECT COUNT(*)::bigint FROM tools
+        WHERE "#,
+    public_tool_where!(),
+    r#"
+          AND to_tsvector('english', coalesce(name, '') || ' ' || coalesce(description, ''))
+              @@ plainto_tsquery('english', $1)
+          AND ($2::text IS NULL OR function = $2)
+          AND ($3::text IS NULL OR $3 = ANY(chains))
+    "#
+);
+
 pub const MCP_SEARCH_TOOLS_BASE_SQL: &str = concat!(
     r#"
         SELECT * FROM tools
@@ -422,6 +435,7 @@ mod tests {
             RECENT_APPROVED_TOOLS_SQL,
             APPROVED_TOOL_BY_SLUG_SQL,
             SEARCH_APPROVED_TOOLS_SQL,
+            MCP_SEARCH_TOOLS_COUNT_SQL,
             COUNT_APPROVED_TOOLS_SQL,
             LIST_APPROVED_TOOLS_SQL,
             CHAIN_COUNTS_SQL,

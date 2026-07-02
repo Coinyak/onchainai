@@ -17,3 +17,5 @@ pub mod rate_limit;
 #[cfg(feature = "ssr")]
 pub mod review_persistence;
 pub mod secret_redaction;
+#[cfg(feature = "ssr")]
+pub mod tool_categories;

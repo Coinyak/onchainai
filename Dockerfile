@@ -1,13 +1,30 @@
 # OnchainAI — multi-stage Docker build (SSR server + WASM hydration bundle).
-# Cache-bust: 2026-06-26T00:00Z
+# cargo-chef caches dependency compilation across UI-only source changes.
+# Cache-bust: 2026-07-02T00:00Z
 
-FROM rust:1.90-slim AS builder
+FROM rust:1.90-slim AS chef
+WORKDIR /app
+ARG CARGO_CHEF_VERSION=0.1.68
+RUN cargo install cargo-chef --version "${CARGO_CHEF_VERSION}" --locked
+
+FROM chef AS planner
+COPY Cargo.toml Cargo.lock* ./
+COPY src/ ./src/
+COPY migrations/ ./migrations/
+COPY style/ ./style/
+COPY public/ ./public/
+RUN cargo chef prepare --recipe-path recipe.json
+
+FROM chef AS builder
 WORKDIR /app
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         build-essential pkg-config libssl-dev curl perl \
     && rm -rf /var/lib/apt/lists/*
+
+COPY --from=planner /app/recipe.json recipe.json
+RUN cargo chef cook --release --features ssr --recipe-path recipe.json
 
 COPY Cargo.toml Cargo.lock* ./
 COPY src/ ./src/
