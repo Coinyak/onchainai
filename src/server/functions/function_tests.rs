@@ -658,6 +658,10 @@ mod tests {
                 default_referral_bps: Some(250),
                 default_referral_payout_address: Some("0x0000000000000000000000000000000000000000"),
                 x402_builder_code: Some("onchainai"),
+                hero_title: Some("Hero"),
+                hero_subtitle: None,
+                about_content: None,
+                footer_links: &[],
             })
             .is_ok()
         );
@@ -675,6 +679,10 @@ mod tests {
                 default_referral_bps: None,
                 default_referral_payout_address: None,
                 x402_builder_code: None,
+                hero_title: None,
+                hero_subtitle: None,
+                about_content: None,
+                footer_links: &[],
             })
             .is_err()
         );
@@ -693,9 +701,54 @@ mod tests {
                 default_referral_bps: None,
                 default_referral_payout_address: None,
                 x402_builder_code: None,
+                hero_title: None,
+                hero_subtitle: None,
+                about_content: None,
+                footer_links: &[],
             })
             .is_err()
         );
+    }
+
+    #[test]
+    fn validate_site_settings_rejects_invalid_footer_link_url() {
+        let keywords = vec!["mcp-server".into()];
+        let footer_links = vec![crate::models::FooterLink {
+            label: "Docs".into(),
+            url: "ftp://bad.example".into(),
+        }];
+        assert!(
+            validate_update_site_settings_input(SiteSettingsValidationInput {
+                site_name: "OnchainAI",
+                slogan: "Slogan",
+                description: "Description here.",
+                mcp_endpoint: "npx mcp-remote",
+                search_keywords: &keywords,
+                default_referral_bps: None,
+                default_referral_payout_address: None,
+                x402_builder_code: None,
+                hero_title: None,
+                hero_subtitle: None,
+                about_content: None,
+                footer_links: &footer_links,
+            })
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn validate_crawler_schedule_accepts_hourly_default() {
+        assert!(validate_update_crawler_source(60).is_ok());
+    }
+
+    #[test]
+    fn validate_crawler_schedule_rejects_too_short() {
+        assert!(validate_update_crawler_source(1).is_err());
+    }
+
+    #[test]
+    fn format_schedule_minutes_renders_hours() {
+        assert_eq!(format_schedule_minutes(360), "Every 6h");
     }
 
     #[test]

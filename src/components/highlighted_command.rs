@@ -80,7 +80,7 @@ pub fn HighlightedCommand(
             {show_prefix.then(|| view! { <span class="install-prefix">"$ "</span> })}
             {tokens.into_iter().enumerate().map(|(idx, token)| {
                 view! {
-                    {(idx > 0).then(|| " ")}
+                    {(idx > 0).then_some(" ")}
                     <span class=token_class(token.kind)>{token.text}</span>
                 }
             }).collect_view()}

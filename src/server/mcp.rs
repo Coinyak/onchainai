@@ -8,6 +8,7 @@ use crate::server::mcp_search::{
 };
 use crate::server::queries::{APPROVED_TOOL_BY_SLUG_SQL, CATEGORIES_WITH_COUNTS_SQL};
 use crate::server::rate_limit::{check_mcp_ip_rate_limit, client_ip_from_parts};
+use crate::server::tool_categories::PUBLIC_TOOL_CATEGORY_IDS;
 use crate::AppState;
 use axum::{
     extract::State,
@@ -144,7 +145,7 @@ fn tool_definitions() -> Vec<Value> {
 fn search_tools_definition() -> Value {
     json!({
         "name": "search_tools",
-        "description": "Search OnchainAI for crypto/onchain MCP, CLI, SDK, API, x402, and AI-agent tools by capability. Examples: bridge USDC to Base, Uniswap MCP server, Solana wallet SDK.",
+        "description": "Search OnchainAI for crypto/onchain MCP, CLI, SDK, API, x402, and AI-agent tools by capability. Use when you need to find or compare tools for a task. Examples: bridge USDC to Base, Uniswap MCP server, Solana wallet SDK. For browsing by function, call list_categories first and pass the returned id as category.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -154,7 +155,8 @@ fn search_tools_definition() -> Value {
                 },
                 "category": {
                     "type": "string",
-                    "description": "Optional OnchainAI function filter, such as bridge, swap, wallet, payments, data, dev-tool, or ai-agent"
+                    "enum": PUBLIC_TOOL_CATEGORY_IDS,
+                    "description": "Optional OnchainAI function filter. Use list_categories ids (bridge, swap, wallet, payments, lending, staking, trading, nft, data, dev-tool, identity, governance, social, ai-agent)."
                 },
                 "chain": {
                     "type": "string",
@@ -173,7 +175,7 @@ fn search_tools_definition() -> Value {
                 },
                 "cursor": {
                     "type": "string",
-                    "description": "Opaque pagination cursor returned by the previous search_tools call"
+                    "description": "Pagination offset string from the previous next_cursor (e.g. \"10\", \"20\"). Omit or pass \"0\" for the first page."
                 }
             },
             "required": ["query"]
@@ -184,10 +186,15 @@ fn search_tools_definition() -> Value {
 fn get_tool_detail_definition() -> Value {
     json!({
         "name": "get_tool_detail",
-        "description": "Get detailed info for a tool by slug",
+        "description": "Get full detail (trust score, install risk, x402 status, chains, repo) for a tool by slug. Use the slug from search_tools results. Call before get_install_guide to verify trust, x402, and install risk.",
         "inputSchema": {
             "type": "object",
-            "properties": { "slug": { "type": "string" } },
+            "properties": {
+                "slug": {
+                    "type": "string",
+                    "description": "Tool slug from search_tools results"
+                }
+            },
             "required": ["slug"]
         }
     })
@@ -196,7 +203,7 @@ fn get_tool_detail_definition() -> Value {
 fn list_categories_definition() -> Value {
     json!({
         "name": "list_categories",
-        "description": "List all tool categories with counts",
+        "description": "List all tool categories with counts. Use for browsing what exists on OnchainAI. Pass the returned id as search_tools category to filter by function.",
         "inputSchema": { "type": "object", "properties": {} }
     })
 }
@@ -222,12 +229,19 @@ fn get_dashboard_snapshot_definition() -> Value {
 fn get_install_guide_definition() -> Value {
     json!({
         "name": "get_install_guide",
-        "description": "Platform-specific install guide",
+        "description": "Get platform-specific install guide. Pass slug from search_tools or get_tool_detail and platform (claude, cursor, generic). If blocked=true or risk_level=critical, do not install.",
         "inputSchema": {
             "type": "object",
             "properties": {
-                "slug": { "type": "string" },
-                "platform": { "type": "string", "enum": ["claude", "cursor", "generic"] }
+                "slug": {
+                    "type": "string",
+                    "description": "Tool slug from search_tools or get_tool_detail — do not guess slugs"
+                },
+                "platform": {
+                    "type": "string",
+                    "enum": ["claude", "cursor", "generic"],
+                    "description": "Target agent environment for install steps"
+                }
             },
             "required": ["slug", "platform"]
         }
@@ -338,7 +352,7 @@ fn optional_string(args: &Value, key: &str) -> Option<String> {
 }
 
 fn serialize_tool_payload(payload: &impl Serialize) -> Result<String, (i32, String)> {
-    serde_json::to_string_pretty(payload).map_err(|e| (-32603, format!("serialize error: {e}")))
+    serde_json::to_string(payload).map_err(|e| (-32603, format!("serialize error: {e}")))
 }
 
 fn tool_call_text_response(content: String) -> Value {
@@ -560,7 +574,42 @@ mod tests {
         assert!(MCP_SEARCH_TOOLS_BASE_SQL.contains("relevance_status = 'accepted'"));
         assert!(MCP_SEARCH_TOOLS_BASE_SQL.contains("install_risk_level <> 'critical'"));
         assert!(MCP_SEARCH_TOOLS_BASE_SQL.contains("quarantined_at IS NULL"));
+        assert!(crate::server::queries::MCP_SEARCH_TOOLS_COUNT_SQL.contains("COUNT(*)"));
+        assert!(
+            crate::server::queries::MCP_SEARCH_TOOLS_COUNT_SQL.contains("quarantined_at IS NULL")
+        );
         assert!(APPROVED_TOOL_BY_SLUG_SQL.contains("relevance_status = 'accepted'"));
         assert!(CATEGORIES_WITH_COUNTS_SQL.contains("quarantined_at IS NULL"));
+    }
+
+    #[test]
+    fn search_tools_schema_exposes_category_enum_and_cursor_offset() {
+        let schema = search_tools_definition();
+        let categories = schema["inputSchema"]["properties"]["category"]["enum"]
+            .as_array()
+            .unwrap();
+        assert_eq!(categories.len(), 14);
+        let cursor_desc = schema["inputSchema"]["properties"]["cursor"]["description"]
+            .as_str()
+            .unwrap();
+        assert!(cursor_desc.contains("next_cursor"));
+        assert!(!cursor_desc.to_ascii_lowercase().contains("opaque"));
+    }
+
+    #[test]
+    fn tool_descriptions_document_agent_call_flow() {
+        let detail_def = get_tool_detail_definition();
+        let detail = detail_def["description"].as_str().unwrap();
+        assert!(detail.contains("search_tools"));
+        assert!(detail.contains("get_install_guide"));
+
+        let categories_def = list_categories_definition();
+        let categories = categories_def["description"].as_str().unwrap();
+        assert!(categories.contains("search_tools"));
+
+        let install_def = get_install_guide_definition();
+        let install = install_def["description"].as_str().unwrap();
+        assert!(install.contains("blocked=true"));
+        assert!(install.contains("critical"));
     }
 }

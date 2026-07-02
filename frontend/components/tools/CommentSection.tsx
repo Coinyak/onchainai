@@ -1,0 +1,1 @@
+export { CommentsSection as CommentSection } from "@/components/comments/CommentsSection";

@@ -3,9 +3,10 @@
 use crate::models::tool::sanitize_tools_for_public_response;
 use crate::models::Tool;
 use crate::server::queries::{
-    MCP_SEARCH_TOOLS_RECENT_SQL, MCP_SEARCH_TOOLS_RELEVANCE_SQL, MCP_SEARCH_TOOLS_STARS_SQL,
-    MCP_SEARCH_TOOLS_TRUST_SQL,
+    MCP_SEARCH_TOOLS_COUNT_SQL, MCP_SEARCH_TOOLS_RECENT_SQL, MCP_SEARCH_TOOLS_RELEVANCE_SQL,
+    MCP_SEARCH_TOOLS_STARS_SQL, MCP_SEARCH_TOOLS_TRUST_SQL,
 };
+use crate::server::tool_categories::is_public_tool_category;
 use serde::Serialize;
 use serde_json::Value;
 use sqlx::PgPool;
@@ -56,10 +57,55 @@ impl McpSearchSort {
     }
 }
 
+/// Slim search hit for MCP agents — enough to compare candidates before detail.
+#[derive(Debug, Clone, Serialize)]
+pub(crate) struct McpToolSummary {
+    pub slug: String,
+    pub name: String,
+    pub description: Option<String>,
+    #[serde(rename = "type")]
+    pub tool_type: String,
+    pub function: String,
+    pub chains: Vec<String>,
+    pub trust_score: i32,
+    pub install_risk_level: String,
+    pub status: String,
+    pub stars: i32,
+    pub pricing: String,
+    pub claim_state: String,
+    pub payment_verified: bool,
+    pub x402_endpoint_verified: bool,
+    pub referral_enabled: bool,
+}
+
+impl From<Tool> for McpToolSummary {
+    fn from(tool: Tool) -> Self {
+        Self {
+            slug: tool.slug,
+            name: tool.name,
+            description: tool.description,
+            tool_type: tool.tool_type,
+            function: tool.function,
+            chains: tool.chains,
+            trust_score: tool.trust_score,
+            install_risk_level: tool.install_risk_level,
+            status: tool.status,
+            stars: tool.stars,
+            pricing: tool.pricing,
+            claim_state: tool.claim_state,
+            payment_verified: tool.payment_verified,
+            x402_endpoint_verified: tool.x402_endpoint_verified,
+            referral_enabled: tool.referral_enabled,
+        }
+    }
+}
+
 #[derive(Serialize)]
 pub(crate) struct McpSearchPage {
-    tools: Vec<Tool>,
+    tools: Vec<McpToolSummary>,
     next_cursor: Option<String>,
+    has_more: bool,
+    total_count: i64,
     limit: i64,
     sort: &'static str,
 }
@@ -107,23 +153,7 @@ fn validate_category(category: Option<&str>) -> Result<Option<String>, (i32, Str
     let Some(category) = category.map(str::trim).filter(|value| !value.is_empty()) else {
         return Ok(None);
     };
-    const CATEGORIES: &[&str] = &[
-        "bridge",
-        "swap",
-        "wallet",
-        "payments",
-        "lending",
-        "staking",
-        "trading",
-        "nft",
-        "data",
-        "dev-tool",
-        "identity",
-        "governance",
-        "social",
-        "ai-agent",
-    ];
-    if CATEGORIES.contains(&category) {
+    if is_public_tool_category(category) {
         Ok(Some(category.to_string()))
     } else {
         Err((-32602, format!("invalid category: {category}")))
@@ -164,17 +194,34 @@ pub(crate) async fn mcp_search_tools(
     let limit = limit.clamp(1, 25);
     let fetch_limit = limit + 1;
 
-    let mut tools = sqlx::query_as::<_, Tool>(sort.query_sql())
-        .bind(&query)
-        .bind(category.as_deref())
-        .bind(chain.as_deref())
-        .bind(fetch_limit)
-        .bind(cursor)
-        .fetch_all(pool)
-        .await
-        .map_err(|e| (-32603, format!("db error: {e}")))?;
-    let next_cursor = if tools.len() as i64 > limit {
+    let (mut tools, total_count) = tokio::try_join!(
+        async {
+            sqlx::query_as::<_, Tool>(sort.query_sql())
+                .bind(&query)
+                .bind(category.as_deref())
+                .bind(chain.as_deref())
+                .bind(fetch_limit)
+                .bind(cursor)
+                .fetch_all(pool)
+                .await
+                .map_err(|e| (-32603, format!("db error: {e}")))
+        },
+        async {
+            sqlx::query_scalar::<_, i64>(MCP_SEARCH_TOOLS_COUNT_SQL)
+                .bind(&query)
+                .bind(category.as_deref())
+                .bind(chain.as_deref())
+                .fetch_one(pool)
+                .await
+                .map_err(|e| (-32603, format!("db error: {e}")))
+        }
+    )?;
+
+    let fetched_more = tools.len() as i64 > limit;
+    if fetched_more {
         tools.truncate(limit as usize);
+    }
+    let next_cursor = if fetched_more {
         cursor
             .checked_add(limit)
             .filter(|next| *next <= MAX_CURSOR_OFFSET)
@@ -182,9 +229,18 @@ pub(crate) async fn mcp_search_tools(
     } else {
         None
     };
+    // Align with next_cursor: if offset cap blocks another page, do not claim has_more.
+    let has_more = next_cursor.is_some();
+    let summaries = sanitize_tools_for_public_response(tools)
+        .into_iter()
+        .map(McpToolSummary::from)
+        .collect();
+
     Ok(McpSearchPage {
-        tools: sanitize_tools_for_public_response(tools),
+        tools: summaries,
         next_cursor,
+        has_more,
+        total_count,
         limit,
         sort: sort.as_str(),
     })
@@ -237,5 +293,51 @@ mod tests {
             Some("base".to_string())
         );
         assert!(validate_chain(Some("base/mainnet")).is_err());
+    }
+
+    #[test]
+    fn mcp_tool_summary_uses_shared_category_whitelist() {
+        use crate::server::tool_categories::PUBLIC_TOOL_CATEGORY_IDS;
+        assert_eq!(PUBLIC_TOOL_CATEGORY_IDS.len(), 14);
+        for category in PUBLIC_TOOL_CATEGORY_IDS {
+            assert!(validate_category(Some(category)).is_ok());
+        }
+    }
+
+    #[test]
+    fn mcp_search_page_serializes_slim_fields() {
+        let page = McpSearchPage {
+            tools: vec![McpToolSummary {
+                slug: "uniswap".into(),
+                name: "Uniswap".into(),
+                description: Some("DEX".into()),
+                tool_type: "mcp".into(),
+                function: "swap".into(),
+                chains: vec!["ethereum".into()],
+                trust_score: 80,
+                install_risk_level: "low".into(),
+                status: "official".into(),
+                stars: 100,
+                pricing: "free".into(),
+                claim_state: "claimed".into(),
+                payment_verified: false,
+                x402_endpoint_verified: false,
+                referral_enabled: false,
+            }],
+            next_cursor: Some("10".into()),
+            has_more: true,
+            total_count: 42,
+            limit: 10,
+            sort: "relevance",
+        };
+        let json = serde_json::to_value(&page).unwrap();
+        let tool = &json["tools"][0];
+        assert!(tool.get("id").is_none());
+        assert!(tool.get("mcp_endpoint").is_none());
+        assert!(tool.get("install_command").is_none());
+        assert_eq!(tool["slug"], "uniswap");
+        assert_eq!(json["total_count"], 42);
+        assert_eq!(json["has_more"], true);
+        assert_eq!(json["next_cursor"], "10");
     }
 }

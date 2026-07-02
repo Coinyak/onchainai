@@ -1,0 +1,46 @@
+# OnchainAI — API-only Docker image (no cargo-leptos, no WASM, no style/).
+# Use after Step 17 (Leptos removal) or for a split deploy where Vercel serves the UI.
+#
+# Build:  docker build -f Dockerfile.api -t onchainai-api .
+# Railway: set railway.json "dockerfilePath" to "Dockerfile.api"
+#
+# Until Leptos SSR is removed, production Railway should keep using Dockerfile
+# (full Leptos SSR + WASM hydration bundle).
+
+FROM rust:1.90-slim AS chef
+WORKDIR /app
+ARG CARGO_CHEF_VERSION=0.1.68
+RUN cargo install cargo-chef --version "${CARGO_CHEF_VERSION}" --locked
+
+FROM chef AS planner
+COPY Cargo.toml Cargo.lock* ./
+COPY src/ ./src/
+COPY migrations/ ./migrations/
+RUN cargo chef prepare --recipe-path recipe.json
+
+FROM chef AS builder
+WORKDIR /app
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential pkg-config libssl-dev curl perl && rm -rf /var/lib/apt/lists/*
+COPY --from=planner /app/recipe.json recipe.json
+RUN cargo chef cook --release --features ssr --recipe-path recipe.json
+COPY Cargo.toml Cargo.lock* ./
+COPY src/ ./src/
+COPY migrations/ ./migrations/
+RUN cargo build --release --features ssr
+
+FROM debian:bookworm-slim
+WORKDIR /app
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libssl3 ca-certificates && rm -rf /var/lib/apt/lists/*
+COPY --from=builder /app/target/release/onchainai /app/onchainai
+COPY --from=builder /app/migrations /app/migrations
+COPY --from=builder /app/public /app/public
+
+ENV PORT=3000
+ENV RUST_LOG=info
+ENV RUST_MIN_STACK=8388608
+ENV SKIP_CRAWLER=1
+EXPOSE 3000
+
+CMD ["/app/onchainai"]

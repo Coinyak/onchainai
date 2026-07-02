@@ -3,6 +3,8 @@
 pub mod functions;
 
 #[cfg(feature = "ssr")]
+pub mod api_v2;
+#[cfg(feature = "ssr")]
 pub mod mcp;
 #[cfg(feature = "ssr")]
 pub mod mcp_search;
@@ -17,3 +19,5 @@ pub mod rate_limit;
 #[cfg(feature = "ssr")]
 pub mod review_persistence;
 pub mod secret_redaction;
+#[cfg(feature = "ssr")]
+pub mod tool_categories;

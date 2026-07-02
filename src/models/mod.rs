@@ -51,8 +51,17 @@ pub struct Source {
     pub crawl_status: String,
     pub items_found: i32,
     pub error_message: Option<String>,
+    pub schedule_minutes: i32,
+    pub enabled: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+}
+
+/// Footer navigation link stored in `site_settings.footer_links` JSONB.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+pub struct FooterLink {
+    pub label: String,
+    pub url: String,
 }
 
 /// A `siwx_sessions` row — server-side only, no client RLS policies.
@@ -89,6 +98,11 @@ pub struct SiteSettings {
     pub default_referral_bps: Option<i32>,
     pub default_referral_payout_address: Option<String>,
     pub x402_builder_code: Option<String>,
+    pub hero_title: Option<String>,
+    pub hero_subtitle: Option<String>,
+    pub about_content: Option<String>,
+    #[cfg_attr(feature = "ssr", sqlx(json))]
+    pub footer_links: Vec<FooterLink>,
     pub updated_at: DateTime<Utc>,
 }
 
@@ -117,6 +131,8 @@ mod tests {
             crawl_status: "success".into(),
             items_found: 42,
             error_message: None,
+            schedule_minutes: 60,
+            enabled: true,
             created_at: now,
             updated_at: now,
         };
@@ -171,6 +187,13 @@ mod tests {
                 "0x0000000000000000000000000000000000000000".into(),
             ),
             x402_builder_code: Some("onchainai".into()),
+            hero_title: Some("Find crypto tools".into()),
+            hero_subtitle: Some("MCP, CLI, SDK, and more".into()),
+            about_content: Some("About OnchainAI".into()),
+            footer_links: vec![FooterLink {
+                label: "GitHub".into(),
+                url: "https://github.com".into(),
+            }],
             updated_at: now,
         };
         let json = serde_json::to_string(&s).expect("serialize settings");
@@ -202,6 +225,10 @@ mod tests {
                 "0x0000000000000000000000000000000000000000".into(),
             ),
             x402_builder_code: Some("onchainai".into()),
+            hero_title: None,
+            hero_subtitle: None,
+            about_content: None,
+            footer_links: vec![],
             updated_at: now,
         };
         let public = sanitize_site_settings_for_public(settings);

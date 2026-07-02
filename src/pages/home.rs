@@ -31,6 +31,10 @@ async fn load_home_header() -> HomeHeaderData {
         default_referral_bps: None,
         default_referral_payout_address: None,
         x402_builder_code: None,
+        hero_title: None,
+        hero_subtitle: None,
+        about_content: None,
+        footer_links: vec![],
         updated_at: chrono::Utc::now(),
     });
     let featured = featured.unwrap_or_default();

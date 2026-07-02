@@ -154,7 +154,7 @@ const MAX_TOOL_FILTER_VALUES: usize = 20;
 const MAX_TOOL_FILTER_VALUE_LEN: usize = 64;
 const MAX_TOOL_LIST_QUERY_LEN: usize = 200;
 
-fn validate_search_tools_input(
+pub(crate) fn validate_search_tools_input(
     query: &str,
     function: &Option<String>,
     chain: &Option<String>,

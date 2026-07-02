@@ -105,7 +105,7 @@ futures = { version = "0.3", default-features = false, features = ["async-await"
 leptos_meta = { version = "0.8", default-features = false }
 leptos_router = { version = "0.8", default-features = false }
 leptos_axum = { version = "0.8", optional = true }
-axum = { version = "0.8", optional = true }
+axum = { version = "0.8", features = ["multipart"], optional = true }
 tower = { version = "0.5", optional = true }
 tower-http = { version = "0.6", features = ["fs", "cors", "trace", "set-header", "limit", "compression-gzip"], optional = true }
 sqlx = { version = "0.8", features = ["postgres", "uuid", "chrono", "json", "macros", "runtime-tokio", "migrate"], optional = true }

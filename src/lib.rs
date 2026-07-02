@@ -127,6 +127,26 @@ async fn cache_control_headers(
     response
 }
 
+/// Origins allowed for browser cross-origin API calls (Vercel, local Next.js, SIWX).
+#[cfg(feature = "ssr")]
+fn cors_allowed_origins(siwx_domain: &str) -> Vec<String> {
+    let mut allowed = vec![
+        SITE_ORIGIN.to_string(),
+        format!("https://{siwx_domain}"),
+        "http://localhost:3000".to_string(),
+        "http://localhost:3001".to_string(),
+    ];
+    if let Ok(extra) = std::env::var("FRONTEND_ORIGIN") {
+        for origin in extra.split(',') {
+            let trimmed = origin.trim();
+            if !trimmed.is_empty() && !allowed.iter().any(|a| a == trimmed) {
+                allowed.push(trimmed.to_string());
+            }
+        }
+    }
+    allowed
+}
+
 /// Build the Axum application router.
 #[cfg(feature = "ssr")]
 pub fn build_app(pool: sqlx::PgPool, config: Config) -> axum::Router {
@@ -159,15 +179,11 @@ pub fn build_app(pool: sqlx::PgPool, config: Config) -> axum::Router {
     let leptos_options_for_handler = leptos_options.clone();
     let state_for_context = state.clone();
     let state_for_fallback = state.clone();
+    let allowed_origins = cors_allowed_origins(&siwx_domain);
     let cors = CorsLayer::new()
         .allow_origin(AllowOrigin::predicate(move |origin, _request_head| {
-            let allowed = [
-                SITE_ORIGIN.to_string(),
-                format!("https://{siwx_domain}"),
-                "http://localhost:3000".to_string(),
-            ];
             if let Ok(origin_str) = origin.to_str() {
-                allowed.iter().any(|a| a == origin_str)
+                allowed_origins.iter().any(|a| a == origin_str)
             } else {
                 false
             }
@@ -407,10 +423,13 @@ pub fn build_app(pool: sqlx::PgPool, config: Config) -> axum::Router {
         app_routes.layer(general_rate_limit)
     };
 
+    let api_v2_routes = crate::server::api_v2::router(state.clone());
+
     Router::new()
         .merge(auth_routes)
         .merge(mcp_routes)
         .merge(static_routes)
+        .merge(api_v2_routes)
         .merge(app_routes)
         .layer(axum::middleware::from_fn(cache_control_headers))
         .layer(axum::middleware::from_fn(canonical_host_redirect))
