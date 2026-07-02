@@ -1,7 +1,6 @@
 //! Registration promo cards on the home page.
 
-use crate::components::copy_button::CopyButton;
-use crate::components::highlighted_command::HighlightedCommand;
+use crate::components::connect_mcp_card::ConnectOnchainAiMcpCard;
 use leptos::prelude::*;
 
 #[component]
@@ -20,16 +19,7 @@ pub fn PromoCards(mcp_endpoint: String) -> impl IntoView {
                     "Suggest →"
                 </a>
             </div>
-            <div class="promo-card border border-[#E5E5E5] rounded-lg p-6 bg-white min-w-0">
-                <h3 class="text-[16px] font-semibold mb-2">"Connect via MCP"</h3>
-                <p class="text-[14px] text-[#6B6B6B] mb-3 leading-relaxed">
-                    "Ask your AI: Find crypto tools on onchain-ai."
-                </p>
-                <div class="flex items-center gap-2 min-w-0">
-                    <HighlightedCommand text=mcp_endpoint.clone()/>
-                    <CopyButton text=mcp_endpoint/>
-                </div>
-            </div>
+            <ConnectOnchainAiMcpCard mcp_endpoint=mcp_endpoint/>
         </div>
     }
 }

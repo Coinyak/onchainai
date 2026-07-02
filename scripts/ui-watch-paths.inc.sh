@@ -8,6 +8,7 @@ ui_watch_paths=(
   src/auth/siwx_client.rs
   src/chains.rs
   src/client_storage.rs
+  src/components/add_mcp_action.rs
   src/components/admin_context.rs
   src/components/admin_review_decision_panel.rs
   src/components/admin_review_timeline.rs
@@ -18,12 +19,17 @@ ui_watch_paths=(
   src/components/chain_strip.rs
   src/components/claim_status_timeline.rs
   src/components/comments_section.rs
+  src/components/connect_mcp_card.rs
   src/components/copy_button.rs
   src/components/empty_state.rs
   src/components/error_state.rs
   src/components/featured_carousel.rs
   src/components/highlighted_command.rs
   src/components/icons.rs
+  src/components/install_guide_panel.rs
+  src/components/install_guide_remote_loader.rs
+  src/components/install_progress_indicator.rs
+  src/components/install_risk_gate.rs
   src/components/login_form.rs
   src/components/login_modal.rs
   src/components/official_links_list.rs
@@ -41,6 +47,7 @@ ui_watch_paths=(
   src/components/tool_trust_facts.rs
   src/components/tools_browser.rs
   src/components/top_nav.rs
+  src/components/trust_evidence_strip.rs
   src/config.rs
   src/discovery.rs
   src/filter_query.rs
@@ -64,10 +71,11 @@ ui_watch_paths=(
   src/pages/tool_detail.rs
   src/pages/toolkit.rs
   src/pages/tools_list.rs
+  src/public_install_guide.rs
   src/server/functions.rs
   src/server/secret_redaction.rs
   src/trust_verification.rs
   src/workbench.rs
 )
 
-ui_path_re='^(src/app\.rs|src/auth/session\.rs|src/auth/siwx_client\.rs|src/chains\.rs|src/client_storage\.rs|src/components/admin_context\.rs|src/components/admin_review_decision_panel\.rs|src/components/admin_review_timeline\.rs|src/components/admin_shell\.rs|src/components/bottom_sheet\.rs|src/components/category_grid\.rs|src/components/chain_logo\.rs|src/components/chain_strip\.rs|src/components/claim_status_timeline\.rs|src/components/comments_section\.rs|src/components/copy_button\.rs|src/components/empty_state\.rs|src/components/error_state\.rs|src/components/featured_carousel\.rs|src/components/highlighted_command\.rs|src/components/icons\.rs|src/components/login_form\.rs|src/components/login_modal\.rs|src/components/official_links_list\.rs|src/components/preview_panel\.rs|src/components/promo_cards\.rs|src/components/search_bar\.rs|src/components/sidebar\.rs|src/components/site_shell\.rs|src/components/skeleton\.rs|src/components/tool_card\.rs|src/components/tool_detail_content\.rs|src/components/tool_finder\.rs|src/components/tool_listing_actions\.rs|src/components/tool_logo\.rs|src/components/tool_trust_facts\.rs|src/components/tools_browser\.rs|src/components/top_nav\.rs|src/config\.rs|src/discovery\.rs|src/filter_query\.rs|src/install_safety\.rs|src/lib\.rs|src/models/category\.rs|src/models/comment\.rs|src/models/featured\.rs|src/models/review\.rs|src/models/submission\.rs|src/models/tool\.rs|src/models/user\.rs|src/pages/admin\.rs|src/pages/category\.rs|src/pages/compare\.rs|src/pages/dashboard\.rs|src/pages/home\.rs|src/pages/login\.rs|src/pages/onboarding\.rs|src/pages/submit\.rs|src/pages/tool_detail\.rs|src/pages/toolkit\.rs|src/pages/tools_list\.rs|src/server/functions\.rs|src/server/secret_redaction\.rs|src/trust_verification\.rs|src/workbench\.rs)$'
+ui_path_re='^(src/app\.rs|src/auth/session\.rs|src/auth/siwx_client\.rs|src/chains\.rs|src/client_storage\.rs|src/components/add_mcp_action\.rs|src/components/admin_context\.rs|src/components/admin_review_decision_panel\.rs|src/components/admin_review_timeline\.rs|src/components/admin_shell\.rs|src/components/bottom_sheet\.rs|src/components/category_grid\.rs|src/components/chain_logo\.rs|src/components/chain_strip\.rs|src/components/claim_status_timeline\.rs|src/components/comments_section\.rs|src/components/connect_mcp_card\.rs|src/components/copy_button\.rs|src/components/empty_state\.rs|src/components/error_state\.rs|src/components/featured_carousel\.rs|src/components/highlighted_command\.rs|src/components/icons\.rs|src/components/install_guide_panel\.rs|src/components/install_guide_remote_loader\.rs|src/components/install_progress_indicator\.rs|src/components/install_risk_gate\.rs|src/components/login_form\.rs|src/components/login_modal\.rs|src/components/official_links_list\.rs|src/components/preview_panel\.rs|src/components/promo_cards\.rs|src/components/search_bar\.rs|src/components/sidebar\.rs|src/components/site_shell\.rs|src/components/skeleton\.rs|src/components/tool_card\.rs|src/components/tool_detail_content\.rs|src/components/tool_finder\.rs|src/components/tool_listing_actions\.rs|src/components/tool_logo\.rs|src/components/tool_trust_facts\.rs|src/components/tools_browser\.rs|src/components/top_nav\.rs|src/components/trust_evidence_strip\.rs|src/config\.rs|src/discovery\.rs|src/filter_query\.rs|src/install_safety\.rs|src/lib\.rs|src/models/category\.rs|src/models/comment\.rs|src/models/featured\.rs|src/models/review\.rs|src/models/submission\.rs|src/models/tool\.rs|src/models/user\.rs|src/pages/admin\.rs|src/pages/category\.rs|src/pages/compare\.rs|src/pages/dashboard\.rs|src/pages/home\.rs|src/pages/login\.rs|src/pages/onboarding\.rs|src/pages/submit\.rs|src/pages/tool_detail\.rs|src/pages/toolkit\.rs|src/pages/tools_list\.rs|src/public_install_guide\.rs|src/server/functions\.rs|src/server/secret_redaction\.rs|src/trust_verification\.rs|src/workbench\.rs)$'

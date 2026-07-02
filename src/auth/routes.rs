@@ -277,15 +277,14 @@ pub(crate) fn github_logout_url() -> &'static str {
 fn append_set_cookie(headers: &mut HeaderMap, cookie: &str) -> Result<(), StatusCode> {
     headers.append(
         header::SET_COOKIE,
-        cookie.parse().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?,
+        cookie
+            .parse()
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?,
     );
     Ok(())
 }
 
-fn clear_session_cookies(
-    headers: &mut HeaderMap,
-    secure_cookie: bool,
-) -> Result<(), StatusCode> {
+fn clear_session_cookies(headers: &mut HeaderMap, secure_cookie: bool) -> Result<(), StatusCode> {
     append_set_cookie(
         headers,
         &clear_cookie(ACCESS_TOKEN_COOKIE, secure_cookie, "Lax"),

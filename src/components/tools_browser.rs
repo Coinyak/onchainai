@@ -7,8 +7,11 @@ use crate::components::{
     sidebar::Sidebar, skeleton::ToolListSkeleton, tool_card::ToolCard,
 };
 use crate::discovery::{empty_state_suggestions, EmptyRecoverySummary};
-use crate::filter_query::{build_tool_filters, describe_active_filters, ActiveFiltersSummary};
+use crate::filter_query::{
+    build_tool_filters, describe_active_filters, strip_preview_params, ActiveFiltersSummary,
+};
 use crate::models::tool::parse_page_value;
+use crate::public_install_guide::ADD_MCP_INTENT;
 
 use crate::server::functions::{
     get_tool_by_slug, load_browser_data, BrowserDataPayload, LoadBrowserDataRequest, ToolFilters,
@@ -76,6 +79,8 @@ pub struct BrowserQueryParams {
     pub sort: String,
     pub search_q: Option<String>,
     pub selected: Option<String>,
+    pub intent: Option<String>,
+    pub compare_tools: Option<String>,
     pub page: u32,
 }
 
@@ -83,6 +88,7 @@ impl BrowserQueryParams {
     pub fn for_filter_navigation(&self) -> Self {
         Self {
             selected: None,
+            intent: None,
             page: 1,
             ..self.clone()
         }
@@ -92,6 +98,7 @@ impl BrowserQueryParams {
         Self {
             sort: sort.to_string(),
             selected: None,
+            intent: None,
             page: 1,
             ..self.clone()
         }
@@ -107,6 +114,7 @@ impl BrowserQueryParams {
         Self {
             status: next_status,
             selected: None,
+            intent: None,
             page: 1,
             ..self.clone()
         }
@@ -122,6 +130,7 @@ impl BrowserQueryParams {
         Self {
             tool_type: next_type,
             selected: None,
+            intent: None,
             page: 1,
             ..self.clone()
         }
@@ -130,6 +139,7 @@ impl BrowserQueryParams {
     pub fn for_next_page(&self) -> Self {
         Self {
             selected: None,
+            intent: None,
             page: self.page.saturating_add(1),
             ..self.clone()
         }
@@ -153,6 +163,10 @@ pub fn build_query_base(base: &BrowserBase, params: &BrowserQueryParams) -> Stri
     append_sort_param(&mut parts, &params.sort);
     append_search_param(&mut parts, params.search_q.as_deref());
     append_optional_param(&mut parts, "selected", params.selected.as_deref());
+    if params.intent.as_deref() == Some(ADD_MCP_INTENT) {
+        append_optional_param(&mut parts, "intent", Some(ADD_MCP_INTENT));
+    }
+    append_optional_param(&mut parts, "compare_tools", params.compare_tools.as_deref());
     append_page_param(&mut parts, params.page);
     query_path(base, parts)
 }
@@ -257,13 +271,9 @@ pub fn should_show_load_more(shown: usize, total: i64, page: u32) -> bool {
 
 pub fn with_selected(base_path: &BrowserBase, base: &str, slug: &str) -> String {
     let root = base_path.path();
-    if base == root || base.is_empty() {
-        format!("{root}?selected={slug}")
-    } else if base.contains('?') {
-        format!("{base}&selected={slug}")
-    } else {
-        format!("{base}?selected={slug}")
-    }
+    let cleaned = strip_preview_params(root, base);
+    let separator = if cleaned.contains('?') { "&" } else { "?" };
+    format!("{cleaned}{separator}selected={}", urlencoding::encode(slug))
 }
 
 /// Sort toolbar link — rebuilds query via `build_query_base` (no duplicate `sort=` params).
@@ -292,24 +302,7 @@ pub fn build_load_more_href(base: &BrowserBase, params: &BrowserQueryParams) -> 
 }
 
 pub fn without_selected(base_path: &BrowserBase, base: &str) -> String {
-    let root = base_path.path();
-    let trimmed = base.trim_start_matches('?');
-    let query = if base.starts_with(&root) {
-        base.strip_prefix(&root)
-            .unwrap_or("")
-            .trim_start_matches('?')
-    } else {
-        trimmed
-    };
-    let parts: Vec<&str> = query
-        .split('&')
-        .filter(|p| !p.is_empty() && !p.starts_with("selected="))
-        .collect();
-    if parts.is_empty() {
-        root.to_string()
-    } else {
-        format!("{root}?{}", parts.join("&"))
-    }
+    strip_preview_params(base_path.path(), base)
 }
 
 fn comment_count_for_slug(comment_counts: &HashMap<String, i64>, slug: &str) -> i64 {
@@ -380,6 +373,16 @@ pub fn ToolsBrowser(
     });
     let search_q = Memo::new(move |_| query.with(|q| q.get("q").map(|s| s.to_string())));
     let selected = Memo::new(move |_| query.with(|q| q.get("selected").map(|s| s.to_string())));
+    let intent = Memo::new(move |_| query.with(|q| q.get("intent").map(|s| s.to_string())));
+    let compare_tools =
+        Memo::new(move |_| query.with(|q| q.get("compare_tools").map(|s| s.to_string())));
+    let compare_return_href = Memo::new(move |_| {
+        compare_tools
+            .get()
+            .filter(|value| !value.trim().is_empty())
+            .map(|slugs| format!("/compare?tools={}", urlencoding::encode(&slugs)))
+    });
+    let add_mode = Memo::new(move |_| intent.get().as_deref() == Some(ADD_MCP_INTENT));
     // Router query only — do not read window.location (SSR/hydration divergence).
     let page_number =
         Memo::new(move |_| parse_page_param(query.with(|q| q.get("page").map(|s| s.to_string()))));
@@ -396,6 +399,8 @@ pub fn ToolsBrowser(
         sort: sort.get(),
         search_q: search_q.get(),
         selected: selected.get(),
+        intent: intent.get().filter(|value| value == ADD_MCP_INTENT),
+        compare_tools: compare_tools.get(),
         page: page_number.get(),
     });
     let query_base =
@@ -689,10 +694,15 @@ pub fn ToolsBrowser(
                                                         let preview = with_selected(&browser_base_list, &qb_list, &slug);
                                                         let sel = selected.get().map(|s| s == slug).unwrap_or(false);
                                                         let count = comment_count_for_slug(&comment_counts, &slug);
+                                                        let card_query_base = strip_preview_params(
+                                                            browser_base_list.path(),
+                                                            &qb_list,
+                                                        );
                                                         view! {
                                                             <ToolCard
                                                                 tool=t
                                                                 preview_href=preview
+                                                                query_base=card_query_base
                                                                 is_selected=sel
                                                                 comment_count=count
                                                             />
@@ -724,12 +734,30 @@ pub fn ToolsBrowser(
                                         Some(Ok(Some(tool))) => {
                                             let close = without_selected(&browser_base, &qb);
                                             let full = format!("/tools/{}", tool.slug);
+                                            let add_mode_open = add_mode.get();
+                                            let add_mcp_base = qb.clone();
+                                            let compare_back =
+                                                compare_return_href.get().unwrap_or_default();
                                             view! {
                                                 <div class="preview-desktop">
-                                                    <PreviewPanel tool=tool.clone() close_href=close.clone() full_page_href=full.clone()/>
+                                                    <PreviewPanel
+                                                        tool=tool.clone()
+                                                        close_href=close.clone()
+                                                        full_page_href=full.clone()
+                                                        add_mode=add_mode_open
+                                                        add_mcp_query_base=add_mcp_base.clone()
+                                                        compare_return_href=compare_back.clone()
+                                                    />
                                                 </div>
                                                 <div class="preview-mobile">
-                                                    <BottomSheet tool=tool close_href=close full_page_href=full/>
+                                                    <BottomSheet
+                                                        tool=tool
+                                                        close_href=close
+                                                        full_page_href=full
+                                                        add_mode=add_mode_open
+                                                        add_mcp_query_base=add_mcp_base
+                                                        compare_return_href=compare_back
+                                                    />
                                                 </div>
                                             }.into_any()
                                         }
@@ -1068,6 +1096,62 @@ mod tests {
             without_selected(&BrowserBase::Tools, "/tools?function=swap&selected=foo"),
             "/tools?function=swap"
         );
+        assert_eq!(
+            without_selected(
+                &BrowserBase::Tools,
+                "/tools?function=swap&selected=foo&intent=add-mcp"
+            ),
+            "/tools?function=swap"
+        );
+    }
+
+    #[test]
+    fn query_base_preserves_compare_tools_context() {
+        let q = build_query_base(
+            &BrowserBase::Tools,
+            &BrowserQueryParams {
+                compare_tools: Some("aave,uniswap".into()),
+                selected: Some("zapper-mcp".into()),
+                intent: Some(ADD_MCP_INTENT.into()),
+                ..query_params()
+            },
+        );
+        assert!(
+            q.contains("compare_tools=aave%2Cuniswap") || q.contains("compare_tools=aave,uniswap")
+        );
+        assert!(q.contains("intent=add-mcp"));
+    }
+
+    #[test]
+    fn query_base_preserves_add_mcp_intent() {
+        let q = build_query_base(
+            &BrowserBase::Tools,
+            &BrowserQueryParams {
+                tool_type: Some("mcp".into()),
+                selected: Some("zapper-mcp".into()),
+                intent: Some(ADD_MCP_INTENT.into()),
+                ..query_params()
+            },
+        );
+        assert!(q.contains("selected=zapper-mcp"));
+        assert!(q.contains("intent=add-mcp"));
+        assert!(q.contains("type=mcp"));
+    }
+
+    #[test]
+    fn filter_navigation_clears_intent_and_selected() {
+        let href = build_filter_navigation_base(
+            &BrowserBase::Tools,
+            &BrowserQueryParams {
+                selected: Some("zapper".into()),
+                intent: Some(ADD_MCP_INTENT.into()),
+                search_q: Some("wallet".into()),
+                ..query_params()
+            },
+        );
+        assert!(!href.contains("selected="));
+        assert!(!href.contains("intent="));
+        assert!(href.contains("q=wallet"));
     }
 
     #[test]
@@ -1230,5 +1314,18 @@ mod tests {
         counts.insert("aave".to_string(), 3);
         assert_eq!(comment_count_for_slug(&counts, "aave"), 3);
         assert_eq!(comment_count_for_slug(&counts, "uniswap"), 0);
+    }
+
+    #[test]
+    fn with_selected_replaces_stale_preview_params() {
+        let href = with_selected(
+            &BrowserBase::Tools,
+            "/tools?type=mcp&selected=old-tool&intent=add-mcp",
+            "new-tool",
+        );
+        assert!(href.contains("type=mcp"));
+        assert!(href.contains("selected=new-tool"));
+        assert_eq!(href.matches("selected=").count(), 1);
+        assert!(!href.contains("intent="));
     }
 }

@@ -107,6 +107,8 @@ fn toolbar_query_params(
             .unwrap_or_else(|| "hot".into()),
         search_q: Some(search_q).filter(|s| !s.is_empty()),
         selected: None,
+        intent: None,
+        compare_tools: None,
         page: 1,
     }
 }

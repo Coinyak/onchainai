@@ -37,11 +37,7 @@ fn token_kind(word: &str, prev_runner: bool) -> CommandTokenKind {
     {
         return CommandTokenKind::Url;
     }
-    if prev_runner
-        || word.starts_with('@')
-        || word.contains('/')
-        || word.contains(':')
-    {
+    if prev_runner || word.starts_with('@') || word.contains('/') || word.contains(':') {
         return CommandTokenKind::Package;
     }
     CommandTokenKind::Arg

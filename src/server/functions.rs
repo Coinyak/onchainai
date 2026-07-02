@@ -138,6 +138,8 @@ mod site_settings;
 pub use site_settings::*;
 
 mod public_tools;
+#[cfg(feature = "ssr")]
+pub use public_tools::server_fn_context_tests;
 pub use public_tools::*;
 
 mod admin_review;

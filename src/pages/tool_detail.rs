@@ -63,6 +63,7 @@ pub fn ToolDetailPage() -> impl IntoView {
                                 compact=false
                                 trust_facts=view.trust_facts.clone()
                                 official_links=view.official_links.clone()
+                                add_mcp_query_base="/tools".into()
                             />
                             <ToolListingActions tool=tool.clone()/>
                             <CommentsSection slug=slug tool_name=tool.name.clone()/>

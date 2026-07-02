@@ -214,7 +214,9 @@ try {
 
   await page.goto(`${base}/tools`, { waitUntil: "networkidle" });
   await waitForToolCards(page);
-  const bookmarkBtn = await page.$(".tool-card:not(.skeleton-card) .card-action-btn");
+  const bookmarkBtn = await page.$(
+    '.tool-card:not(.skeleton-card) button.card-action-btn[aria-label="Save to Toolkit"]',
+  );
   if (bookmarkBtn) {
     await bookmarkBtn.click();
     let hasDialog = false;

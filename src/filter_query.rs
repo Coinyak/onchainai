@@ -3,7 +3,7 @@
 use crate::server::functions::ToolFilters;
 
 /// Scalar query params — not comma-split (e.g. search text may contain commas).
-const SCALAR_KEYS: &[&str] = &["q", "sort", "selected"];
+const SCALAR_KEYS: &[&str] = &["q", "sort", "selected", "intent", "compare_tools"];
 
 fn decode_param(v: &str) -> String {
     urlencoding::decode(v)
@@ -338,6 +338,26 @@ pub fn describe_active_filters(
     lines
 }
 
+/// Remove preview selection and add-mode intent from a query string.
+pub fn strip_preview_params(base_path: impl AsRef<str>, query_base: impl AsRef<str>) -> String {
+    let base_path = base_path.as_ref();
+    let query_base = query_base.as_ref();
+    let root = base_path;
+    let query = query_base
+        .strip_prefix(root)
+        .unwrap_or(query_base)
+        .trim_start_matches('?');
+    let parts: Vec<&str> = query
+        .split('&')
+        .filter(|p| !p.is_empty() && !p.starts_with("selected=") && !p.starts_with("intent="))
+        .collect();
+    if parts.is_empty() {
+        root.to_string()
+    } else {
+        format!("{root}?{}", parts.join("&"))
+    }
+}
+
 /// Returns true when a same-app route change should close the mobile filter overlay.
 pub fn should_collapse_mobile_sidebar_on_route_change(
     prev_route: &str,
@@ -422,6 +442,18 @@ mod tests {
         assert!(!href.contains("function="));
         assert!(href.contains("sort=new"));
         assert!(href.contains("q=test"));
+    }
+
+    #[test]
+    fn strip_preview_params_removes_selected_and_intent() {
+        let href = strip_preview_params(
+            "/tools",
+            "/tools?function=bridge&selected=foo&intent=add-mcp&sort=new",
+        );
+        assert!(!href.contains("selected="));
+        assert!(!href.contains("intent="));
+        assert!(href.contains("function=bridge"));
+        assert!(href.contains("sort=new"));
     }
 
     #[test]
