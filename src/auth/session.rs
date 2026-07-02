@@ -1,6 +1,6 @@
 //! Session cookies and JWT verification for Supabase access tokens.
 
-use leptos::server_fn::ServerFnError;
+use crate::server::fn_error::FnError;
 use uuid::Uuid;
 
 pub const ACCESS_TOKEN_COOKIE: &str = "onchainai_access_token";
@@ -51,26 +51,6 @@ pub fn cookie_secure_for_domain(siwx_domain: &str) -> bool {
     !is_local_dev_domain(siwx_domain)
 }
 
-/// Whether the SSR shell will inject the WASM hydration bundle.
-///
-/// Matches [`crate::app::shell`] so wallet buttons can fall back to plain
-/// links when interactive handlers are unavailable.
-pub fn ssr_hydration_available() -> bool {
-    #[cfg(feature = "ssr")]
-    {
-        let bundle = std::path::Path::new("target/site/pkg/onchainai.js").exists();
-        match std::env::var("LEPTOS_HYDRATION").as_deref() {
-            Ok("0") | Ok("false") | Ok("FALSE") => false,
-            Ok("1") | Ok("true") | Ok("TRUE") => bundle,
-            _ => bundle,
-        }
-    }
-    #[cfg(not(feature = "ssr"))]
-    {
-        cfg!(feature = "hydrate")
-    }
-}
-
 /// Authenticated user resolved from JWT + profiles row.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct SessionUser {
@@ -79,33 +59,6 @@ pub struct SessionUser {
     pub avatar_url: Option<String>,
     pub is_admin: bool,
     pub auth_method: String,
-}
-
-/// Client-only: whether the non-authoritative session hint is present.
-/// The HttpOnly JWT is never readable here; this only skips anonymous server-fn bursts.
-#[cfg(feature = "hydrate")]
-pub fn has_access_token_cookie() -> bool {
-    use wasm_bindgen::JsCast;
-
-    let Some(window) = web_sys::window() else {
-        return false;
-    };
-    let Some(document) = window.document() else {
-        return false;
-    };
-    let Ok(html_document) = document.dyn_into::<web_sys::HtmlDocument>() else {
-        return false;
-    };
-    let Ok(cookie) = html_document.cookie() else {
-        return false;
-    };
-    cookie_value(&cookie, SESSION_HINT_COOKIE) == Some(SESSION_HINT_VALUE)
-}
-
-/// SSR/build without hydrate: defer to the blocking session resource.
-#[cfg(not(feature = "hydrate"))]
-pub fn has_access_token_cookie() -> bool {
-    true
 }
 
 /// Parse `Cookie` header value and extract the named cookie.
@@ -140,9 +93,9 @@ impl std::fmt::Display for AuthSessionError {
     }
 }
 
-impl From<AuthSessionError> for ServerFnError {
+impl From<AuthSessionError> for FnError {
     fn from(e: AuthSessionError) -> Self {
-        ServerFnError::new(e.to_string())
+        FnError::new(e.to_string())
     }
 }
 
@@ -150,10 +103,10 @@ impl From<AuthSessionError> for ServerFnError {
 /// Invalid, expired, or missing sessions become `Ok(None)` instead of API errors.
 pub fn optional_session_result(
     result: Result<Option<SessionUser>, AuthSessionError>,
-) -> Result<Option<SessionUser>, ServerFnError> {
+) -> Result<Option<SessionUser>, FnError> {
     match result {
         Ok(user) => Ok(user),
-        Err(AuthSessionError::Database(msg)) => Err(ServerFnError::new(msg)),
+        Err(AuthSessionError::Database(msg)) => Err(FnError::new(msg)),
         Err(_) => Ok(None),
     }
 }

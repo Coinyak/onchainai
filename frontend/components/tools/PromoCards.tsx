@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { CopyButton } from "@/components/ui/CopyButton";
+import { ConnectOnchainAiMcpCard } from "@/components/tools/ConnectOnchainAiMcpCard";
 
 interface PromoCardsProps {
   mcpEndpoint: string;
@@ -7,20 +7,21 @@ interface PromoCardsProps {
 
 export function PromoCards({ mcpEndpoint }: PromoCardsProps) {
   return (
-    <div className="promo-cards">
-      <Link href="/submit" className="promo-card promo-card-submit no-underline">
-        <h3 className="text-h3 text-primary">Submit a Tool</h3>
-        <p className="text-body-sm text-secondary">
-          Suggest a crypto MCP, CLI, SDK, or API for operator review.
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 min-w-0">
+      <div className="promo-card border border-[#E5E5E5] rounded-lg p-6 bg-white">
+        <h3 className="text-[16px] font-semibold mb-2">Suggest a Tool</h3>
+        <p className="text-[14px] text-[#6B6B6B] mb-4 leading-relaxed">
+          Know a crypto MCP, CLI, SDK, API, or x402 tool we should review? Send
+          it for operator review.
         </p>
-      </Link>
-      <div className="promo-card promo-card-mcp">
-        <h3 className="text-h3 text-primary">Connect via MCP</h3>
-        <div className="install-command-row">
-          <code className="install-command text-code">{mcpEndpoint}</code>
-          <CopyButton text={mcpEndpoint} />
-        </div>
+        <Link
+          href="/submit"
+          className="inline-flex items-center justify-center h-10 px-4 rounded-lg bg-[#E76F00] text-white text-[14px] font-medium no-underline hover:bg-[#D96400]"
+        >
+          Suggest →
+        </Link>
       </div>
+      <ConnectOnchainAiMcpCard mcpEndpoint={mcpEndpoint} />
     </div>
   );
 }

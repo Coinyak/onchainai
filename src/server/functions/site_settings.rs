@@ -29,36 +29,6 @@ impl CategoryWithCount {
     }
 }
 
-/// Returns the public site settings singleton (slogan, description, MCP endpoint).
-#[server(GetSiteSettings, "/api")]
-pub async fn get_site_settings() -> Result<SiteSettings, ServerFnError> {
-    let pool = use_context::<sqlx::PgPool>()
-        .ok_or_else(|| ServerFnError::new("database pool not available"))?;
-
-    let settings = sqlx::query_as::<_, SiteSettings>("SELECT * FROM site_settings WHERE id = 1")
-        .fetch_one(&pool)
-        .await
-        .map_err(|e| ServerFnError::new(format!("failed to load site settings: {e}")))?;
-
-    Ok(sanitize_site_settings_for_public(settings))
-}
-
-/// Admin-only site settings (includes referral defaults and builder code).
-#[server(GetAdminSiteSettings, "/api")]
-pub async fn get_admin_site_settings() -> Result<SiteSettings, ServerFnError> {
-    let (parts, pool, config) = request_context()?;
-    require_admin(&parts, &pool, &config)
-        .await
-        .map_err(ServerFnError::new)?;
-
-    let settings = sqlx::query_as::<_, SiteSettings>("SELECT * FROM site_settings WHERE id = 1")
-        .fetch_one(&pool)
-        .await
-        .map_err(|e| ServerFnError::new(format!("failed to load site settings: {e}")))?;
-
-    Ok(settings)
-}
-
 /// Parse comma- or newline-separated crawler keywords.
 pub(crate) fn parse_search_keywords(raw: &str) -> Vec<String> {
     raw.split([',', '\n'])
@@ -227,82 +197,4 @@ pub struct UpdateSiteSettingsPayload {
     pub hero_subtitle: Option<String>,
     pub about_content: Option<String>,
     pub footer_links: Vec<FooterLink>,
-}
-
-/// Admin-only update of the `site_settings` singleton (id = 1).
-#[server(UpdateSiteSettings, "/api")]
-pub async fn update_site_settings(
-    payload: UpdateSiteSettingsPayload,
-) -> Result<SiteSettings, ServerFnError> {
-    let keywords = parse_search_keywords(&payload.search_keywords_raw);
-    if let Err(msg) = validate_update_site_settings_input(SiteSettingsValidationInput {
-        site_name: &payload.site_name,
-        slogan: &payload.slogan,
-        description: &payload.description,
-        mcp_endpoint: &payload.mcp_endpoint,
-        search_keywords: &keywords,
-        default_referral_bps: payload.default_referral_bps,
-        default_referral_payout_address: payload.default_referral_payout_address.as_deref(),
-        x402_builder_code: payload.x402_builder_code.as_deref(),
-        hero_title: payload.hero_title.as_deref(),
-        hero_subtitle: payload.hero_subtitle.as_deref(),
-        about_content: payload.about_content.as_deref(),
-        footer_links: &payload.footer_links,
-    }) {
-        return Err(ServerFnError::new(msg.to_string()));
-    }
-
-    let (parts, pool, config) = request_context()?;
-    require_admin(&parts, &pool, &config)
-        .await
-        .map_err(ServerFnError::new)?;
-
-    let settings = sqlx::query_as::<_, SiteSettings>(
-        r#"
-        UPDATE site_settings
-        SET site_name = $1,
-            slogan = $2,
-            description = $3,
-            mcp_endpoint = $4,
-            search_keywords = $5,
-            allow_free_registration = $6,
-            require_tool_approval = $7,
-            allow_x402_registration = $8,
-            default_referral_bps = $9,
-            default_referral_payout_address = $10,
-            x402_builder_code = $11,
-            hero_title = $12,
-            hero_subtitle = $13,
-            about_content = $14,
-            footer_links = $15,
-            updated_at = now()
-        WHERE id = 1
-        RETURNING *
-        "#,
-    )
-    .bind(payload.site_name.trim())
-    .bind(payload.slogan.trim())
-    .bind(payload.description.trim())
-    .bind(payload.mcp_endpoint.trim())
-    .bind(&keywords)
-    .bind(payload.allow_free_registration)
-    .bind(payload.require_tool_approval)
-    .bind(payload.allow_x402_registration)
-    .bind(payload.default_referral_bps)
-    .bind(
-        payload
-            .default_referral_payout_address
-            .as_deref()
-            .map(str::trim),
-    )
-    .bind(payload.x402_builder_code.as_deref().map(str::trim))
-    .bind(payload.hero_title.as_deref().map(str::trim))
-    .bind(payload.hero_subtitle.as_deref().map(str::trim))
-    .bind(payload.about_content.as_deref().map(str::trim))
-    .bind(sqlx::types::Json(&payload.footer_links))
-    .fetch_one(&pool)
-    .await
-    .map_err(|e| ServerFnError::new(format!("failed to update site settings: {e}")))?;
-
-    Ok(settings)
 }

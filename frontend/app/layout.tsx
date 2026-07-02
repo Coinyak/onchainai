@@ -3,6 +3,7 @@ import { Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { Providers } from "./providers";
 import { TopNav } from "@/components/layout/TopNav";
+import { SiteFooter } from "@/components/layout/SiteFooter";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -33,6 +34,7 @@ export default function RootLayout({
         <Providers>
           <TopNav />
           <main className="site-page-body flex-1 min-h-0 flex flex-col">{children}</main>
+          <SiteFooter />
         </Providers>
       </body>
     </html>

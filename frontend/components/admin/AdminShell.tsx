@@ -12,6 +12,7 @@ const ADMIN_NAV = [
   { href: "/admin/categories", label: "Categories" },
   { href: "/admin/crawler", label: "Crawler" },
   { href: "/admin/featured", label: "Featured" },
+  { href: "/admin/content", label: "Content" },
   { href: "/admin/settings", label: "Settings" },
 ];
 

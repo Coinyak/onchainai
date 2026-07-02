@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { X, ExternalLink } from "lucide-react";
+import { useRouter } from "next/navigation";
 import type { Tool } from "@/lib/api";
 import { ToolDetail } from "@/components/tools/ToolDetail";
 
@@ -11,9 +11,22 @@ interface BottomSheetProps {
   closeHref: string;
   fullPageHref: string;
   commentCount?: number;
+  addMode?: boolean;
+  addMcpQueryBase?: string;
+  compareReturnHref?: string;
 }
 
-export function BottomSheet({ tool, closeHref, fullPageHref, commentCount }: BottomSheetProps) {
+export function BottomSheet({
+  tool,
+  closeHref,
+  fullPageHref,
+  commentCount,
+  addMode = false,
+  addMcpQueryBase = "",
+  compareReturnHref = "",
+}: BottomSheetProps) {
+  const router = useRouter();
+  const sheetRef = useRef<HTMLDivElement>(null);
   const [expanded, setExpanded] = useState(false);
 
   useEffect(() => {
@@ -23,10 +36,29 @@ export function BottomSheet({ tool, closeHref, fullPageHref, commentCount }: Bot
     };
   }, []);
 
+  useEffect(() => {
+    function onKeyDown(ev: KeyboardEvent) {
+      if (ev.key === "Escape") {
+        ev.stopPropagation();
+        router.push(closeHref);
+      }
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [closeHref, router]);
+
   return (
     <>
-      <Link href={closeHref} className="bottom-sheet-backdrop" aria-label="Close preview" />
-      <div className={`bottom-sheet ${expanded ? "bottom-sheet-full" : ""}`}>
+      <Link href={closeHref} className="bottom-sheet-backdrop" aria-label="Close preview">
+        <span className="sr-only">Close</span>
+      </Link>
+      <div
+        ref={sheetRef}
+        className={expanded ? "bottom-sheet bottom-sheet-full" : "bottom-sheet"}
+        role="dialog"
+        aria-label="Tool preview"
+        data-testid="preview-bottom-sheet"
+      >
         <div
           className="bottom-sheet-handle"
           role="button"
@@ -34,17 +66,16 @@ export function BottomSheet({ tool, closeHref, fullPageHref, commentCount }: Bot
           aria-label="Drag to expand"
           onClick={() => setExpanded((v) => !v)}
         />
-        <div className="bottom-sheet-header">
-          <Link href={closeHref} className="bottom-sheet-close" aria-label="Close">
-            <X size={20} />
-          </Link>
-          <Link href={fullPageHref} className="bottom-sheet-open">
-            <ExternalLink size={16} /> Open
-          </Link>
-        </div>
         <div className="bottom-sheet-body">
-          <ToolDetail tool={tool} compact commentCount={commentCount} />
-          {!expanded && (
+          <ToolDetail
+            tool={tool}
+            compact
+            commentCount={commentCount}
+            addMode={addMode}
+            addMcpQueryBase={addMcpQueryBase}
+            compareReturnHref={compareReturnHref}
+          />
+          {!addMode && (
             <Link href={fullPageHref} className="bottom-sheet-view-full">
               View full page
             </Link>

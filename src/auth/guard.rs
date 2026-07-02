@@ -2,7 +2,7 @@
 
 use crate::auth::session::{session_from_parts, SessionUser};
 use crate::config::Config;
-use leptos::server_fn::ServerFnError;
+use crate::server::fn_error::FnError;
 use sqlx::PgPool;
 
 /// Authorization failure — map to generic messages (no IDOR hints).
@@ -21,9 +21,9 @@ impl std::fmt::Display for AuthError {
     }
 }
 
-impl From<AuthError> for ServerFnError {
+impl From<AuthError> for FnError {
     fn from(e: AuthError) -> Self {
-        ServerFnError::new(e.to_string())
+        FnError::new(e.to_string())
     }
 }
 

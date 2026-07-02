@@ -211,7 +211,7 @@ fn normalized_optional_string(value: Option<&str>) -> Option<String> {
 }
 
 #[cfg(feature = "ssr")]
-async fn duplicate_submission_count(pool: &sqlx::PgPool, slug: &str) -> Result<i64, ServerFnError> {
+async fn duplicate_submission_count(pool: &sqlx::PgPool, slug: &str) -> Result<i64, FnError> {
     sqlx::query_scalar::<_, i64>(
         r#"
         SELECT COUNT(*)::bigint FROM (
@@ -226,83 +226,15 @@ async fn duplicate_submission_count(pool: &sqlx::PgPool, slug: &str) -> Result<i
     .bind(slug)
     .fetch_one(pool)
     .await
-    .map_err(|e| ServerFnError::new(format!("duplicate check failed: {e}")))
+    .map_err(|e| FnError::new(format!("duplicate check failed: {e}")))
 }
 
-fn reject_duplicate_submission(duplicate_count: i64) -> Result<(), ServerFnError> {
+fn reject_duplicate_submission(duplicate_count: i64) -> Result<(), FnError> {
     if duplicate_count > 0 {
-        Err(ServerFnError::new(
+        Err(FnError::new(
             "a similar tool is already listed or pending review",
         ))
     } else {
         Ok(())
     }
-}
-
-/// Submit a tool suggestion for operator review (authenticated, never directly public).
-#[server(SubmitTool, "/api")]
-pub async fn submit_tool(input: SubmitToolInput) -> Result<ToolSubmission, ServerFnError> {
-    if let Err(msg) = validate_submit_tool_input(&input) {
-        return Err(ServerFnError::new(msg.to_string()));
-    }
-
-    let (parts, pool, config) = request_context()?;
-    let user = require_user(&parts, &pool, &config.jwt_secret, &config.jwt_issuer()).await?;
-    if let Err(limit) = check_user_rate_limit(user.id, UserRateLimitAction::SubmitTool) {
-        return Err(ServerFnError::new(limit.to_string()));
-    }
-
-    let scan = scan_submission(&input);
-    let chains = parse_submission_chains(&input.chains_raw);
-    let slug = base_slug(input.name.trim());
-
-    reject_duplicate_submission(duplicate_submission_count(&pool, &slug).await?)?;
-
-    let payload = submission_payload(input, chains, slug);
-
-    let payload_json = serde_json::to_value(&payload)
-        .map_err(|e| ServerFnError::new(format!("failed to encode submission: {e}")))?;
-
-    let row = sqlx::query_as::<_, ToolSubmission>(
-        r#"
-        INSERT INTO tool_submissions (
-          submitted_by, status, payload,
-          crypto_relevance_score, relevance_status, install_risk_level
-        )
-        VALUES ($1, 'pending', $2, $3, $4, $5)
-        RETURNING *
-        "#,
-    )
-    .bind(user.id)
-    .bind(payload_json)
-    .bind(scan.crypto_relevance_score)
-    .bind(scan.relevance_status)
-    .bind(scan.install_risk_level)
-    .fetch_one(&pool)
-    .await
-    .map_err(|e| ServerFnError::new(format!("failed to save submission: {e}")))?;
-
-    Ok(row)
-}
-
-/// List the current user's tool submissions.
-#[server(ListMySubmissions, "/api")]
-pub async fn list_my_submissions() -> Result<Vec<ToolSubmission>, ServerFnError> {
-    let (parts, pool, config) = request_context()?;
-    let user = require_user(&parts, &pool, &config.jwt_secret, &config.jwt_issuer()).await?;
-
-    let rows = sqlx::query_as::<_, ToolSubmission>(
-        r#"
-        SELECT * FROM tool_submissions
-        WHERE submitted_by = $1
-        ORDER BY created_at DESC
-        LIMIT 50
-        "#,
-    )
-    .bind(user.id)
-    .fetch_all(&pool)
-    .await
-    .map_err(|e| ServerFnError::new(format!("failed to list submissions: {e}")))?;
-
-    Ok(rows)
 }

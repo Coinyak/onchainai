@@ -1,12 +1,9 @@
-//! OnchainAI library — shared between SSR server binary and WASM hydration bundle.
+//! OnchainAI library — Axum API server (Next.js frontend on Vercel).
 
 #![recursion_limit = "256"]
 
-pub mod app;
 pub mod auth;
 pub mod chains;
-pub mod client_storage;
-pub mod components;
 pub mod config;
 #[cfg(feature = "ssr")]
 pub mod crawler;
@@ -14,7 +11,6 @@ pub mod discovery;
 pub mod filter_query;
 pub mod install_safety;
 pub mod models;
-pub mod pages;
 pub mod public_install_guide;
 pub mod server;
 pub mod trust_verification;
@@ -22,20 +18,12 @@ pub mod workbench;
 
 pub use config::{Config, CANONICAL_DOMAIN, MCP_ENDPOINT_CMD, SITE_ORIGIN};
 
-/// Shared application state for Axum + Leptos SSR.
+/// Shared application state for Axum handlers.
 #[cfg(feature = "ssr")]
 #[derive(Clone)]
 pub struct AppState {
     pub pool: sqlx::PgPool,
     pub config: Config,
-    pub leptos_options: leptos::config::LeptosOptions,
-}
-
-#[cfg(feature = "ssr")]
-impl axum::extract::FromRef<AppState> for leptos::config::LeptosOptions {
-    fn from_ref(state: &AppState) -> Self {
-        state.leptos_options.clone()
-    }
 }
 
 #[cfg(feature = "ssr")]
@@ -74,10 +62,7 @@ async fn canonical_host_redirect(
 }
 
 #[cfg(feature = "ssr")]
-fn cache_control_for_response(
-    path: &str,
-    content_type: Option<&str>,
-) -> Option<axum::http::HeaderValue> {
+fn cache_control_for_response(path: &str) -> Option<axum::http::HeaderValue> {
     if path == "/mcp"
         || path.starts_with("/api/")
         || path.starts_with("/auth/")
@@ -85,16 +70,6 @@ fn cache_control_for_response(
     {
         return Some(axum::http::HeaderValue::from_static("no-store"));
     }
-
-    if content_type
-        .map(|value| value.starts_with("text/html"))
-        .unwrap_or(false)
-    {
-        return Some(axum::http::HeaderValue::from_static(
-            "private, no-cache, max-age=0, must-revalidate",
-        ));
-    }
-
     None
 }
 
@@ -113,12 +88,7 @@ async fn cache_control_headers(
         return response;
     }
 
-    let content_type = response
-        .headers()
-        .get(axum::http::header::CONTENT_TYPE)
-        .and_then(|value| value.to_str().ok());
-
-    if let Some(value) = cache_control_for_response(&path, content_type) {
+    if let Some(value) = cache_control_for_response(&path) {
         response
             .headers_mut()
             .insert(axum::http::header::CACHE_CONTROL, value);
@@ -147,12 +117,10 @@ fn cors_allowed_origins(siwx_domain: &str) -> Vec<String> {
     allowed
 }
 
-/// Build the Axum application router.
+/// Build the Axum application router (API-only; no Leptos SSR).
 #[cfg(feature = "ssr")]
 pub fn build_app(pool: sqlx::PgPool, config: Config) -> axum::Router {
     use axum::Router;
-    use leptos::config::get_configuration;
-    use leptos_axum::{file_and_error_handler_with_context, generate_route_list, LeptosRoutes};
     use tower::ServiceBuilder;
     use tower_governor::{governor::GovernorConfigBuilder, GovernorLayer};
     use tower_http::{
@@ -164,21 +132,9 @@ pub fn build_app(pool: sqlx::PgPool, config: Config) -> axum::Router {
         trace::TraceLayer,
     };
 
-    let conf = get_configuration(Some("Cargo.toml")).expect("leptos configuration");
-    let leptos_options = conf.leptos_options;
-    let routes = generate_route_list(app::App);
-
     let siwx_domain = config.siwx_domain.clone();
+    let state = AppState { pool, config };
 
-    let state = AppState {
-        pool,
-        config,
-        leptos_options: leptos_options.clone(),
-    };
-
-    let leptos_options_for_handler = leptos_options.clone();
-    let state_for_context = state.clone();
-    let state_for_fallback = state.clone();
     let allowed_origins = cors_allowed_origins(&siwx_domain);
     let cors = CorsLayer::new()
         .allow_origin(AllowOrigin::predicate(move |origin, _request_head| {
@@ -203,8 +159,6 @@ pub fn build_app(pool: sqlx::PgPool, config: Config) -> axum::Router {
 
     use crate::server::rate_limit::{AUTH_PER_MINUTE, GENERAL_PER_MINUTE, MCP_PER_MINUTE};
 
-    // Catalog pages fan out ~6 read-only server-fn calls on hydrate; smoke tests
-    // navigate quickly — allow short bursts above 60/min without blocking SSR reads.
     let relax_rate_limit = std::env::var("ONCHAINAI_RELAX_RATE_LIMIT")
         .map(|v| v == "1")
         .unwrap_or(false);
@@ -256,30 +210,13 @@ pub fn build_app(pool: sqlx::PgPool, config: Config) -> axum::Router {
         .layer(SetResponseHeaderLayer::if_not_present(
             axum::http::header::CONTENT_SECURITY_POLICY,
             axum::http::HeaderValue::from_static(
-                "default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self';",
+                "default-src 'none'; frame-ancestors 'none'; base-uri 'none';",
             ),
         ))
         .layer(SetResponseHeaderLayer::if_not_present(
             axum::http::header::HeaderName::from_static("x-xss-protection"),
             axum::http::HeaderValue::from_static("0"),
         ));
-
-    let static_route = leptos_axum::site_pkg_dir_service_route_path(&leptos_options);
-
-    let provide_leptos_context = {
-        let state_for_context = state_for_context.clone();
-        move || {
-            leptos::prelude::provide_context(state_for_context.pool.clone());
-            leptos::prelude::provide_context(state_for_context.config.clone());
-        }
-    };
-    let provide_fallback_context = {
-        let state_for_fallback = state_for_fallback.clone();
-        move || {
-            leptos::prelude::provide_context(state_for_fallback.pool.clone());
-            leptos::prelude::provide_context(state_for_fallback.config.clone());
-        }
-    };
 
     let auth_routes = Router::new()
         .route(
@@ -313,9 +250,7 @@ pub fn build_app(pool: sqlx::PgPool, config: Config) -> axum::Router {
         )
         .route("/auth/siwx/verify", axum::routing::post(auth::siwx::verify))
         .with_state(state.clone());
-    // Local dev (ONCHAINAI_RELAX_RATE_LIMIT=1) skips the tight auth limiter
-    // (burst 5, ~1/12s) so repeated login/logout cycles while iterating don't
-    // hit 429s. Production never sets the flag, so the limiter stays active.
+
     let auth_routes = if relax_rate_limit {
         auth_routes
     } else {
@@ -327,37 +262,8 @@ pub fn build_app(pool: sqlx::PgPool, config: Config) -> axum::Router {
         .with_state(state.clone())
         .layer(mcp_rate_limit);
 
-    let pkg_no_cache = std::env::var("ONCHAINAI_PKG_NO_CACHE")
-        .map(|v| v == "1")
-        .unwrap_or(false);
-    let pkg_cache_control = if pkg_no_cache {
-        axum::http::HeaderValue::from_static("no-store")
-    } else {
-        axum::http::HeaderValue::from_static("public, max-age=31536000, immutable")
-    };
-    let css_service = ServiceBuilder::new()
-        .layer(SetResponseHeaderLayer::overriding(
-            axum::http::header::CACHE_CONTROL,
-            pkg_cache_control.clone(),
-        ))
-        .service(ServeFile::new("style/output.css"));
-    let pkg_service = ServiceBuilder::new()
-        .layer(SetResponseHeaderLayer::overriding(
-            axum::http::header::CACHE_CONTROL,
-            pkg_cache_control,
-        ))
-        .service(leptos_axum::site_pkg_dir_service(&leptos_options));
-
-    // Static assets (immutable cached) bypass the general IP rate limiter.
-    // Serving them under general_rate_limit starves WASM/JS/CSS on shared IPs
-    // (NAT/proxy/Railway peer-IP) and breaks hydration when many subresources
-    // load together. Cache headers + CDN front the abuse vector; mutations,
-    // auth, MCP, SSR pages, and admin API stay throttled in app_routes below.
-    // Route order matters: the explicit /pkg/onchainai.css must precede the
-    // /pkg/{*path} wildcard (static_route) so cargo-leptos placeholder never
-    // shadows the real CSS.
+    // Public static assets (brand logos, chain icons) — immutable cached.
     let static_routes = Router::new()
-        .route_service("/pkg/onchainai.css", css_service)
         .route_service("/favicon.ico", ServeFile::new("public/favicon.ico"))
         .route_service(
             "/apple-touch-icon.png",
@@ -384,10 +290,9 @@ pub fn build_app(pool: sqlx::PgPool, config: Config) -> axum::Router {
                     axum::http::HeaderValue::from_static("public, max-age=31536000, immutable"),
                 ))
                 .service(ServeDir::new("public/chains").append_index_html_on_directories(false)),
-        )
-        .route_service(&static_route, pkg_service);
+        );
 
-    let app_routes = Router::new()
+    let operator_routes = Router::new()
         .route(
             "/api/admin/operator/snapshot",
             axum::routing::get(server::operator_harness::get_operator_snapshot),
@@ -408,19 +313,12 @@ pub fn build_app(pool: sqlx::PgPool, config: Config) -> axum::Router {
             "/api/admin/operator/review-timeline",
             axum::routing::get(server::operator_harness::get_review_timeline),
         )
-        .leptos_routes_with_context(&state, routes, provide_leptos_context, move || {
-            app::shell(leptos_options_for_handler.clone())
-        })
-        .fallback(file_and_error_handler_with_context::<AppState, _>(
-            provide_fallback_context,
-            app::shell,
-        ))
         .with_state(state.clone());
 
-    let app_routes = if relax_rate_limit {
-        app_routes
+    let operator_routes = if relax_rate_limit {
+        operator_routes
     } else {
-        app_routes.layer(general_rate_limit)
+        operator_routes.layer(general_rate_limit)
     };
 
     let api_v2_routes = crate::server::api_v2::router(state.clone());
@@ -430,7 +328,7 @@ pub fn build_app(pool: sqlx::PgPool, config: Config) -> axum::Router {
         .merge(mcp_routes)
         .merge(static_routes)
         .merge(api_v2_routes)
-        .merge(app_routes)
+        .merge(operator_routes)
         .layer(axum::middleware::from_fn(cache_control_headers))
         .layer(axum::middleware::from_fn(canonical_host_redirect))
         .layer(security_headers)
@@ -444,8 +342,8 @@ pub fn build_app(pool: sqlx::PgPool, config: Config) -> axum::Router {
 mod tests {
     use super::*;
 
-    fn cache_header_str(path: &str, content_type: Option<&str>) -> Option<String> {
-        cache_control_for_response(path, content_type)
+    fn cache_header_str(path: &str) -> Option<String> {
+        cache_control_for_response(path)
             .map(|value| value.to_str().expect("valid cache-control").to_string())
     }
 
@@ -466,27 +364,15 @@ mod tests {
     }
 
     #[test]
-    fn html_responses_revalidate_before_reuse() {
-        assert_eq!(
-            cache_header_str("/", Some("text/html; charset=utf-8")).as_deref(),
-            Some("private, no-cache, max-age=0, must-revalidate")
-        );
-        assert_eq!(
-            cache_header_str("/tools", Some("text/html")).as_deref(),
-            Some("private, no-cache, max-age=0, must-revalidate")
-        );
-    }
-
-    #[test]
     fn dynamic_mutation_and_auth_paths_are_not_stored() {
         for path in [
-            "/api/list_tools",
+            "/api/v2/tools",
             "/auth/logout",
             "/onboarding/complete",
             "/mcp",
         ] {
             assert_eq!(
-                cache_header_str(path, Some("application/json")).as_deref(),
+                cache_header_str(path).as_deref(),
                 Some("no-store"),
                 "{path}"
             );
@@ -495,11 +381,8 @@ mod tests {
 
     #[test]
     fn static_assets_do_not_get_dynamic_cache_policy() {
-        assert!(cache_control_for_response("/pkg/onchainai.js", Some("text/javascript")).is_none());
-        assert!(
-            cache_control_for_response("/brand/onchainai-logo.svg", Some("image/svg+xml"))
-                .is_none()
-        );
+        assert!(cache_control_for_response("/brand/onchainai-logo.svg").is_none());
+        assert!(cache_control_for_response("/chains/base.svg").is_none());
     }
 
     fn test_config() -> Config {
@@ -540,12 +423,8 @@ mod tests {
         req
     }
 
-    /// Static assets (WASM/JS/CSS/favicon/brand/chains) must bypass the general
-    /// IP rate limiter. Shared IPs (NAT/proxy/Railway peer-IP) would otherwise
-    /// starve hydration on 429 when many subresources load together.
     #[tokio::test]
     async fn static_assets_bypass_general_rate_limiter() {
-        // Force relax off — this test verifies prod behavior.
         std::env::remove_var("ONCHAINAI_RELAX_RATE_LIMIT");
 
         let app = build_app(test_pool(), test_config());
@@ -555,9 +434,6 @@ mod tests {
             "/site.webmanifest",
             "/brand/onchainai-logo.svg",
             "/chains/base.svg",
-            "/pkg/onchainai.css",
-            "/pkg/onchainai.js",
-            "/pkg/onchainai.wasm",
         ] {
             for attempt in 0..150 {
                 let req = request_with_ip(path);
@@ -572,7 +448,6 @@ mod tests {
         }
     }
 
-    /// Dynamic routes (SSR + admin API) stay throttled by the general limiter.
     #[tokio::test]
     async fn dynamic_routes_stay_rate_limited() {
         std::env::remove_var("ONCHAINAI_RELAX_RATE_LIMIT");
@@ -612,7 +487,7 @@ pub async fn run_server() -> anyhow::Result<()> {
         )
         .init();
 
-    tracing::info!("OnchainAI starting up");
+    tracing::info!("OnchainAI API server starting up");
 
     let cfg = Config::from_env()?;
     tracing::info!(
@@ -642,7 +517,7 @@ pub async fn run_server() -> anyhow::Result<()> {
     let port = cfg.port;
     let app = build_app(pool, cfg);
     let addr = format!("0.0.0.0:{port}");
-    tracing::info!("binding Axum server on {addr}");
+    tracing::info!("binding Axum API server on {addr}");
     let listener = tokio::net::TcpListener::bind(&addr).await?;
     axum::serve(
         listener,
@@ -651,13 +526,4 @@ pub async fn run_server() -> anyhow::Result<()> {
     .await?;
 
     Ok(())
-}
-
-/// WASM hydration entry — mounts interactive Leptos components in the browser.
-#[cfg(feature = "hydrate")]
-#[wasm_bindgen::prelude::wasm_bindgen]
-pub fn hydrate() {
-    use crate::app::App;
-    console_error_panic_hook::set_once();
-    leptos::mount::hydrate_body(App);
 }

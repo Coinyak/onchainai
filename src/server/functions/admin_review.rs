@@ -10,21 +10,6 @@ pub(crate) fn clamp_admin_review_list_limit(limit: i64) -> i64 {
     limit.clamp(1, MAX_ADMIN_REVIEW_LIST_LIMIT)
 }
 
-/// List tools awaiting admin review (`approval_status = 'pending'`).
-#[server(ListPendingTools, "/api")]
-pub async fn list_pending_tools(limit: i64) -> Result<Vec<Tool>, ServerFnError> {
-    let (parts, pool, config) = request_context()?;
-    require_admin(&parts, &pool, &config).await?;
-
-    let tools = sqlx::query_as::<_, Tool>(LIST_PENDING_TOOLS_SQL)
-        .bind(clamp_admin_review_list_limit(limit))
-        .fetch_all(&pool)
-        .await
-        .map_err(|e| ServerFnError::new(format!("failed to list pending tools: {e}")))?;
-
-    Ok(tools)
-}
-
 /// Operator review queue identifiers.
 pub const REVIEW_QUEUES: &[&str] = &[
     "new_candidate",
@@ -212,110 +197,11 @@ async fn count_reported_tools(pool: &sqlx::PgPool) -> i64 {
     .unwrap_or(0)
 }
 
-/// Operator dashboard stats — queue counts, public tools, crawler source health.
-#[server(GetAdminDashboardStats, "/api")]
-pub async fn get_admin_dashboard_stats() -> Result<AdminDashboardStats, ServerFnError> {
-    let (parts, pool, config) = request_context()?;
-    require_admin(&parts, &pool, &config).await?;
-
-    let counts = sqlx::query_as::<_, (i64, i64, i64, i64, i64, i64)>(
-        r#"
-        SELECT
-          COUNT(*) FILTER (
-            WHERE approval_status = 'pending'
-              AND last_reviewed_at IS NULL
-              AND quarantined_at IS NULL
-          )::bigint,
-          COUNT(*) FILTER (
-            WHERE approval_status = 'approved'
-              AND last_reviewed_at IS NOT NULL
-              AND updated_at > last_reviewed_at
-              AND quarantined_at IS NULL
-          )::bigint,
-          COUNT(*) FILTER (
-            WHERE approval_status IN ('pending', 'approved')
-              AND install_risk_level IN ('high', 'critical')
-              AND quarantined_at IS NULL
-          )::bigint,
-          COUNT(*) FILTER (
-            WHERE approval_status = 'approved'
-              AND relevance_status = 'accepted'
-              AND install_risk_level <> 'critical'
-              AND quarantined_at IS NULL
-          )::bigint,
-          COUNT(*) FILTER (
-            WHERE approval_status IN ('pending', 'approved')
-              AND relevance_status = 'needs_review'
-              AND crypto_relevance_score < 50
-              AND quarantined_at IS NULL
-          )::bigint,
-          COUNT(*) FILTER (
-            WHERE approval_status = 'pending'
-              AND relevance_status = 'rejected'
-              AND quarantined_at IS NULL
-          )::bigint
-        FROM tools
-        "#,
-    )
-    .fetch_one(&pool)
-    .await
-    .map_err(|e| ServerFnError::new(format!("failed to load dashboard counts: {e}")))?;
-
-    let open_reports = count_open_reports(&pool).await;
-    let reported = count_reported_tools(&pool).await;
-    let crawler_sources = list_crawler_sources_inner(&pool).await?;
-
-    Ok(AdminDashboardStats {
-        pending_candidates: counts.0,
-        known_updates: counts.1,
-        high_risk_installs: counts.2,
-        public_tool_count: counts.3,
-        needs_manual_research: counts.4,
-        low_relevance: counts.5,
-        reported,
-        open_reports,
-        crawler_sources,
-    })
-}
-
-/// List tools in an operator review queue with enriched row metadata.
-#[server(ListReviewQueue, "/api")]
-pub async fn list_review_queue(
-    queue: String,
-    limit: i64,
-) -> Result<Vec<ReviewQueueItem>, ServerFnError> {
-    if let Err(msg) = review_queue_sql(&queue) {
-        return Err(ServerFnError::new(msg.to_string()));
-    }
-
-    let (parts, pool, config) = request_context()?;
-    require_admin(&parts, &pool, &config).await?;
-
-    let tools = sqlx::query_as::<_, Tool>(review_queue_sql(&queue).expect("validated above"))
-        .bind(clamp_admin_review_list_limit(limit))
-        .fetch_all(&pool)
-        .await
-        .map_err(|e| ServerFnError::new(format!("failed to list review queue: {e}")))?;
-
-    let mut items = Vec::with_capacity(tools.len());
-    for tool in tools {
-        let duplicates = fetch_duplicate_candidates(&pool, &tool).await?;
-        items.push(ReviewQueueItem {
-            lifecycle_state: derive_lifecycle_state(&tool),
-            claim_state: derive_claim_state(&tool),
-            duplicate_candidates: duplicates,
-            tool: redact_tool_for_admin(tool),
-        });
-    }
-
-    Ok(items)
-}
-
 #[cfg(feature = "ssr")]
 async fn fetch_duplicate_candidates(
     pool: &sqlx::PgPool,
     tool: &Tool,
-) -> Result<Vec<DuplicateCandidateStub>, ServerFnError> {
+) -> Result<Vec<DuplicateCandidateStub>, FnError> {
     let repo = tool.repo_url.as_deref().unwrap_or("");
     let rows = if repo.is_empty() {
         sqlx::query_as::<_, (String, String)>(
@@ -350,7 +236,7 @@ async fn fetch_duplicate_candidates(
         .fetch_all(pool)
         .await
     }
-    .map_err(|e| ServerFnError::new(format!("failed to load duplicate candidates: {e}")))?;
+    .map_err(|e| FnError::new(format!("failed to load duplicate candidates: {e}")))?;
 
     Ok(rows
         .into_iter()
@@ -454,10 +340,10 @@ pub(crate) async fn execute_review_tool_in_tx(
     admin_id: uuid::Uuid,
     tool: &Tool,
     payload: &ReviewToolPayload,
-) -> Result<(), ServerFnError> {
+) -> Result<(), FnError> {
     if let Some(expected) = payload.expected_updated_at {
         if tool.updated_at != expected {
-            return Err(ServerFnError::new(
+            return Err(FnError::new(
                 "tool was modified by another session; refresh and retry",
             ));
         }
@@ -475,7 +361,7 @@ pub(crate) async fn execute_review_tool_in_tx(
             if let Err(msg) =
                 validate_review_approval_gate(tool, payload.override_reason.as_deref())
             {
-                return Err(ServerFnError::new(msg.to_string()));
+                return Err(FnError::new(msg.to_string()));
             }
         }
         OperatorReviewGate::MarkOfficial => {
@@ -485,19 +371,19 @@ pub(crate) async fn execute_review_tool_in_tx(
             .bind(tool.id)
             .fetch_all(&mut **tx)
             .await
-            .map_err(|e| ServerFnError::new(format!("failed to load official links: {e}")))?;
+            .map_err(|e| FnError::new(format!("failed to load official links: {e}")))?;
             if let Err(msg) = validate_mark_official_gate(tool, &links) {
-                return Err(ServerFnError::new(msg.to_string()));
+                return Err(FnError::new(msg.to_string()));
             }
         }
         OperatorReviewGate::DemoteVerified => {
             if let Err(msg) = validate_demote_verified_gate(tool) {
-                return Err(ServerFnError::new(msg.to_string()));
+                return Err(FnError::new(msg.to_string()));
             }
         }
         OperatorReviewGate::DemoteOfficial => {
             if let Err(msg) = validate_demote_official_gate(tool) {
-                return Err(ServerFnError::new(msg.to_string()));
+                return Err(FnError::new(msg.to_string()));
             }
         }
         OperatorReviewGate::None => {}
@@ -531,70 +417,26 @@ pub async fn run_review_tool(
     pool: &sqlx::PgPool,
     admin_id: uuid::Uuid,
     payload: &ReviewToolPayload,
-) -> Result<(), ServerFnError> {
+) -> Result<(), FnError> {
     let mut tx = pool
         .begin()
         .await
-        .map_err(|e| ServerFnError::new(format!("failed to start review transaction: {e}")))?;
+        .map_err(|e| FnError::new(format!("failed to start review transaction: {e}")))?;
 
     let tool = sqlx::query_as::<_, Tool>("SELECT * FROM tools WHERE slug = $1 FOR UPDATE")
         .bind(&payload.slug)
         .fetch_optional(&mut *tx)
         .await
-        .map_err(|e| ServerFnError::new(format!("failed to load tool: {e}")))?
-        .ok_or_else(|| ServerFnError::new(format!("tool not found: {}", payload.slug)))?;
+        .map_err(|e| FnError::new(format!("failed to load tool: {e}")))?
+        .ok_or_else(|| FnError::new(format!("tool not found: {}", payload.slug)))?;
 
     execute_review_tool_in_tx(&mut tx, admin_id, &tool, payload).await?;
 
     tx.commit()
         .await
-        .map_err(|e| ServerFnError::new(format!("failed to commit review: {e}")))?;
+        .map_err(|e| FnError::new(format!("failed to commit review: {e}")))?;
 
     Ok(())
-}
-
-/// Gated tool review — enforces publication gates, writes audit event, updates tool.
-///
-/// Shipped path: `validate_review_action` → `require_admin` → `run_review_tool`.
-#[server(ReviewTool, "/api")]
-pub async fn review_tool(payload: ReviewToolPayload) -> Result<(), ServerFnError> {
-    if let Err(msg) = validate_review_action(&payload.action, &payload.reason) {
-        return Err(ServerFnError::new(msg.to_string()));
-    }
-
-    let (parts, pool, config) = request_context()?;
-    let admin = require_admin(&parts, &pool, &config).await?;
-
-    run_review_tool(&pool, admin.id, &payload).await
-}
-
-/// Approve or reject a tool by slug — legacy wrapper around gated `review_tool`.
-#[server(SetToolApproval, "/api")]
-pub async fn set_tool_approval(
-    slug: String,
-    status: String,
-    reason: Option<String>,
-) -> Result<(), ServerFnError> {
-    if let Err(msg) = validate_set_tool_approval_input(&status, reason.as_deref()) {
-        return Err(ServerFnError::new(msg.to_string()));
-    }
-
-    let review_reason = match reason {
-        Some(r) if !r.trim().is_empty() => r,
-        _ if status == "approved" => "Approved via legacy set_tool_approval".into(),
-        _ => String::new(),
-    };
-
-    review_tool(ReviewToolPayload {
-        slug,
-        action: status,
-        reason: review_reason,
-        override_reason: None,
-        expected_updated_at: None,
-        snapshot_id: None,
-        recommendation_id: None,
-    })
-    .await
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -604,27 +446,6 @@ pub struct ReferralDashboardStats {
     pub referral_enabled_tools: i64,
     pub attribution_events: i64,
     pub reported_settlements: i64,
-}
-
-#[server(GetReferralDashboardStats, "/api")]
-pub async fn get_referral_dashboard_stats() -> Result<ReferralDashboardStats, ServerFnError> {
-    let (parts, pool, config) = request_context()?;
-    require_admin(&parts, &pool, &config)
-        .await
-        .map_err(ServerFnError::new)?;
-
-    sqlx::query_as::<_, ReferralDashboardStats>(
-        r#"
-        SELECT
-            (SELECT COUNT(*) FROM tools WHERE pricing = 'x402') AS x402_tools,
-            (SELECT COUNT(*) FROM tools WHERE referral_enabled = true) AS referral_enabled_tools,
-            (SELECT COUNT(*) FROM referral_events) AS attribution_events,
-            (SELECT COUNT(*) FROM referral_events WHERE event_type = 'reported_settlement') AS reported_settlements
-        "#,
-    )
-    .fetch_one(&pool)
-    .await
-    .map_err(|e| ServerFnError::new(format!("failed to load referral stats: {e}")))
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -674,52 +495,4 @@ pub(crate) fn validate_tool_referral_payload(
         }
     }
     Ok(())
-}
-
-#[server(UpdateToolReferral, "/api")]
-pub async fn update_tool_referral(
-    payload: UpdateToolReferralPayload,
-) -> Result<Tool, ServerFnError> {
-    if let Err(msg) = validate_tool_referral_payload(&payload) {
-        return Err(ServerFnError::new(msg.to_string()));
-    }
-
-    let (parts, pool, config) = request_context()?;
-    require_admin(&parts, &pool, &config)
-        .await
-        .map_err(ServerFnError::new)?;
-
-    let tool = sqlx::query_as::<_, Tool>(
-        r#"
-        UPDATE tools
-        SET referral_enabled = $1,
-            referral_bps = $2,
-            referral_payout_address = $3,
-            referral_model = $4,
-            x402_pay_to_address = $5,
-            x402_builder_code = $6,
-            payment_verified = $7,
-            x402_endpoint_verified = $8,
-            price_verified = $9,
-            updated_at = now()
-        WHERE slug = $10
-        RETURNING *
-        "#,
-    )
-    .bind(payload.referral_enabled)
-    .bind(payload.referral_bps)
-    .bind(normalize_optional_text(payload.referral_payout_address))
-    .bind(normalize_optional_text(payload.referral_model))
-    .bind(normalize_optional_text(payload.x402_pay_to_address))
-    .bind(normalize_optional_text(payload.x402_builder_code))
-    .bind(payload.payment_verified)
-    .bind(payload.x402_endpoint_verified)
-    .bind(payload.price_verified)
-    .bind(payload.slug.trim())
-    .fetch_optional(&pool)
-    .await
-    .map_err(|e| ServerFnError::new(format!("failed to update referral settings: {e}")))?
-    .ok_or_else(|| ServerFnError::new(format!("tool not found: {}", payload.slug)))?;
-
-    Ok(redact_tool_for_admin(tool))
 }

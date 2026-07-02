@@ -74,7 +74,12 @@ async fn list_pending_tools(
         .await
         .map_err(|e| ApiError::Internal(format!("failed to list pending tools: {e}")))?;
 
-    Ok(Json(tools))
+    Ok(Json(
+        tools
+            .into_iter()
+            .map(redact_tool_for_admin)
+            .collect::<Vec<_>>(),
+    ))
 }
 
 async fn count_open_reports(pool: &sqlx::PgPool) -> i64 {

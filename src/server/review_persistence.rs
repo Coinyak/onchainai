@@ -1,11 +1,11 @@
 //! Review harness persistence — official links, review runs, entries, operator verdicts.
 
 use crate::models::{OperatorVerdict, ReviewEntry, ReviewRun, Tool, ToolOfficialLink};
+use crate::server::fn_error::FnError;
 use crate::server::operator_review_transition::{OperatorReviewEffect, ToolReviewSqlUpdate};
 use crate::trust_verification::{
     official_promotion_allowed, verify_tool_trust, TrustVerificationResult,
 };
-use leptos::prelude::ServerFnError;
 
 #[derive(Debug, Clone)]
 pub struct InsertReviewRunInput {
@@ -72,7 +72,7 @@ pub struct VerifyOfficialLinkInput {
 pub async fn insert_review_run(
     pool: &sqlx::PgPool,
     input: InsertReviewRunInput,
-) -> Result<ReviewRun, ServerFnError> {
+) -> Result<ReviewRun, FnError> {
     sqlx::query_as::<_, ReviewRun>(
         r#"
         INSERT INTO review_runs (
@@ -90,7 +90,7 @@ pub async fn insert_review_run(
     .bind(input.created_by)
     .fetch_one(pool)
     .await
-    .map_err(|e| ServerFnError::new(format!("failed to create review run: {e}")))
+    .map_err(|e| FnError::new(format!("failed to create review run: {e}")))
 }
 
 pub async fn complete_review_run(
@@ -98,7 +98,7 @@ pub async fn complete_review_run(
     run_id: uuid::Uuid,
     summary: Option<String>,
     status: &str,
-) -> Result<ReviewRun, ServerFnError> {
+) -> Result<ReviewRun, FnError> {
     sqlx::query_as::<_, ReviewRun>(
         r#"
         UPDATE review_runs
@@ -112,13 +112,13 @@ pub async fn complete_review_run(
     .bind(summary)
     .fetch_one(pool)
     .await
-    .map_err(|e| ServerFnError::new(format!("failed to complete review run: {e}")))
+    .map_err(|e| FnError::new(format!("failed to complete review run: {e}")))
 }
 
 pub async fn insert_review_entry(
     pool: &sqlx::PgPool,
     input: InsertReviewEntryInput,
-) -> Result<ReviewEntry, ServerFnError> {
+) -> Result<ReviewEntry, FnError> {
     sqlx::query_as::<_, ReviewEntry>(
         r#"
         INSERT INTO review_entries (
@@ -141,27 +141,27 @@ pub async fn insert_review_entry(
     .bind(input.missing_proofs_json)
     .fetch_one(pool)
     .await
-    .map_err(|e| ServerFnError::new(format!("failed to append review entry: {e}")))
+    .map_err(|e| FnError::new(format!("failed to append review entry: {e}")))
 }
 
 pub async fn list_review_entries(
     pool: &sqlx::PgPool,
     review_run_id: uuid::Uuid,
-) -> Result<Vec<ReviewEntry>, ServerFnError> {
+) -> Result<Vec<ReviewEntry>, FnError> {
     sqlx::query_as::<_, ReviewEntry>(
         "SELECT * FROM review_entries WHERE review_run_id = $1 ORDER BY created_at ASC",
     )
     .bind(review_run_id)
     .fetch_all(pool)
     .await
-    .map_err(|e| ServerFnError::new(format!("failed to list review entries: {e}")))
+    .map_err(|e| FnError::new(format!("failed to list review entries: {e}")))
 }
 
 /// Review timeline entries (agent reviews + operator notes). Verdict rows are separate.
 pub async fn list_tool_review_entries(
     pool: &sqlx::PgPool,
     tool_id: uuid::Uuid,
-) -> Result<Vec<ReviewEntry>, ServerFnError> {
+) -> Result<Vec<ReviewEntry>, FnError> {
     sqlx::query_as::<_, ReviewEntry>(
         r#"
         SELECT e.*
@@ -175,14 +175,14 @@ pub async fn list_tool_review_entries(
     .bind(tool_id)
     .fetch_all(pool)
     .await
-    .map_err(|e| ServerFnError::new(format!("failed to load review entries: {e}")))
+    .map_err(|e| FnError::new(format!("failed to load review entries: {e}")))
 }
 
 /// Back-compat alias for harness callers.
 pub async fn list_tool_review_timeline(
     pool: &sqlx::PgPool,
     tool_id: uuid::Uuid,
-) -> Result<Vec<ReviewEntry>, ServerFnError> {
+) -> Result<Vec<ReviewEntry>, FnError> {
     list_tool_review_entries(pool, tool_id).await
 }
 
@@ -195,7 +195,7 @@ pub struct ToolReviewTimelineBundle {
 pub async fn load_tool_review_timeline(
     pool: &sqlx::PgPool,
     tool_id: uuid::Uuid,
-) -> Result<ToolReviewTimelineBundle, ServerFnError> {
+) -> Result<ToolReviewTimelineBundle, FnError> {
     let entries = list_tool_review_entries(pool, tool_id).await?;
     let operator_verdicts = list_operator_verdicts(pool, tool_id).await?;
     Ok(ToolReviewTimelineBundle {
@@ -207,14 +207,14 @@ pub async fn load_tool_review_timeline(
 pub async fn list_operator_verdicts(
     pool: &sqlx::PgPool,
     tool_id: uuid::Uuid,
-) -> Result<Vec<OperatorVerdict>, ServerFnError> {
+) -> Result<Vec<OperatorVerdict>, FnError> {
     sqlx::query_as::<_, OperatorVerdict>(
         "SELECT * FROM operator_verdicts WHERE tool_id = $1 ORDER BY created_at DESC LIMIT 50",
     )
     .bind(tool_id)
     .fetch_all(pool)
     .await
-    .map_err(|e| ServerFnError::new(format!("failed to list operator verdicts: {e}")))
+    .map_err(|e| FnError::new(format!("failed to list operator verdicts: {e}")))
 }
 
 /// Statuses safe for public tool detail — operator-verified only (no user-submitted candidates).
@@ -227,20 +227,20 @@ pub fn is_public_official_link(link: &ToolOfficialLink) -> bool {
 pub async fn list_official_links(
     pool: &sqlx::PgPool,
     tool_id: uuid::Uuid,
-) -> Result<Vec<ToolOfficialLink>, ServerFnError> {
+) -> Result<Vec<ToolOfficialLink>, FnError> {
     sqlx::query_as::<_, ToolOfficialLink>(
         "SELECT * FROM tool_official_links WHERE tool_id = $1 ORDER BY link_type, created_at",
     )
     .bind(tool_id)
     .fetch_all(pool)
     .await
-    .map_err(|e| ServerFnError::new(format!("failed to load official links: {e}")))
+    .map_err(|e| FnError::new(format!("failed to load official links: {e}")))
 }
 
 pub async fn list_public_official_links(
     pool: &sqlx::PgPool,
     tool_id: uuid::Uuid,
-) -> Result<Vec<ToolOfficialLink>, ServerFnError> {
+) -> Result<Vec<ToolOfficialLink>, FnError> {
     sqlx::query_as::<_, ToolOfficialLink>(
         r#"
         SELECT * FROM tool_official_links
@@ -253,7 +253,7 @@ pub async fn list_public_official_links(
     .bind(PUBLIC_OFFICIAL_LINK_STATUSES)
     .fetch_all(pool)
     .await
-    .map_err(|e| ServerFnError::new(format!("failed to load public official links: {e}")))
+    .map_err(|e| FnError::new(format!("failed to load public official links: {e}")))
 }
 
 pub async fn insert_candidate_official_link(
@@ -263,7 +263,7 @@ pub async fn insert_candidate_official_link(
     url: &str,
     display_label: &str,
     discovered_from: &str,
-) -> Result<(), ServerFnError> {
+) -> Result<(), FnError> {
     sqlx::query(
         r#"
         INSERT INTO tool_official_links (
@@ -281,14 +281,14 @@ pub async fn insert_candidate_official_link(
     .bind(discovered_from)
     .execute(&mut **tx)
     .await
-    .map_err(|e| ServerFnError::new(format!("failed to insert official link: {e}")))?;
+    .map_err(|e| FnError::new(format!("failed to insert official link: {e}")))?;
     Ok(())
 }
 
 pub async fn verify_official_link(
     pool: &sqlx::PgPool,
     input: VerifyOfficialLinkInput,
-) -> Result<ToolOfficialLink, ServerFnError> {
+) -> Result<ToolOfficialLink, FnError> {
     sqlx::query_as::<_, ToolOfficialLink>(
         r#"
         UPDATE tool_official_links
@@ -313,13 +313,13 @@ pub async fn verify_official_link(
     .bind(input.operator_id)
     .fetch_one(pool)
     .await
-    .map_err(|e| ServerFnError::new(format!("failed to verify official link: {e}")))
+    .map_err(|e| FnError::new(format!("failed to verify official link: {e}")))
 }
 
 pub async fn compute_tool_trust(
     pool: &sqlx::PgPool,
     tool: &Tool,
-) -> Result<(TrustVerificationResult, Vec<ToolOfficialLink>), ServerFnError> {
+) -> Result<(TrustVerificationResult, Vec<ToolOfficialLink>), FnError> {
     let links = list_official_links(pool, tool.id).await?;
     let trust = verify_tool_trust(tool, &links);
     Ok((trust, links))
@@ -357,7 +357,7 @@ async fn apply_tool_review_update_in_tx(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     slug: &str,
     update: &ToolReviewSqlUpdate,
-) -> Result<(), ServerFnError> {
+) -> Result<(), FnError> {
     if update.quarantine {
         sqlx::query(
             r#"
@@ -371,7 +371,7 @@ async fn apply_tool_review_update_in_tx(
         .bind(slug)
         .execute(&mut **tx)
         .await
-        .map_err(|e| ServerFnError::new(format!("failed to quarantine tool: {e}")))?;
+        .map_err(|e| FnError::new(format!("failed to quarantine tool: {e}")))?;
         return Ok(());
     }
 
@@ -389,14 +389,14 @@ async fn apply_tool_review_update_in_tx(
         .bind(slug)
         .execute(&mut **tx)
         .await
-        .map_err(|e| ServerFnError::new(format!("failed to update listing status: {e}")))?;
+        .map_err(|e| FnError::new(format!("failed to update listing status: {e}")))?;
         if let Some(ref claim_state) = update.claim_state {
             sqlx::query("UPDATE tools SET claim_state = $1, updated_at = now() WHERE slug = $2")
                 .bind(claim_state)
                 .bind(slug)
                 .execute(&mut **tx)
                 .await
-                .map_err(|e| ServerFnError::new(format!("failed to update claim state: {e}")))?;
+                .map_err(|e| FnError::new(format!("failed to update claim state: {e}")))?;
         }
         return Ok(());
     }
@@ -421,7 +421,7 @@ async fn apply_tool_review_update_in_tx(
             .bind(slug)
             .execute(&mut **tx)
             .await
-            .map_err(|e| ServerFnError::new(format!("failed to update approval: {e}")))?;
+            .map_err(|e| FnError::new(format!("failed to update approval: {e}")))?;
         } else {
             sqlx::query(
                 r#"
@@ -438,7 +438,7 @@ async fn apply_tool_review_update_in_tx(
             .bind(slug)
             .execute(&mut **tx)
             .await
-            .map_err(|e| ServerFnError::new(format!("failed to update approval: {e}")))?;
+            .map_err(|e| FnError::new(format!("failed to update approval: {e}")))?;
         }
         if let Some(ref claim_state) = update.claim_state {
             sqlx::query("UPDATE tools SET claim_state = $1, updated_at = now() WHERE slug = $2")
@@ -446,7 +446,7 @@ async fn apply_tool_review_update_in_tx(
                 .bind(slug)
                 .execute(&mut **tx)
                 .await
-                .map_err(|e| ServerFnError::new(format!("failed to update claim state: {e}")))?;
+                .map_err(|e| FnError::new(format!("failed to update claim state: {e}")))?;
         }
         return Ok(());
     }
@@ -462,7 +462,7 @@ pub async fn apply_operator_review_in_tx(
     effect: &OperatorReviewEffect,
     legacy: &LegacyReviewEventInput,
     harness_run_id: Option<uuid::Uuid>,
-) -> Result<(OperatorVerdict, ReviewEntry), ServerFnError> {
+) -> Result<(OperatorVerdict, ReviewEntry), FnError> {
     sqlx::query(
         r#"
         INSERT INTO tool_review_events (
@@ -483,7 +483,7 @@ pub async fn apply_operator_review_in_tx(
     .bind(legacy.recommendation_id)
     .execute(&mut **tx)
     .await
-    .map_err(|e| ServerFnError::new(format!("failed to write review event: {e}")))?;
+    .map_err(|e| FnError::new(format!("failed to write review event: {e}")))?;
 
     apply_tool_review_update_in_tx(tx, slug, &effect.tool_update).await?;
 
@@ -508,7 +508,7 @@ pub async fn record_operator_review_action_in_tx(
     note: &str,
     harness_run_id: Option<uuid::Uuid>,
     mut verdict_input: InsertOperatorVerdictInput,
-) -> Result<(OperatorVerdict, ReviewEntry), ServerFnError> {
+) -> Result<(OperatorVerdict, ReviewEntry), FnError> {
     let run_id = match resolve_operator_review_run_strategy(harness_run_id) {
         OperatorReviewRunStrategy::ReuseHarnessRun => {
             harness_run_id.expect("reuse strategy requires harness run id")
@@ -528,7 +528,7 @@ pub async fn record_operator_review_action_in_tx(
             .bind(operator_id)
             .fetch_one(&mut **tx)
             .await
-            .map_err(|e| ServerFnError::new(format!("failed to create operator review run: {e}")))?;
+            .map_err(|e| FnError::new(format!("failed to create operator review run: {e}")))?;
             run.id
         }
     };
@@ -552,7 +552,7 @@ pub async fn record_operator_review_action_in_tx(
     .bind(note)
     .fetch_one(&mut **tx)
     .await
-    .map_err(|e| ServerFnError::new(format!("failed to append operator note: {e}")))?;
+    .map_err(|e| FnError::new(format!("failed to append operator note: {e}")))?;
 
     Ok((verdict, entry))
 }
@@ -561,7 +561,7 @@ pub async fn insert_operator_verdict_in_tx(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     operator_id: uuid::Uuid,
     input: InsertOperatorVerdictInput,
-) -> Result<OperatorVerdict, ServerFnError> {
+) -> Result<OperatorVerdict, FnError> {
     sqlx::query_as::<_, OperatorVerdict>(
         r#"
         INSERT INTO operator_verdicts (
@@ -584,7 +584,7 @@ pub async fn insert_operator_verdict_in_tx(
     .bind(operator_id)
     .fetch_one(&mut **tx)
     .await
-    .map_err(|e| ServerFnError::new(format!("failed to insert operator verdict: {e}")))
+    .map_err(|e| FnError::new(format!("failed to insert operator verdict: {e}")))
 }
 
 #[cfg(test)]

@@ -417,7 +417,7 @@ async fn get_tool_comment_count(
 async fn fetch_user_toolkit(
     pool: &sqlx::PgPool,
     user_id: uuid::Uuid,
-) -> Result<MyToolkitPayload, leptos::server_fn::ServerFnError> {
+) -> Result<MyToolkitPayload, crate::server::fn_error::FnError> {
     use sqlx::{FromRow, Row};
 
     let rows = sqlx::query(USER_TOOLKIT_SQL)
@@ -425,35 +425,35 @@ async fn fetch_user_toolkit(
         .fetch_all(pool)
         .await
         .map_err(|e| {
-            leptos::server_fn::ServerFnError::new(format!("failed to load toolkit: {e}"))
+            crate::server::fn_error::FnError::new(format!("failed to load toolkit: {e}"))
         })?;
 
     let mut items = Vec::new();
     for row in rows {
         let tool = Tool::from_row(&row).map_err(|e| {
-            leptos::server_fn::ServerFnError::new(format!("failed to decode toolkit tool: {e}"))
+            crate::server::fn_error::FnError::new(format!("failed to decode toolkit tool: {e}"))
         })?;
         let note = row
             .try_get::<Option<String>, _>("bookmark_note")
             .map_err(|e| {
-                leptos::server_fn::ServerFnError::new(format!("failed to decode toolkit note: {e}"))
+                crate::server::fn_error::FnError::new(format!("failed to decode toolkit note: {e}"))
             })?;
         let tags = row
             .try_get::<Vec<String>, _>("bookmark_tags")
             .map_err(|e| {
-                leptos::server_fn::ServerFnError::new(format!("failed to decode toolkit tags: {e}"))
+                crate::server::fn_error::FnError::new(format!("failed to decode toolkit tags: {e}"))
             })?;
         let saved_at = row
             .try_get::<chrono::DateTime<chrono::Utc>, _>("bookmark_created_at")
             .map_err(|e| {
-                leptos::server_fn::ServerFnError::new(format!(
+                crate::server::fn_error::FnError::new(format!(
                     "failed to decode toolkit saved_at: {e}"
                 ))
             })?;
         let updated_at = row
             .try_get::<chrono::DateTime<chrono::Utc>, _>("bookmark_updated_at")
             .map_err(|e| {
-                leptos::server_fn::ServerFnError::new(format!(
+                crate::server::fn_error::FnError::new(format!(
                     "failed to decode toolkit updated_at: {e}"
                 ))
             })?;
@@ -469,9 +469,9 @@ async fn fetch_user_toolkit(
     build_toolkit_payload(items)
 }
 
-fn validate_toolkit_tags(tags: &[String]) -> Result<Vec<String>, leptos::server_fn::ServerFnError> {
+fn validate_toolkit_tags(tags: &[String]) -> Result<Vec<String>, crate::server::fn_error::FnError> {
     if tags.len() > 8 {
-        return Err(leptos::server_fn::ServerFnError::new(
+        return Err(crate::server::fn_error::FnError::new(
             "toolkit tags accept at most 8 values",
         ));
     }
@@ -483,7 +483,7 @@ fn validate_toolkit_tags(tags: &[String]) -> Result<Vec<String>, leptos::server_
             continue;
         }
         if tag.len() > 32 {
-            return Err(leptos::server_fn::ServerFnError::new(
+            return Err(crate::server::fn_error::FnError::new(
                 "toolkit tags must be at most 32 characters",
             ));
         }
@@ -491,7 +491,7 @@ fn validate_toolkit_tags(tags: &[String]) -> Result<Vec<String>, leptos::server_
             .bytes()
             .any(|byte| !(byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_'))
         {
-            return Err(leptos::server_fn::ServerFnError::new(
+            return Err(crate::server::fn_error::FnError::new(
                 "toolkit tags may contain letters, numbers, hyphens, and underscores",
             ));
         }
@@ -504,11 +504,11 @@ fn validate_toolkit_tags(tags: &[String]) -> Result<Vec<String>, leptos::server_
 
 fn validate_toolkit_note(
     note: Option<String>,
-) -> Result<Option<String>, leptos::server_fn::ServerFnError> {
+) -> Result<Option<String>, crate::server::fn_error::FnError> {
     let note = note.map(|value| value.trim().to_string());
     let note = note.filter(|value| !value.is_empty());
     if note.as_ref().is_some_and(|value| value.len() > 500) {
-        return Err(leptos::server_fn::ServerFnError::new(
+        return Err(crate::server::fn_error::FnError::new(
             "toolkit note must be at most 500 characters",
         ));
     }

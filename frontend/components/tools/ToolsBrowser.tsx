@@ -11,6 +11,7 @@ import {
 } from "@/lib/api";
 import {
   type BrowserBase,
+  ADD_MCP_INTENT,
   paramsFromSearchParams,
   buildQueryBase,
   forFilterNavigation,
@@ -22,6 +23,9 @@ import {
   withoutSelected,
   shouldShowLoadMore,
   buildToolFilters,
+  buildFilterRevision,
+  compareReturnHref,
+  stripPreviewParams,
 } from "@/lib/browser-query";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { ChainStrip } from "@/components/tools/ChainStrip";
@@ -77,6 +81,13 @@ export function ToolsBrowser({ base, showToolbarSearch = false, children }: Tool
   const filters = buildToolFilters(params);
   const queryBase = buildQueryBase(base, params);
   const filterQueryBase = buildQueryBase(base, forFilterNavigation(params));
+  const filterRevision = buildFilterRevision(params);
+  const addMode = params.intent === ADD_MCP_INTENT;
+  const compareBackHref = compareReturnHref(params.compare_tools) ?? "";
+  const cardQueryBase = stripPreviewParams(
+    base === "home" ? "/" : base === "tools" ? "/tools" : `/categories/${(base as { category: string }).category}`,
+    queryBase,
+  );
 
   const browserQuery = useQuery({
     queryKey: ["browser-data", base, params.sort, filters, params.q, params.page],
@@ -123,6 +134,7 @@ export function ToolsBrowser({ base, showToolbarSearch = false, children }: Tool
             base={base}
             categories={[]}
             queryBase={filterQueryBase}
+            filterRevision={filterRevision}
             defaultFunctionOpen={base === "tools"}
           />
           <div className="tools-main">
@@ -136,6 +148,7 @@ export function ToolsBrowser({ base, showToolbarSearch = false, children }: Tool
             base={base}
             categories={categories}
             queryBase={filterQueryBase}
+            filterRevision={filterRevision}
             activeFunction={params.function}
             activeAssetClass={params.asset_class}
             activeActor={params.actor}
@@ -159,6 +172,7 @@ export function ToolsBrowser({ base, showToolbarSearch = false, children }: Tool
             base={base}
             categories={categories}
             queryBase={filterQueryBase}
+            filterRevision={filterRevision}
             activeFunction={params.function}
             activeAssetClass={params.asset_class}
             activeActor={params.actor}
@@ -210,6 +224,7 @@ export function ToolsBrowser({ base, showToolbarSearch = false, children }: Tool
                       key={tool.slug}
                       tool={tool}
                       previewHref={withSelected(base, queryBase, tool.slug)}
+                      queryBase={cardQueryBase}
                       isSelected={selectedSlug === tool.slug}
                       commentCount={browserQuery.data!.comment_counts[tool.slug] ?? 0}
                     />
@@ -240,6 +255,9 @@ export function ToolsBrowser({ base, showToolbarSearch = false, children }: Tool
                     closeHref={closePreviewHref}
                     fullPageHref={`/tools/${previewQuery.data.slug}`}
                     commentCount={browserQuery.data.comment_counts[previewQuery.data.slug] ?? 0}
+                    addMode={addMode}
+                    addMcpQueryBase={queryBase}
+                    compareReturnHref={compareBackHref}
                   />
                 </div>
                 <div className="preview-mobile">
@@ -248,6 +266,9 @@ export function ToolsBrowser({ base, showToolbarSearch = false, children }: Tool
                     closeHref={closePreviewHref}
                     fullPageHref={`/tools/${previewQuery.data.slug}`}
                     commentCount={browserQuery.data.comment_counts[previewQuery.data.slug] ?? 0}
+                    addMode={addMode}
+                    addMcpQueryBase={queryBase}
+                    compareReturnHref={compareBackHref}
                   />
                 </div>
               </>

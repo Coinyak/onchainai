@@ -4,9 +4,13 @@ import type { Tool, TrustFact } from "@/lib/api";
 import { ToolLogo } from "@/components/tools/ToolLogo";
 import { Badge } from "@/components/ui/Badge";
 import { InstallSection } from "@/components/tools/InstallSection";
+import { InstallGuidePanel } from "@/components/tools/InstallGuidePanel";
+import { AddMcpAction } from "@/components/tools/AddMcpAction";
 import { TrustFacts } from "@/components/tools/TrustFacts";
 import { ChainLogo } from "@/components/tools/ChainLogo";
 import { chainTagsForTool } from "@/lib/chains";
+import { compareHref } from "@/lib/browser-query";
+import { toolHasInstallPath } from "@/lib/install-guide";
 import { timeAgo, statusBadgeLabel } from "@/lib/format";
 
 interface ToolDetailProps {
@@ -14,6 +18,9 @@ interface ToolDetailProps {
   trustFacts?: TrustFact[];
   compact?: boolean;
   commentCount?: number;
+  addMode?: boolean;
+  addMcpQueryBase?: string;
+  compareReturnHref?: string;
 }
 
 function statusVariant(status: string): "verified" | "official" | "community" {
@@ -27,6 +34,9 @@ export function ToolDetail({
   trustFacts,
   compact = false,
   commentCount = 0,
+  addMode = false,
+  addMcpQueryBase = "",
+  compareReturnHref = "",
 }: ToolDetailProps) {
   const chains = chainTagsForTool(tool.chains);
   const links = [
@@ -36,18 +46,37 @@ export function ToolDetail({
     tool.mcp_endpoint && { label: "MCP", url: tool.mcp_endpoint },
   ].filter(Boolean) as { label: string; url: string; extra?: string }[];
 
+  const contentClass = addMode
+    ? compact
+      ? "detail-content compact add-mode"
+      : "detail-content add-mode"
+    : compact
+      ? "detail-content compact"
+      : "detail-content";
+
   return (
-    <article className="tool-detail">
-      <header className="tool-detail-header">
+    <article className={`tool-detail ${contentClass}`}>
+      <header className="tool-detail-header detail-header">
         <ToolLogo
           name={tool.name}
           logoUrl={tool.logo_url}
           logoMonogram={tool.logo_monogram}
           size={compact ? 48 : 64}
         />
-        <div className="tool-detail-heading">
-          <h1 className="text-h1">{tool.name}</h1>
-          <div className="tool-detail-badges">
+        <div className="tool-detail-heading detail-header-text">
+          <div className="detail-header-row">
+            <h1 className={compact ? "text-h2 detail-title" : "text-h1 detail-title"}>
+              {tool.name}
+            </h1>
+            {!addMode && addMcpQueryBase && (
+              <AddMcpAction
+                tool={tool}
+                hrefSource={{ kind: "query_base", base: addMcpQueryBase }}
+                variant="detail_primary"
+              />
+            )}
+          </div>
+          <div className="tool-detail-badges tool-badges">
             <Badge variant={statusVariant(tool.status)}>{statusBadgeLabel(tool.status)}</Badge>
             {tool.official_team && (
               <Badge variant="official">Official: {tool.official_team}</Badge>
@@ -59,22 +88,55 @@ export function ToolDetail({
             <Badge variant="neutral">{tool.asset_class}</Badge>
             <Badge variant="neutral">{tool.actor}</Badge>
           </div>
-          <div className="tool-detail-stats">
-            <span><Star size={14} /> {tool.stars}</span>
-            <span><MessageCircle size={14} /> {commentCount} comments</span>
-            <span>updated {timeAgo(tool.last_commit_at || tool.updated_at)}</span>
-          </div>
+          {!addMode && (
+            <div className="tool-detail-stats">
+              <span><Star size={14} /> {tool.stars}</span>
+              <span><MessageCircle size={14} /> {commentCount} comments</span>
+              <span>updated {timeAgo(tool.last_commit_at || tool.updated_at)}</span>
+            </div>
+          )}
         </div>
       </header>
 
-      {tool.description && (
-        <section className="detail-section">
-          <h2 className="text-h2 mb-3">Description</h2>
-          <p className="text-body-md md:text-mobile-body leading-relaxed">{tool.description}</p>
-        </section>
+      {addMode ? (
+        <>
+          {compareReturnHref && (
+            <Link href={compareReturnHref} className="detail-compare-return-link">
+              ← Back to compare
+            </Link>
+          )}
+          <TrustFacts tool={tool} facts={trustFacts} />
+          <InstallGuidePanel tool={tool} compact={compact} showProgress />
+          {tool.description && (
+            <section className="detail-section">
+              <h2 className="text-h2 mb-3">Description</h2>
+              <p className="text-body-md md:text-mobile-body leading-relaxed detail-desc">
+                {tool.description}
+              </p>
+            </section>
+          )}
+          <div className="detail-compare-row">
+            <Link href={compareHref([tool.slug])} className="detail-compare-link">
+              Compare this tool
+            </Link>
+          </div>
+        </>
+      ) : (
+        <>
+          {tool.description && (
+            <section className="detail-section">
+              <h2 className="text-h2 mb-3">Description</h2>
+              <p className="text-body-md md:text-mobile-body leading-relaxed">{tool.description}</p>
+            </section>
+          )}
+          {toolHasInstallPath(tool) && <InstallSection tool={tool} compact={compact} />}
+          <div className="detail-compare-row">
+            <Link href={compareHref([tool.slug])} className="detail-compare-link">
+              Compare this tool
+            </Link>
+          </div>
+        </>
       )}
-
-      <InstallSection tool={tool} />
 
       {chains.length > 0 && (
         <section className="detail-section">
@@ -91,8 +153,8 @@ export function ToolDetail({
       )}
 
       {links.length > 0 && (
-        <section className="detail-section">
-          <h2 className="text-h2 mb-3">Links</h2>
+        <section className="detail-section links-section">
+          <h2 className="text-h2 mb-3 install-heading">Links</h2>
           <div className="detail-links">
             {links.map((link) => (
               <a
@@ -100,7 +162,7 @@ export function ToolDetail({
                 href={link.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="detail-link no-underline"
+                className="detail-link external-link no-underline"
               >
                 {link.label}
                 {link.extra && ` ${link.extra}`}
@@ -111,9 +173,9 @@ export function ToolDetail({
         </section>
       )}
 
-      <TrustFacts tool={tool} facts={trustFacts} />
+      {!addMode && <TrustFacts tool={tool} facts={trustFacts} />}
 
-      {!compact && (
+      {!compact && !addMode && (
         <p className="mt-4">
           <Link href={`/tools/${tool.slug}`} className="text-tertiary">
             View full page

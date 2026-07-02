@@ -1,10 +1,8 @@
-//! Integration-test binary — exercises the shipped `get_public_install_guide` server fn
-//! with Leptos `Owner` + `provide_context`, same path as `InstallGuideRemoteLoader`.
+//! Integration-test binary — exercises `fetch_public_install_guide` directly.
 
 #[cfg(feature = "ssr")]
 mod ssr {
-    use leptos::prelude::{provide_context, Owner};
-    use onchainai::server::functions::get_public_install_guide;
+    use onchainai::server::functions::fetch_public_install_guide;
     use onchainai::server::functions::server_fn_context_tests::{
         run_get_public_install_guide_server_fn_loads_approved_tool,
         run_get_public_install_guide_server_fn_returns_not_found_for_missing_slug,
@@ -13,45 +11,37 @@ mod ssr {
     };
 
     #[tokio::test(flavor = "multi_thread")]
-    async fn get_public_install_guide_server_fn_loads_approved_tool() {
+    async fn fetch_public_install_guide_loads_approved_tool() {
         run_get_public_install_guide_server_fn_loads_approved_tool().await;
     }
 
     #[tokio::test(flavor = "multi_thread")]
-    async fn get_public_install_guide_server_fn_returns_not_found_for_missing_slug() {
+    async fn fetch_public_install_guide_returns_not_found_for_missing_slug() {
         run_get_public_install_guide_server_fn_returns_not_found_for_missing_slug().await;
     }
 
     #[tokio::test(flavor = "multi_thread")]
-    async fn install_guide_panel_chain_matches_server_fn_for_approved_tool() {
+    async fn install_guide_panel_chain_matches_fetch_for_approved_tool() {
         run_install_guide_panel_chain_matches_server_fn_for_approved_tool().await;
     }
 
-    /// Integration crate calls `get_public_install_guide` directly (not only via lib delegate).
     #[tokio::test(flavor = "multi_thread")]
-    async fn integration_binary_invokes_get_public_install_guide_with_owner_context() {
+    async fn integration_binary_invokes_fetch_public_install_guide_directly() {
         let pool = match test_pool().await {
             Ok(value) => value,
             Err(err) => {
-                skip_or_panic("integration Owner context DB setup failed", err);
+                skip_or_panic("integration fetch DB setup failed", err);
                 return;
             }
         };
 
         let missing = format!("missing-integration-{}", uuid::Uuid::new_v4());
-        let owner = Owner::new();
-        let result = owner.with(|| {
-            provide_context(pool);
-            tokio::task::block_in_place(|| {
-                tokio::runtime::Handle::current()
-                    .block_on(get_public_install_guide(missing.clone(), "claude".into()))
-            })
-        });
+        let result = fetch_public_install_guide(&pool, &missing, "claude").await;
 
         assert!(result.is_err());
         assert!(
             result.unwrap_err().to_string().contains("tool not found"),
-            "integration binary must hit shipped server fn for {missing}"
+            "integration binary must hit fetch_public_install_guide for {missing}"
         );
     }
 }

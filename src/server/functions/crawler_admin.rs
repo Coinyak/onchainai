@@ -68,11 +68,11 @@ pub(crate) fn validate_update_crawler_source(schedule_minutes: i32) -> Result<()
 #[cfg(feature = "ssr")]
 pub(crate) async fn list_crawler_sources_inner(
     pool: &sqlx::PgPool,
-) -> Result<Vec<CrawlerSourceView>, ServerFnError> {
+) -> Result<Vec<CrawlerSourceView>, FnError> {
     let rows = sqlx::query_as::<_, Source>("SELECT * FROM sources ORDER BY name ASC")
         .fetch_all(pool)
         .await
-        .map_err(|e| ServerFnError::new(format!("failed to list sources: {e}")))?;
+        .map_err(|e| FnError::new(format!("failed to list sources: {e}")))?;
 
     let mut by_name: std::collections::HashMap<String, Source> =
         rows.into_iter().map(|r| (r.name.clone(), r)).collect();
@@ -128,14 +128,6 @@ pub(crate) async fn list_crawler_sources_inner(
     Ok(views)
 }
 
-/// List crawler source status (admin).
-#[server(ListCrawlerSources, "/api")]
-pub async fn list_crawler_sources() -> Result<Vec<CrawlerSourceView>, ServerFnError> {
-    let (parts, pool, config) = request_context()?;
-    require_admin(&parts, &pool, &config).await?;
-    list_crawler_sources_inner(&pool).await
-}
-
 /// Validate manual crawler trigger input.
 pub(crate) fn validate_trigger_crawler_source(source: &str) -> Result<(), &'static str> {
     match source {
@@ -151,7 +143,7 @@ pub(crate) async fn update_crawler_source_inner(
     id: uuid::Uuid,
     schedule_minutes: i32,
     enabled: bool,
-) -> Result<Source, ServerFnError> {
+) -> Result<Source, FnError> {
     let row = sqlx::query_as::<_, Source>(
         r#"
         UPDATE sources
@@ -167,42 +159,7 @@ pub(crate) async fn update_crawler_source_inner(
     .bind(id)
     .fetch_optional(pool)
     .await
-    .map_err(|e| ServerFnError::new(format!("failed to update crawler source: {e}")))?;
+    .map_err(|e| FnError::new(format!("failed to update crawler source: {e}")))?;
 
-    row.ok_or_else(|| ServerFnError::new("crawler source not found"))
-}
-
-/// Update crawler source schedule and enabled flag (admin).
-#[server(UpdateCrawlerSource, "/api")]
-pub async fn update_crawler_source(
-    id: uuid::Uuid,
-    payload: UpdateCrawlerSourcePayload,
-) -> Result<Source, ServerFnError> {
-    if let Err(msg) = validate_update_crawler_source(payload.schedule_minutes) {
-        return Err(ServerFnError::new(msg.to_string()));
-    }
-
-    let (parts, pool, config) = request_context()?;
-    require_admin(&parts, &pool, &config).await?;
-
-    update_crawler_source_inner(&pool, id, payload.schedule_minutes, payload.enabled).await
-}
-
-/// Manually trigger a crawler job in the background (admin).
-#[server(TriggerCrawlerSource, "/api")]
-pub async fn trigger_crawler_source(source: String) -> Result<(), ServerFnError> {
-    if let Err(msg) = validate_trigger_crawler_source(&source) {
-        return Err(ServerFnError::new(msg.to_string()));
-    }
-
-    let (parts, pool, config) = request_context()?;
-    require_admin(&parts, &pool, &config).await?;
-
-    let pool_bg = pool.clone();
-    let source_bg = source.clone();
-    tokio::spawn(async move {
-        crawler::trigger_source(&pool_bg, &source_bg).await;
-    });
-
-    Ok(())
+    row.ok_or_else(|| FnError::new("crawler source not found"))
 }

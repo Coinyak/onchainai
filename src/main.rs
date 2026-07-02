@@ -1,4 +1,4 @@
-//! OnchainAI server binary — Leptos SSR + Axum.
+//! OnchainAI server binary — Axum API (Next.js frontend on Vercel).
 
 const TOKIO_WORKER_STACK_SIZE: usize = 16 * 1024 * 1024;
 

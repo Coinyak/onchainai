@@ -4,12 +4,13 @@ interface ChainLogoProps {
   id: string;
   label: string;
   size?: number;
+  className?: string;
 }
 
-export function ChainLogo({ id, label, size = 36 }: ChainLogoProps) {
+export function ChainLogo({ id, label, size = 36, className = "chain-logo" }: ChainLogoProps) {
   return (
     <img
-      className="chain-logo"
+      className={className}
       src={chainLogoPath(id)}
       alt={label}
       title={label}
