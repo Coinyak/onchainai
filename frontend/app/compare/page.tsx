@@ -50,7 +50,9 @@ function CompareContent() {
 
   return (
     <div className="compare-grid grid gap-8 md:grid-cols-2">
-      {compareQuery.data?.tools.map((tool) => (
+      {compareQuery.data?.map((entry) => {
+        const tool = entry.tool;
+        return (
         <article key={tool.slug} className="compare-card">
           <header className="compare-card-header">
             <ToolLogo
@@ -79,7 +81,8 @@ function CompareContent() {
             <Link href="/toolkit">Open toolkit</Link>
           </div>
         </article>
-      ))}
+        );
+      })}
     </div>
   );
 }

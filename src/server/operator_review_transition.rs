@@ -305,6 +305,12 @@ pub fn evaluate_auto_approval(
             reason: "rejected crypto relevance requires manual review".into(),
         };
     }
+    if tool.relevance_status == "needs_review" {
+        return AutoApprovalResult {
+            tier: AutoApprovalTier::Manual,
+            reason: "relevance needs human review before auto-approval".into(),
+        };
+    }
     if !tool_has_trustworthy_url(tool) {
         return AutoApprovalResult {
             tier: AutoApprovalTier::Manual,
@@ -350,11 +356,7 @@ pub fn plan_auto_approval(
     let tool_update = ToolReviewSqlUpdate {
         approval_status: Some("approved".into()),
         rejection_reason: Some(None),
-        relevance_status: if tool.relevance_status == "needs_review" {
-            Some("accepted".into())
-        } else {
-            None
-        },
+        relevance_status: None,
         listing_status: Some(listing_status.into()),
         quarantine: false,
         claim_state: None,
@@ -603,6 +605,15 @@ mod tests {
         let result = evaluate_auto_approval(&tool, 0);
         assert_eq!(result.tier, AutoApprovalTier::Manual);
         assert!(result.reason.contains("relevance"));
+    }
+
+    #[test]
+    fn auto_approval_rejects_needs_review_relevance() {
+        let mut tool = sample_tool("unclaimed", "community", "pending");
+        tool.relevance_status = "needs_review".into();
+        let result = evaluate_auto_approval(&tool, 0);
+        assert_eq!(result.tier, AutoApprovalTier::Manual);
+        assert!(result.reason.contains("human review"));
     }
 
     #[test]
