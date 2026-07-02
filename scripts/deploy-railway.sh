@@ -40,6 +40,7 @@ fi
 
 # Production overrides (never commit these values).
 export SIWX_DOMAIN="${SIWX_DOMAIN_PROD:-www.onchain-ai.xyz}"
+export GITHUB_REDIRECT_URI="${GITHUB_REDIRECT_URI_PROD:-https://${SIWX_DOMAIN}/auth/callback}"
 export PORT="${PORT:-3000}"
 export RUST_LOG="${RUST_LOG:-info}"
 
