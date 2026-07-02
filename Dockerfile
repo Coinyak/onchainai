@@ -2,11 +2,9 @@
 # Cache-bust: 2026-07-02T00:00Z
 #
 # Optimized for Railway builds:
-# - Dependency layer cached separately from source (Cargo.toml/Cargo.lock first)
-# - BuildKit cache mounts for cargo registry/git and target dir
+# - Dependency fetch cached separately from source (Cargo.toml/Cargo.lock first)
 # - HEALTHCHECK so Railway routes traffic as soon as the app is ready
 
-# syntax=docker/dockerfile:1.7
 FROM rust:1.90-slim AS builder
 WORKDIR /app
 
@@ -26,9 +24,7 @@ RUN cargo install cargo-leptos --version "${CARGO_LEPTOS_VERSION}" --locked
 COPY Cargo.toml Cargo.lock* ./
 
 # Pre-fetch dependencies (cached unless Cargo.toml/Cargo.lock change).
-RUN --mount=type=cache,target=/usr/local/cargo/registry \
-    --mount=type=cache,target=/usr/local/cargo/git \
-    cargo fetch --locked 2>/dev/null || cargo fetch
+RUN cargo fetch --locked 2>/dev/null || cargo fetch
 
 # --- Source layer ---
 COPY src/ ./src/
@@ -38,27 +34,17 @@ COPY public/ ./public/
 COPY scripts/verify-wasm-bundle.sh ./scripts/verify-wasm-bundle.sh
 
 # Full Leptos build — fail the image build if SSR, WASM, or JS artifacts are invalid.
-# Cache mounts persist across builds on the same Railway builder instance.
-RUN --mount=type=cache,target=/usr/local/cargo/registry \
-    --mount=type=cache,target=/usr/local/cargo/git \
-    --mount=type=cache,target=/app/target \
-    cargo leptos build --release 2>&1 | tee /tmp/leptos-build.log && \
-    cp target/release/onchainai /tmp/onchainai-bin && \
-    cp -a target/site/pkg /tmp/pkg && \
-    cp -a style /tmp/style && \
-    cp -a public /tmp/public && \
-    cp -a migrations /tmp/migrations && \
-    cp Cargo.toml /tmp/Cargo.toml
+RUN cargo leptos build --release 2>&1 | tee /tmp/leptos-build.log
 
-RUN ln -sf onchainai.wasm /tmp/pkg/onchainai_bg.wasm
-RUN bash scripts/verify-wasm-bundle.sh /tmp/pkg
+RUN ln -sf onchainai.wasm /app/target/site/pkg/onchainai_bg.wasm
+RUN bash scripts/verify-wasm-bundle.sh target/site/pkg
 
-RUN test -s /tmp/onchainai-bin \
-    && test -s /tmp/pkg/onchainai.js \
-    && test -s /tmp/pkg/onchainai.wasm \
-    && test -e /tmp/pkg/onchainai_bg.wasm \
-    && test -s /tmp/style/output.css \
-    && test -s /tmp/public/chains/bitcoin.svg
+RUN test -s /app/target/release/onchainai \
+    && test -s /app/target/site/pkg/onchainai.js \
+    && test -s /app/target/site/pkg/onchainai.wasm \
+    && test -e /app/target/site/pkg/onchainai_bg.wasm \
+    && test -s /app/style/output.css \
+    && test -s /app/public/chains/bitcoin.svg
 
 # --- runtime stage ---
 FROM debian:bookworm-slim
@@ -68,12 +54,12 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends libssl3 ca-certificates curl \
     && rm -rf /var/lib/apt/lists/*
 
-COPY --from=builder /tmp/onchainai-bin /app/onchainai
-COPY --from=builder /tmp/pkg /app/target/site/pkg
-COPY --from=builder /tmp/Cargo.toml /app/Cargo.toml
-COPY --from=builder /tmp/migrations /app/migrations
-COPY --from=builder /tmp/style /app/style
-COPY --from=builder /tmp/public /app/public
+COPY --from=builder /app/target/release/onchainai /app/onchainai
+COPY --from=builder /app/target/site/pkg /app/target/site/pkg
+COPY --from=builder /app/Cargo.toml /app/Cargo.toml
+COPY --from=builder /app/migrations /app/migrations
+COPY --from=builder /app/style /app/style
+COPY --from=builder /app/public /app/public
 
 ENV PORT=3000
 ENV RUST_LOG=info
