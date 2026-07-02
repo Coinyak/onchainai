@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" role="img" aria-label="BOB">
+  <!-- official-brand-asset harness-round-11 -->
+  <rect width="48" height="48" rx="8" fill="#fff"/>
+  <g transform="translate(13 7)">
+    <rect x="0" y="0" width="10" height="10" fill="#343536"/>
+    <rect x="0" y="12" width="10" height="10" fill="#343536"/>
+    <rect x="12" y="12" width="10" height="10" fill="#F58B00"/>
+    <rect x="0" y="24" width="10" height="10" fill="#343536"/>
+    <rect x="12" y="24" width="10" height="10" fill="#F58B00"/>
+  </g>
+</svg>

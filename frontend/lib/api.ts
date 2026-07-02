@@ -1,0 +1,666 @@
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
+
+export async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
+  const headers: Record<string, string> = {};
+  if (options?.body && !(options.body instanceof FormData)) {
+    headers["Content-Type"] = "application/json";
+  }
+  const res = await fetch(`${API_URL}${path}`, {
+    ...options,
+    credentials: "include",
+    headers: { ...headers, ...(options?.headers as Record<string, string>) },
+  });
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ error: { message: "Request failed" } }));
+    throw new Error(error.error?.message || "Request failed");
+  }
+  if (res.status === 204) return undefined as T;
+  return res.json();
+}
+
+// --- Types ---
+
+export interface Category {
+  id: string;
+  label: string;
+  icon: string;
+  description: string;
+  sort_order: number;
+}
+
+export type CategoryRow = [Category, number];
+
+export interface CategoryWithCount {
+  category: Category;
+  count: number;
+}
+
+export interface SessionUser {
+  id: string;
+  nickname: string | null;
+  avatar_url: string | null;
+  is_admin: boolean;
+  auth_method: string;
+}
+
+export interface Tool {
+  id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  function: string;
+  asset_class: string;
+  actor: string;
+  type: string;
+  repo_url: string | null;
+  homepage: string | null;
+  npm_package: string | null;
+  install_command: string | null;
+  mcp_endpoint: string | null;
+  chains: string[];
+  status: string;
+  official_team: string | null;
+  trust_score: number;
+  approval_status?: string;
+  crypto_relevance_score: number;
+  crypto_relevance_reasons: string[];
+  relevance_status: string;
+  install_risk_level: string;
+  install_risk_reasons: string[];
+  requires_secret: boolean;
+  safe_copy_command: string | null;
+  claim_state: string;
+  license: string | null;
+  pricing: string;
+  x402_price: string | null;
+  referral_enabled?: boolean;
+  referral_bps?: number | null;
+  referral_model?: string | null;
+  payment_verified: boolean;
+  x402_endpoint_verified: boolean;
+  price_verified: boolean;
+  stars: number;
+  last_commit_at: string | null;
+  source: string;
+  source_url: string | null;
+  logo_url: string | null;
+  logo_monogram: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ToolFilters {
+  function?: string[];
+  asset_class?: string[];
+  actor?: string[];
+  tool_type?: string[];
+  status?: string[];
+  pricing?: string[];
+  install_risk?: string[];
+  chain?: string[];
+}
+
+export interface ToolListRequest {
+  sort: string;
+  offset: number;
+  limit: number;
+  filters: ToolFilters;
+  query?: string | null;
+}
+
+export interface BrowserDataPayload {
+  categories: CategoryRow[];
+  chains: [string, number][];
+  total: number;
+  tools: Tool[];
+  comment_counts: Record<string, number>;
+  preview_tool: Tool | null;
+}
+
+export interface LoadBrowserDataRequest {
+  sort: string;
+  filters: ToolFilters;
+  search_q?: string | null;
+  selected?: string | null;
+  page: number;
+}
+
+export interface FeaturedCard {
+  id: string;
+  tool_id: string;
+  tool_slug: string;
+  tool_name: string;
+  image_url: string;
+  headline: string | null;
+  subtitle: string | null;
+  sort_order: number;
+}
+
+export interface FooterLink {
+  label: string;
+  url: string;
+}
+
+export interface SiteSettings {
+  id: number;
+  site_name: string;
+  slogan: string;
+  description: string;
+  mcp_endpoint: string;
+  search_keywords: string[];
+  allow_free_registration: boolean;
+  require_tool_approval: boolean;
+  allow_x402_registration: boolean;
+  default_referral_bps?: number | null;
+  default_referral_payout_address?: string | null;
+  x402_builder_code?: string | null;
+  hero_title?: string | null;
+  hero_subtitle?: string | null;
+  about_content?: string | null;
+  footer_links: FooterLink[];
+  updated_at: string;
+}
+
+export interface UpdateSiteSettingsPayload {
+  site_name: string;
+  slogan: string;
+  description: string;
+  mcp_endpoint: string;
+  search_keywords_raw: string;
+  allow_free_registration: boolean;
+  require_tool_approval: boolean;
+  allow_x402_registration: boolean;
+  default_referral_bps?: number | null;
+  default_referral_payout_address?: string | null;
+  x402_builder_code?: string | null;
+  hero_title?: string | null;
+  hero_subtitle?: string | null;
+  about_content?: string | null;
+  footer_links: FooterLink[];
+}
+
+export interface TrustFact {
+  label: string;
+  detail: string;
+  severity: string;
+}
+
+export interface ToolOfficialLink {
+  id: string;
+  tool_id: string;
+  url: string;
+  link_type: string;
+  verification_status: string;
+  evidence_strength: string;
+  official_badge_allowed: boolean;
+  verification_method: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ToolTrustView {
+  tool: Tool;
+  official_links: ToolOfficialLink[];
+  trust_facts: TrustFact[];
+}
+
+export interface CommentView {
+  id: string;
+  tool_id: string;
+  parent_id: string | null;
+  user_id: string;
+  content: string;
+  created_at: string;
+  author_nickname: string | null;
+  author_auth_method: string | null;
+  author_is_admin: boolean;
+  upvote_count: number;
+  viewer_upvoted: boolean;
+}
+
+export interface DashboardBucket {
+  id: string;
+  label: string;
+  count: number;
+  href: string;
+}
+
+export interface DashboardMetrics {
+  public_tools: number;
+  mcp_tools: number;
+  cli_tools: number;
+  sdk_tools: number;
+  api_tools: number;
+  x402_tools: number;
+  official_tools: number;
+  verified_tools: number;
+  updated_recently: number;
+}
+
+export interface PublicDashboardSnapshot {
+  metrics: DashboardMetrics;
+  type_counts: DashboardBucket[];
+  function_counts: DashboardBucket[];
+  chain_counts: DashboardBucket[];
+  trust_counts: DashboardBucket[];
+  pricing_counts: DashboardBucket[];
+  new_tools: Tool[];
+  popular_tools: Tool[];
+  x402_tools: Tool[];
+  high_trust_tools: Tool[];
+  as_of: string;
+}
+
+export interface ToolkitToolView {
+  tool: Tool;
+  note: string | null;
+  tags: string[];
+  starred: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MyToolkitPayload {
+  items: ToolkitToolView[];
+  exports: { claude_desktop: { filename: string; body: string }; cursor: { filename: string; body: string } };
+}
+
+export interface ToolComparisonView {
+  tools: Tool[];
+}
+
+export interface ToolSubmission {
+  id: string;
+  name: string;
+  slug: string;
+  status: string;
+  created_at: string;
+}
+
+export interface AdminDashboardStats {
+  pending_candidates: number;
+  known_updates: number;
+  high_risk_installs: number;
+  open_reports: number;
+  needs_manual_research: number;
+  low_relevance: number;
+  public_tools: number;
+  crawler_sources: CrawlerSourceView[];
+}
+
+export interface CrawlerSourceView {
+  id?: string | null;
+  name: string;
+  url: string;
+  schedule: string;
+  schedule_minutes: number;
+  enabled: boolean;
+  last_crawled_at: string | null;
+  crawl_status: string;
+  items_found: number;
+  error_message: string | null;
+}
+
+export interface UpdateCrawlerSourcePayload {
+  schedule_minutes: number;
+  enabled: boolean;
+}
+
+export interface ReviewQueueItem {
+  tool: Tool;
+  queue_reason: string;
+  priority: number;
+}
+
+export interface AdminUserView {
+  id: string;
+  nickname: string | null;
+  auth_method: string;
+  is_admin: boolean;
+  is_banned: boolean;
+  comment_count: number;
+  bookmark_count: number;
+  created_at: string;
+}
+
+export interface AdminCommentView {
+  id: string;
+  content: string;
+  created_at: string;
+  tool_slug: string;
+  tool_name: string;
+  author_nickname: string | null;
+  author_auth_method: string | null;
+}
+
+export interface AdminCategoryView {
+  category: Category;
+  count: number;
+}
+
+// --- Helpers ---
+
+function normalizeCategory(row: CategoryRow): CategoryWithCount {
+  return { category: row[0], count: row[1] };
+}
+
+function filtersToQuery(filters: ToolFilters): URLSearchParams {
+  const search = new URLSearchParams();
+  const mapping: [string, string[] | undefined][] = [
+    ["function", filters.function],
+    ["asset_class", filters.asset_class],
+    ["actor", filters.actor],
+    ["type", filters.tool_type],
+    ["status", filters.status],
+    ["pricing", filters.pricing],
+    ["install_risk", filters.install_risk],
+    ["chain", filters.chain],
+  ];
+  for (const [key, values] of mapping) {
+    if (values?.length) search.set(key, values.join(","));
+  }
+  return search;
+}
+
+// --- Auth ---
+
+export async function getMe(): Promise<SessionUser | null> {
+  return apiFetch<SessionUser | null>("/api/v2/me");
+}
+
+export async function checkAdminAccess(): Promise<boolean> {
+  try {
+    await apiFetch<{ ok: boolean }>("/api/v2/admin/check");
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// --- Public catalog ---
+
+export async function getCategories(): Promise<CategoryWithCount[]> {
+  const rows = await apiFetch<CategoryRow[]>("/api/v2/categories");
+  return rows.map(normalizeCategory);
+}
+
+export async function getToolBySlug(slug: string): Promise<Tool> {
+  return apiFetch<Tool>(`/api/v2/tools/${encodeURIComponent(slug)}`);
+}
+
+export async function getToolTrustView(slug: string): Promise<ToolTrustView> {
+  return apiFetch<ToolTrustView>(`/api/v2/admin/trust/${encodeURIComponent(slug)}`);
+}
+
+export async function searchTools(params: {
+  query: string;
+  function?: string;
+  chain?: string;
+}): Promise<Tool[]> {
+  const search = new URLSearchParams({ query: params.query });
+  if (params.function) search.set("function", params.function);
+  if (params.chain) search.set("chain", params.chain);
+  return apiFetch<Tool[]>(`/api/v2/tools/search?${search.toString()}`);
+}
+
+export async function getRecentTools(limit = 10): Promise<Tool[]> {
+  return apiFetch<Tool[]>(`/api/v2/tools/recent?limit=${limit}`);
+}
+
+export async function listTools(req: ToolListRequest): Promise<Tool[]> {
+  return apiFetch<Tool[]>("/api/v2/tools/list", {
+    method: "POST",
+    body: JSON.stringify(req),
+  });
+}
+
+export async function countTools(filters: ToolFilters = {}): Promise<number> {
+  const qs = filtersToQuery(filters).toString();
+  return apiFetch<number>(`/api/v2/tools/count${qs ? `?${qs}` : ""}`);
+}
+
+export async function getChainCounts(limit = 12): Promise<[string, number][]> {
+  return apiFetch<[string, number][]>(`/api/v2/chains?limit=${limit}`);
+}
+
+export async function loadBrowserData(req: LoadBrowserDataRequest): Promise<BrowserDataPayload> {
+  return apiFetch<BrowserDataPayload>("/api/v2/browser-data", {
+    method: "POST",
+    body: JSON.stringify(req),
+  });
+}
+
+export async function getFeaturedCards(): Promise<FeaturedCard[]> {
+  return apiFetch<FeaturedCard[]>("/api/v2/featured");
+}
+
+export async function getSiteSettings(): Promise<SiteSettings> {
+  return apiFetch<SiteSettings>("/api/v2/settings");
+}
+
+export async function getPublicDashboard(limit = 12): Promise<PublicDashboardSnapshot> {
+  return apiFetch<PublicDashboardSnapshot>(`/api/v2/dashboard?limit=${limit}`);
+}
+
+export async function compareTools(slugs: string[]): Promise<ToolComparisonView> {
+  return apiFetch<ToolComparisonView>(
+    `/api/v2/tools/compare?slugs=${encodeURIComponent(slugs.join(","))}`,
+  );
+}
+
+export async function getToolCommentCounts(slugs: string[]): Promise<Record<string, number>> {
+  if (!slugs.length) return {};
+  return apiFetch<Record<string, number>>(
+    `/api/v2/tools/comment-counts?slugs=${encodeURIComponent(slugs.join(","))}`,
+  );
+}
+
+export async function getToolCommentCount(slug: string): Promise<number> {
+  return apiFetch<number>(`/api/v2/tools/${encodeURIComponent(slug)}/comment-count`);
+}
+
+// --- Comments & bookmarks ---
+
+export async function getToolComments(slug: string, sort = "new"): Promise<CommentView[]> {
+  return apiFetch<CommentView[]>(
+    `/api/v2/tools/${encodeURIComponent(slug)}/comments?sort=${sort}`,
+  );
+}
+
+export async function createComment(
+  slug: string,
+  content: string,
+  parentId?: string | null,
+): Promise<CommentView> {
+  return apiFetch<CommentView>(`/api/v2/tools/${encodeURIComponent(slug)}/comments`, {
+    method: "POST",
+    body: JSON.stringify({ content, parent_id: parentId ?? null }),
+  });
+}
+
+export async function toggleUpvote(commentId: string): Promise<{ upvoted: boolean }> {
+  return apiFetch<{ upvoted: boolean }>(`/api/v2/comments/${commentId}/upvote`, {
+    method: "POST",
+  });
+}
+
+export async function isBookmarked(slug: string): Promise<boolean> {
+  const res = await apiFetch<{ starred: boolean }>(
+    `/api/v2/tools/${encodeURIComponent(slug)}/bookmark`,
+  );
+  return res.starred;
+}
+
+export async function setBookmark(slug: string, starred: boolean): Promise<void> {
+  await apiFetch(`/api/v2/tools/${encodeURIComponent(slug)}/bookmark`, {
+    method: "PUT",
+    body: JSON.stringify({ starred }),
+  });
+}
+
+export async function toggleBookmark(slug: string): Promise<{ starred: boolean }> {
+  return apiFetch<{ starred: boolean }>(
+    `/api/v2/tools/${encodeURIComponent(slug)}/bookmark`,
+    { method: "POST" },
+  );
+}
+
+// --- Toolkit ---
+
+export async function listMyToolkit(): Promise<MyToolkitPayload> {
+  return apiFetch<MyToolkitPayload>("/api/v2/toolkit");
+}
+
+export async function updateToolkitItem(
+  slug: string,
+  payload: { note?: string | null; tags?: string[]; starred?: boolean },
+): Promise<void> {
+  await apiFetch(`/api/v2/toolkit/${encodeURIComponent(slug)}`, {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+}
+
+// --- Submissions ---
+
+export async function submitTool(payload: Record<string, unknown>): Promise<ToolSubmission> {
+  return apiFetch<ToolSubmission>("/api/v2/submit", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function listMySubmissions(): Promise<ToolSubmission[]> {
+  return apiFetch<ToolSubmission[]>("/api/v2/my-submissions");
+}
+
+export async function reportTool(slug: string, reason: string): Promise<void> {
+  await apiFetch(`/api/v2/tools/${encodeURIComponent(slug)}/report`, {
+    method: "POST",
+    body: JSON.stringify({ reason }),
+  });
+}
+
+export async function requestToolClaim(slug: string, payload: Record<string, unknown>): Promise<void> {
+  await apiFetch(`/api/v2/tools/${encodeURIComponent(slug)}/claim`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+// --- Admin ---
+
+export async function getAdminStats(): Promise<AdminDashboardStats> {
+  return apiFetch<AdminDashboardStats>("/api/v2/admin/stats");
+}
+
+export async function getReviewQueue(queue: string, limit = 50): Promise<ReviewQueueItem[]> {
+  return apiFetch<ReviewQueueItem[]>(
+    `/api/v2/admin/review-queue?queue=${encodeURIComponent(queue)}&limit=${limit}`,
+  );
+}
+
+export async function reviewTool(payload: Record<string, unknown>): Promise<void> {
+  await apiFetch("/api/v2/admin/review", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function listAdminUsers(): Promise<AdminUserView[]> {
+  return apiFetch<AdminUserView[]>("/api/v2/admin/users");
+}
+
+export async function setUserBanned(userId: string, banned: boolean): Promise<void> {
+  await apiFetch(`/api/v2/admin/users/${userId}/ban`, {
+    method: "PUT",
+    body: JSON.stringify({ banned }),
+  });
+}
+
+export async function setUserAdmin(userId: string, isAdmin: boolean): Promise<void> {
+  await apiFetch(`/api/v2/admin/users/${userId}/admin`, {
+    method: "PUT",
+    body: JSON.stringify({ is_admin: isAdmin }),
+  });
+}
+
+export async function deleteUser(userId: string): Promise<void> {
+  await apiFetch(`/api/v2/admin/users/${userId}`, { method: "DELETE" });
+}
+
+export async function listAdminComments(): Promise<AdminCommentView[]> {
+  return apiFetch<AdminCommentView[]>("/api/v2/admin/comments");
+}
+
+export async function deleteAdminComment(commentId: string): Promise<void> {
+  await apiFetch(`/api/v2/admin/comments/${commentId}`, { method: "DELETE" });
+}
+
+export async function deleteCommentAndBanUser(commentId: string): Promise<void> {
+  await apiFetch(`/api/v2/admin/comments/${commentId}/ban-author`, { method: "DELETE" });
+}
+
+export async function listAdminCategories(): Promise<AdminCategoryView[]> {
+  const rows = await apiFetch<CategoryRow[]>("/api/v2/admin/categories");
+  return rows.map((row) => ({ category: row[0], count: row[1] }));
+}
+
+export async function createCategory(payload: { id: string; label: string; icon: string }): Promise<Category> {
+  return apiFetch<Category>("/api/v2/admin/categories", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function updateCategory(id: string, payload: Partial<Category>): Promise<Category> {
+  return apiFetch<Category>(`/api/v2/admin/categories/${encodeURIComponent(id)}`, {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteCategory(id: string): Promise<void> {
+  await apiFetch(`/api/v2/admin/categories/${encodeURIComponent(id)}`, { method: "DELETE" });
+}
+
+export async function listFeaturedCardsAdmin(): Promise<FeaturedCard[]> {
+  return apiFetch<FeaturedCard[]>("/api/v2/admin/featured");
+}
+
+export async function getAdminSiteSettings(): Promise<SiteSettings> {
+  return apiFetch<SiteSettings>("/api/v2/admin/settings");
+}
+
+export async function updateSiteSettings(
+  payload: UpdateSiteSettingsPayload,
+): Promise<SiteSettings> {
+  return apiFetch<SiteSettings>("/api/v2/admin/settings", {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function listCrawlerSources(): Promise<CrawlerSourceView[]> {
+  return apiFetch<CrawlerSourceView[]>("/api/v2/admin/crawler/sources");
+}
+
+export async function updateCrawlerSource(
+  id: string,
+  payload: UpdateCrawlerSourcePayload,
+): Promise<unknown> {
+  return apiFetch(`/api/v2/admin/crawler/sources/${encodeURIComponent(id)}`, {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function triggerCrawlerSource(source: string): Promise<{ ok: boolean }> {
+  return apiFetch<{ ok: boolean }>("/api/v2/admin/crawler/trigger", {
+    method: "POST",
+    body: JSON.stringify({ source }),
+  });
+}
+
+export const API_BASE = API_URL;
