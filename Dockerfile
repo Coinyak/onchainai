@@ -10,11 +10,6 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 COPY Cargo.toml Cargo.lock* ./
-
-# Pre-fetch dependencies (cached unless Cargo.toml/Cargo.lock change).
-# This layer is cached by Railway's Docker builder across source-only changes.
-RUN cargo fetch --locked 2>/dev/null || cargo fetch
-
 COPY src/ ./src/
 COPY migrations/ ./migrations/
 COPY style/ ./style/
