@@ -73,6 +73,14 @@ export const CHAIN_CATALOG: ChainMeta[] = [
   { id: "mezo", label: "Mezo", logo: "/chains/mezo.svg", aliases: ["mezo-mainnet"], pinned: false },
   { id: "bittensor", label: "Bittensor", logo: "/chains/bittensor.svg", aliases: ["tao", "bittensor-mainnet"], pinned: false },
   { id: "pulsechain", label: "PulseChain", logo: "/chains/pulsechain.svg", aliases: ["pls", "pulsechain-mainnet"], pinned: false },
+  { id: "provenance", label: "Provenance", logo: "/chains/provenance.svg", aliases: ["hash", "hash-2", "provenance-mainnet"], pinned: false },
+  { id: "fluent", label: "Fluent", logo: "/chains/fluent.svg", aliases: ["fluent-network", "fluent-mainnet"], pinned: false },
+  { id: "hydration", label: "Hydration", logo: "/chains/hydration.svg", aliases: ["hydradx", "hydration-mainnet"], pinned: false },
+  { id: "mixin", label: "Mixin", logo: "/chains/mixin.svg", aliases: ["xin", "mixin-mainnet"], pinned: false },
+  { id: "vaulta", label: "Vaulta", logo: "/chains/vaulta.svg", aliases: ["eos", "eosio", "vaulta-mainnet"], pinned: false },
+  { id: "ethereal", label: "Ethereal", logo: "/chains/ethereal.svg", aliases: ["ethereal-mainnet"], pinned: false },
+  { id: "stable", label: "Stable", logo: "/chains/stable.svg", aliases: ["stable-2", "stable-mainnet"], pinned: false },
+  { id: "xpr", label: "XPR Network", logo: "/chains/xpr.svg", aliases: ["proton", "xpr-network", "xpr-mainnet"], pinned: false },
 ];
 
 export const STRIP_PRIMARY_VISIBLE = 20;

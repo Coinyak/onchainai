@@ -464,6 +464,62 @@
       "kind": "wrap_raster",
       "source": "pulsechain_llama.png",
       "markers": ["data:image/png;base64,"]
+    },
+    {
+      "id": "provenance",
+      "label": "Provenance",
+      "kind": "wrap_raster",
+      "source": "provenance_llama.png",
+      "markers": ["data:image/png;base64,"]
+    },
+    {
+      "id": "fluent",
+      "label": "Fluent",
+      "kind": "wrap_raster",
+      "source": "fluent_llama.png",
+      "markers": ["data:image/png;base64,"]
+    },
+    {
+      "id": "hydration",
+      "label": "Hydration",
+      "kind": "wrap_raster",
+      "source": "hydration_llama.png",
+      "markers": ["data:image/png;base64,"]
+    },
+    {
+      "id": "mixin",
+      "label": "Mixin",
+      "kind": "wrap_raster",
+      "source": "mixin_llama.png",
+      "markers": ["data:image/png;base64,"]
+    },
+    {
+      "id": "vaulta",
+      "label": "Vaulta",
+      "kind": "wrap_raster",
+      "source": "vaulta_llama.png",
+      "markers": ["data:image/png;base64,"]
+    },
+    {
+      "id": "ethereal",
+      "label": "Ethereal",
+      "kind": "wrap_raster",
+      "source": "ethereal_llama.png",
+      "markers": ["data:image/png;base64,"]
+    },
+    {
+      "id": "stable",
+      "label": "Stable",
+      "kind": "wrap_raster",
+      "source": "stable_llama.png",
+      "markers": ["data:image/png;base64,"]
+    },
+    {
+      "id": "xpr",
+      "label": "XPR Network",
+      "kind": "wrap_raster",
+      "source": "xpr_llama.png",
+      "markers": ["data:image/png;base64,"]
     }
   ]
 }

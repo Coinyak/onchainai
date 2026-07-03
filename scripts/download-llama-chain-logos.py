@@ -24,6 +24,14 @@ CHAINS: list[tuple[str, list[str]]] = [
     ("mezo", ["https://icons.llama.fi/mezo.jpg", "https://icons.llamao.fi/icons/chains/rsz_mezo?w=48&h=48"]),
     ("bittensor", ["https://icons.llama.fi/bittensor.jpg", "https://icons.llamao.fi/icons/chains/rsz_bittensor?w=48&h=48"]),
     ("pulsechain", ["https://icons.llama.fi/pulsechain.jpg", "https://icons.llama.fi/pulsechain.png"]),
+    ("provenance", ["https://icons.llama.fi/provenance.jpg", "https://icons.llamao.fi/icons/chains/rsz_provenance?w=48&h=48"]),
+    ("fluent", ["https://icons.llama.fi/fluent.jpg", "https://icons.llamao.fi/icons/chains/rsz_fluent?w=48&h=48"]),
+    ("hydration", ["https://icons.llama.fi/hydradx.jpg", "https://icons.llamao.fi/icons/chains/rsz_hydration?w=48&h=48"]),
+    ("mixin", ["https://icons.llama.fi/mixin.jpg", "https://icons.llamao.fi/icons/chains/rsz_mixin?w=48&h=48"]),
+    ("vaulta", ["https://icons.llama.fi/eos.jpg", "https://icons.llama.fi/vaulta.jpg"]),
+    ("ethereal", ["https://icons.llama.fi/ethena-usde.jpg", "https://icons.llamao.fi/icons/chains/rsz_ethereal?w=48&h=48"]),
+    ("stable", ["https://icons.llama.fi/stable-2.jpg", "https://icons.llamao.fi/icons/chains/rsz_stable?w=48&h=48"]),
+    ("xpr", ["https://icons.llama.fi/proton.jpg", "https://icons.llamao.fi/icons/chains/rsz_xpr?w=48&h=48"]),
 ]
 
 

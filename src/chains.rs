@@ -487,6 +487,62 @@ pub const CHAIN_CATALOG: &[ChainMeta] = &[
         aliases: &["pls", "pulsechain-mainnet"],
         pinned: false,
     },
+    ChainMeta {
+        id: "provenance",
+        label: "Provenance",
+        logo: "/chains/provenance.svg",
+        aliases: &["hash", "hash-2", "provenance-mainnet"],
+        pinned: false,
+    },
+    ChainMeta {
+        id: "fluent",
+        label: "Fluent",
+        logo: "/chains/fluent.svg",
+        aliases: &["fluent-network", "fluent-mainnet"],
+        pinned: false,
+    },
+    ChainMeta {
+        id: "hydration",
+        label: "Hydration",
+        logo: "/chains/hydration.svg",
+        aliases: &["hydradx", "hydration-mainnet"],
+        pinned: false,
+    },
+    ChainMeta {
+        id: "mixin",
+        label: "Mixin",
+        logo: "/chains/mixin.svg",
+        aliases: &["xin", "mixin-mainnet"],
+        pinned: false,
+    },
+    ChainMeta {
+        id: "vaulta",
+        label: "Vaulta",
+        logo: "/chains/vaulta.svg",
+        aliases: &["eos", "eosio", "vaulta-mainnet"],
+        pinned: false,
+    },
+    ChainMeta {
+        id: "ethereal",
+        label: "Ethereal",
+        logo: "/chains/ethereal.svg",
+        aliases: &["ethereal-mainnet"],
+        pinned: false,
+    },
+    ChainMeta {
+        id: "stable",
+        label: "Stable",
+        logo: "/chains/stable.svg",
+        aliases: &["stable-2", "stable-mainnet"],
+        pinned: false,
+    },
+    ChainMeta {
+        id: "xpr",
+        label: "XPR Network",
+        logo: "/chains/xpr.svg",
+        aliases: &["proton", "xpr-network", "xpr-mainnet"],
+        pinned: false,
+    },
 ];
 
 /// Primary-row chain tiles (excluding the All tile).
@@ -910,7 +966,7 @@ mod tests {
                 "XRPL catalog alias should resolve: {known_xrpl}"
             );
         }
-        for unknown in ["provenance", "anubis"] {
+        for unknown in ["anubis", "robinhood"] {
             assert!(
                 resolve_chain(unknown).is_none(),
                 "unknown chain should not resolve: {unknown}"
@@ -972,7 +1028,7 @@ mod tests {
     #[test]
     fn strip_primary_visible_leaves_overflow_for_expand_control() {
         assert_eq!(STRIP_PRIMARY_VISIBLE, 20);
-        assert_eq!(CHAIN_CATALOG.len(), 66);
+        assert_eq!(CHAIN_CATALOG.len(), 74);
 
         let counts: Vec<(String, i64)> = CHAIN_CATALOG
             .iter()
