@@ -31,8 +31,8 @@
 // Rules (see docs/OPERATOR_GUIDE.md — 자동 검증 하네스):
 //   official  repo org is a curated first-party org (FIRST_PARTY_ORGS), or the
 //             GitHub org is domain-verified AND its site matches tool homepage
-//   verified  repo exists + identity cluster aligned (>=1 pair of org/npm-scope/
-//             homepage-label) — mirrors src/trust_verification.rs
+//   verified  repo exists + three-way identity cluster (github org + npm scope +
+//             homepage label) — mirrors src/trust_verification.rs
 //   never     elevate tools failing the public gate (approval/relevance/risk/
 //             quarantine); never downgrade; never touch x402 payment flags.
 
@@ -521,7 +521,9 @@ async function processTool(db, tool) {
 }
 
 function isScanCandidate(tool) {
-  if (tool.install_risk_level === "critical") return false;
+  if (tool.install_risk_level === "critical" || tool.install_risk_level === "high") {
+    return false;
+  }
   const gh = tool.repo_url ? parseGithubRepo(tool.repo_url) : null;
   const orgHit =
     gh && Object.keys(FIRST_PARTY_ORGS).some((org) => normalize(org) === normalize(gh.org));

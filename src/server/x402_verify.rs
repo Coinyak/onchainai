@@ -117,23 +117,27 @@ fn is_link_local_v6(ip: Ipv6Addr) -> bool {
     (ip.segments()[0] & 0xffc0) == 0xfe80
 }
 
-/// Resolve host and reject private/link-local/metadata addresses (async SSRF guard).
-pub async fn resolve_host_is_public(host: &str) -> Result<(), String> {
+/// Resolve host once, reject blocked IPs, return the first public socket for pinning.
+pub async fn resolve_public_probe_addr(host: &str) -> Result<SocketAddr, String> {
     let port = 443u16;
     let addrs = tokio::net::lookup_host((host, port))
         .await
         .map_err(|e| format!("dns resolution failed: {e}"))?;
     let mut any = false;
+    let mut first_public = None;
     for addr in addrs {
         any = true;
         if is_blocked_ip(addr.ip()) {
             return Err("resolved to blocked address".into());
         }
+        if first_public.is_none() {
+            first_public = Some(addr);
+        }
     }
     if !any {
         return Err("dns resolution returned no addresses".into());
     }
-    Ok(())
+    first_public.ok_or_else(|| "dns resolution returned no public addresses".into())
 }
 
 fn truncate_body(body: &str) -> &str {
@@ -172,39 +176,18 @@ pub fn normalize_price_token(value: &str) -> String {
         .collect()
 }
 
-pub fn price_matches_advertised(probed_amount: &str, x402_price: &str) -> bool {
-    let left = normalize_price_token(probed_amount);
-    let right = normalize_price_token(x402_price);
-    if left.is_empty() || right.is_empty() {
-        return false;
-    }
-    if left == right {
-        return true;
-    }
-    // Allow advertised labels to embed the probed amount (e.g. "$1,000 USDC"),
-    // but reject trivial substring hits such as "1" inside "1000".
-    const MIN_PARTIAL_LEN: usize = 3;
-    if left.len() >= MIN_PARTIAL_LEN && right.contains(&left) {
-        return true;
-    }
-    if right.len() >= MIN_PARTIAL_LEN && left.contains(&right) {
-        return true;
-    }
-    false
+/// Leading numeric token (digits + optional decimal point) from normalized price text.
+fn extract_amount_digits(value: &str) -> String {
+    normalize_price_token(value)
+        .chars()
+        .take_while(|c| c.is_ascii_digit() || *c == '.')
+        .collect()
 }
 
-/// Pick the first public address for `host` and pin DNS for the outbound probe.
-async fn pick_public_probe_addr(host: &str) -> Result<SocketAddr, String> {
-    resolve_host_is_public(host).await?;
-    let addrs = tokio::net::lookup_host((host, 443u16))
-        .await
-        .map_err(|e| format!("dns resolution failed: {e}"))?;
-    for addr in addrs {
-        if !is_blocked_ip(addr.ip()) {
-            return Ok(addr);
-        }
-    }
-    Err("dns resolution returned no public addresses".into())
+pub fn price_matches_advertised(probed_amount: &str, x402_price: &str) -> bool {
+    let probed = extract_amount_digits(probed_amount);
+    let advertised = extract_amount_digits(x402_price);
+    !probed.is_empty() && probed == advertised
 }
 
 fn pinned_probe_client(host: &str, addr: SocketAddr) -> reqwest::Client {
@@ -216,13 +199,14 @@ fn pinned_probe_client(host: &str, addr: SocketAddr) -> reqwest::Client {
         .expect("pinned reqwest client")
 }
 
-pub async fn probe_x402_endpoint(_client: &reqwest::Client, url_str: &str) -> ProbeOutcome {
+/// Probe an x402 endpoint. Builds a per-host DNS-pinned client (shared pools are not reused).
+pub async fn probe_x402_endpoint(url_str: &str) -> ProbeOutcome {
     let parsed = match validate_probe_url(url_str) {
         Ok(url) => url,
         Err(reason) => return ProbeOutcome::SsrfBlocked(reason),
     };
     let host = parsed.host_str().expect("validated host");
-    let pinned_addr = match pick_public_probe_addr(host).await {
+    let pinned_addr = match resolve_public_probe_addr(host).await {
         Ok(addr) => addr,
         Err(reason) => return ProbeOutcome::SsrfBlocked(reason),
     };
@@ -284,7 +268,7 @@ fn apply_outcome_to_flags(
 
 pub async fn verify_tool_by_id(
     pool: &PgPool,
-    client: &reqwest::Client,
+    _client: &reqwest::Client,
     tool_id: Uuid,
 ) -> Result<Option<X402VerifyStatus>, sqlx::Error> {
     let row = sqlx::query_as::<_, ToolProbeRow>(
@@ -306,7 +290,7 @@ pub async fn verify_tool_by_id(
         _ => return Ok(None),
     };
 
-    let outcome = probe_x402_endpoint(client, endpoint).await;
+    let outcome = probe_x402_endpoint(endpoint).await;
     let (endpoint_verified, price_verified, failures) = apply_outcome_to_flags(
         &outcome,
         row.x402_price.as_deref(),
@@ -466,6 +450,7 @@ mod tests {
         assert!(!price_matches_advertised("2000", "0.001 usdc"));
         assert!(!price_matches_advertised("1", "0.01 usdc"));
         assert!(!price_matches_advertised("1", "1000"));
+        assert!(!price_matches_advertised("100", "$1000 USDC"));
     }
 
     #[test]
