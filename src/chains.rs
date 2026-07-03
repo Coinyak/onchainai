@@ -382,6 +382,111 @@ pub const CHAIN_CATALOG: &[ChainMeta] = &[
         aliases: &["zora-mainnet"],
         pinned: false,
     },
+    ChainMeta {
+        id: "stellar",
+        label: "Stellar",
+        logo: "/chains/stellar.svg",
+        aliases: &["xlm", "stellar-mainnet"],
+        pinned: false,
+    },
+    ChainMeta {
+        id: "algorand",
+        label: "Algorand",
+        logo: "/chains/algorand.svg",
+        aliases: &["algo", "algorand-mainnet"],
+        pinned: false,
+    },
+    ChainMeta {
+        id: "filecoin",
+        label: "Filecoin",
+        logo: "/chains/filecoin.svg",
+        aliases: &["fil", "filecoin-mainnet"],
+        pinned: false,
+    },
+    ChainMeta {
+        id: "ronin",
+        label: "Ronin",
+        logo: "/chains/ronin.svg",
+        aliases: &["ron", "ronin-mainnet"],
+        pinned: false,
+    },
+    ChainMeta {
+        id: "worldchain",
+        label: "World Chain",
+        logo: "/chains/worldchain.svg",
+        aliases: &["world-chain", "worldcoin", "wld"],
+        pinned: false,
+    },
+    ChainMeta {
+        id: "hedera",
+        label: "Hedera",
+        logo: "/chains/hedera.svg",
+        aliases: &["hbar", "hedera-hashgraph"],
+        pinned: false,
+    },
+    ChainMeta {
+        id: "xrpl",
+        label: "XRPL",
+        logo: "/chains/xrpl.svg",
+        aliases: &["xrp", "ripple", "xrpl-mainnet"],
+        pinned: false,
+    },
+    ChainMeta {
+        id: "thorchain",
+        label: "THORChain",
+        logo: "/chains/thorchain.svg",
+        aliases: &["rune", "thorchain-mainnet"],
+        pinned: false,
+    },
+    ChainMeta {
+        id: "katana",
+        label: "Katana",
+        logo: "/chains/katana.svg",
+        aliases: &["katana-mainnet"],
+        pinned: false,
+    },
+    ChainMeta {
+        id: "dydx",
+        label: "dYdX",
+        logo: "/chains/dydx.svg",
+        aliases: &["dydx-chain", "dydx-mainnet"],
+        pinned: false,
+    },
+    ChainMeta {
+        id: "fraxtal",
+        label: "Fraxtal",
+        logo: "/chains/fraxtal.svg",
+        aliases: &["frax", "fraxtal-mainnet"],
+        pinned: false,
+    },
+    ChainMeta {
+        id: "tezos",
+        label: "Tezos",
+        logo: "/chains/tezos.svg",
+        aliases: &["xtz", "tezos-mainnet"],
+        pinned: false,
+    },
+    ChainMeta {
+        id: "mezo",
+        label: "Mezo",
+        logo: "/chains/mezo.svg",
+        aliases: &["mezo-mainnet"],
+        pinned: false,
+    },
+    ChainMeta {
+        id: "bittensor",
+        label: "Bittensor",
+        logo: "/chains/bittensor.svg",
+        aliases: &["tao", "bittensor-mainnet"],
+        pinned: false,
+    },
+    ChainMeta {
+        id: "pulsechain",
+        label: "PulseChain",
+        logo: "/chains/pulsechain.svg",
+        aliases: &["pls", "pulsechain-mainnet"],
+        pinned: false,
+    },
 ];
 
 /// Primary-row chain tiles (excluding the All tile).
@@ -799,7 +904,13 @@ mod tests {
                 "catalog chain should resolve: {known}"
             );
         }
-        for unknown in ["xrp", "ripple"] {
+        for known_xrpl in ["xrp", "ripple", "xrpl"] {
+            assert!(
+                resolve_chain(known_xrpl).is_some(),
+                "XRPL catalog alias should resolve: {known_xrpl}"
+            );
+        }
+        for unknown in ["provenance", "anubis"] {
             assert!(
                 resolve_chain(unknown).is_none(),
                 "unknown chain should not resolve: {unknown}"
@@ -861,7 +972,7 @@ mod tests {
     #[test]
     fn strip_primary_visible_leaves_overflow_for_expand_control() {
         assert_eq!(STRIP_PRIMARY_VISIBLE, 20);
-        assert_eq!(CHAIN_CATALOG.len(), 51);
+        assert_eq!(CHAIN_CATALOG.len(), 66);
 
         let counts: Vec<(String, i64)> = CHAIN_CATALOG
             .iter()
@@ -954,7 +1065,7 @@ mod tests {
         }
         println!("catalog_logos={catalog_hits} text_pills={pill_hits}");
 
-        for noise in ["multi-chain", "63+ networks", "xrp"] {
+        for noise in ["multi-chain", "63+ networks", "ecosystem"] {
             assert!(
                 resolve_chain(noise).is_none(),
                 "noise value must not resolve: {noise}"

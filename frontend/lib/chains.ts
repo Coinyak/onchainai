@@ -58,6 +58,21 @@ export const CHAIN_CATALOG: ChainMeta[] = [
   { id: "taiko", label: "Taiko", logo: "/chains/taiko.svg", aliases: ["taiko-mainnet"], pinned: false },
   { id: "immutable", label: "Immutable", logo: "/chains/immutable.svg", aliases: ["imx", "immutablex", "immutable-x", "immutable-zkevm"], pinned: false },
   { id: "zora", label: "Zora", logo: "/chains/zora.svg", aliases: ["zora-mainnet"], pinned: false },
+  { id: "stellar", label: "Stellar", logo: "/chains/stellar.svg", aliases: ["xlm", "stellar-mainnet"], pinned: false },
+  { id: "algorand", label: "Algorand", logo: "/chains/algorand.svg", aliases: ["algo", "algorand-mainnet"], pinned: false },
+  { id: "filecoin", label: "Filecoin", logo: "/chains/filecoin.svg", aliases: ["fil", "filecoin-mainnet"], pinned: false },
+  { id: "ronin", label: "Ronin", logo: "/chains/ronin.svg", aliases: ["ron", "ronin-mainnet"], pinned: false },
+  { id: "worldchain", label: "World Chain", logo: "/chains/worldchain.svg", aliases: ["world-chain", "worldcoin", "wld"], pinned: false },
+  { id: "hedera", label: "Hedera", logo: "/chains/hedera.svg", aliases: ["hbar", "hedera-hashgraph"], pinned: false },
+  { id: "xrpl", label: "XRPL", logo: "/chains/xrpl.svg", aliases: ["xrp", "ripple", "xrpl-mainnet"], pinned: false },
+  { id: "thorchain", label: "THORChain", logo: "/chains/thorchain.svg", aliases: ["rune", "thorchain-mainnet"], pinned: false },
+  { id: "katana", label: "Katana", logo: "/chains/katana.svg", aliases: ["katana-mainnet"], pinned: false },
+  { id: "dydx", label: "dYdX", logo: "/chains/dydx.svg", aliases: ["dydx-chain", "dydx-mainnet"], pinned: false },
+  { id: "fraxtal", label: "Fraxtal", logo: "/chains/fraxtal.svg", aliases: ["frax", "fraxtal-mainnet"], pinned: false },
+  { id: "tezos", label: "Tezos", logo: "/chains/tezos.svg", aliases: ["xtz", "tezos-mainnet"], pinned: false },
+  { id: "mezo", label: "Mezo", logo: "/chains/mezo.svg", aliases: ["mezo-mainnet"], pinned: false },
+  { id: "bittensor", label: "Bittensor", logo: "/chains/bittensor.svg", aliases: ["tao", "bittensor-mainnet"], pinned: false },
+  { id: "pulsechain", label: "PulseChain", logo: "/chains/pulsechain.svg", aliases: ["pls", "pulsechain-mainnet"], pinned: false },
 ];
 
 export const STRIP_PRIMARY_VISIBLE = 20;

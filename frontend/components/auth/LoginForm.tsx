@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { API_BASE } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { GitHubMarkIcon } from "@/components/icons/GitHubMarkIcon";
@@ -25,6 +25,12 @@ export function LoginForm({
   const [emailBusy, setEmailBusy] = useState(false);
   const [walletBusy, setWalletBusy] = useState(false);
   const [walletMsg, setWalletMsg] = useState<string | null>(null);
+  const [isVercelPreview, setIsVercelPreview] = useState(false);
+
+  useEffect(() => {
+    const host = window.location.hostname;
+    setIsVercelPreview(host.endsWith(".vercel.app"));
+  }, []);
 
   const githubHref = `${API_BASE}/auth/github`;
   const githubSwitchAction = `${API_BASE}/auth/github/switch`;
@@ -93,6 +99,23 @@ export function LoginForm({
           data-testid="auth-error-banner"
         >
           {authError}
+        </p>
+      )}
+      {isVercelPreview && (
+        <p
+          className="mb-4 rounded-md border border-border bg-neutral-hover px-4 py-3 text-body-sm text-secondary"
+          role="status"
+          data-testid="preview-auth-notice"
+        >
+          GitHub sign-in does not work on Vercel preview URLs — OAuth callbacks are
+          registered for production only. Use{" "}
+          <a
+            href="https://www.onchain-ai.xyz/login"
+            className="text-primary underline hover:no-underline"
+          >
+            www.onchain-ai.xyz
+          </a>{" "}
+          or local dev (<code className="text-body-sm">localhost:3000</code>).
         </p>
       )}
       <a

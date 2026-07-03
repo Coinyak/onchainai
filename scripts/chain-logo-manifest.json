@@ -359,6 +359,111 @@
       "kind": "wrap_raster",
       "source": "zora_llama.png",
       "markers": ["data:image/png;base64,"]
+    },
+    {
+      "id": "stellar",
+      "label": "Stellar",
+      "kind": "wrap_raster",
+      "source": "stellar_llama.png",
+      "markers": ["data:image/png;base64,"]
+    },
+    {
+      "id": "algorand",
+      "label": "Algorand",
+      "kind": "wrap_raster",
+      "source": "algorand_llama.png",
+      "markers": ["data:image/png;base64,"]
+    },
+    {
+      "id": "filecoin",
+      "label": "Filecoin",
+      "kind": "wrap_raster",
+      "source": "filecoin_llama.png",
+      "markers": ["data:image/png;base64,"]
+    },
+    {
+      "id": "ronin",
+      "label": "Ronin",
+      "kind": "wrap_raster",
+      "source": "ronin_llama.png",
+      "markers": ["data:image/png;base64,"]
+    },
+    {
+      "id": "worldchain",
+      "label": "World Chain",
+      "kind": "wrap_raster",
+      "source": "worldchain_llama.png",
+      "markers": ["data:image/png;base64,"]
+    },
+    {
+      "id": "hedera",
+      "label": "Hedera",
+      "kind": "wrap_raster",
+      "source": "hedera_llama.png",
+      "markers": ["data:image/png;base64,"]
+    },
+    {
+      "id": "xrpl",
+      "label": "XRPL",
+      "kind": "wrap_raster",
+      "source": "xrpl_llama.png",
+      "markers": ["data:image/png;base64,"]
+    },
+    {
+      "id": "thorchain",
+      "label": "THORChain",
+      "kind": "wrap_raster",
+      "source": "thorchain_llama.png",
+      "markers": ["data:image/png;base64,"]
+    },
+    {
+      "id": "katana",
+      "label": "Katana",
+      "kind": "wrap_raster",
+      "source": "katana_llama.png",
+      "markers": ["data:image/png;base64,"]
+    },
+    {
+      "id": "dydx",
+      "label": "dYdX",
+      "kind": "wrap_raster",
+      "source": "dydx_llama.png",
+      "markers": ["data:image/png;base64,"]
+    },
+    {
+      "id": "fraxtal",
+      "label": "Fraxtal",
+      "kind": "wrap_raster",
+      "source": "fraxtal_llama.png",
+      "markers": ["data:image/png;base64,"]
+    },
+    {
+      "id": "tezos",
+      "label": "Tezos",
+      "kind": "wrap_raster",
+      "source": "tezos_llama.png",
+      "markers": ["data:image/png;base64,"]
+    },
+    {
+      "id": "mezo",
+      "label": "Mezo",
+      "kind": "wrap_raster",
+      "source": "mezo_llama.png",
+      "markers": ["data:image/png;base64,"]
+    },
+    {
+      "id": "bittensor",
+      "label": "Bittensor",
+      "kind": "wrap_raster",
+      "source": "bittensor_llama.png",
+      "markers": ["data:image/png;base64,"]
+    },
+    {
+      "id": "pulsechain",
+      "label": "PulseChain",
+      "kind": "wrap_raster",
+      "source": "pulsechain_llama.png",
+      "markers": ["data:image/png;base64,"]
     }
   ]
 }
