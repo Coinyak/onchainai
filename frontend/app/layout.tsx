@@ -43,6 +43,10 @@ export const metadata: Metadata = {
     description: "Crypto tool directory — MCP, CLI, SDK, API, x402, RWA, AI agents",
     images: [DEFAULT_OG_IMAGE_PATH],
   },
+  // Base.dev domain verification (dashboard.base.org → Settings → Builder Codes)
+  other: {
+    "base:app_id": "6a479e8a2876ee6c1138a70a",
+  },
 };
 
 export default function RootLayout({
