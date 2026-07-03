@@ -767,8 +767,27 @@ mod tests {
             payment_verified: false,
             x402_endpoint_verified: false,
             price_verified: false,
+            x402_endpoint: Some("https://pay.example.com/probe".into()),
         })
         .is_ok());
+    }
+
+    #[test]
+    fn validate_tool_referral_payload_rejects_bad_x402_endpoint() {
+        let payload = UpdateToolReferralPayload {
+            slug: "paid-tool".into(),
+            referral_enabled: false,
+            referral_bps: None,
+            referral_payout_address: None,
+            referral_model: None,
+            x402_pay_to_address: None,
+            x402_builder_code: None,
+            payment_verified: false,
+            x402_endpoint_verified: false,
+            price_verified: false,
+            x402_endpoint: Some("http://insecure.example/pay".into()),
+        };
+        assert!(validate_tool_referral_payload(&payload).is_err());
     }
 
     #[test]
@@ -784,6 +803,7 @@ mod tests {
             payment_verified: false,
             x402_endpoint_verified: false,
             price_verified: false,
+            x402_endpoint: None,
         };
         assert!(validate_tool_referral_payload(&payload).is_err());
         payload.referral_bps = Some(100);

@@ -59,6 +59,3 @@ __pycache__/
 supabase/.branches
 supabase/.temp
 .vercel
-
-# Keep the env template tracked (must stay after every .env* ignore rule).
-!.env.example

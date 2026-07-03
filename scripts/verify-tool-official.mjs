@@ -8,7 +8,7 @@
 //
 // Usage:
 //   node scripts/verify-tool-official.mjs <slug> [<slug>...] [--apply]
-//   node scripts/verify-tool-official.mjs --scan [--apply] [--limit N]
+//   node scripts/verify-tool-official.mjs --scan [--apply --i-understand-bulk] [--limit N]
 //   node scripts/verify-tool-official.mjs <slug> --expect-org <org> [--apply]
 //
 // Modes:
@@ -73,6 +73,9 @@ const FIRST_PARTY_ORGS = {
   "goat-sdk": "Crossmint GOAT",
   farcasterxyz: "Farcaster",
   neynarhq: "Neynar",
+  neynarxyz: "Neynar",
+  discord: "Discord",
+  grammyjs: "grammY",
   metamask: "MetaMask",
   consensys: "Consensys",
   "safe-global": "Safe",
@@ -91,10 +94,10 @@ const FIRST_PARTY_ORGS = {
   graphprotocol: "The Graph",
 };
 
+// Narrow scan keywords — org hits in FIRST_PARTY_ORGS are the primary signal.
 const PLATFORM_KEYWORDS = [
-  "github", "twitter", " x ", "x-", "farcaster", "discord", "telegram",
-  "etherscan", "coinbase", "uniswap", "opensea", "metamask", "walletconnect",
-  "safe", "chainlink", "alchemy", "solana", "base", "ethereum", "the graph",
+  "github-mcp", "farcaster", "neynar", "discord-interactions", "telegram",
+  "x-api", "twitter-api", "xdevplatform",
 ];
 
 function parseEnvFile(path) {
@@ -133,6 +136,7 @@ const GITHUB_TOKEN = env.GITHUB_API_TOKEN || "";
 const args = process.argv.slice(2);
 const APPLY = args.includes("--apply");
 const SCAN = args.includes("--scan");
+const BULK_APPLY = args.includes("--i-understand-bulk");
 const LIMIT = Number(args[args.indexOf("--limit") + 1]) || 500;
 const expectOrgIdx = args.indexOf("--expect-org");
 const EXPECT_ORG = expectOrgIdx >= 0 ? args[expectOrgIdx + 1] : null;
@@ -295,11 +299,25 @@ async function github(path) {
 const normalize = (v) =>
   (v || "").trim().toLowerCase().replace(/^@/, "").replace(/[-_]/g, "");
 
-const related = (a, b) => {
+const identityTokensRelated = (a, b) => {
   const x = normalize(a);
   const y = normalize(b);
   if (!x || !y) return false;
   return x === y || x.includes(y) || y.includes(x);
+};
+
+const identityClusterAligned = (repoUrl, homepage, npmPackage) => {
+  const gh = repoUrl ? parseGithubRepo(repoUrl) : null;
+  const org = gh?.org;
+  const scope = npmScope(npmPackage);
+  const home = homepage ? hostLabel(homepage) : null;
+  const domainLabel = home?.label;
+  if (!org || !scope || !domainLabel) return false;
+  return (
+    identityTokensRelated(org, scope) &&
+    (identityTokensRelated(org, domainLabel) ||
+      identityTokensRelated(scope, domainLabel))
+  );
 };
 
 function parseGithubRepo(repoUrl) {
@@ -379,23 +397,24 @@ async function collectEvidence(tool) {
   const home = tool.homepage ? hostLabel(tool.homepage) : null;
   evidence.homepage_label = home?.label || null;
 
-  // Identity cluster: how many independent identity tokens agree?
-  const tokens = [evidence.github_org, scope, home?.label].filter(Boolean);
-  let aligned = 0;
-  for (let i = 0; i < tokens.length; i++)
-    for (let j = i + 1; j < tokens.length; j++)
-      if (related(tokens[i], tokens[j])) aligned++;
-  evidence.cluster_pairs_aligned = aligned;
-  if (aligned > 0)
+  evidence.identity_cluster_aligned = identityClusterAligned(
+    tool.repo_url,
+    tool.homepage,
+    tool.npm_package,
+  );
+  if (evidence.identity_cluster_aligned) {
     evidence.checks.push(
-      `identity cluster: ${aligned} aligned pair(s) of ${tokens.join(" / ")}`,
+      `identity cluster aligned (${evidence.github_org} / ${scope ?? "—"} / ${home?.label ?? "—"})`,
     );
+  }
 
   // Org verified-domain ↔ homepage agreement (official path for unmapped vendors).
   if (evidence.org_domain_verified && evidence.org_site && home) {
     const orgHost = hostLabel(evidence.org_site)?.host;
     evidence.org_site_matches_homepage =
-      !!orgHost && (orgHost === home.host || related(orgHost.split(".")[0], home.label));
+      !!orgHost &&
+      (orgHost === home.host ||
+        identityTokensRelated(orgHost.split(".")[0], home.label));
     if (evidence.org_site_matches_homepage)
       evidence.checks.push("verified org site matches tool homepage");
   }
@@ -408,6 +427,7 @@ function decide(tool, evidence) {
   if (tool.approval_status !== "approved") gates.push("approval_status!=approved");
   if (tool.relevance_status !== "accepted") gates.push("relevance_status!=accepted");
   if (tool.install_risk_level === "critical") gates.push("install_risk_level=critical");
+  if (tool.install_risk_level === "high") gates.push("install_risk_level=high");
   if (tool.quarantined_at) gates.push("quarantined");
   if (gates.length)
     return { decision: "refuse", reason: `public gate failed: ${gates.join(", ")}` };
@@ -435,10 +455,10 @@ function decide(tool, evidence) {
       reason: "GitHub domain-verified org, org site matches tool homepage",
     };
   }
-  if (evidence.repo_exists && !evidence.repo_archived && evidence.cluster_pairs_aligned >= 1) {
+  if (evidence.repo_exists && !evidence.repo_archived && evidence.identity_cluster_aligned) {
     return {
       decision: "verified",
-      reason: `identity cluster aligned (${evidence.cluster_pairs_aligned} pair(s))`,
+      reason: "identity cluster aligned (github org + npm scope + homepage)",
     };
   }
   return {
@@ -513,7 +533,15 @@ function isScanCandidate(tool) {
 // --- main ----------------------------------------------------------------------
 
 if (!SCAN && slugs.length === 0) {
-  console.error("usage: node scripts/verify-tool-official.mjs <slug> [--apply] | --scan");
+  console.error(
+    "usage: node scripts/verify-tool-official.mjs <slug> [--apply] | --scan [--apply --i-understand-bulk]",
+  );
+  process.exit(2);
+}
+if (SCAN && APPLY && !BULK_APPLY) {
+  console.error(
+    "refusing --scan --apply without --i-understand-bulk (bulk promotions need explicit ack)",
+  );
   process.exit(2);
 }
 if (!(SUPABASE_URL && SERVICE_KEY) && !DATABASE_URL) {

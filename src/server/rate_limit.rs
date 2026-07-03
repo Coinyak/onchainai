@@ -20,6 +20,8 @@ pub const BOOKMARK_PER_MINUTE: u32 = 60;
 pub const MCP_PER_MINUTE: u32 = 100;
 /// Auth endpoints allow at most 5 attempts per minute per IP.
 pub const AUTH_PER_MINUTE: u32 = 5;
+/// Admin x402 manual re-probes: at most 10 per minute per admin.
+pub const ADMIN_X402_VERIFY_PER_MINUTE: u32 = 10;
 /// General API traffic baseline (see [`crate::build_app`] — burst is 2× this, 5 req/s refill).
 pub const GENERAL_PER_MINUTE: u32 = 60;
 
@@ -31,12 +33,15 @@ static BOOKMARK_LIMITER: LazyLock<DefaultKeyedRateLimiter<Uuid>> =
     LazyLock::new(|| RateLimiter::dashmap(bookmark_quota()));
 static MCP_IP_LIMITER: LazyLock<DefaultKeyedRateLimiter<String>> =
     LazyLock::new(|| RateLimiter::dashmap(mcp_ip_quota()));
+static ADMIN_X402_VERIFY_LIMITER: LazyLock<DefaultKeyedRateLimiter<Uuid>> =
+    LazyLock::new(|| RateLimiter::dashmap(admin_x402_verify_quota()));
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum UserRateLimitAction {
     SubmitTool,
     CreateComment,
     ToggleBookmark,
+    AdminX402Verify,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -68,6 +73,12 @@ pub fn mcp_ip_quota() -> Quota {
     Quota::per_minute(NonZeroU32::new(MCP_PER_MINUTE).expect("non-zero mcp quota"))
 }
 
+pub fn admin_x402_verify_quota() -> Quota {
+    Quota::per_minute(
+        NonZeroU32::new(ADMIN_X402_VERIFY_PER_MINUTE).expect("non-zero admin x402 verify quota"),
+    )
+}
+
 /// Check a per-user rate limit before mutating state.
 pub fn check_user_rate_limit(
     user_id: Uuid,
@@ -77,6 +88,7 @@ pub fn check_user_rate_limit(
         UserRateLimitAction::SubmitTool => &SUBMIT_LIMITER,
         UserRateLimitAction::CreateComment => &COMMENT_LIMITER,
         UserRateLimitAction::ToggleBookmark => &BOOKMARK_LIMITER,
+        UserRateLimitAction::AdminX402Verify => &ADMIN_X402_VERIFY_LIMITER,
     };
     limiter.check_key(&user_id).map_err(|_| RateLimitExceeded {
         message: "too many requests; try again later",
@@ -136,6 +148,7 @@ mod tests {
         assert_eq!(MCP_PER_MINUTE, 100);
         assert_eq!(AUTH_PER_MINUTE, 5);
         assert_eq!(GENERAL_PER_MINUTE, 60);
+        assert_eq!(ADMIN_X402_VERIFY_PER_MINUTE, 10);
     }
 
     #[test]

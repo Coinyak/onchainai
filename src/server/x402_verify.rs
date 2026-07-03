@@ -1,6 +1,6 @@
 //! x402 endpoint liveness and price honesty probes (attribution/trust only — no custody).
 
-use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -140,7 +140,11 @@ fn truncate_body(body: &str) -> &str {
     if body.len() <= MAX_RESPONSE_BYTES {
         return body;
     }
-    &body[..MAX_RESPONSE_BYTES]
+    let mut end = MAX_RESPONSE_BYTES;
+    while end > 0 && !body.is_char_boundary(end) {
+        end -= 1;
+    }
+    &body[..end]
 }
 
 fn parse_payment_requirements(body: &str) -> Option<(Option<String>, Option<String>)> {
@@ -174,27 +178,63 @@ pub fn price_matches_advertised(probed_amount: &str, x402_price: &str) -> bool {
     if left.is_empty() || right.is_empty() {
         return false;
     }
-    left == right || right.contains(&left) || left.contains(&right)
+    if left == right {
+        return true;
+    }
+    // Allow advertised labels to embed the probed amount (e.g. "$1,000 USDC"),
+    // but reject trivial substring hits such as "1" inside "1000".
+    const MIN_PARTIAL_LEN: usize = 3;
+    if left.len() >= MIN_PARTIAL_LEN && right.contains(&left) {
+        return true;
+    }
+    if right.len() >= MIN_PARTIAL_LEN && left.contains(&right) {
+        return true;
+    }
+    false
 }
 
-pub async fn probe_x402_endpoint(client: &reqwest::Client, url_str: &str) -> ProbeOutcome {
+/// Pick the first public address for `host` and pin DNS for the outbound probe.
+async fn pick_public_probe_addr(host: &str) -> Result<SocketAddr, String> {
+    resolve_host_is_public(host).await?;
+    let addrs = tokio::net::lookup_host((host, 443u16))
+        .await
+        .map_err(|e| format!("dns resolution failed: {e}"))?;
+    for addr in addrs {
+        if !is_blocked_ip(addr.ip()) {
+            return Ok(addr);
+        }
+    }
+    Err("dns resolution returned no public addresses".into())
+}
+
+fn pinned_probe_client(host: &str, addr: SocketAddr) -> reqwest::Client {
+    reqwest::Client::builder()
+        .redirect(Policy::none())
+        .timeout(PROBE_TIMEOUT)
+        .resolve(host, addr)
+        .build()
+        .expect("pinned reqwest client")
+}
+
+pub async fn probe_x402_endpoint(_client: &reqwest::Client, url_str: &str) -> ProbeOutcome {
     let parsed = match validate_probe_url(url_str) {
         Ok(url) => url,
         Err(reason) => return ProbeOutcome::SsrfBlocked(reason),
     };
     let host = parsed.host_str().expect("validated host");
-    if let Err(reason) = resolve_host_is_public(host).await {
-        return ProbeOutcome::SsrfBlocked(reason);
-    }
+    let pinned_addr = match pick_public_probe_addr(host).await {
+        Ok(addr) => addr,
+        Err(reason) => return ProbeOutcome::SsrfBlocked(reason),
+    };
+    let pinned_client = pinned_probe_client(host, pinned_addr);
 
-    let response = match client.post(parsed.clone()).send().await {
+    let response = match pinned_client.post(parsed.clone()).send().await {
         Ok(resp) => resp,
-        Err(_) => match client.get(parsed).send().await {
+        Err(_) => match pinned_client.get(parsed).send().await {
             Ok(resp) => resp,
             Err(e) => return ProbeOutcome::RequestFailed(e.to_string()),
         },
     };
-
     let status = response.status();
     let body = match response.text().await {
         Ok(text) => text,
@@ -424,6 +464,16 @@ mod tests {
         assert!(price_matches_advertised("1000", "$1,000 USDC"));
         assert!(price_matches_advertised("0.001", "0.001 usdc"));
         assert!(!price_matches_advertised("2000", "0.001 usdc"));
+        assert!(!price_matches_advertised("1", "0.01 usdc"));
+        assert!(!price_matches_advertised("1", "1000"));
+    }
+
+    #[test]
+    fn truncate_body_respects_utf8_boundaries() {
+        let emoji_body = "💳".repeat(40_000);
+        let truncated = truncate_body(&emoji_body);
+        assert!(truncated.len() <= MAX_RESPONSE_BYTES);
+        assert!(std::str::from_utf8(truncated.as_bytes()).is_ok());
     }
 
     #[test]

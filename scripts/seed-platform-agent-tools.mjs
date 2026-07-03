@@ -5,6 +5,7 @@
 //
 // Usage:
 //   ENV_FILE=/path/to/.env SEED_ENV=prod-curate node scripts/seed-platform-agent-tools.mjs
+//   ENV_FILE=/path/to/.env SEED_ENV=prod-curate FORCE_APPROVE=1 node scripts/seed-platform-agent-tools.mjs
 
 import { readFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
@@ -335,11 +336,21 @@ ON CONFLICT (slug) DO UPDATE SET
   install_command = EXCLUDED.install_command,
   mcp_endpoint = EXCLUDED.mcp_endpoint,
   chains = EXCLUDED.chains,
-  approval_status = 'approved',
-  rejection_reason = NULL,
+  approval_status = CASE
+    WHEN $23::boolean THEN 'approved'
+    ELSE tools.approval_status
+  END,
+  rejection_reason = CASE
+    WHEN $23::boolean THEN NULL
+    ELSE tools.rejection_reason
+  END,
   crypto_relevance_score = EXCLUDED.crypto_relevance_score,
   crypto_relevance_reasons = EXCLUDED.crypto_relevance_reasons,
-  relevance_status = EXCLUDED.relevance_status,
+  relevance_status = CASE
+    WHEN $23::boolean THEN EXCLUDED.relevance_status
+    WHEN tools.relevance_status = 'rejected' THEN tools.relevance_status
+    ELSE EXCLUDED.relevance_status
+  END,
   install_risk_level = EXCLUDED.install_risk_level,
   install_risk_reasons = EXCLUDED.install_risk_reasons,
   requires_secret = EXCLUDED.requires_secret,
@@ -347,10 +358,20 @@ ON CONFLICT (slug) DO UPDATE SET
   stars = GREATEST(tools.stars, EXCLUDED.stars),
   source = EXCLUDED.source,
   review_policy_version = EXCLUDED.review_policy_version,
-  quarantined_at = NULL,
+  quarantined_at = CASE
+    WHEN $23::boolean THEN NULL
+    ELSE tools.quarantined_at
+  END,
+  status = CASE
+    WHEN $23::boolean THEN EXCLUDED.status
+    WHEN tools.status IN ('official', 'verified') THEN tools.status
+    ELSE EXCLUDED.status
+  END,
   updated_at = now()
 RETURNING slug, (xmax = 0) AS inserted;
 `;
+
+const FORCE_APPROVE = env.FORCE_APPROVE === "1";
 
 const client = new pg.Client({
   connectionString: DATABASE_URL,
@@ -383,6 +404,7 @@ for (const tool of TOOLS) {
     tool.license,
     tool.stars,
     tool.source,
+    FORCE_APPROVE,
   ]);
   results.push({
     slug: tool.slug,

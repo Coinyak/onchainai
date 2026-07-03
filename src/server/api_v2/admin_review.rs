@@ -345,8 +345,9 @@ async fn update_tool_referral(
             payment_verified = $7,
             x402_endpoint_verified = $8,
             price_verified = $9,
+            x402_endpoint = $10,
             updated_at = now()
-        WHERE slug = $10
+        WHERE slug = $11
         RETURNING *
         "#,
     )
@@ -359,6 +360,7 @@ async fn update_tool_referral(
     .bind(payload.payment_verified)
     .bind(payload.x402_endpoint_verified)
     .bind(payload.price_verified)
+    .bind(normalize_optional_text(payload.x402_endpoint))
     .bind(payload.slug.trim())
     .fetch_optional(&state.pool)
     .await
@@ -373,7 +375,14 @@ async fn trigger_x402_verify(
     headers: HeaderMap,
     Path(id): Path<Uuid>,
 ) -> Result<Json<crate::server::x402_verify::X402VerifyStatus>, ApiError> {
-    require_admin_from(&state, &headers).await?;
+    let admin = require_admin_from(&state, &headers).await?;
+    crate::server::rate_limit::check_user_rate_limit(
+        admin.id,
+        crate::server::rate_limit::UserRateLimitAction::AdminX402Verify,
+    )
+    .map_err(|_| {
+        ApiError::BadRequest("x402 verify rate limit exceeded; try again later".into())
+    })?;
 
     let client = crate::server::x402_verify::probe_client();
     let status = crate::server::x402_verify::verify_tool_by_id(&state.pool, &client, id)
