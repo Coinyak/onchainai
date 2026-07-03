@@ -93,7 +93,7 @@ Smithery 소개 카드 + Product Hunt 세로 리스트 + AlternativeTo 사이드
 5. **Chain strip** — `ChainStrip`: 로고 타일, `?chain=` 다중 선택. 사이드바 Chain 섹션 **대체** (§5.7).
 6. **도구 리스트** — 정렬바 + HOT 리스트 (`ToolsBrowser`)
 
-> **카테고리 그리드 ("Browse by function") 제거됨 (2026-06-26)** — 기능 분류는 사이드바 Function 섹션·`/categories/:id`·`/tools?function=`로 대체. `CategoryGrid` 컴포넌트는 코드에만 잔존.
+> **카테고리 그리드 ("Browse by function") 제거됨 (2026-06-26)** — 기능 분류는 사이드바 Function 섹션·`/categories/:id`·`/tools?function=`로 대체. `CategoryGrid` 삭제됨 (§11-4, F10).
 > 기능 필터: 사이드바 Function 또는 `/categories/:id` URL
 > 사이드바 각 섹션(▸) 클릭 시 펼침/접침, localStorage에 접힘 상태 저장 (hydration 후 적용)
 > HOT = stars + 최근 커밋 가중치 (정렬 드롭다운)

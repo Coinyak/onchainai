@@ -470,7 +470,7 @@ async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
 
 | 페이지 | Next.js 라우트 | 기존 Leptos | 주요 컴포넌트 |
 |--------|---------------|------------|-------------|
-| 홈 | `/` | `pages/home.rs` | FeaturedCarousel, CategoryGrid, SearchBar |
+| 홈 | `/` | `frontend/app/page.tsx` | FeaturedCarousel, SearchBar, PromoCards (CategoryGrid removed §11-4) |
 | 도구 브라우저 | `/tools` | `pages/tools_list.rs` + `components/tools_browser.rs` | ToolList, Sidebar, FilterPanel, Pagination, PreviewPanel |
 | 도구 상세 | `/tools/[slug]` | `pages/tool_detail.rs` + `components/tool_detail_content.rs` | ToolDetail, InstallSection, TrustFacts, CommentSection |
 | 로그인 | `/login` | `pages/login.rs` | LoginForm |
@@ -505,7 +505,7 @@ async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
 | `skeleton.rs` (874B) | `Skeleton` | |
 | `empty_state.rs` (2.5KB) | `EmptyState` | |
 | `error_state.rs` (520B) | `ErrorState` | |
-| `category_grid.rs` (1.5KB) | `CategoryGrid` | |
+| ~~`category_grid.rs`~~ | ~~`CategoryGrid`~~ | Removed (§11-4); function discovery via sidebar |
 | `featured_carousel.rs` (10.3KB) | `FeaturedCarousel` | |
 | `promo_cards.rs` (1.6KB) | `PromoCards` | |
 

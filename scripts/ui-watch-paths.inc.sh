@@ -48,7 +48,6 @@ ui_watch_paths=(
   frontend/components/layout/TopNav.tsx
   frontend/components/tools/AddMcpAction.tsx
   frontend/components/tools/BottomSheet.tsx
-  frontend/components/tools/CategoryGrid.tsx
   frontend/components/tools/ChainLogo.tsx
   frontend/components/tools/ChainStrip.tsx
   frontend/components/tools/ClaimStatusTimeline.tsx
@@ -64,7 +63,6 @@ ui_watch_paths=(
   frontend/components/tools/SearchBar.tsx
   frontend/components/tools/ToolCard.tsx
   frontend/components/tools/ToolDetail.tsx
-  frontend/components/tools/ToolFinder.tsx
   frontend/components/tools/ToolListingActions.tsx
   frontend/components/tools/ToolLogo.tsx
   frontend/components/tools/ToolsBrowser.tsx

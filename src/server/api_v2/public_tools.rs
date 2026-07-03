@@ -227,7 +227,7 @@ async fn load_browser_data(
 
     let (categories, chains, total, tools, preview_tool) = futures::join!(
         fetch_categories(&state.pool),
-        fetch_chain_counts(&state.pool, 12),
+        fetch_chain_counts(&state.pool, 100),
         fetch_count_tools(&state.pool, &req.filters),
         fetch_list_tools(
             &state.pool,

@@ -5,6 +5,7 @@ import { Check } from "lucide-react";
 interface TrustFactsProps {
   tool: Tool;
   facts?: TrustFact[];
+  variant?: "default" | "preview";
 }
 
 function buildDefaultFacts(tool: Tool): TrustFact[] {
@@ -39,9 +40,26 @@ function buildDefaultFacts(tool: Tool): TrustFact[] {
   return facts;
 }
 
-export function TrustFacts({ tool, facts }: TrustFactsProps) {
-  const items = facts?.length ? facts : buildDefaultFacts(tool);
+export function TrustFacts({ tool, facts, variant = "default" }: TrustFactsProps) {
+  const allItems = facts?.length ? facts : buildDefaultFacts(tool);
+  const items = variant === "preview" ? allItems.slice(0, 3) : allItems;
   if (!items.length) return null;
+
+  if (variant === "preview") {
+    return (
+      <ul className="preview-trust-facts" aria-label="Trust summary">
+        {items.map((fact) => (
+          <li key={`${fact.label}-${fact.detail}`} className="preview-trust-fact">
+            <Check size={14} className="preview-trust-fact-icon" aria-hidden />
+            <span>
+              <strong>{fact.label}</strong>
+              {fact.detail && <> · {fact.detail}</>}
+            </span>
+          </li>
+        ))}
+      </ul>
+    );
+  }
 
   return (
     <section className="detail-section">

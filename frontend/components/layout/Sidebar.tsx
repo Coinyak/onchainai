@@ -2,6 +2,16 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import {
+  BadgeCheck,
+  Coins,
+  Layers,
+  Plug,
+  Shield,
+  Tag,
+  Users,
+  type LucideIcon,
+} from "lucide-react";
 import type { CategoryWithCount } from "@/lib/api";
 import { SidebarBrand } from "@/components/layout/SidebarBrand";
 import { CategoryList } from "@/components/layout/CategoryList";
@@ -59,14 +69,14 @@ const INSTALL_RISK = [
   { id: "high", label: "High" },
 ];
 
-const RAIL_ICONS: { id: string; short: string; label: string }[] = [
-  { id: "function", short: "Fn", label: "Function" },
-  { id: "asset_class", short: "Ac", label: "Asset Class" },
-  { id: "actor", short: "Hu", label: "Actor" },
-  { id: "type", short: "Ty", label: "Type" },
-  { id: "status", short: "St", label: "Status" },
-  { id: "pricing", short: "Pr", label: "Pricing" },
-  { id: "install_risk", short: "Ri", label: "Install Risk" },
+const RAIL_ICONS: { id: string; label: string; Icon: LucideIcon }[] = [
+  { id: "function", label: "Function", Icon: Layers },
+  { id: "asset_class", label: "Asset Class", Icon: Coins },
+  { id: "actor", label: "Actor", Icon: Users },
+  { id: "type", label: "Type", Icon: Plug },
+  { id: "status", label: "Status", Icon: BadgeCheck },
+  { id: "pricing", label: "Pricing", Icon: Tag },
+  { id: "install_risk", label: "Install Risk", Icon: Shield },
 ];
 
 interface SidebarSectionProps {
@@ -218,6 +228,28 @@ export function Sidebar({
     });
   }
 
+  function railSectionActive(sectionId: string): boolean {
+    const has = (value?: string) => parseMulti(value).length > 0;
+    switch (sectionId) {
+      case "function":
+        return has(activeFunction);
+      case "asset_class":
+        return has(activeAssetClass);
+      case "actor":
+        return has(activeActor);
+      case "type":
+        return has(activeType);
+      case "status":
+        return has(activeStatus);
+      case "pricing":
+        return has(activePricing);
+      case "install_risk":
+        return has(activeInstallRisk);
+      default:
+        return false;
+    }
+  }
+
   function openRailSection(sectionId: string) {
     persistCollapsed(false);
     setSections((prev) => {
@@ -293,7 +325,7 @@ export function Sidebar({
           }
         }}
       >
-        <SidebarBrand />
+        <SidebarBrand collapsed={collapsed} />
         <div className="sidebar-controls">
           <button
             type="button"
@@ -327,6 +359,7 @@ export function Sidebar({
           </button>
           <Link
             href={clearAxis(clearHref, queryBase, "function")}
+            scroll={false}
             className="sidebar-clear sidebar-title-text"
             onClick={collapseMobile}
           >
@@ -335,16 +368,22 @@ export function Sidebar({
         </div>
 
         <div className="sidebar-rail-icons">
-          {RAIL_ICONS.map(({ id, short, label }) => (
+          {RAIL_ICONS.map(({ id, label, Icon }, index) => (
             <button
               key={id}
               type="button"
-              className="sidebar-rail-icon"
+              className={
+                railSectionActive(id)
+                  ? "sidebar-rail-icon sidebar-rail-icon-active"
+                  : "sidebar-rail-icon"
+              }
               title={label}
               aria-label={label}
+              data-rail-section={id}
+              data-rail-divider={index > 0 ? "true" : undefined}
               onClick={() => openRailSection(id)}
             >
-              {short}
+              <Icon size={20} strokeWidth={2} aria-hidden="true" />
             </button>
           ))}
         </div>

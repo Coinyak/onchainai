@@ -13,6 +13,7 @@ export function FilterChip({ href, label, active, count, onNavigate }: FilterChi
     <li>
       <Link
         href={href}
+        scroll={false}
         className={active ? "sidebar-link active" : "sidebar-link"}
         onClick={onNavigate}
       >

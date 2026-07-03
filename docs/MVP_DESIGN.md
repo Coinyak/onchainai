@@ -801,7 +801,7 @@ fn HomePage() -> impl IntoView {
     let tools = create_resource(|| (), |_| async { get_recent_tools(8).await });
     view! {
         <SearchBar/>
-        <CategoryGrid/>
+        // CategoryGrid removed 2026-06-26 — sidebar Function filter
         <Suspense fallback=|| "Loading...">
             <ToolList tools={tools}/>
         </Suspense>

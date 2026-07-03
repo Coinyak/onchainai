@@ -9,7 +9,12 @@ import {
   parseMulti,
   browserBasePath,
 } from "@/lib/browser-query";
-import { stripChains, chainFilterActive } from "@/lib/chains";
+import {
+  stripChains,
+  chainFilterActive,
+  hasChainLogo,
+  STRIP_PRIMARY_VISIBLE,
+} from "@/lib/chains";
 import { ChainLogo } from "@/components/tools/ChainLogo";
 
 interface ChainStripProps {
@@ -27,57 +32,43 @@ export function ChainStrip({ base, queryBase, activeChain, chainCounts }: ChainS
   const allActive = chainActive.length === 0;
 
   const chains = stripChains(chainCounts);
-  const primary = chains.slice(0, 20);
-  const overflow = chains.slice(20);
-  const overflowCount = overflow.length;
+  const withLogo = chains.filter((entry) => hasChainLogo(entry.id));
+  const withoutLogo = chains.filter((entry) => !hasChainLogo(entry.id));
+  const tileChains = withLogo.slice(0, STRIP_PRIMARY_VISIBLE);
+  const overflowChains = [...withLogo.slice(STRIP_PRIMARY_VISIBLE), ...withoutLogo];
+  const overflowCount = overflowChains.length;
 
   return (
     <div className="chain-strip" role="group" aria-label="Filter by chain">
-      <div className="chain-strip-scroll">
+      <div className="chain-strip-scroll" tabIndex={0}>
         <Link
           href={allHref}
+          scroll={false}
           className={allActive ? "chain-tile chain-tile-all active" : "chain-tile chain-tile-all"}
           aria-label="All chains"
           title="All chains"
-          aria-pressed={allActive}
+          aria-current={allActive ? "page" : undefined}
         >
           All
         </Link>
 
-        {primary.map((entry) => {
+        {tileChains.map((entry) => {
           const href = toggleMulti(basePath, queryBase, "chain", entry.id, chainActive);
           const isActive = chainFilterActive(entry, chainActive);
           return (
             <Link
               key={entry.id}
               href={href}
+              scroll={false}
               className={isActive ? "chain-tile chain-tile-logo active" : "chain-tile chain-tile-logo"}
               aria-label={entry.label}
               title={entry.label}
-              aria-pressed={isActive}
+              aria-current={isActive ? "page" : undefined}
             >
               <ChainLogo id={entry.id} label={entry.label} size={36} />
             </Link>
           );
         })}
-
-        {expanded &&
-          overflow.map((entry) => {
-            const href = toggleMulti(basePath, queryBase, "chain", entry.id, chainActive);
-            const isActive = chainFilterActive(entry, chainActive);
-            return (
-              <Link
-                key={entry.id}
-                href={href}
-                className={isActive ? "chain-tile chain-tile-logo active" : "chain-tile chain-tile-logo"}
-                aria-label={entry.label}
-                title={entry.label}
-                aria-pressed={isActive}
-              >
-                <ChainLogo id={entry.id} label={entry.label} size={36} />
-              </Link>
-            );
-          })}
 
         {overflowCount > 0 && (
           <button
@@ -95,6 +86,32 @@ export function ChainStrip({ base, queryBase, activeChain, chainCounts }: ChainS
           </button>
         )}
       </div>
+
+      {expanded && overflowCount > 0 && (
+        <ul className="chain-strip-overflow-list" role="list">
+          {overflowChains.map((entry) => {
+            const href = toggleMulti(basePath, queryBase, "chain", entry.id, chainActive);
+            const isActive = chainFilterActive(entry, chainActive);
+            return (
+              <li key={entry.id}>
+                <Link
+                  href={href}
+                  scroll={false}
+                  className={isActive ? "chain-overflow-item active" : "chain-overflow-item"}
+                  aria-current={isActive ? "page" : undefined}
+                >
+                  {hasChainLogo(entry.id) ? (
+                    <ChainLogo id={entry.id} label={entry.label} size={24} decorative />
+                  ) : (
+                    <span className="chain-overflow-fallback" aria-hidden="true" />
+                  )}
+                  <span className="chain-overflow-label">{entry.label}</span>
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+      )}
     </div>
   );
 }

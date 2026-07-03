@@ -61,7 +61,7 @@ export function LoginForm({ compact = false, onCancel, headingId }: LoginFormPro
       >
         Continue with GitHub
       </a>
-      <p className="mt-2 text-center text-body-sm text-secondary">
+      <div className="mt-2 text-center text-body-sm text-secondary">
         Use a different GitHub account?{" "}
         <form action={`${API_BASE}/auth/github/switch`} method="post" className="inline">
           <button
@@ -73,7 +73,7 @@ export function LoginForm({ compact = false, onCancel, headingId }: LoginFormPro
           </button>
         </form>
         , then return here and continue with GitHub.
-      </p>
+      </div>
       <form className="mt-3 flex gap-2" onSubmit={sendMagicLink}>
         <input
           type="email"

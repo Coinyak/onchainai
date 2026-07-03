@@ -186,7 +186,7 @@ pub fn normalize_compare_slugs(raw: &str) -> Vec<String> {
         .map(|part| part.trim().to_ascii_lowercase())
         .filter(|part| !part.is_empty())
         .filter(|part| seen.insert(part.clone()))
-        .take(3)
+        .take(4)
         .collect()
 }
 
@@ -330,7 +330,7 @@ mod tests {
     fn compare_slugs_are_deduped_and_limited() {
         assert_eq!(
             normalize_compare_slugs("zapper,bob,zapper,third,fourth"),
-            vec!["zapper", "bob", "third"]
+            vec!["zapper", "bob", "third", "fourth"]
         );
     }
 

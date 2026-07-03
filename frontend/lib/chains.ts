@@ -32,9 +32,57 @@ export const CHAIN_CATALOG: ChainMeta[] = [
   { id: "aptos", label: "Aptos", logo: "/chains/aptos.svg", aliases: ["apt", "aptos-mainnet"], pinned: false },
   { id: "near", label: "NEAR", logo: "/chains/near.svg", aliases: ["near-protocol", "near-mainnet"], pinned: false },
   { id: "cosmos", label: "Cosmos", logo: "/chains/cosmos.svg", aliases: ["cosmos-hub", "atom", "cosmos-mainnet"], pinned: false },
+  { id: "celo", label: "Celo", logo: "/chains/celo.svg", aliases: ["celo-mainnet"], pinned: false },
+  { id: "fantom", label: "Fantom", logo: "/chains/fantom.svg", aliases: ["ftm", "fantom-mainnet"], pinned: false },
+  { id: "blast", label: "Blast", logo: "/chains/blast.svg", aliases: ["blast-mainnet"], pinned: false },
+  { id: "scroll", label: "Scroll", logo: "/chains/scroll.svg", aliases: ["scroll-mainnet"], pinned: false },
+  { id: "gnosis", label: "Gnosis", logo: "/chains/gnosis.svg", aliases: ["gno", "xdai"], pinned: false },
+  { id: "cardano", label: "Cardano", logo: "/chains/cardano.svg", aliases: ["ada", "cardano-mainnet"], pinned: false },
+  { id: "moonbeam", label: "Moonbeam", logo: "/chains/moonbeam.svg", aliases: ["glmr", "moonbeam-mainnet"], pinned: false },
+  { id: "litecoin", label: "Litecoin", logo: "/chains/litecoin.svg", aliases: ["ltc", "litecoin-mainnet"], pinned: false },
+  { id: "dogecoin", label: "Dogecoin", logo: "/chains/dogecoin.svg", aliases: ["doge", "dogecoin-mainnet"], pinned: false },
+  { id: "aurora", label: "Aurora", logo: "/chains/aurora.svg", aliases: ["aurora-mainnet"], pinned: false },
+  { id: "okx", label: "OKX Chain", logo: "/chains/okx.svg", aliases: ["okc", "okex-chain"], pinned: false },
 ];
 
 export const STRIP_PRIMARY_VISIBLE = 20;
+
+/** Chain IDs with a committed `/chains/<id>.svg` tile (no text-fallback tiles in strip). */
+export const CHAIN_LOGO_IDS = new Set<string>([
+  "aptos",
+  "arbitrum",
+  "avalanche",
+  "base",
+  "bera",
+  "bitcoin",
+  "bob",
+  "bsc",
+  "cardano",
+  "celo",
+  "cosmos",
+  "ethereum",
+  "fantom",
+  "gnosis",
+  "hyperliquid",
+  "linea",
+  "near",
+  "optimism",
+  "plasma",
+  "polygon",
+  "sei",
+  "solana",
+  "soneium",
+  "sonic",
+  "starknet",
+  "sui",
+  "tron",
+  "unichain",
+  "zksync",
+]);
+
+export function hasChainLogo(id: string): boolean {
+  return CHAIN_LOGO_IDS.has(id.trim().toLowerCase());
+}
 
 const CHAIN_NOISE = new Set([
   "all", "any", "none", "unknown", "multi-chain", "multichain", "multi",
@@ -105,28 +153,43 @@ export function chainTagsForTool(chains: string[]): ChainMeta[] {
   return result;
 }
 
+function syntheticChainMeta(raw: string): ChainMeta | undefined {
+  if (isChainNoise(raw)) return undefined;
+  const id = normalizeChainKey(raw);
+  if (!id) return undefined;
+  const catalogMatch = CHAIN_CATALOG.find((c) => c.id === id);
+  if (catalogMatch) return catalogMatch;
+  return {
+    id,
+    label: chainFallbackLabel(raw),
+    logo: chainLogoPath(id),
+    aliases: [raw],
+    pinned: false,
+  };
+}
+
 export function stripChains(chainCounts: [string, number][]): ChainMeta[] {
-  const countMap = new Map<string, number>();
+  const byId = new Map<string, { meta: ChainMeta; count: number }>();
+
   for (const [raw, count] of chainCounts) {
-    const meta = resolveChain(raw);
-    if (meta) {
-      countMap.set(meta.id, (countMap.get(meta.id) ?? 0) + count);
+    const meta = resolveChain(raw) ?? syntheticChainMeta(raw);
+    if (!meta) continue;
+    const prev = byId.get(meta.id);
+    if (prev) {
+      prev.count += count;
+    } else {
+      byId.set(meta.id, { meta, count });
     }
   }
 
-  const pinned = CHAIN_CATALOG.filter((c) => c.pinned);
-  const rest = CHAIN_CATALOG.filter((c) => !c.pinned && (countMap.get(c.id) ?? 0) > 0);
-  rest.sort((a, b) => (countMap.get(b.id) ?? 0) - (countMap.get(a.id) ?? 0));
+  const pinned = CHAIN_CATALOG.filter((c) => c.pinned && byId.has(c.id));
+  const pinnedIds = new Set(pinned.map((c) => c.id));
+  const rest = [...byId.values()]
+    .filter((entry) => !pinnedIds.has(entry.meta.id))
+    .sort((a, b) => b.count - a.count)
+    .map((entry) => entry.meta);
 
-  const seen = new Set<string>();
-  const out: ChainMeta[] = [];
-  for (const c of [...pinned, ...rest]) {
-    if (!seen.has(c.id)) {
-      seen.add(c.id);
-      out.push(c);
-    }
-  }
-  return out;
+  return [...pinned, ...rest];
 }
 
 export function chainFilterActive(entry: ChainMeta, active: string[]): boolean {

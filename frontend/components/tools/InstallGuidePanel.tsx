@@ -1,18 +1,15 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import type { Tool } from "@/lib/api";
-import { HighlightedCommand } from "@/components/tools/HighlightedCommand";
-import { CopyButton } from "@/components/ui/CopyButton";
+import { ConnectGuideBlocks } from "@/components/connect/ConnectGuideBlocks";
 import {
-  ALL_SELECTABLE_PLATFORMS,
-  type InstallPlatform,
-  type PublicInstallGuide,
+  TOOL_INSTALL_CLIENTS,
   buildPublicInstallGuide,
-  copyAllowed,
-  copyLabelAria,
-  displayGuideText,
-  platformLabel,
+  toolInstallClientLabel,
+  type PublicInstallGuide,
+  type ToolInstallClient,
 } from "@/lib/install-guide";
 
 interface InstallGuidePanelProps {
@@ -26,19 +23,15 @@ export function InstallGuidePanel({
   compact = false,
   showProgress = false,
 }: InstallGuidePanelProps) {
-  const [platform, setPlatform] = useState<InstallPlatform>("claude");
+  const [client, setClient] = useState<ToolInstallClient>("chatgpt");
   const [copyRevealed, setCopyRevealed] = useState(false);
 
   const guide = useMemo(
-    () => buildPublicInstallGuide(tool, tool.slug, platform),
-    [tool, platform],
+    () => buildPublicInstallGuide(tool, tool.slug, client),
+    [tool, client],
   );
 
-  const copyText = displayGuideText(guide);
-  const copyAria = copyLabelAria(guide.copy_label);
-  const showShellPrefix = platform === "generic_mcp";
-  const canCopy = copyAllowed(guide.copy_gate, copyRevealed);
-
+  const blocks = guide.connect_blocks ?? [];
   return (
     <section
       className={`install-section install-guide-panel${compact ? " install-guide-panel-compact" : ""}`}
@@ -52,62 +45,70 @@ export function InstallGuidePanel({
       <h3 id="install-guide-heading" className="install-heading">
         Safe install
       </h3>
-      <div className="install-platform-group" role="group" aria-label="Choose client">
-        {ALL_SELECTABLE_PLATFORMS.map((value) => (
-          <button
-            key={value}
-            type="button"
-            className={
-              platform === value ? "install-platform-btn active" : "install-platform-btn"
-            }
-            aria-pressed={platform === value}
-            onClick={() => setPlatform(value)}
-          >
-            {platformLabel(value)}
-          </button>
-        ))}
+      <div className="install-platform-group" role="tablist" aria-label="Choose client">
+        {TOOL_INSTALL_CLIENTS.map((value) =>
+          value === "more" ? (
+            <Link
+              key={value}
+              href="/connect"
+              className="install-platform-btn"
+              data-testid="install-more-clients-link"
+            >
+              {toolInstallClientLabel(value)} →
+            </Link>
+          ) : (
+            <button
+              key={value}
+              type="button"
+              role="tab"
+              aria-selected={client === value}
+              className={
+                client === value ? "install-platform-btn active" : "install-platform-btn"
+              }
+              onClick={() => {
+                setClient(value);
+                setCopyRevealed(false);
+              }}
+            >
+              {toolInstallClientLabel(value)}
+            </button>
+          ),
+        )}
       </div>
       {guide.warning && (
         <p className="install-warning" role="alert">
           {guide.warning}
         </p>
       )}
-      {canCopy ? (
-        <div className="tool-install-stack">
-          <div className="tool-install">
-            <HighlightedCommand
-              command={copyText}
-              showPrefix={showShellPrefix}
-              showCopy={false}
-            />
-            <CopyButton text={copyText} label={copyAria} />
-          </div>
-        </div>
-      ) : guide.copy_gate === "blocked" ? (
+      {guide.copy_gate === "blocked" ? (
         <p className="install-warning" role="alert">
           Copy is blocked for critical-risk install commands.
         </p>
-      ) : guide.copy_gate === "reveal_first" ? (
-        <button
-          type="button"
-          className="install-reveal-btn"
-          onClick={() => setCopyRevealed(true)}
-        >
-          Reveal copy action
-        </button>
-      ) : null}
-      <ul className="install-steps">
-        {guide.steps.map((step) => (
-          <li key={step}>{step}</li>
-        ))}
-      </ul>
+      ) : guide.copy_gate === "reveal_first" && !copyRevealed ? (
+        <>
+          <ul className="install-steps">
+            {guide.steps.map((step) => (
+              <li key={step}>{step}</li>
+            ))}
+          </ul>
+          <button
+            type="button"
+            className="install-reveal-btn"
+            onClick={() => setCopyRevealed(true)}
+          >
+            Reveal copy action
+          </button>
+        </>
+      ) : (
+        <ConnectGuideBlocks blocks={blocks} moreHref="/connect" />
+      )}
       <InstallGuideMeta guide={guide} />
     </section>
   );
 }
 
 function InstallGuideMeta({ guide }: { guide: PublicInstallGuide }) {
-  if (!guide.x402_notice && !guide.referral_disclosure && guide.docs_links.length === 0) {
+  if (!guide.x402_notice && !guide.referral_disclosure) {
     return null;
   }
   return (
@@ -115,17 +116,6 @@ function InstallGuideMeta({ guide }: { guide: PublicInstallGuide }) {
       {guide.x402_notice && <p className="text-body-sm text-secondary">{guide.x402_notice}</p>}
       {guide.referral_disclosure && (
         <p className="text-body-sm text-secondary">{guide.referral_disclosure}</p>
-      )}
-      {guide.docs_links.length > 0 && (
-        <ul className="install-docs-links">
-          {guide.docs_links.map((link) => (
-            <li key={link.url}>
-              <a href={link.url} target="_blank" rel="noopener noreferrer" className="external-link">
-                {link.label}
-              </a>
-            </li>
-          ))}
-        </ul>
       )}
     </div>
   );

@@ -3,6 +3,7 @@
 pub mod admin_review;
 pub mod admin_users_comments;
 pub mod auth;
+pub mod blueprints;
 pub mod comments_bookmarks;
 pub mod crawler_admin;
 pub mod error;
@@ -23,6 +24,7 @@ pub fn router(state: AppState) -> Router {
         .merge(public_tools::router(state.clone()))
         .merge(user::router(state.clone()))
         .merge(comments_bookmarks::router(state.clone()))
+        .merge(blueprints::router(state.clone()))
         .merge(admin_review::router(state.clone()))
         .merge(taxonomy_featured::router(state.clone()))
         .merge(admin_users_comments::router(state.clone()))

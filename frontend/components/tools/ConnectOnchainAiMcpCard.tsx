@@ -1,35 +1,24 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { HighlightedCommand } from "@/components/tools/HighlightedCommand";
-import { CopyButton } from "@/components/ui/CopyButton";
+import { useState } from "react";
+import Link from "next/link";
+import { ConnectGuideBlocks } from "@/components/connect/ConnectGuideBlocks";
 import {
-  CONNECT_CARD_PLATFORMS,
-  DEFAULT_CONNECT_PLATFORM,
-  type InstallPlatform,
+  CONNECT_CARD_CLIENTS,
+  DEFAULT_CONNECT_CLIENT,
   buildOnchainaiConnectGuide,
-  copyLabelAria,
-  displayGuideText,
-  platformLabel,
-} from "@/lib/install-guide";
+  connectClientLabel,
+  type ConnectCardClient,
+} from "@/lib/mcp-connect";
 
 interface ConnectOnchainAiMcpCardProps {
-  mcpEndpoint: string;
+  /** Kept for PromoCards API compatibility; Phase 9 uses canonical HTTP endpoint. */
+  mcpEndpoint?: string;
 }
 
-export function ConnectOnchainAiMcpCard({
-  mcpEndpoint,
-}: ConnectOnchainAiMcpCardProps) {
-  const [platform, setPlatform] = useState<InstallPlatform>(
-    DEFAULT_CONNECT_PLATFORM,
-  );
-
-  const guide = useMemo(
-    () => buildOnchainaiConnectGuide(platform, mcpEndpoint),
-    [platform, mcpEndpoint],
-  );
-  const copyText = displayGuideText(guide);
-  const copyAria = copyLabelAria(guide.copy_label);
+export function ConnectOnchainAiMcpCard(_props: ConnectOnchainAiMcpCardProps) {
+  const [client, setClient] = useState<ConnectCardClient>(DEFAULT_CONNECT_CLIENT);
+  const guide = buildOnchainaiConnectGuide(client);
 
   return (
     <div
@@ -42,32 +31,41 @@ export function ConnectOnchainAiMcpCard({
       </p>
       <div
         className="install-platform-group connect-mcp-platforms"
-        role="group"
+        role="tablist"
         aria-label="Connect OnchainAI MCP client"
       >
-        {CONNECT_CARD_PLATFORMS.map((value) => (
+        {CONNECT_CARD_CLIENTS.map((value) => (
           <button
             key={value}
             type="button"
+            role="tab"
+            id={`connect-tab-${value}`}
+            aria-selected={client === value}
+            aria-controls={`connect-panel-${value}`}
             className={
-              platform === value
-                ? "install-platform-btn active"
-                : "install-platform-btn"
+              client === value ? "install-platform-btn active" : "install-platform-btn"
             }
-            aria-pressed={platform === value}
-            onClick={() => setPlatform(value)}
+            onClick={() => setClient(value)}
           >
-            {platformLabel(value)}
+            {connectClientLabel(value)}
           </button>
         ))}
+        <Link
+          href="/connect"
+          className="install-platform-btn connect-more-tab"
+          role="tab"
+          data-testid="connect-more-clients-link"
+        >
+          More →
+        </Link>
       </div>
-      <div className="flex items-center gap-2 min-w-0 mt-4">
-        <HighlightedCommand
-          command={copyText}
-          showPrefix={false}
-          showCopy={false}
-        />
-        <CopyButton text={copyText} label={copyAria} />
+      <div
+        id={`connect-panel-${client}`}
+        role="tabpanel"
+        aria-labelledby={`connect-tab-${client}`}
+        className="mt-4 min-w-0"
+      >
+        <ConnectGuideBlocks blocks={guide.blocks} />
       </div>
     </div>
   );

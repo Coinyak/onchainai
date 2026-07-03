@@ -3,9 +3,30 @@ import type { NextConfig } from "next";
 const API_PROXY_TARGET =
   process.env.API_PROXY_TARGET ?? "http://localhost:3000";
 
+const SECURITY_HEADERS = [
+  { key: "X-Frame-Options", value: "DENY" },
+  { key: "X-Content-Type-Options", value: "nosniff" },
+  { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+  {
+    key: "Permissions-Policy",
+    value: "camera=(), microphone=(), geolocation=()",
+  },
+];
+
 const nextConfig: NextConfig = {
   env: {
     NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL ?? "",
+    NEXT_PUBLIC_GITHUB_REPO:
+      process.env.NEXT_PUBLIC_GITHUB_REPO ??
+      "https://github.com/onchain-ai/onchainai",
+  },
+  async headers() {
+    return [
+      {
+        source: "/:path*",
+        headers: SECURITY_HEADERS,
+      },
+    ];
   },
   async rewrites() {
     return [
