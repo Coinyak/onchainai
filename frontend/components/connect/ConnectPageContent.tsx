@@ -97,7 +97,7 @@ export function ConnectPageContent() {
           </ol>
           <div className="tool-install-stack mt-3">
             <div className="tool-install">
-              <HighlightedCommand command={PLUGIN_MARKETPLACE_CMD} showCopy={false} />
+              <HighlightedCommand command={PLUGIN_MARKETPLACE_CMD} showPrefix={false} showCopy={false} />
               <CopyButton
                 text={PLUGIN_MARKETPLACE_CMD}
                 label={copyLabelAria("Copy marketplace command")}
@@ -106,7 +106,7 @@ export function ConnectPageContent() {
           </div>
           <div className="tool-install-stack mt-3">
             <div className="tool-install">
-              <HighlightedCommand command={PLUGIN_INSTALL_CMD} showCopy={false} />
+              <HighlightedCommand command={PLUGIN_INSTALL_CMD} showPrefix={false} showCopy={false} />
               <CopyButton
                 text={PLUGIN_INSTALL_CMD}
                 label={copyLabelAria("Copy install command")}

@@ -14,6 +14,13 @@
       "runtimeExecutable": "/bin/sh",
       "runtimeArgs": ["-c", "exec ./scripts/dev-watch.sh"],
       "port": 3000
+    },
+    {
+      "name": "frontend",
+      "autoPort": false,
+      "runtimeExecutable": "/bin/sh",
+      "runtimeArgs": ["-c", "cd frontend && exec npx next start -p 3100"],
+      "port": 3100
     }
   ]
 }

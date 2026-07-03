@@ -86,11 +86,11 @@ Rust 바이너리는 API/MCP/크롤러(Railway), DB는 Supabase. Vercel이 `/api
 | 스킬 단독 | 스킬 폴더를 `~/.claude/skills/` 복사 또는 런타임 업로드 | ✅ CONNECT.md §skill |
 | 에이전트 자동 발견 | `https://www.onchain-ai.xyz/llms.txt` | ✅ 이번 턴 신설 |
 
-### 2.2 🔲 남은 온보딩 작업
-- **P1 · /connect 허브에 "Plugin & Skill" 섹션 추가** (frontend UI — `dev-watch.sh`로 반복,
-  `ui-change-gate.sh`로 마감): Claude Code 플러그인 설치 2-명령 카드 + 스킬 단독 설치 카드.
-  수용 기준: `data-testid="connect-plugin-card"` 존재, 명령 복사 버튼, 기존 카드 그리드 불변.
-- **P1 · 홈 히어로/푸터에 llms.txt·CONNECT.md 링크 노출** (작은 UI 변경, 같은 게이트).
+### 2.2 남은 온보딩 작업
+- ✅ **/connect 허브 "Plugin & Skill" 섹션** — 이 브랜치에서 구현됨(`connect-plugin-card`
+  testid, 설치 2-명령 + 복사 버튼, 스킬 단독 설치 안내, 기존 클라이언트 카드 9개 불변).
+  프로덕션 빌드 + 브라우저 스냅샷/콘솔 검증 완료. 배포 전 `ui-change-gate.sh` 최종 확인만.
+- ✅ **푸터에 llms.txt·Connect MCP 링크** — 구현·브라우저 확인 완료.
 - **P2 · `GET /mcp` 안내 응답**: 현재 405 — JSON `{name, endpoint, docs, tools[]}` 200 응답으로
   바꾸면 브라우저로 열어본 사람/크롤러가 즉시 이해. (클라이언트 호환성 재확인 후.)
 - **P2 · initialize의 `protocolVersion` 에코**: 서버가 `2024-11-05` 고정 응답 — 클라이언트 요청
@@ -201,7 +201,7 @@ ALTER TABLE tools
 | 2 | 플러그인 번들 분리 + 검증 게이트 | P0 | — | ✅ 이번 턴 |
 | 3 | gitleaks 히스토리 스캔 + 키 로테이트 + repo 설정 + flip (§1.3) | P0 | 0.5d 수동 | 🔲 |
 | 4 | flip 직후 스모크(플러그인 실설치·MCP 연결·llms.txt) | P0 | 1h | 🔲 |
-| 5 | /connect Plugin&Skill 섹션 + 홈 링크 (UI 게이트) | P1 | 0.5d | 🔲 |
+| 5 | /connect Plugin&Skill 섹션 + 푸터 링크 | P1 | — | ✅ 이 브랜치 (배포 전 ui-change-gate만) |
 | 6 | x402 검증 잡 (§4: 028 마이그레이션 + 모듈 + cron + admin route + 테스트) | P1 | 2–3d | 🔲 |
 | 7 | MCP Registry/Smithery/등재 일괄 (§3) | P1 | 1d 수동 | 🔲 |
 | 8 | funnel_events + /api/v2/events + 대시보드 위젯 (§5) | P1 | 1–2d | 🔲 |
@@ -214,8 +214,14 @@ ALTER TABLE tools
 - 검증 플래그의 public 게이트 편입.
 - 자동 CI 상시화(예산) — 수동 dispatch 유지.
 
-## 8. 이번 턴 검증 기록
+## 8. 이번 턴 검증 기록 (2026-07-03)
 - `./scripts/spec-verify.sh J1 J2` → 7 PASS (신설 `J2-market`·`J2-devmcp` 포함).
 - `claude plugin validate plugin/onchainai` / `claude plugin validate .` → 둘 다 통과.
 - 매니페스트 3종 `JSON.parse` OK. `git check-ignore`로 `.env.example` 추적 가능·`.env*` 무시 확인.
 - 시크릿 패턴 grep 0건, `git log --diff-filter=A`에 env류 추가 이력 없음 (정밀 스캔은 §1.3-1).
+- `./scripts/agent-harness-check.sh` → PASS (`cargo check --features ssr` 포함; 이 셸에선
+  `OPENSSL_DIR="$HOME/.local/openssl" OPENSSL_STATIC=1` 지정 필요 — `.zshrc` 값).
+- `./scripts/check-mcp-config-parity.sh` PASS, `node scripts/sync-ui-watch-paths.mjs` 재동기화(115 paths).
+- frontend: `npx tsc --noEmit` OK, `next build` 성공(15/15 정적 생성), `next start`(:3100) 브라우저
+  검증 — /connect 플러그인 카드·슬래시 명령(프리픽스 없음)·복사 버튼, 푸터 llms.txt·Connect 링크,
+  `/llms.txt` 200, TopNav GitHub 링크 = 실제 레포. 콘솔 에러 0.
