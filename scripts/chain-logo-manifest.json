@@ -223,8 +223,9 @@
     {
       "id": "moonbeam",
       "label": "Moonbeam",
-      "kind": "public_svg",
-      "markers": ["#E1147B"]
+      "kind": "wrap",
+      "source": "moonbeam_official.svg",
+      "markers": ["#958FDC", "path"]
     },
     {
       "id": "litecoin",
@@ -250,8 +251,9 @@
     {
       "id": "okx",
       "label": "OKX Chain",
-      "kind": "public_svg",
-      "markers": ["#000000", "#FFFFFF"]
+      "kind": "wrap",
+      "source": "xlayer_official.svg",
+      "markers": ["fill=\"black\"", "path"]
     }
   ]
 }
