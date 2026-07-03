@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { Tool } from "@/lib/api";
 import { ToolDetail } from "@/components/tools/ToolDetail";
-import { CommentsSection } from "@/components/comments/CommentsSection";
+import { PreviewPanelContent } from "@/components/tools/PreviewPanelContent";
+import { PreviewActionBar } from "@/components/tools/PreviewActionBar";
 
 interface PreviewPanelProps {
   tool: Tool;
@@ -21,7 +21,7 @@ export function PreviewPanel({
   tool,
   closeHref,
   fullPageHref,
-  commentCount,
+  commentCount = 0,
   addMode = false,
   addMcpQueryBase = "",
   compareReturnHref = "",
@@ -30,14 +30,14 @@ export function PreviewPanel({
   const panelRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
-    panelRef.current?.focus();
+    panelRef.current?.focus({ preventScroll: true });
   }, [tool.slug]);
 
   useEffect(() => {
     function onKeyDown(ev: KeyboardEvent) {
       if (ev.key === "Escape") {
         ev.stopPropagation();
-        router.push(closeHref);
+        router.push(closeHref, { scroll: false });
       }
     }
     window.addEventListener("keydown", onKeyDown);
@@ -45,24 +45,16 @@ export function PreviewPanel({
   }, [closeHref, router]);
 
   return (
-    <>
-      <Link href={closeHref} className="preview-backdrop" aria-label="Close preview">
-        <span className="sr-only">Close</span>
-      </Link>
-      <aside
-        ref={panelRef}
-        className="preview-panel"
-        role="dialog"
-        aria-label="Tool preview"
-        tabIndex={-1}
-        data-testid="preview-panel"
-      >
-        <div className="preview-panel-header">
-          <Link href={closeHref} className="preview-close" aria-label="Close preview">
-            ×
-          </Link>
-        </div>
-        <div className="preview-panel-body">
+    <aside
+      ref={panelRef}
+      className="preview-panel"
+      role="complementary"
+      aria-label="Tool preview"
+      tabIndex={-1}
+      data-testid="preview-panel"
+    >
+      <div className="preview-panel-scroll">
+        {addMode ? (
           <ToolDetail
             tool={tool}
             compact
@@ -71,9 +63,24 @@ export function PreviewPanel({
             addMcpQueryBase={addMcpQueryBase}
             compareReturnHref={compareReturnHref}
           />
-          {!addMode && <CommentsSection slug={tool.slug} compact />}
-        </div>
-      </aside>
-    </>
+        ) : (
+          <PreviewPanelContent
+            key={tool.slug}
+            tool={tool}
+            closeHref={closeHref}
+            fullPageHref={fullPageHref}
+            commentCount={commentCount}
+          />
+        )}
+      </div>
+      {!addMode && (
+        <PreviewActionBar
+          key={tool.slug}
+          tool={tool}
+          fullPageHref={fullPageHref}
+          addMcpQueryBase={addMcpQueryBase}
+        />
+      )}
+    </aside>
   );
 }

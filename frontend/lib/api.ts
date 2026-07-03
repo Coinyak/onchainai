@@ -392,6 +392,18 @@ export async function getToolBySlug(slug: string): Promise<Tool> {
   return apiFetch<Tool>(`/api/v2/tools/${encodeURIComponent(slug)}`);
 }
 
+/** N1 related tools — returns [] until API is available. */
+export async function getRelatedTools(slug: string, limit = 4): Promise<Tool[]> {
+  try {
+    const tools = await apiFetch<Tool[]>(
+      `/api/v2/tools/${encodeURIComponent(slug)}/related?limit=${limit}`,
+    );
+    return Array.isArray(tools) ? tools : [];
+  } catch {
+    return [];
+  }
+}
+
 export async function getToolTrustView(slug: string): Promise<ToolTrustView> {
   return apiFetch<ToolTrustView>(`/api/v2/admin/trust/${encodeURIComponent(slug)}`);
 }
@@ -400,11 +412,17 @@ export async function searchTools(params: {
   query: string;
   function?: string;
   chain?: string;
+  page_size?: number;
 }): Promise<Tool[]> {
   const search = new URLSearchParams({ query: params.query });
   if (params.function) search.set("function", params.function);
   if (params.chain) search.set("chain", params.chain);
-  return apiFetch<Tool[]>(`/api/v2/tools/search?${search.toString()}`);
+  if (params.page_size != null) search.set("page_size", String(params.page_size));
+  const tools = await apiFetch<Tool[]>(`/api/v2/tools/search?${search.toString()}`);
+  if (params.page_size != null && params.page_size > 0) {
+    return tools.slice(0, params.page_size);
+  }
+  return tools;
 }
 
 export async function getRecentTools(limit = 10): Promise<Tool[]> {
@@ -507,6 +525,66 @@ export async function toggleBookmark(slug: string): Promise<{ starred: boolean }
     `/api/v2/tools/${encodeURIComponent(slug)}/bookmark`,
     { method: "POST" },
   );
+}
+
+// --- Blueprints ---
+
+export interface BlueprintNode {
+  id: string;
+  kind: "tool" | "note";
+  slug?: string;
+  text?: string;
+  x: number;
+  y: number;
+}
+
+export interface BlueprintListItem {
+  id: string;
+  title: string;
+  node_count: number;
+  updated_at: string;
+}
+
+export interface Blueprint {
+  id: string;
+  title: string;
+  nodes: BlueprintNode[];
+  created_at: string;
+  updated_at: string;
+}
+
+export async function listBlueprints(): Promise<BlueprintListItem[]> {
+  return apiFetch<BlueprintListItem[]>("/api/v2/blueprints");
+}
+
+export async function createBlueprint(payload: {
+  title?: string;
+  nodes?: BlueprintNode[];
+}): Promise<Blueprint> {
+  return apiFetch<Blueprint>("/api/v2/blueprints", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function getBlueprint(id: string): Promise<Blueprint> {
+  return apiFetch<Blueprint>(`/api/v2/blueprints/${encodeURIComponent(id)}`);
+}
+
+export async function updateBlueprint(
+  id: string,
+  payload: { title?: string; nodes?: BlueprintNode[] },
+): Promise<Blueprint> {
+  return apiFetch<Blueprint>(`/api/v2/blueprints/${encodeURIComponent(id)}`, {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteBlueprint(id: string): Promise<void> {
+  await apiFetch(`/api/v2/blueprints/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  });
 }
 
 // --- Toolkit ---

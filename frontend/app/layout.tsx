@@ -4,6 +4,7 @@ import "./globals.css";
 import { Providers } from "./providers";
 import { TopNav } from "@/components/layout/TopNav";
 import { SiteFooter } from "@/components/layout/SiteFooter";
+import { DEFAULT_OG_IMAGE_PATH, SITE_ORIGIN } from "@/lib/site";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -16,8 +17,32 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "OnchainAI",
+  metadataBase: new URL(SITE_ORIGIN),
+  title: {
+    default: "OnchainAI",
+    template: "%s",
+  },
   description: "Crypto tool directory — MCP, CLI, SDK, API, x402, RWA, AI agents",
+  openGraph: {
+    title: "OnchainAI",
+    description: "Crypto tool directory — MCP, CLI, SDK, API, x402, RWA, AI agents",
+    siteName: "OnchainAI",
+    type: "website",
+    images: [
+      {
+        url: DEFAULT_OG_IMAGE_PATH,
+        width: 1200,
+        height: 630,
+        alt: "OnchainAI",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "OnchainAI",
+    description: "Crypto tool directory — MCP, CLI, SDK, API, x402, RWA, AI agents",
+    images: [DEFAULT_OG_IMAGE_PATH],
+  },
 };
 
 export default function RootLayout({

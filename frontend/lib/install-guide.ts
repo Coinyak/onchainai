@@ -1,6 +1,7 @@
 import type { Tool } from "@/lib/api";
 import { ADD_MCP_INTENT, stripAddModeParams } from "@/lib/browser-query";
 
+
 export type InstallPlatform = "claude" | "cursor" | "generic_mcp" | "cli_sdk";
 
 export type CopyGate = "allow" | "reveal_first" | "blocked";
@@ -8,6 +9,17 @@ export type CopyGate = "allow" | "reveal_first" | "blocked";
 export interface GuideLink {
   label: string;
   url: string;
+}
+
+export interface ConnectGuideBlock {
+  title?: string;
+  steps: string[];
+  copyText: string | null;
+  copyLabel: string;
+  configJson?: string | null;
+  deeplinkHref?: string | null;
+  deeplinkLabel?: string | null;
+  showShellPrefix?: boolean;
 }
 
 export interface PublicInstallGuide {
@@ -27,24 +39,26 @@ export interface PublicInstallGuide {
   docs_links: GuideLink[];
   x402_notice: string | null;
   referral_disclosure: string | null;
+  /** Phase 9: per-client install blocks (ChatGPT / Claude / Cursor / VS Code / More). */
+  connect_blocks?: ConnectGuideBlock[];
 }
 
 export const SITE_ORIGIN = "https://www.onchain-ai.xyz";
 
+/** @deprecated Phase 9 — use CONNECT_CARD_CLIENTS from mcp-connect. */
 export const CONNECT_CARD_PLATFORMS: InstallPlatform[] = [
   "claude",
   "cursor",
   "generic_mcp",
 ];
 
+/** @deprecated Phase 9 — use TOOL_INSTALL_CLIENTS from mcp-connect. */
 export const ALL_SELECTABLE_PLATFORMS: InstallPlatform[] = [
   "claude",
   "cursor",
   "generic_mcp",
   "cli_sdk",
 ];
-
-export const DEFAULT_CONNECT_PLATFORM: InstallPlatform = "claude";
 
 export { ADD_MCP_INTENT };
 
@@ -173,6 +187,16 @@ function npmPackageUrl(packageName?: string | null): string | null {
   return `https://www.npmjs.com/package/${pkg}`;
 }
 
+export function toolGuideMeta(
+  tool: Tool,
+): Pick<PublicInstallGuide, "docs_links" | "x402_notice" | "referral_disclosure"> {
+  return {
+    docs_links: docsLinksForTool(tool),
+    x402_notice: x402NoticeForTool(tool),
+    referral_disclosure: referralDisclosureForTool(tool),
+  };
+}
+
 function docsLinksForTool(tool: Tool): GuideLink[] {
   const links: GuideLink[] = [];
   if (tool.repo_url?.trim()) {
@@ -205,31 +229,6 @@ function referralDisclosureForTool(tool: Tool): string | null {
   return `OnchainAI may receive ${bps} through ${model} referral attribution.`;
 }
 
-function blockedGuide(tool: Tool, slug: string, platform: InstallPlatform): PublicInstallGuide {
-  return {
-    slug,
-    tool_name: tool.name,
-    platform: platformAsStr(platform),
-    risk_level: tool.install_risk_level,
-    risk_reasons: tool.install_risk_reasons,
-    warning: "Install guidance blocked: critical risk pending operator review.",
-    blocked: true,
-    copy_gate: "blocked",
-    command: null,
-    config_json: null,
-    copy_text: null,
-    copy_label: "Copy blocked",
-    steps: [
-      "This tool has a critical-risk install command.",
-      "Public install guidance is withheld until an operator reviews the listing.",
-      "Contact the project directly or wait for operator approval.",
-    ],
-    docs_links: docsLinksForTool(tool),
-    x402_notice: x402NoticeForTool(tool),
-    referral_disclosure: referralDisclosureForTool(tool),
-  };
-}
-
 export function claudeMcpConfig(
   serverName: string,
   install: string,
@@ -258,141 +257,263 @@ export function claudeMcpConfig(
   return `{"mcpServers":{"${serverName}":{"command":"${runner}","args":[${argsJson}]}}}`;
 }
 
-export function buildOnchainaiConnectGuide(
-  platform: InstallPlatform,
-  endpointCmd: string,
-): PublicInstallGuide {
-  const slug = "onchainai";
-  const riskLevel = "low";
+import {
+  cursorMcpDeeplink,
+  vscodeMcpDeeplink,
+} from "@/lib/mcp-deeplinks";
+export {
+  TOOL_INSTALL_CLIENTS,
+  toolInstallClientLabel,
+  type ToolInstallClient,
+} from "@/lib/mcp-connect-clients";
 
-  let configJson: string | null = null;
-  let copyText: string | null = null;
-  let copyLabel: string;
-  let steps: string[];
+import type { ToolInstallClient } from "@/lib/mcp-connect-clients";
 
-  if (platform === "claude" || platform === "cursor") {
-    const config = claudeMcpConfig(slug, endpointCmd, riskLevel);
-    configJson = config;
-    copyText = config ?? endpointCmd;
-    copyLabel = "Copy config";
-    steps = [
-      "Open your MCP client settings.",
-      "Paste the OnchainAI search MCP config.",
-      "Reload or restart your client.",
-    ];
-  } else {
-    copyText = endpointCmd;
-    copyLabel = "Copy command";
-    steps = [
-      "Run the command in your terminal to connect OnchainAI search MCP.",
-    ];
+function httpMcpJsonConfig(serverName: string, url: string): string {
+  return JSON.stringify({ mcpServers: { [serverName]: { url } } }, null, 2);
+}
+
+function stdioMcpJsonConfig(
+  serverName: string,
+  command: string,
+  args: string[],
+): string {
+  return JSON.stringify(
+    { mcpServers: { [serverName]: { command, args } } },
+    null,
+    2,
+  );
+}
+
+function toolHttpEndpoint(tool: Tool): string | null {
+  const endpoint = tool.mcp_endpoint?.trim();
+  if (!endpoint?.startsWith("http://") && !endpoint?.startsWith("https://")) {
+    return null;
   }
+  return endpoint;
+}
 
-  return {
-    slug,
-    tool_name: "OnchainAI MCP",
-    platform: platformAsStr(platform),
-    risk_level: riskLevel,
-    risk_reasons: ["documented package manager install"],
-    warning: null,
-    blocked: false,
-    copy_gate: "allow",
-    command: endpointCmd,
-    config_json: configJson,
-    copy_text: copyText,
-    copy_label: copyLabel,
-    steps,
-    docs_links: [{ label: "OnchainAI", url: SITE_ORIGIN }],
-    x402_notice: null,
-    referral_disclosure: null,
-  };
+function toolStdioConfig(tool: Tool, slug: string, riskLevel: string): string | null {
+  const command = primaryInstallCommand(tool);
+  if (!command || blocksStructuredConfig(riskLevel)) return null;
+  const parts = command.trim().split(/\s+/);
+  if (parts.length === 0) return null;
+  return stdioMcpJsonConfig(slug, parts[0], parts.slice(1));
+}
+
+function buildToolClientBlocks(
+  tool: Tool,
+  slug: string,
+  client: ToolInstallClient,
+): ConnectGuideBlock[] {
+  const riskLevel = tool.install_risk_level;
+  const command = primaryInstallCommand(tool);
+  const httpUrl = toolHttpEndpoint(tool);
+  const stdioJson = toolStdioConfig(tool, slug, riskLevel);
+  const claudeJson =
+    !blocksStructuredConfig(riskLevel) && command
+      ? claudeMcpConfig(slug, command, riskLevel)
+      : null;
+
+  switch (client) {
+    case "chatgpt":
+      if (httpUrl) {
+        return [
+          {
+            steps: [
+              "Enable Developer mode in ChatGPT connector settings.",
+              "Create a connector with this tool's MCP URL.",
+              "Use Developer mode in chat to call the connector.",
+            ],
+            copyText: httpUrl,
+            copyLabel: "Copy endpoint URL",
+          },
+        ];
+      }
+      return [
+        {
+          steps: [
+            "ChatGPT connectors require an HTTP MCP endpoint.",
+            "Use Claude, Cursor, VS Code, or More for CLI/SDK install instead.",
+          ],
+          copyText: command,
+          copyLabel: "Copy command",
+          showShellPrefix: true,
+        },
+      ];
+    case "claude":
+      if (httpUrl) {
+        return [
+          {
+            title: "Claude Desktop or Web",
+            steps: [
+              "Add a custom connector with the MCP URL below.",
+              "Enable the connector in your Claude session.",
+            ],
+            copyText: httpUrl,
+            copyLabel: "Copy endpoint URL",
+          },
+          {
+            title: "Claude Code CLI",
+            steps: ["Register the remote MCP server with HTTP transport."],
+            copyText: `claude mcp add --transport http ${slug} ${httpUrl}`,
+            copyLabel: "Copy command",
+            showShellPrefix: true,
+          },
+        ];
+      }
+      return [
+        {
+          title: "Claude Desktop",
+          steps: [
+            "Paste the structured MCP config into Claude settings.",
+            "Restart Claude to load the tool.",
+          ],
+          copyText: claudeJson ?? command,
+          copyLabel: claudeJson ? "Copy config" : "Copy command",
+          configJson: claudeJson,
+          showShellPrefix: !claudeJson,
+        },
+        {
+          title: "Claude Code CLI",
+          steps: ["Run the install command if structured config is unavailable."],
+          copyText: command,
+          copyLabel: "Copy command",
+          showShellPrefix: true,
+        },
+      ];
+    case "cursor": {
+      const cursorConfig = httpUrl
+        ? { url: httpUrl }
+        : stdioJson
+          ? (JSON.parse(stdioJson).mcpServers[slug] as Record<string, unknown>)
+          : null;
+      const configJson =
+        httpUrl && cursorConfig
+          ? JSON.stringify({ mcpServers: { [slug]: cursorConfig } }, null, 2)
+          : stdioJson;
+      const deeplink =
+        cursorConfig && !blocksStructuredConfig(riskLevel)
+          ? cursorMcpDeeplink(slug, cursorConfig)
+          : null;
+      return [
+        {
+          steps: [
+            deeplink
+              ? "Click Add to Cursor or paste the JSON into .cursor/mcp.json."
+              : "Paste the JSON into .cursor/mcp.json.",
+            "Reload MCP servers in Cursor.",
+          ],
+          copyText: configJson ?? command,
+          copyLabel: configJson ? "Copy config" : "Copy command",
+          configJson,
+          deeplinkHref: deeplink,
+          deeplinkLabel: deeplink ? "Add to Cursor" : undefined,
+          showShellPrefix: !configJson,
+        },
+      ];
+    }
+    case "vscode": {
+      const vscodeConfig = httpUrl
+        ? { type: "http", url: httpUrl }
+        : command && !blocksStructuredConfig(riskLevel)
+          ? (() => {
+              const parts = command.trim().split(/\s+/);
+              return { type: "stdio", command: parts[0], args: parts.slice(1) };
+            })()
+          : null;
+      const deeplink =
+        vscodeConfig && !blocksStructuredConfig(riskLevel)
+          ? vscodeMcpDeeplink(slug, vscodeConfig)
+          : null;
+      return [
+        {
+          steps: [
+            deeplink
+              ? "Click Add to VS Code or use MCP: Add Server manually."
+              : "Use MCP: Add Server and paste the install command output.",
+            "Start the server from MCP: List Servers.",
+          ],
+          copyText: httpUrl ?? command,
+          copyLabel: httpUrl ? "Copy endpoint URL" : "Copy command",
+          deeplinkHref: deeplink,
+          deeplinkLabel: deeplink ? "Add to VS Code" : undefined,
+          showShellPrefix: !httpUrl,
+        },
+      ];
+    }
+    case "more":
+      return [
+        {
+          title: "Terminal install",
+          steps: [
+            "Run the install command in your terminal.",
+            "See all MCP clients on the Connect page.",
+          ],
+          copyText: command,
+          copyLabel: "Copy command",
+          showShellPrefix: true,
+        },
+        {
+          title: "More clients",
+          steps: ["Codex, Windsurf, Gemini, Goose, Devin, Raycast, and Generic JSON."],
+          copyText: null,
+          copyLabel: "Copy",
+        },
+      ];
+  }
 }
 
 export function buildPublicInstallGuide(
   tool: Tool,
   slug: string,
-  platform: InstallPlatform,
+  client: ToolInstallClient,
 ): PublicInstallGuide {
   if (tool.install_risk_level === "critical") {
-    return blockedGuide(tool, slug, platform);
+    return {
+      slug,
+      tool_name: tool.name,
+      platform: client,
+      risk_level: tool.install_risk_level,
+      risk_reasons: tool.install_risk_reasons,
+      warning: "Install guidance blocked: critical risk pending operator review.",
+      blocked: true,
+      copy_gate: "blocked",
+      command: null,
+      config_json: null,
+      copy_text: null,
+      copy_label: "Copy blocked",
+      steps: [
+        "This tool has a critical-risk install command.",
+        "Public install guidance is withheld until an operator reviews the listing.",
+      ],
+      connect_blocks: [],
+      ...toolGuideMeta(tool),
+      docs_links: [],
+      x402_notice: null,
+      referral_disclosure: null,
+    };
   }
 
-  const riskLevel = tool.install_risk_level;
-  const copyGate = copyGateForRisk(riskLevel);
-  const configBlocked = blocksStructuredConfig(riskLevel);
-  const command = primaryInstallCommand(tool);
-  const rawInstall = tool.install_command?.trim() || null;
-  const installForConfig = command ?? rawInstall ?? "";
-
-  let configJson: string | null = null;
-  let copyText: string | null = null;
-  let copyLabel = "Copy command";
-  let steps: string[] = [];
-
-  switch (platform) {
-    case "claude": {
-      const config = !configBlocked
-        ? claudeMcpConfig(slug, installForConfig, riskLevel)
-        : null;
-      configJson = config;
-      copyText = config ?? command;
-      copyLabel = configBlocked ? "Copy command" : "Copy config";
-      steps = [
-        "Open Claude Desktop settings.",
-        configBlocked
-          ? "Structured config is unavailable for high-risk commands; use generic install only if you trust the source."
-          : "Paste the structured MCP config JSON into your Claude settings.",
-        "Restart Claude to load the tool.",
-      ];
-      break;
-    }
-    case "cursor": {
-      const config = !configBlocked
-        ? claudeMcpConfig(slug, installForConfig, riskLevel)
-        : null;
-      configJson = config;
-      copyText = config ?? command;
-      copyLabel = configBlocked ? "Copy command" : "Copy config";
-      steps = [
-        "Open Cursor MCP settings.",
-        configBlocked
-          ? "High-risk install: do not paste raw shell wrappers. Add manually only if you trust the source."
-          : "Paste the config JSON or use the install command.",
-        "Reload MCP servers.",
-      ];
-      break;
-    }
-    case "generic_mcp":
-      copyText = command;
-      copyLabel = "Copy command";
-      steps = ["Run the install command in your terminal."];
-      break;
-    case "cli_sdk":
-      copyText = command;
-      copyLabel = "Copy command";
-      steps = [
-        "Install the package using the command below.",
-        "Open the docs or repository link for setup details.",
-      ];
-      break;
-  }
+  const blocks = buildToolClientBlocks(tool, slug, client);
+  const primary = blocks.find((b) => b.copyText) ?? blocks[0];
+  const copyGate = copyGateForRisk(tool.install_risk_level);
 
   return {
     slug,
     tool_name: tool.name,
-    platform: platformAsStr(platform),
-    risk_level: riskLevel,
+    platform: client,
+    risk_level: tool.install_risk_level,
     risk_reasons: tool.install_risk_reasons,
-    warning: installWarningText(riskLevel),
+    warning: installWarningText(tool.install_risk_level),
     blocked: false,
     copy_gate: copyGate,
-    command,
-    config_json: configJson,
-    copy_text: copyText,
-    copy_label: copyLabel,
-    steps,
-    docs_links: docsLinksForTool(tool),
-    x402_notice: x402NoticeForTool(tool),
-    referral_disclosure: referralDisclosureForTool(tool),
+    command: primaryInstallCommand(tool),
+    config_json: primary.configJson ?? null,
+    copy_text: primary.copyText,
+    copy_label: primary.copyLabel,
+    steps: primary.steps,
+    connect_blocks: blocks,
+    ...toolGuideMeta(tool),
   };
 }

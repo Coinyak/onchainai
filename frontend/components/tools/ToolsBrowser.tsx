@@ -1,8 +1,8 @@
 "use client";
 
-import { useMemo } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import {
   loadBrowserData,
@@ -35,6 +35,7 @@ import { BottomSheet } from "@/components/tools/BottomSheet";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { ToolListSkeleton } from "@/components/ui/Skeleton";
+import { ToolSearchCombobox } from "@/components/tools/ToolSearchCombobox";
 
 function normalizeCategories(rows: [import("@/lib/api").Category, number][]): CategoryWithCount[] {
   return rows.map(([category, count]) => ({ category, count }));
@@ -45,24 +46,136 @@ interface ToolbarSearchProps {
   initialQ: string;
 }
 
+const SORT_OPTIONS = [
+  { value: "hot", label: "HOT ↓" },
+  { value: "new", label: "New" },
+  { value: "comments", label: "Comments" },
+] as const;
+
+const TYPE_CHIPS = [
+  { id: "mcp", label: "MCP" },
+  { id: "cli", label: "CLI" },
+  { id: "api", label: "API" },
+  { id: "sdk", label: "SDK" },
+  { id: "skill", label: "Skill" },
+  { id: "x402", label: "x402" },
+] as const;
+
+const STATUS_CHIPS = [
+  { id: "verified", label: "Verified" },
+  { id: "official", label: "Official" },
+] as const;
+
+interface MobileToolbarStripProps {
+  sort: string;
+  sortHot: string;
+  sortNew: string;
+  sortComments: string;
+  typeHrefs: Record<string, string>;
+  statusHrefs: Record<string, string>;
+  activeType?: string;
+  activeStatus?: string;
+  toolCount: number;
+}
+
+function MobileToolbarStrip({
+  sort,
+  sortHot,
+  sortNew,
+  sortComments,
+  typeHrefs,
+  statusHrefs,
+  activeType,
+  activeStatus,
+  toolCount,
+}: MobileToolbarStripProps) {
+  const router = useRouter();
+  const sortHrefs: Record<string, string> = {
+    hot: sortHot,
+    new: sortNew,
+    comments: sortComments,
+  };
+
+  return (
+    <div className="toolbar-mobile-strip sticky-toolbar">
+      <label className="toolbar-sort-label">
+        <span className="sr-only">Sort tools</span>
+        <select
+          className="toolbar-sort-select"
+          value={sort}
+          aria-label="Sort tools"
+          onChange={(ev) => {
+            const href = sortHrefs[ev.target.value];
+            if (href) router.push(href, { scroll: false });
+          }}
+        >
+          {SORT_OPTIONS.map(({ value, label }) => (
+            <option key={value} value={value}>
+              {label}
+            </option>
+          ))}
+        </select>
+      </label>
+      <div className="toolbar-type-chips" role="group" aria-label="Filter by type or status" tabIndex={0}>
+        {TYPE_CHIPS.map(({ id, label }) => (
+          <Link
+            key={id}
+            href={typeHrefs[id]}
+            scroll={false}
+            className={activeType === id ? "toolbar-type-chip active" : "toolbar-type-chip"}
+          >
+            {label}
+          </Link>
+        ))}
+        {STATUS_CHIPS.map(({ id, label }) => (
+          <Link
+            key={id}
+            href={statusHrefs[id]}
+            scroll={false}
+            className={activeStatus === id ? "toolbar-type-chip active" : "toolbar-type-chip"}
+          >
+            {label}
+          </Link>
+        ))}
+      </div>
+      <span className="tool-count tool-count-mobile">{toolCount} tools</span>
+    </div>
+  );
+}
+
 function ToolbarSearch({ base, initialQ }: ToolbarSearchProps) {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const params = paramsFromSearchParams(base, searchParams);
 
+  const navigateWithQuery = useCallback(
+    (q: string) => {
+      const trimmed = q.trim();
+      const nextParams = {
+        ...params,
+        q: trimmed || undefined,
+        selected: undefined,
+        intent: undefined,
+        page: 1,
+      };
+      const href = buildQueryBase(base, nextParams);
+      const currentQ = params.q?.trim() ?? "";
+      if (trimmed === currentQ) return;
+      router.push(href, { scroll: false });
+    },
+    [base, params, router],
+  );
+
   return (
-    <form className="toolbar-search" action={buildQueryBase(base, { ...params, page: 1 })} method="get">
-      <input
-        type="search"
-        name="q"
-        placeholder="Search tools..."
+    <div className="toolbar-search">
+      <ToolSearchCombobox
+        variant="toolbar"
         defaultValue={initialQ}
-        className="toolbar-search-input"
+        onSubmitSearch={navigateWithQuery}
+        onDebouncedQueryChange={navigateWithQuery}
+        data-testid="toolbar-search-bar"
       />
-      {params.sort !== "hot" && <input type="hidden" name="sort" value={params.sort} />}
-      {params.function && <input type="hidden" name="function" value={params.function} />}
-      {params.chain && <input type="hidden" name="chain" value={params.chain} />}
-      {params.type && <input type="hidden" name="type" value={params.type} />}
-    </form>
+    </div>
   );
 }
 
@@ -72,7 +185,19 @@ interface ToolsBrowserProps {
   children?: React.ReactNode;
 }
 
+function isEditableTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  const tag = target.tagName;
+  return (
+    tag === "INPUT" ||
+    tag === "TEXTAREA" ||
+    tag === "SELECT" ||
+    target.isContentEditable
+  );
+}
+
 export function ToolsBrowser({ base, showToolbarSearch = false, children }: ToolsBrowserProps) {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const params = useMemo(
     () => paramsFromSearchParams(base, searchParams),
@@ -125,9 +250,40 @@ export function ToolsBrowser({ base, showToolbarSearch = false, children }: Tool
   const typeX402 = buildQueryBase(base, forTypeFilter(params, "x402"));
   const loadMoreHref = buildQueryBase(base, forNextPage(params));
   const closePreviewHref = withoutSelected(base, queryBase);
+  const previewOpen = Boolean(selectedSlug && previewQuery.data);
+  const layoutClass = previewOpen ? "tools-layout tools-layout-preview-open" : "tools-layout";
+
+  useEffect(() => {
+    if (!selectedSlug || !browserQuery.data?.tools.length) return;
+
+    function onKeyDown(ev: KeyboardEvent) {
+      if (isEditableTarget(ev.target)) return;
+
+      const tools = browserQuery.data!.tools;
+      const currentIndex = tools.findIndex((tool) => tool.slug === selectedSlug);
+      if (currentIndex < 0) return;
+
+      let nextIndex = -1;
+      if (ev.key === "ArrowDown" || ev.key === "j") {
+        nextIndex = currentIndex + 1;
+      } else if (ev.key === "ArrowUp" || ev.key === "k") {
+        nextIndex = currentIndex - 1;
+      } else {
+        return;
+      }
+
+      if (nextIndex < 0 || nextIndex >= tools.length) return;
+
+      ev.preventDefault();
+      router.push(withSelected(base, queryBase, tools[nextIndex].slug), { scroll: false });
+    }
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [base, browserQuery.data, queryBase, router, selectedSlug]);
 
   return (
-    <div className="tools-layout" data-tools-browser="">
+    <div className={layoutClass} data-tools-browser="">
       {browserQuery.isLoading && !browserQuery.data ? (
         <>
           <Sidebar
@@ -190,28 +346,51 @@ export function ToolsBrowser({ base, showToolbarSearch = false, children }: Tool
               activeChain={params.chain}
               chainCounts={browserQuery.data.chains}
             />
-            <div className="tools-toolbar sticky-toolbar">
+            <div className="tools-toolbar">
               {showToolbarSearch && (
                 <ToolbarSearch base={base} initialQ={params.q ?? ""} />
               )}
-              <div className="toolbar-rows">
-                <div className="toolbar-sort-row">
-                  <Link href={sortHot} className={params.sort === "hot" ? "sort-link active" : "sort-link"}>HOT ↓</Link>
-                  <Link href={sortNew} className={params.sort === "new" ? "sort-link active" : "sort-link"}>New</Link>
-                  <Link href={sortComments} className={params.sort === "comments" ? "sort-link active" : "sort-link"}>Comments</Link>
-                  <Link href={statusVerified} className={params.status === "verified" ? "sort-link active" : "sort-link"}>Verified</Link>
-                  <Link href={statusOfficial} className={params.status === "official" ? "sort-link active" : "sort-link"}>Official</Link>
+              <div className="toolbar-desktop sticky-toolbar">
+                <div className="toolbar-rows">
+                  <div className="toolbar-sort-row">
+                    <Link href={sortHot} scroll={false} className={params.sort === "hot" ? "sort-link active" : "sort-link"}>HOT ↓</Link>
+                    <Link href={sortNew} scroll={false} className={params.sort === "new" ? "sort-link active" : "sort-link"}>New</Link>
+                    <Link href={sortComments} scroll={false} className={params.sort === "comments" ? "sort-link active" : "sort-link"}>Comments</Link>
+                    <Link href={statusVerified} scroll={false} className={params.status === "verified" ? "sort-link active" : "sort-link"}>Verified</Link>
+                    <Link href={statusOfficial} scroll={false} className={params.status === "official" ? "sort-link active" : "sort-link"}>Official</Link>
+                  </div>
+                  <div className="toolbar-filter-row">
+                    <Link href={typeMcp} scroll={false} className={params.type === "mcp" ? "sort-link active" : "sort-link"}>MCP</Link>
+                    <Link href={typeCli} scroll={false} className={params.type === "cli" ? "sort-link active" : "sort-link"}>CLI</Link>
+                    <Link href={typeApi} scroll={false} className={params.type === "api" ? "sort-link active" : "sort-link"}>API</Link>
+                    <Link href={typeSdk} scroll={false} className={params.type === "sdk" ? "sort-link active" : "sort-link"}>SDK</Link>
+                    <Link href={typeSkill} scroll={false} className={params.type === "skill" ? "sort-link active" : "sort-link"}>Skill</Link>
+                    <Link href={typeX402} scroll={false} className={params.type === "x402" ? "sort-link active" : "sort-link"}>x402</Link>
+                  </div>
                 </div>
-                <div className="toolbar-filter-row">
-                  <Link href={typeMcp} className={params.type === "mcp" ? "sort-link active" : "sort-link"}>MCP</Link>
-                  <Link href={typeCli} className={params.type === "cli" ? "sort-link active" : "sort-link"}>CLI</Link>
-                  <Link href={typeApi} className={params.type === "api" ? "sort-link active" : "sort-link"}>API</Link>
-                  <Link href={typeSdk} className={params.type === "sdk" ? "sort-link active" : "sort-link"}>SDK</Link>
-                  <Link href={typeSkill} className={params.type === "skill" ? "sort-link active" : "sort-link"}>Skill</Link>
-                  <Link href={typeX402} className={params.type === "x402" ? "sort-link active" : "sort-link"}>x402</Link>
-                </div>
+                <span className="tool-count">{browserQuery.data.total} tools</span>
               </div>
-              <span className="tool-count">{browserQuery.data.total} tools</span>
+              <MobileToolbarStrip
+                sort={params.sort}
+                sortHot={sortHot}
+                sortNew={sortNew}
+                sortComments={sortComments}
+                typeHrefs={{
+                  mcp: typeMcp,
+                  cli: typeCli,
+                  api: typeApi,
+                  sdk: typeSdk,
+                  skill: typeSkill,
+                  x402: typeX402,
+                }}
+                statusHrefs={{
+                  verified: statusVerified,
+                  official: statusOfficial,
+                }}
+                activeType={params.type}
+                activeStatus={params.status}
+                toolCount={browserQuery.data.total}
+              />
             </div>
 
             {browserQuery.data.tools.length === 0 ? (
@@ -236,7 +415,7 @@ export function ToolsBrowser({ base, showToolbarSearch = false, children }: Tool
                   params.page,
                 ) && (
                   <div className="load-more-row">
-                    <Link href={loadMoreHref} className="load-more-btn">
+                    <Link href={loadMoreHref} scroll={false} className="load-more-btn">
                       Load more
                     </Link>
                     <span className="load-more-count">
@@ -247,33 +426,48 @@ export function ToolsBrowser({ base, showToolbarSearch = false, children }: Tool
               </>
             )}
 
+            {selectedSlug && previewQuery.isError && !previewQuery.isLoading && (
+              <div
+                className="preview-load-error"
+                role="alert"
+                data-testid="preview-load-error"
+              >
+                <p className="empty-state-message">
+                  {previewQuery.error?.message ?? "Could not load tool preview."}
+                </p>
+                <Link href={closePreviewHref} scroll={false} className="empty-state-clear-btn">
+                  Close preview
+                </Link>
+              </div>
+            )}
+
             {previewQuery.data && (
-              <>
-                <div className="preview-desktop">
-                  <PreviewPanel
-                    tool={previewQuery.data}
-                    closeHref={closePreviewHref}
-                    fullPageHref={`/tools/${previewQuery.data.slug}`}
-                    commentCount={browserQuery.data.comment_counts[previewQuery.data.slug] ?? 0}
-                    addMode={addMode}
-                    addMcpQueryBase={queryBase}
-                    compareReturnHref={compareBackHref}
-                  />
-                </div>
-                <div className="preview-mobile">
-                  <BottomSheet
-                    tool={previewQuery.data}
-                    closeHref={closePreviewHref}
-                    fullPageHref={`/tools/${previewQuery.data.slug}`}
-                    commentCount={browserQuery.data.comment_counts[previewQuery.data.slug] ?? 0}
-                    addMode={addMode}
-                    addMcpQueryBase={queryBase}
-                    compareReturnHref={compareBackHref}
-                  />
-                </div>
-              </>
+              <div className="preview-mobile">
+                <BottomSheet
+                  tool={previewQuery.data}
+                  closeHref={closePreviewHref}
+                  fullPageHref={`/tools/${previewQuery.data.slug}`}
+                  commentCount={browserQuery.data.comment_counts[previewQuery.data.slug] ?? 0}
+                  addMode={addMode}
+                  addMcpQueryBase={queryBase}
+                  compareReturnHref={compareBackHref}
+                />
+              </div>
             )}
           </div>
+          {previewQuery.data && (
+            <div className="preview-desktop">
+              <PreviewPanel
+                tool={previewQuery.data}
+                closeHref={closePreviewHref}
+                fullPageHref={`/tools/${previewQuery.data.slug}`}
+                commentCount={browserQuery.data.comment_counts[previewQuery.data.slug] ?? 0}
+                addMode={addMode}
+                addMcpQueryBase={queryBase}
+                compareReturnHref={compareBackHref}
+              />
+            </div>
+          )}
         </>
       ) : null}
     </div>

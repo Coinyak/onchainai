@@ -177,6 +177,34 @@
       "label": "Cosmos",
       "kind": "public_svg",
       "markers": ["#2E3148"]
+    },
+    {
+      "id": "celo",
+      "label": "Celo",
+      "kind": "wrap",
+      "source": "celo_official.svg",
+      "markers": ["#35D07F", "#FBCC5C"]
+    },
+    {
+      "id": "fantom",
+      "label": "Fantom",
+      "kind": "wrap",
+      "source": "fantom_official.svg",
+      "markers": ["#1969FF", "path"]
+    },
+    {
+      "id": "gnosis",
+      "label": "Gnosis",
+      "kind": "wrap",
+      "source": "gnosis_official.svg",
+      "markers": ["#04795B", "path"]
+    },
+    {
+      "id": "cardano",
+      "label": "Cardano",
+      "kind": "wrap",
+      "source": "cardano_official.svg",
+      "markers": ["path", "fill"]
     }
   ]
 }

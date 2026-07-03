@@ -1,35 +1,52 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback } from "react";
 import { useRouter } from "next/navigation";
+import { ToolSearchCombobox } from "@/components/tools/ToolSearchCombobox";
 
-export function SearchBar() {
+interface SearchBarProps {
+  /** Echo active `q` query param in the input (Phase 3 search mode). */
+  defaultValue?: string;
+  /** Base path for full search submit. Defaults to home (`/`). */
+  searchPath?: string;
+}
+
+export function SearchBar({ defaultValue = "", searchPath = "/" }: SearchBarProps) {
   const router = useRouter();
-  const [input, setInput] = useState("");
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  useEffect(() => {
-    if (timerRef.current) clearTimeout(timerRef.current);
-    if (!input.trim()) return;
-    timerRef.current = setTimeout(() => {
-      const q = encodeURIComponent(input.trim());
-      router.push(`/tools?q=${q}`);
-    }, 200);
-    return () => {
-      if (timerRef.current) clearTimeout(timerRef.current);
-    };
-  }, [input, router]);
+  const handleSubmitSearch = useCallback(
+    (query: string) => {
+      const trimmed = query.trim();
+      if (!trimmed) return;
+      const separator = searchPath.includes("?") ? "&" : "?";
+      router.push(`${searchPath}${separator}q=${encodeURIComponent(trimmed)}`, {
+        scroll: false,
+      });
+    },
+    [router, searchPath],
+  );
+
+  const handleDebouncedQueryChange = useCallback(
+    (query: string) => {
+      const trimmed = query.trim();
+      if (!trimmed) {
+        if (defaultValue) router.replace(searchPath, { scroll: false });
+        return;
+      }
+      const separator = searchPath.includes("?") ? "&" : "?";
+      const target = `${searchPath}${separator}q=${encodeURIComponent(trimmed)}`;
+      router.replace(target, { scroll: false });
+    },
+    [defaultValue, router, searchPath],
+  );
 
   return (
-    <div className="w-full">
-      <input
-        type="search"
-        placeholder="Search: asset tracking, trading, DeFi, chain name..."
-        className="search-input w-full h-12 px-4 text-body-md md:text-mobile-body rounded-md border border-border bg-neutral-bg text-primary outline-none focus:border-tertiary"
-        autoComplete="off"
-        value={input}
-        onChange={(e) => setInput(e.target.value)}
-      />
-    </div>
+    <ToolSearchCombobox
+      variant="hero"
+      defaultValue={defaultValue}
+      onSubmitSearch={handleSubmitSearch}
+      onDebouncedQueryChange={handleDebouncedQueryChange}
+      data-testid="home-search-bar"
+    />
   );
 }

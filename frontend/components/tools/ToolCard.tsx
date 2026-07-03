@@ -105,6 +105,7 @@ export function ToolCard({
       <LoginModal open={showLogin} onClose={() => setShowLogin(false)} />
       <Link
         href={previewHref}
+        scroll={false}
         className="tool-card-link no-underline text-inherit"
         data-testid="tool-card-link"
       >
@@ -141,7 +142,10 @@ export function ToolCard({
               {renderChainTags(chainDesktop, extraDesktop, "tool-chains tool-chains-desktop")}
               {renderChainTags(chainMobile, extraMobile, "tool-chains tool-chains-mobile")}
               <span className="tool-meta-sep">·</span>
-              <span className="tool-stars">★ {tool.stars}</span>
+              <span className="tool-stars" title="GitHub stars">
+                <Star size={14} strokeWidth={1.75} aria-hidden />
+                {tool.stars} GitHub stars
+              </span>
               <span className="tool-meta-sep">·</span>
               <span className="tool-comments">comments {commentCount}</span>
             </div>

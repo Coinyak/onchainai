@@ -16,7 +16,7 @@ export function PromoCards({ mcpEndpoint }: PromoCardsProps) {
         </p>
         <Link
           href="/submit"
-          className="inline-flex items-center justify-center h-10 px-4 rounded-lg bg-[#E76F00] text-white text-[14px] font-medium no-underline hover:bg-[#D96400]"
+          className="inline-flex items-center justify-center h-10 px-4 rounded-lg border border-border-strong bg-neutral-bg text-primary text-[14px] font-medium no-underline hover:bg-neutral-surface"
         >
           Suggest →
         </Link>

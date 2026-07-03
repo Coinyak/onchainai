@@ -50,7 +50,7 @@ export function CommentsSection({ slug, compact = false }: CommentsSectionProps)
   }, {});
 
   return (
-    <section className="detail-section comments-section">
+    <section id="comments" className="detail-section comments-section">
       <LoginModal open={showLogin} onClose={() => setShowLogin(false)} />
       <div className="comments-header">
         <h2 className="text-h2">Comments ({comments?.length ?? 0})</h2>

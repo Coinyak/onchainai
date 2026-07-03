@@ -7,7 +7,8 @@ import { useAuth } from "@/lib/auth";
 import { LoginModal } from "@/components/auth/LoginModal";
 import { monogramFromName } from "@/lib/format";
 
-const GITHUB_REPO = "https://github.com/hoyeon4315-cpu/onchainai";
+const GITHUB_REPO =
+  process.env.NEXT_PUBLIC_GITHUB_REPO || "https://github.com/onchain-ai/onchainai";
 
 function ProfileMenu() {
   const { user } = useAuth();
@@ -71,6 +72,14 @@ function ProfileMenu() {
             >
               My Toolkit
             </Link>
+            <Link
+              href="/blueprints"
+              role="menuitem"
+              className="site-profile-dropdown-item"
+              data-testid="profile-menu-blueprints"
+            >
+              Blueprints
+            </Link>
             {user.is_admin && (
               <Link
                 href="/admin"
@@ -81,7 +90,7 @@ function ProfileMenu() {
                 Admin
               </Link>
             )}
-            <form action={`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000"}/auth/logout`} method="post" className="site-profile-dropdown-signout">
+            <form action={`${process.env.NEXT_PUBLIC_API_URL || ""}/auth/logout`} method="post" className="site-profile-dropdown-signout">
               <button
                 type="submit"
                 role="menuitem"

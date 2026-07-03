@@ -37,8 +37,15 @@ export default function ToolkitPage() {
   return (
     <SiteShell>
       <div className="px-gutter md:px-8 py-8 max-w-[960px] mx-auto">
-        <h1 className="text-h1 mb-2">My Toolkit</h1>
-        <p className="text-secondary text-body-md mb-8">Saved tools and export bundles.</p>
+        <div className="toolkit-page-header mb-8">
+          <div>
+            <h1 className="text-h1 mb-2">My Toolkit</h1>
+            <p className="text-secondary text-body-md">Saved tools and export bundles.</p>
+          </div>
+          <Link href="/blueprints" className="toolkit-browse-link whitespace-nowrap">
+            Plan on a blueprint →
+          </Link>
+        </div>
 
         {toolkitQuery.isLoading && <ToolListSkeleton count={3} />}
         {toolkitQuery.data && (

@@ -303,3 +303,9 @@ export function categoryHref(catId: string, queryBase: string): string {
   const parts = query.split("&").filter((p) => p && !p.startsWith("function="));
   return parts.length ? `/categories/${catId}?${parts.join("&")}` : `/categories/${catId}`;
 }
+
+/** Single-axis filter link for tool detail chips (Phase 4). */
+export function singleFilterHref(filterKey: string, value: string): string {
+  if (!value.trim()) return "/tools";
+  return buildFromMap("/tools", new Map([[filterKey, [value.trim()]]]));
+}

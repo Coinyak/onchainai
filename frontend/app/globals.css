@@ -78,4 +78,718 @@
 }
 
 /* Production site CSS — shared with Leptos SSR (DESIGN.md source of truth). */
-@import "../styles/site-output.css";
+@layer legacy {
+  @import "../styles/site-output.css";
+}
+
+/* Stack Blueprint (Phase 7) */
+.toolkit-page-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.blueprint-list-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.blueprint-card-grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+}
+
+.blueprint-card {
+  display: block;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 20px;
+  background: var(--color-neutral-bg);
+  transition: border-color 0.15s ease;
+}
+
+.blueprint-card:hover {
+  border-color: var(--color-border-strong);
+}
+
+.blueprint-card-title {
+  font-size: var(--text-h3);
+  font-weight: 600;
+  margin: 0 0 8px;
+}
+
+.blueprint-card-meta {
+  margin: 0;
+  font-size: var(--text-body-sm);
+  color: var(--color-secondary);
+}
+
+.blueprint-editor {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 56px);
+  min-height: 480px;
+  background: var(--color-neutral-bg);
+}
+
+.blueprint-mobile-banner {
+  padding: 10px 16px;
+  background: var(--color-neutral-surface);
+  border-bottom: 1px solid var(--color-border);
+  font-size: var(--text-body-sm);
+  color: var(--color-secondary);
+  text-align: center;
+}
+
+.blueprint-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-neutral-bg);
+}
+
+.blueprint-toolbar-back {
+  font-size: var(--text-body-sm);
+  color: var(--color-secondary);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.blueprint-toolbar-back:hover {
+  color: var(--color-primary);
+}
+
+.blueprint-toolbar-title {
+  flex: 1;
+  min-width: 160px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: var(--text-h3);
+  font-weight: 600;
+  background: transparent;
+  color: var(--color-primary);
+}
+
+.blueprint-toolbar-title:focus {
+  outline: none;
+  border-color: var(--color-border);
+  background: var(--color-neutral-hover);
+}
+
+.blueprint-toolbar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.blueprint-toolbar-btn {
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-neutral-bg);
+  font-size: var(--text-body-sm);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.blueprint-toolbar-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.blueprint-toolbar-btn-danger {
+  color: var(--color-error);
+  border-color: #e8c4c0;
+}
+
+.blueprint-save-state {
+  font-size: var(--text-body-sm);
+  color: var(--color-secondary);
+  min-width: 120px;
+}
+
+.blueprint-editor-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.blueprint-palette {
+  display: none;
+  width: 280px;
+  flex-shrink: 0;
+  border-right: 1px solid var(--color-border);
+  flex-direction: column;
+  background: var(--color-neutral-bg);
+}
+
+.blueprint-palette-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.blueprint-palette-tab {
+  flex: 1;
+  min-height: 44px;
+  border: 0;
+  background: transparent;
+  font-size: var(--text-body-sm);
+  font-weight: 600;
+  cursor: pointer;
+  color: var(--color-secondary);
+}
+
+.blueprint-palette-tab-active {
+  color: var(--color-primary);
+  box-shadow: inset 0 -2px 0 var(--color-primary);
+}
+
+.blueprint-palette-panel {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  padding: 12px;
+  gap: 8px;
+}
+
+.blueprint-palette-search {
+  width: 100%;
+  min-height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  font-size: var(--text-body-md);
+}
+
+.blueprint-palette-hint {
+  margin: 0;
+  font-size: var(--text-body-sm);
+  color: var(--color-secondary);
+}
+
+.blueprint-palette-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+}
+
+.blueprint-palette-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-neutral-bg);
+  text-align: left;
+  cursor: grab;
+}
+
+.blueprint-palette-item-dragging {
+  opacity: 0.5;
+}
+
+.blueprint-palette-item-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.blueprint-palette-item-name {
+  font-size: var(--text-body-sm);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.blueprint-canvas-viewport {
+  flex: 1;
+  overflow: auto;
+  position: relative;
+  background: #ffffff;
+  cursor: grab;
+}
+
+.blueprint-canvas-viewport:active {
+  cursor: grabbing;
+}
+
+.blueprint-canvas-surface {
+  position: relative;
+  width: 4000px;
+  height: 4000px;
+  background-color: #ffffff;
+  background-image:
+    linear-gradient(to right, #efefe8 1px, transparent 1px),
+    linear-gradient(to bottom, #efefe8 1px, transparent 1px),
+    linear-gradient(to right, #e4e4dc 1px, transparent 1px),
+    linear-gradient(to bottom, #e4e4dc 1px, transparent 1px);
+  background-size:
+    8px 8px,
+    8px 8px,
+    40px 40px,
+    40px 40px;
+}
+
+.blueprint-empty-state {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  text-align: center;
+  color: var(--color-secondary);
+  font-size: var(--text-body-md);
+  pointer-events: none;
+}
+
+.blueprint-node {
+  position: absolute;
+  box-sizing: border-box;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-neutral-bg);
+  touch-action: none;
+}
+
+.blueprint-node-tool {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 220px;
+  min-height: 64px;
+  padding: 10px 12px;
+}
+
+.blueprint-node-note {
+  width: 220px;
+  padding: 10px 12px;
+  background: var(--color-neutral-surface);
+}
+
+.blueprint-node-selected {
+  border-color: var(--color-border-strong);
+  background: var(--color-neutral-surface);
+}
+
+.blueprint-node-dragging,
+.blueprint-node-overlay {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+.blueprint-node-remove {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: 4px;
+  background: var(--color-neutral-bg);
+  color: #4b4b4b;
+  cursor: pointer;
+}
+
+.blueprint-node:hover .blueprint-node-remove,
+.blueprint-node-selected .blueprint-node-remove {
+  display: inline-flex;
+}
+
+.blueprint-node-tool-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+}
+
+.blueprint-node-tool-name {
+  font-size: var(--text-body-sm);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.blueprint-node-link {
+  display: inline-flex;
+  color: #4b4b4b;
+  flex-shrink: 0;
+}
+
+.blueprint-node-ghost {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+}
+
+.blueprint-node-ghost-label {
+  font-size: var(--text-body-sm);
+  font-weight: 600;
+  color: var(--color-secondary);
+}
+
+.blueprint-node-ghost-slug {
+  font-size: var(--text-body-sm);
+  color: var(--color-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.blueprint-node-note-input {
+  width: 100%;
+  min-height: 72px;
+  border: 0;
+  background: transparent;
+  resize: vertical;
+  font-size: var(--text-body-md);
+  line-height: 1.5;
+  color: var(--color-primary);
+  font-family: inherit;
+}
+
+.blueprint-node-note-input:focus-visible {
+  outline: 2px solid rgba(231, 111, 0, 0.35);
+  outline-offset: 2px;
+}
+
+.blueprint-editor-loading,
+.blueprint-editor-guest {
+  padding: 48px 24px;
+  text-align: center;
+  color: var(--color-secondary);
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (min-width: 1024px) {
+  .blueprint-editor-body {
+    flex-direction: row;
+  }
+
+  .blueprint-palette {
+    display: flex;
+  }
+}
+
+/* Phase 1 — docked preview panel (desktop ≥1024px, non-modal) */
+@media (min-width: 1024px) {
+  .tools-layout.tools-layout-preview-open .tools-main {
+    min-width: 0;
+  }
+}
+
+/* Phase 3 — search mode + typeahead */
+.search-mode {
+  margin-bottom: 0;
+}
+
+.search-mode-back {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--min-height-touch);
+  margin-bottom: 4px;
+  font-size: var(--text-body-md);
+  color: var(--color-secondary);
+  text-decoration: none;
+}
+
+.search-mode-back:hover {
+  color: var(--color-primary);
+}
+
+.search-mode-header-row {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+@media (min-width: 768px) {
+  .search-mode-header-row {
+    flex-direction: row;
+    align-items: center;
+    gap: 16px;
+  }
+}
+
+.search-mode-title {
+  margin: 0;
+  font-size: var(--text-h2);
+  font-weight: 700;
+  line-height: 1.25;
+  color: var(--color-primary);
+  white-space: nowrap;
+}
+
+.search-mode .search-typeahead {
+  flex: 1;
+  min-width: 0;
+}
+
+.search-typeahead {
+  position: relative;
+  width: 100%;
+}
+
+.search-typeahead-toolbar {
+  min-width: 0;
+}
+
+.search-typeahead-list {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 40;
+  margin: 0;
+  padding: 4px 0;
+  list-style: none;
+  background: var(--color-neutral-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.search-typeahead-option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: var(--min-height-touch);
+  padding: 8px 12px;
+  cursor: pointer;
+}
+
+.search-typeahead-option:hover,
+.search-typeahead-option-active {
+  background: var(--color-neutral-surface);
+}
+
+.search-typeahead-option-text {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  min-width: 0;
+}
+
+.search-typeahead-option-name {
+  font-size: var(--text-body-md);
+  font-weight: 500;
+  color: var(--color-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+.search-typeahead-status {
+  padding: 12px 16px;
+  font-size: var(--text-body-md);
+  color: var(--color-secondary);
+}
+
+.search-typeahead-mobile-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  background: var(--color-neutral-bg);
+}
+
+.search-typeahead-mobile-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px var(--spacing-md);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.search-typeahead-mobile-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: var(--min-width-touch);
+  min-height: var(--min-height-touch);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.search-typeahead-mobile-header .search-input,
+.search-typeahead-mobile-header .toolbar-search-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.search-typeahead-mobile-results {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.search-typeahead-mobile-results .search-typeahead-list {
+  position: static;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  max-height: none;
+}
+
+/* F11: ensure tool card install row stays hidden below md (legacy .tool-install wins without this). */
+@media (max-width: 767px) {
+  .tool-card .tool-install {
+    display: none;
+  }
+}
+
+/* Phase 9: icon-only copy button (DESIGN.md) */
+.copy-btn.copy-btn-icon-only {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: var(--min-width-touch);
+  min-height: var(--min-height-touch);
+  padding: 0 10px;
+}
+
+.copy-btn.copy-btn-icon-only .copy-btn-copied-label {
+  font-size: 13px;
+}
+
+/* Phase 9: MCP connect hub */
+.connect-more-tab,
+.connect-more-link {
+  text-decoration: none;
+  color: inherit;
+}
+
+.connect-deeplink-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--min-height-touch);
+  padding: 0 14px;
+  margin-top: 8px;
+  border-radius: 8px;
+  border: 1px solid var(--color-border-strong);
+  background: var(--color-neutral-bg);
+  color: var(--color-primary);
+  font-size: var(--text-body-md);
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.connect-deeplink-btn:hover {
+  background: var(--color-neutral-surface);
+}
+
+.connect-guide-block + .connect-guide-block {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--color-border);
+}
+
+.connect-guide-block-title {
+  margin: 0 0 8px;
+  font-size: var(--text-body-md);
+  font-weight: 600;
+}
+
+.connect-client-grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: 1fr;
+}
+
+@media (min-width: 768px) {
+  .connect-client-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.connect-client-card {
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 20px;
+  background: var(--color-neutral-bg);
+  min-width: 0;
+}
+
+.connect-client-card-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.connect-client-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #4b4b4b;
+}
+
+.connect-client-card-title {
+  margin: 0;
+  font-size: var(--text-h3);
+  font-weight: 600;
+}
+
+.connect-universal {
+  padding: 20px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-neutral-surface);
+}
+
+/* Keyboard focus for preview/compare controls (CodeRabbit a11y) */
+.preview-close:focus-visible,
+.preview-desc-more:focus-visible,
+.preview-action-btn:focus-visible,
+.preview-action-primary:focus-visible,
+.compare-matrix-remove:focus-visible,
+.chain-overflow-item:focus-visible {
+  outline: 2px solid rgba(231, 111, 0, 0.35);
+  outline-offset: 2px;
+}

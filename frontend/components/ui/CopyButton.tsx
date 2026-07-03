@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Clipboard } from "lucide-react";
+import { Check, Clipboard } from "lucide-react";
 
 interface CopyButtonProps {
   text: string;
@@ -26,17 +26,17 @@ export function CopyButton({ text, label = "Copy" }: CopyButtonProps) {
   return (
     <button
       type="button"
-      className="copy-btn"
+      className={`copy-btn copy-btn-icon-only${copied ? " copied" : ""}`}
       onClick={handleCopy}
       aria-label={copied ? "Copied" : label}
     >
       {copied ? (
-        "Copied"
-      ) : (
         <>
-          <Clipboard size={14} strokeWidth={1.75} aria-hidden />
-          <span>{label}</span>
+          <Check size={14} strokeWidth={1.75} aria-hidden />
+          <span className="copy-btn-copied-label">Copied</span>
         </>
+      ) : (
+        <Clipboard size={14} strokeWidth={1.75} aria-hidden />
       )}
     </button>
   );
