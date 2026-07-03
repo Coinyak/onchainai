@@ -528,10 +528,10 @@ mod tests {
             created_at: Utc::now(),
             updated_at: Utc::now(),
         };
-        assert!(referral_metadata_for_tool(&tool).is_none());
+        assert!(referral_metadata_for_tool(&tool, None).is_none());
 
         tool.referral_enabled = true;
-        assert!(referral_metadata_for_tool(&tool).is_some());
+        assert!(referral_metadata_for_tool(&tool, None).is_some());
     }
 
     #[test]
