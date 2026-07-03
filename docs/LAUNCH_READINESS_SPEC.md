@@ -1,7 +1,7 @@
 # 공식 출범 준비 스펙 — GitHub 공개 + 에이전트 온보딩 + x402 활성화
 
 > 작성일: 2026-07-03 · 목적: 프라이빗 레포를 **공개 출범 가능한 상태**로 만드는 전 범위 분석 + 실행 스펙.
-> 관련: [SKILL_PLUGIN_SPEC.md](SKILL_PLUGIN_SPEC.md) · [X402_REFERRAL_SPEC.md](X402_REFERRAL_SPEC.md) · [CONNECT.md](CONNECT.md) · [PRODUCT_ENHANCEMENT_SPEC.md](PRODUCT_ENHANCEMENT_SPEC.md)
+> 관련: [SKILL_PLUGIN_SPEC.md](SKILL_PLUGIN_SPEC.md) · [X402_REFERRAL_SPEC.md](X402_REFERRAL_SPEC.md) · [CONNECT.md](CONNECT.md) · [PRODUCT_ENHANCEMENT_SPEC.md](PRODUCT_ENHANCEMENT_SPEC.md) · [UI 통합 감사 스펙](superpowers/specs/2026-07-03-visual-ui-audit-16-agent-spec.md)
 > 표기: ✅ = 2026-07-03 기준 구현/완료, 🔲 = 남은 작업. 우선순위 P0(공개 전 필수) > P1(공개 직후 2주) > P2(후속).
 
 ---
@@ -15,7 +15,8 @@
 | Claude Code 플러그인 | ✅ 이번 턴 재구성 | `plugin/onchainai/` 분리 — dev MCP(vercel/railway) 유출 버그 수정 |
 | Skill | ✅ | 플러그인에 동봉, 단독 설치 경로 문서화 |
 | x402 스키마/메타/어트리뷰션 | ✅ | migrations 017–018, MCP 응답 referral 메타, `referral_events` 기록 |
-| x402 검증 잡 (엔드포인트/가격) | 🔲 **미구현** | 플래그는 존재하나 수동 설정만 가능 — §4 |
+| x402 검증 잡 (엔드포인트/가격) | ✅ `be49680` | migration 028 + SSRF 가드 프로브 + 일일 cron + admin 재검증 route (§4) |
+| UI 시각 품질 (통합 감사) | ◐ 막바지 | Phase A/B/C/D 랜딩(`bfcb662`·`f81c78e`·`ae8e9aa`); 잔여 = 회귀 검증 + G2(P0) + P1 6건 — [통합 감사 스펙 v3.1](superpowers/specs/2026-07-03-visual-ui-audit-16-agent-spec.md) |
 | 레퍼럴 어드민 API | ✅ | `/api/v2/admin/tool-referral`, `/api/v2/admin/referral-stats` |
 | README/LICENSE/공개 문서 | ✅ 이번 턴 | README 전면 개편, LICENSE/SECURITY/CONTRIBUTING/CONNECT/llms.txt 신설 |
 | GitHub 레포 | 🔲 PRIVATE | 공개 전환 절차 §2 |
@@ -116,13 +117,18 @@ Rust 바이너리는 API/MCP/크롤러(Railway), DB는 Supabase. Vercel이 `/api
 
 ---
 
-## 4. x402 활성화 — 잔여 구현 (검증 잡) — P1
+## 4. x402 활성화 — 검증 잡 — ✅ 구현 완료 (`be49680`)
 
 > 원칙 재확인(AGENTS.md 하드룰): attribution/trust 메타데이터만. 커스터디·facilitator·게이트웨이·
 > 자금이동·비문서화 `referrer`/`split` 필드 금지. 검증 플래그는 **공개 게이트가 아니라 신뢰 뱃지**
 > (`PUBLIC_TOOL_WHERE`/RLS에 추가 금지 — X402_REFERRAL_SPEC 2026-06-27 결정 유지).
 
-### 4.1 현재 갭
+> **2026-07-03 저녁 구현됨**: `src/server/x402_verify.rs`(유닛 테스트 8건 포함), migration 028,
+> `X402_VERIFY_CRON` 일일 잡(SKIP_CRAWLER 시 미등록), `POST /api/v2/admin/tools/{id}/x402-verify`.
+> 아래 4.1–4.5는 설계 기록으로 유지. **잔여**: 운영 DB 마이그레이션 + `sqlx prepare`, 도구별
+> `x402_endpoint` 등록(운영자), admin UI 재검증 버튼/뱃지 노출, x402 실스펙 필드명 재실측(§4.3 ⚠️).
+
+### 4.1 당시 갭 (구현 전 기록)
 `payment_verified`·`x402_endpoint_verified`·`price_verified`는 스키마/노출/어드민 API까지 있으나
 **갱신 수단이 수동뿐**. 자동 검증 잡이 없어 "operator verified" 뱃지가 실질 항상 false.
 또한 프로브 대상 URL 컬럼이 없음(`x402_price`는 텍스트, 엔드포인트 필드 부재).
@@ -202,12 +208,13 @@ ALTER TABLE tools
 | 3 | gitleaks 히스토리 스캔 + 키 로테이트 + repo 설정 + flip (§1.3) | P0 | 0.5d 수동 | 🔲 |
 | 4 | flip 직후 스모크(플러그인 실설치·MCP 연결·llms.txt) | P0 | 1h | 🔲 |
 | 5 | /connect Plugin&Skill 섹션 + 푸터 링크 | P1 | — | ✅ 이 브랜치 (배포 전 ui-change-gate만) |
-| 6 | x402 검증 잡 (§4: 028 마이그레이션 + 모듈 + cron + admin route + 테스트) | P1 | 2–3d | 🔲 |
+| 6 | x402 검증 잡 (§4: 028 마이그레이션 + 모듈 + cron + admin route + 테스트) | P1 | — | ✅ `be49680` (운영 DB migrate + admin UI 노출 잔여) |
 | 7 | MCP Registry/Smithery/등재 일괄 (§3) | P1 | 1d 수동 | 🔲 |
 | 8 | funnel_events + /api/v2/events + 대시보드 위젯 (§5) | P1 | 1–2d | 🔲 |
 | 9 | TOOL_OWNERS.md + OPERATOR_GUIDE x402 섹션 | P1 | 0.5d | 🔲 |
 | 10 | GET /mcp 안내 응답, protocolVersion 에코, 버전 동기화 | P2 | 0.5d | 🔲 |
 | 11 | 컬렉션→플러그인 export (SKILL_PLUGIN_SPEC §3 J3) | P2 | 별도 스펙 | 🔲 |
+| 12 | UI 통합 감사 잔여 — P0: 🔧A0/A2 운영 정렬 · B/C/D 랜딩 회귀 검증(슬라이스 0) · G2 featured 겹침 → P1: J1–J2 빈상태·H3 CTA·I 검색·K1 배지·L1/L4 (상세: [통합 감사 스펙 = Grok 실행 패킷 v3.1](superpowers/specs/2026-07-03-visual-ui-audit-16-agent-spec.md)) | P0/P1 | 1–2d | ◐ Phase A/B/C/D ✅(`bfcb662`·`f81c78e`·`ae8e9aa`) · 잔여 Grok 위임 (결정 완료 §0.3) |
 
 ## 7. 비범위 (변경 없음)
 - x402 커스터디/facilitator/게이트웨이/자금이동 일체 (X402_REFERRAL_SPEC §7).
