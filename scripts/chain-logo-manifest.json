@@ -216,8 +216,9 @@
     {
       "id": "scroll",
       "label": "Scroll",
-      "kind": "public_svg",
-      "markers": ["#EBC28F", "path"]
+      "kind": "wrap",
+      "source": "scroll_official.svg",
+      "markers": ["#101010", "path"]
     },
     {
       "id": "moonbeam",
