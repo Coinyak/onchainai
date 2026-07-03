@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { API_BASE } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { GitHubMarkIcon } from "@/components/icons/GitHubMarkIcon";
 import { connectWalletSiwx, SiwxError } from "@/lib/siwx";
 
 interface LoginFormProps {
@@ -98,8 +99,9 @@ export function LoginForm({
         href={githubHref}
         rel="external"
         data-testid="github-sign-in"
-        className="flex items-center justify-center w-full min-h-touch px-4 py-2.5 rounded-md bg-primary text-white text-body-md font-medium hover:opacity-90 no-underline"
+        className="flex items-center justify-center gap-2 w-full min-h-touch px-4 py-2.5 rounded-md bg-primary text-white text-body-md font-medium hover:opacity-90 no-underline"
       >
+        <GitHubMarkIcon size={18} className="shrink-0" />
         Continue with GitHub
       </a>
       <div className="mt-2 text-center text-body-sm text-secondary">

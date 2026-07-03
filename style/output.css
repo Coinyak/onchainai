@@ -853,12 +853,19 @@ body {
 }
 .site-top-nav-btn-outline:hover { background: #FAFAFA; }
 .site-top-nav-repo {
-  display: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
   color: #6B6B6B;
   font-size: 13px;
   text-decoration: none;
   white-space: nowrap;
   flex-shrink: 0;
+}
+.site-top-nav-repo svg {
+  display: block;
 }
 .site-top-nav-repo:hover { color: #1A1A1A; }
 .site-top-nav-auth {
@@ -987,7 +994,7 @@ body {
     padding: 0 12px;
     font-size: 13px;
   }
-  .site-top-nav-repo { display: inline; }
+
 }
 @media (min-width: 768px) {
   .site-top-nav-inner { padding: 0 24px; }
