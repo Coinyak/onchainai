@@ -116,6 +116,36 @@ UI 변경 검수용 스크린샷은 로컬 또는 배포 URL에 대해 `node scr
 
 ---
 
+## 4. 자동 검증 하네스 — verified/official 상태 (AI·운영자 공용)
+
+"이 도구 verified/official 처리해줘"라는 요청은 사람이 판단하지 말고 **하네스를 실행**한다.
+어떤 AI 에이전트든 같은 명령으로 같은 결과가 나온다 (증거 기반, deny-by-default).
+
+```bash
+# 드라이런(기본): 판정·증거만 출력, 쓰기 없음
+node scripts/verify-tool-official.mjs <slug>
+
+# 자동 승인: 증거가 기준을 넘으면 status 갱신 + tool_review_events 감사 기록
+node scripts/verify-tool-official.mjs <slug> --apply
+
+# 전체 스캔(공개 도구 중 first-party org / 플랫폼 키워드 후보 일괄 판정)
+node scripts/verify-tool-official.mjs --scan [--apply]
+```
+
+- **판정 규칙**: `official` = repo org가 first-party 목록(스크립트 상단 `FIRST_PARTY_ORGS`,
+  PR로 확장)이거나 GitHub 도메인 인증 org + org 사이트가 도구 홈페이지와 일치.
+  `verified` = repo 실존 + 아이덴티티 클러스터(org/npm scope/홈페이지 도메인) 일치.
+  증거 부족이면 community 유지. **다운그레이드는 절대 안 함.** 공개 게이트
+  (승인/관련성/critical 위험/격리) 미통과 도구는 승격 거부.
+- **감사**: 모든 적용은 `tool_review_events`(action=`agent_auto_status`)에 before/after와
+  근거가 남는다. x402 결제 플래그(`payment_verified` 등)는 이 하네스가 건드리지 않는다
+  (소유권 증명은 클레임 플로 + 운영자).
+- **환경**: 레포 루트 `.env`(또는 `ENV_FILE=경로`)의 `SUPABASE_URL`+`SUPABASE_SERVICE_KEY`
+  또는 `DATABASE_URL`. Supabase REST(PostgREST)가 503(PGRST002)이면 자동으로 직접
+  Postgres 폴백 — 최초 1회 `npm install --prefix scripts/ops` 필요.
+
+---
+
 ## 요약 3줄
 1. **운영자(노코드)**: 도구 승인/거부, 추천카드, 카테고리, 유저 정지, 댓글 삭제, 사이트 텍스트·MCP·크롤러 키워드·등록정책 토글, 크롤러 수동 실행.
 2. **개발자(코드)**: 화면 모양·레이아웃·새 페이지·크롤러 소스/주기·판정 로직·DB·MCP·인증·배포.

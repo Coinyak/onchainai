@@ -873,3 +873,15 @@
   background: var(--color-neutral-hover);
   color: var(--color-primary);
 }
+/* TopNav GitHub link renders the official GitHub mark only (no text). */
+@media (min-width: 990px) {
+  .site-top-nav-repo {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+}
+
+.site-top-nav-repo svg {
+  display: block;
+}
