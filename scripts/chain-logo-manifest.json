@@ -205,6 +205,52 @@
       "kind": "wrap",
       "source": "cardano_official.svg",
       "markers": ["path", "fill"]
+    },
+    {
+      "id": "blast",
+      "label": "Blast",
+      "kind": "wrap",
+      "source": "blast_official.svg",
+      "markers": ["#FCFC03", "path"]
+    },
+    {
+      "id": "scroll",
+      "label": "Scroll",
+      "kind": "public_svg",
+      "markers": ["#EBC28F", "path"]
+    },
+    {
+      "id": "moonbeam",
+      "label": "Moonbeam",
+      "kind": "public_svg",
+      "markers": ["#E1147B"]
+    },
+    {
+      "id": "litecoin",
+      "label": "Litecoin",
+      "kind": "wrap",
+      "source": "litecoin_official.svg",
+      "markers": ["#345d9d", "path"]
+    },
+    {
+      "id": "dogecoin",
+      "label": "Dogecoin",
+      "kind": "wrap",
+      "source": "dogecoin_official.svg",
+      "markers": ["#988430", "circle"]
+    },
+    {
+      "id": "aurora",
+      "label": "Aurora",
+      "kind": "wrap",
+      "source": "aurora_official.svg",
+      "markers": ["linearGradient", "path"]
+    },
+    {
+      "id": "okx",
+      "label": "OKX Chain",
+      "kind": "public_svg",
+      "markers": ["#000000", "#FFFFFF"]
     }
   ]
 }

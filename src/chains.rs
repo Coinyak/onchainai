@@ -200,6 +200,83 @@ pub const CHAIN_CATALOG: &[ChainMeta] = &[
         aliases: &["cosmos-hub", "atom", "cosmos-mainnet"],
         pinned: false,
     },
+    ChainMeta {
+        id: "celo",
+        label: "Celo",
+        logo: "/chains/celo.svg",
+        aliases: &["celo-mainnet"],
+        pinned: false,
+    },
+    ChainMeta {
+        id: "fantom",
+        label: "Fantom",
+        logo: "/chains/fantom.svg",
+        aliases: &["ftm", "fantom-mainnet"],
+        pinned: false,
+    },
+    ChainMeta {
+        id: "blast",
+        label: "Blast",
+        logo: "/chains/blast.svg",
+        aliases: &["blast-mainnet"],
+        pinned: false,
+    },
+    ChainMeta {
+        id: "scroll",
+        label: "Scroll",
+        logo: "/chains/scroll.svg",
+        aliases: &["scroll-mainnet"],
+        pinned: false,
+    },
+    ChainMeta {
+        id: "gnosis",
+        label: "Gnosis",
+        logo: "/chains/gnosis.svg",
+        aliases: &["gno", "xdai"],
+        pinned: false,
+    },
+    ChainMeta {
+        id: "cardano",
+        label: "Cardano",
+        logo: "/chains/cardano.svg",
+        aliases: &["ada", "cardano-mainnet"],
+        pinned: false,
+    },
+    ChainMeta {
+        id: "moonbeam",
+        label: "Moonbeam",
+        logo: "/chains/moonbeam.svg",
+        aliases: &["glmr", "moonbeam-mainnet"],
+        pinned: false,
+    },
+    ChainMeta {
+        id: "litecoin",
+        label: "Litecoin",
+        logo: "/chains/litecoin.svg",
+        aliases: &["ltc", "litecoin-mainnet"],
+        pinned: false,
+    },
+    ChainMeta {
+        id: "dogecoin",
+        label: "Dogecoin",
+        logo: "/chains/dogecoin.svg",
+        aliases: &["doge", "dogecoin-mainnet"],
+        pinned: false,
+    },
+    ChainMeta {
+        id: "aurora",
+        label: "Aurora",
+        logo: "/chains/aurora.svg",
+        aliases: &["aurora-mainnet"],
+        pinned: false,
+    },
+    ChainMeta {
+        id: "okx",
+        label: "OKX Chain",
+        logo: "/chains/okx.svg",
+        aliases: &["okc", "okex-chain"],
+        pinned: false,
+    },
 ];
 
 /// Primary-row chain tiles (excluding the All tile).
@@ -611,7 +688,13 @@ mod tests {
             );
             assert!(is_chain_noise(noise), "noise value not flagged: {noise}");
         }
-        for unknown in ["fantom", "litecoin", "xrp", "celo", "gnosis"] {
+        for known in ["fantom", "litecoin", "celo", "gnosis", "blast", "okx"] {
+            assert!(
+                resolve_chain(known).is_some(),
+                "catalog chain should resolve: {known}"
+            );
+        }
+        for unknown in ["xrp", "ripple"] {
             assert!(
                 resolve_chain(unknown).is_none(),
                 "unknown chain should not resolve: {unknown}"
@@ -673,7 +756,7 @@ mod tests {
     #[test]
     fn strip_primary_visible_leaves_overflow_for_expand_control() {
         assert_eq!(STRIP_PRIMARY_VISIBLE, 20);
-        assert_eq!(CHAIN_CATALOG.len(), 25);
+        assert_eq!(CHAIN_CATALOG.len(), 36);
 
         let counts: Vec<(String, i64)> = CHAIN_CATALOG
             .iter()
@@ -766,7 +849,7 @@ mod tests {
         }
         println!("catalog_logos={catalog_hits} text_pills={pill_hits}");
 
-        for noise in ["multi-chain", "63+ networks", "fantom"] {
+        for noise in ["multi-chain", "63+ networks", "xrp"] {
             assert!(
                 resolve_chain(noise).is_none(),
                 "noise value must not resolve: {noise}"

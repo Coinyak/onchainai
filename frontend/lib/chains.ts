@@ -48,37 +48,9 @@ export const CHAIN_CATALOG: ChainMeta[] = [
 export const STRIP_PRIMARY_VISIBLE = 20;
 
 /** Chain IDs with a committed `/chains/<id>.svg` tile (no text-fallback tiles in strip). */
-export const CHAIN_LOGO_IDS = new Set<string>([
-  "aptos",
-  "arbitrum",
-  "avalanche",
-  "base",
-  "bera",
-  "bitcoin",
-  "bob",
-  "bsc",
-  "cardano",
-  "celo",
-  "cosmos",
-  "ethereum",
-  "fantom",
-  "gnosis",
-  "hyperliquid",
-  "linea",
-  "near",
-  "optimism",
-  "plasma",
-  "polygon",
-  "sei",
-  "solana",
-  "soneium",
-  "sonic",
-  "starknet",
-  "sui",
-  "tron",
-  "unichain",
-  "zksync",
-]);
+export const CHAIN_LOGO_IDS = new Set<string>(
+  CHAIN_CATALOG.map((entry) => entry.id),
+);
 
 export function hasChainLogo(id: string): boolean {
   return CHAIN_LOGO_IDS.has(id.trim().toLowerCase());
