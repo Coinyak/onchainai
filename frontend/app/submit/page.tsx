@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { SiteShell } from "@/components/layout/SiteShell";
-import { LoginForm } from "@/components/auth/LoginForm";
+import { GuestSignInPrompt } from "@/components/auth/GuestSignInPrompt";
 import { useAuth } from "@/lib/auth";
 import { submitTool, listMySubmissions } from "@/lib/api";
 
@@ -42,9 +42,11 @@ export default function SubmitPage() {
   if (!isAuthenticated) {
     return (
       <SiteShell>
-        <div className="px-gutter py-12 max-w-[480px] mx-auto">
-          <LoginForm />
-        </div>
+        <GuestSignInPrompt
+          title="Submit a tool"
+          description="Sign in to suggest a crypto tool for operator review."
+          testId="submit-sign-in"
+        />
       </SiteShell>
     );
   }

@@ -43,7 +43,7 @@ assert_contains 'Vercel frontend' "${ROOT}/scripts/smoke-test-api.sh"
 
 # Frontend smoke targets Next.js split deploy.
 assert_contains 'connect-page' "${ROOT}/scripts/smoke-test-frontend.sh"
-assert_contains 'wallet-sign-in-link' "${ROOT}/scripts/smoke-test-frontend.sh"
+assert_contains 'wallet-sign-in' "${ROOT}/scripts/smoke-test-frontend.sh"
 assert_contains '_next/static' "${ROOT}/scripts/smoke-test-frontend.sh"
 assert_not_contains 'sidebar-brand' "${ROOT}/scripts/smoke-test-frontend.sh"
 

@@ -2,17 +2,31 @@
 
 import { useState } from "react";
 import { API_BASE } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
+import { connectWalletSiwx, SiwxError } from "@/lib/siwx";
 
 interface LoginFormProps {
   compact?: boolean;
   onCancel?: () => void;
   headingId?: string;
+  authError?: string | null;
 }
 
-export function LoginForm({ compact = false, onCancel, headingId }: LoginFormProps) {
+export function LoginForm({
+  compact = false,
+  onCancel,
+  headingId = "login-title",
+  authError = null,
+}: LoginFormProps) {
+  const { refetch } = useAuth();
   const [email, setEmail] = useState("");
   const [emailMsg, setEmailMsg] = useState<string | null>(null);
   const [emailBusy, setEmailBusy] = useState(false);
+  const [walletBusy, setWalletBusy] = useState(false);
+  const [walletMsg, setWalletMsg] = useState<string | null>(null);
+
+  const githubHref = `${API_BASE}/auth/github`;
+  const githubSwitchAction = `${API_BASE}/auth/github/switch`;
 
   const headingClass = compact
     ? "text-[18px] font-semibold mb-2"
@@ -45,6 +59,24 @@ export function LoginForm({ compact = false, onCancel, headingId }: LoginFormPro
     }
   }
 
+  async function handleWalletSignIn() {
+    setWalletBusy(true);
+    setWalletMsg(null);
+    try {
+      const { redirect } = await connectWalletSiwx(API_BASE);
+      await refetch();
+      window.location.href = redirect;
+    } catch (err) {
+      const message =
+        err instanceof SiwxError
+          ? err.message
+          : "Wallet sign-in failed. Try again.";
+      setWalletMsg(message);
+    } finally {
+      setWalletBusy(false);
+    }
+  }
+
   return (
     <div>
       <h1 id={headingId} className={headingClass}>
@@ -53,8 +85,17 @@ export function LoginForm({ compact = false, onCancel, headingId }: LoginFormPro
       <p className={descClass}>
         Sign in to comment, bookmark tools, and access admin features.
       </p>
+      {authError && (
+        <p
+          className="mb-4 rounded-md border border-error/30 bg-error/5 px-4 py-3 text-body-sm text-error"
+          role="alert"
+          data-testid="auth-error-banner"
+        >
+          {authError}
+        </p>
+      )}
       <a
-        href={`${API_BASE}/auth/github`}
+        href={githubHref}
         rel="external"
         data-testid="github-sign-in"
         className="flex items-center justify-center w-full min-h-touch px-4 py-2.5 rounded-md bg-primary text-white text-body-md font-medium hover:opacity-90 no-underline"
@@ -63,7 +104,7 @@ export function LoginForm({ compact = false, onCancel, headingId }: LoginFormPro
       </a>
       <div className="mt-2 text-center text-body-sm text-secondary">
         Use a different GitHub account?{" "}
-        <form action={`${API_BASE}/auth/github/switch`} method="post" className="inline">
+        <form action={githubSwitchAction} method="post" className="inline">
           <button
             type="submit"
             data-testid="github-switch-account"
@@ -97,14 +138,21 @@ export function LoginForm({ compact = false, onCancel, headingId }: LoginFormPro
         </p>
       )}
       <div className="mt-3">
-        <a
-          href="/login#wallet"
-          data-testid="wallet-sign-in-link"
-          className="flex items-center justify-center w-full min-h-touch px-4 py-2.5 rounded-md border border-border text-body-md font-medium hover:bg-neutral-hover no-underline text-primary"
+        <button
+          type="button"
+          data-testid="wallet-sign-in"
+          disabled={walletBusy}
+          onClick={() => void handleWalletSignIn()}
+          className="flex items-center justify-center w-full min-h-touch px-4 py-2.5 rounded-md border border-border text-body-md font-medium hover:bg-neutral-hover disabled:opacity-60 text-primary"
         >
-          Connect Wallet (SIWX)
-        </a>
+          {walletBusy ? "Connecting wallet..." : "Connect Wallet (SIWX)"}
+        </button>
       </div>
+      {walletMsg && (
+        <p className="mt-2 text-body-sm text-error" role="alert">
+          {walletMsg}
+        </p>
+      )}
       {onCancel && (
         <button
           type="button"

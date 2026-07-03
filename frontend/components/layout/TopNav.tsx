@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import Image from "next/image";
 import { useAuth } from "@/lib/auth";
 import { LoginModal } from "@/components/auth/LoginModal";
@@ -108,8 +109,10 @@ function ProfileMenu() {
 }
 
 export function TopNav() {
+  const pathname = usePathname();
   const { isAuthenticated, isLoading } = useAuth();
   const [showLogin, setShowLogin] = useState(false);
+  const hideSignInOnLoginPage = pathname === "/login";
 
   return (
     <>
@@ -142,7 +145,7 @@ export function TopNav() {
               <div className="site-top-nav-auth" data-testid="auth-signed-in">
                 <ProfileMenu />
               </div>
-            ) : (
+            ) : hideSignInOnLoginPage ? null : (
               <div className="site-top-nav-auth" data-testid="auth-sign-in">
                 <button
                   type="button"

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { SiteShell } from "@/components/layout/SiteShell";
 import { ToolCard } from "@/components/tools/ToolCard";
-import { LoginForm } from "@/components/auth/LoginForm";
+import { GuestSignInPrompt } from "@/components/auth/GuestSignInPrompt";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { useAuth } from "@/lib/auth";
 import { listMyToolkit } from "@/lib/api";
@@ -22,14 +22,11 @@ export default function ToolkitPage() {
   if (!isAuthenticated) {
     return (
       <SiteShell>
-        <div className="px-gutter py-12 max-w-[480px] mx-auto">
-          <LoginForm />
-          <p className="mt-4 text-center">
-            <Link href="/login" data-testid="toolkit-sign-in" className="text-tertiary">
-              Sign in
-            </Link>
-          </p>
-        </div>
+        <GuestSignInPrompt
+          title="My Toolkit"
+          description="Sign in to save tools and export bundles."
+          testId="toolkit-sign-in"
+        />
       </SiteShell>
     );
   }
