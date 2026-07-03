@@ -136,6 +136,29 @@ latest_deployment_status() {
     || true
 }
 
+railway_api_url() {
+  if [[ -n "${RAILWAY_API_URL:-}" ]]; then
+    printf '%s' "${RAILWAY_API_URL%/}"
+    return 0
+  fi
+  local resolved
+  resolved="$(railway status --json 2>/dev/null \
+    | /usr/bin/python3 -c "import json,sys
+d=json.load(sys.stdin)
+for env in d.get('environments',{}).get('edges',[]):
+  for edge in env['node'].get('serviceInstances',{}).get('edges',[]):
+    node=edge['node']
+    for dom in (node.get('domains',{}) or {}).get('serviceDomains',[]) or []:
+      if dom.get('domain'):
+        print(dom['domain']); raise SystemExit
+" 2>/dev/null || true)"
+  if [[ -n "$resolved" ]]; then
+    printf 'https://%s' "${resolved%/}"
+    return 0
+  fi
+  printf '%s' "https://onchainai-production.up.railway.app"
+}
+
 echo "Waiting for Railway deployment to succeed (up to ${DEPLOY_WAIT_ATTEMPTS} checks, ${DEPLOY_WAIT_INTERVAL}s interval)..."
 for attempt in $(seq 1 "${DEPLOY_WAIT_ATTEMPTS}"); do
   deploy_status="$(latest_deployment_status)"
@@ -163,16 +186,16 @@ for attempt in $(seq 1 "${DEPLOY_WAIT_ATTEMPTS}"); do
   esac
 done
 
-echo "Waiting for production deployment to become reachable..."
-PROD_URL="https://${SIWX_DOMAIN}"
+API_URL="$(railway_api_url)"
+echo "Waiting for Railway API smoke (${API_URL})..."
 for attempt in $(seq 1 "${DEPLOY_SMOKE_ATTEMPTS}"); do
-  if ./scripts/smoke-test.sh "${PROD_URL}" 2>/dev/null; then
-    echo "Production smoke passed."
+  if ./scripts/smoke-test-api.sh "${API_URL}" 2>/dev/null; then
+    echo "Railway API smoke passed."
     break
   fi
   if [[ "${attempt}" -eq "${DEPLOY_SMOKE_ATTEMPTS}" ]]; then
-    echo "Production smoke failed after ${DEPLOY_SMOKE_ATTEMPTS} attempts." >&2
-    echo "The app may still be starting. Check: curl -sS -o /dev/null -w '%{http_code}' ${PROD_URL}" >&2
+    echo "Railway API smoke failed after ${DEPLOY_SMOKE_ATTEMPTS} attempts." >&2
+    echo "The API may still be starting. Check: curl -sS -o /dev/null -w '%{http_code}' ${API_URL}/favicon.ico" >&2
     exit 1
   fi
   sleep "${DEPLOY_SMOKE_INTERVAL}"

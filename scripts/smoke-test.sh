@@ -1,10 +1,13 @@
 #!/usr/bin/env bash
-# Curl smoke: public pages, dashboard/toolkit routes, chain markup, MCP initialize.
+# Curl smoke for the local Leptos SSR release binary (CI + restart-dev).
+#
+# Split production deploy:
+#   ./scripts/smoke-test-api.sh      — Railway API-only service
+#   ./scripts/smoke-test-frontend.sh — Vercel Next.js frontend
 #
 # Usage:
 #   ./scripts/smoke-test.sh
 #   ./scripts/smoke-test.sh http://localhost:3000
-#   ./scripts/smoke-test.sh https://www.onchain-ai.xyz
 set -euo pipefail
 
 BASE="${1:-http://localhost:3000}"
