@@ -1,5 +1,6 @@
 {
   "name": "onchainai",
+  "description": "Official OnchainAI marketplace — crypto tool discovery for AI agents (MCP search, /find-tool, install-risk and x402 vetting).",
   "owner": {
     "name": "OnchainAI",
     "url": "https://www.onchain-ai.xyz"
@@ -7,7 +8,7 @@
   "plugins": [
     {
       "name": "onchainai",
-      "source": "./",
+      "source": "./plugin/onchainai",
       "description": "Crypto tool directory: find, vet, and install MCP/CLI/SDK/API/x402 tools."
     }
   ]

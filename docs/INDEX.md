@@ -13,6 +13,13 @@
 - [[UI_UX_DESIGN]] — Full UI spec: pages, components, sidebar, preview panel, bottom sheet, mobile, admin dashboard
 - [[../DESIGN]] — Stitch DESIGN.md: design tokens (colors, typography, components) for AI UI generation
 
+## Product & Launch
+
+- [[CONNECT]] — Connect any MCP client, install the Claude Code plugin/skill (user-facing)
+- [[LAUNCH_READINESS_SPEC]] — GitHub 공개 전환 체크리스트, 온보딩 표면, 등재 채널, x402 검증 잡, 어댑션 계측
+- [[X402_REFERRAL_SPEC]] — x402 레퍼럴/어트리뷰션 설계 (no-custody 원칙)
+- [[SKILL_PLUGIN_SPEC]] — Skill + Plugin 패키징 스펙 (`plugin/onchainai/` 레이아웃)
+
 ## Operations & Deploy
 
 - [[OPERATOR_GUIDE]] — Operator/admin capabilities (Korean): what each role can do without code changes

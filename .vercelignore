@@ -12,6 +12,10 @@ public/chains
 .cursor
 .factory
 .claude
+plugin
+agent
+seeds
+supabase
 *.rs
 Cargo.toml
 Cargo.lock

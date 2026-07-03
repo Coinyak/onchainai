@@ -55,8 +55,10 @@ undefined/
 .superpowers/
 __pycache__/
 
-# Supabase
+# Supabase / Vercel
 supabase/.branches
 supabase/.temp
 .vercel
-.env*
+
+# Keep the env template tracked (must stay after every .env* ignore rule).
+!.env.example

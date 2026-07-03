@@ -76,10 +76,11 @@ PROD_URL=https://staging.example ./scripts/spec-verify.sh
 | ID | 검사 | PASS 조건 | 유형 |
 |---|---|---|---|
 | D4 | "에이전트에 연결" CTA | 홈/About에 Claude·Cursor config 복사 UI 존재(`mcpServers` 문자열 노출) | auto(grep/curl) |
-| J1 | OnchainAI Skill | `skills/onchainai-crypto-tools/SKILL.md` 존재 + frontmatter `name`·`description` | auto |
+| J1 | OnchainAI Skill | `plugin/onchainai/skills/onchainai-crypto-tools/SKILL.md` 존재 + frontmatter `name`·`description` | auto |
 | J1-rule | Skill 안전 규칙 | SKILL.md에 `critical`·`x402` 단어 포함(위험/결제 규칙 명시) | auto |
-| J2 | Plugin 번들 | `.claude-plugin/plugin.json` + `.mcp.json` + `commands/*.md` 존재 | auto |
-| J2-mcp | 플러그인 MCP 연결 | `.mcp.json`에 `www.onchain-ai.xyz/mcp` 포함 | auto |
+| J2 | Plugin 번들 | `plugin/onchainai/.claude-plugin/plugin.json` + `plugin/onchainai/.mcp.json` + `plugin/onchainai/commands/*.md` 존재 | auto |
+| J2-mcp | 플러그인 MCP 연결 | `plugin/onchainai/.mcp.json`에 `www.onchain-ai.xyz/mcp` 포함 | auto |
+| J2-devmcp | dev MCP 미유출 | 플러그인 `.mcp.json`에 `vercel`/`railway` 서버 0건 (루트 `.mcp.json`은 개발용) | auto |
 
 ### 트랙 5 — 신뢰 카드 (C2=D7=I1)
 | ID | 검사 | PASS 조건 | 유형 |

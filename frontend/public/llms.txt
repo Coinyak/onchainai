@@ -1,0 +1,26 @@
+# OnchainAI
+
+> Crypto tool directory for humans and AI agents. Discover, vet, and install MCP servers, CLIs, SDKs, APIs, x402 services, and AI-agent tools across chains — with trust scores, install-risk gating, and x402 payment disclosure.
+
+For AI agents: connect to the free, read-only MCP endpoint `https://www.onchain-ai.xyz/mcp` (streamable HTTP, JSON-RPC over POST, no auth). Tools: search_tools, get_tool_detail, get_install_guide, list_categories, get_dashboard_snapshot. Never install tools whose install_risk_level is "critical"; always disclose x402 pricing before a paid tool is called. Claude Code users can install the plugin: `/plugin marketplace add hoyeon4315-cpu/onchainai` then `/plugin install onchainai@onchainai`.
+
+## Connect
+
+- [Connect hub](https://www.onchain-ai.xyz/connect): per-client MCP setup (Claude, Cursor, VS Code, ChatGPT, more) with one-click deeplinks
+- [Connection guide](https://github.com/hoyeon4315-cpu/onchainai/blob/main/docs/CONNECT.md): canonical markdown guide for every client
+
+## Browse
+
+- [Tools](https://www.onchain-ai.xyz/tools): full searchable directory with category, chain, type, and pricing filters
+- [Categories](https://www.onchain-ai.xyz/categories): function taxonomy (bridge, swap, wallet, payments, data, ai-agent, ...)
+- [Dashboard](https://www.onchain-ai.xyz/dashboard): public coverage, trust, and x402 stats
+- [Blueprints](https://www.onchain-ai.xyz/blueprints): curated tool stacks for common agent jobs
+
+## Contribute
+
+- [Submit a tool](https://www.onchain-ai.xyz/submit): add a missing crypto tool to the directory
+- [Source code](https://github.com/hoyeon4315-cpu/onchainai): MIT-licensed Rust API + Next.js frontend
+
+## Policy
+
+- x402: OnchainAI publishes payment metadata and verification flags only — it never holds funds, proxies payments, or acts as a facilitator.

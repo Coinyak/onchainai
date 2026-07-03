@@ -6,6 +6,25 @@
 
 ---
 
+## 2026-07-03 구현 상태 업데이트 (레이아웃 확정)
+
+J1(Skill)·J2(Plugin)는 구현 완료. **번들 위치가 이 문서 §2.1 초안과 다르게 확정**되었다:
+
+- 플러그인 번들: `plugin/onchainai/` (`.claude-plugin/plugin.json`, `.mcp.json`, `commands/`, `skills/`, `README.md`)
+- 마켓플레이스 매니페스트: 레포 루트 `.claude-plugin/marketplace.json`, `plugins[].source = "./plugin/onchainai"`
+- 이유: 플러그인 MCP 설정은 병합 규칙(own merge rules)이라 소스가 레포 루트(`./`)면 개발용
+  루트 `.mcp.json`(vercel·railway)이 최종 사용자에게 번들된다. 서브디렉터리 분리로 격리
+  (§5 보안 원칙 — 자동 연결 MCP는 OnchainAI 엔드포인트 하나뿐).
+- 플러그인 `.mcp.json`은 `mcp-remote` 대신 streamable HTTP 직결(`"type": "http"`)을 쓴다
+  (프로덕션 `/mcp`가 POST JSON-RPC 지원 확인, `frontend/lib/mcp-deeplinks.ts` 참조).
+- 설치 명령: `/plugin marketplace add hoyeon4315-cpu/onchainai` → `/plugin install onchainai@onchainai`
+- 검증: `./scripts/spec-verify.sh J1 J2` (dev MCP 미유출 검사 `J2-devmcp` 포함).
+- 사용자 노출 문서: [CONNECT.md](CONNECT.md), 루트 README "Use it from your agent" 섹션.
+- `version`은 `plugin.json`에 명시(semver). **플러그인 파일을 바꾸면 반드시 version을 올려야
+  설치 사용자에게 업데이트가 전파된다** (커밋만으로는 캐시 유지됨).
+
+---
+
 ## 0. 3계층 요약
 
 | 계층 | 산출물 | 역할 |

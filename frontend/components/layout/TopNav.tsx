@@ -8,7 +8,7 @@ import { LoginModal } from "@/components/auth/LoginModal";
 import { monogramFromName } from "@/lib/format";
 
 const GITHUB_REPO =
-  process.env.NEXT_PUBLIC_GITHUB_REPO || "https://github.com/onchain-ai/onchainai";
+  process.env.NEXT_PUBLIC_GITHUB_REPO || "https://github.com/hoyeon4315-cpu/onchainai";
 
 function ProfileMenu() {
   const { user } = useAuth();
