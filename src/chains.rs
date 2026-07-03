@@ -277,6 +277,111 @@ pub const CHAIN_CATALOG: &[ChainMeta] = &[
         aliases: &["okc", "okex-chain"],
         pinned: false,
     },
+    ChainMeta {
+        id: "monad",
+        label: "Monad",
+        logo: "/chains/monad.svg",
+        aliases: &["mon", "monad-mainnet"],
+        pinned: false,
+    },
+    ChainMeta {
+        id: "mantle",
+        label: "Mantle",
+        logo: "/chains/mantle.svg",
+        aliases: &["mnt", "mantle-mainnet"],
+        pinned: false,
+    },
+    ChainMeta {
+        id: "cronos",
+        label: "Cronos",
+        logo: "/chains/cronos.svg",
+        aliases: &["cro", "crypto-com-chain", "cronos-mainnet"],
+        pinned: false,
+    },
+    ChainMeta {
+        id: "movement",
+        label: "Movement",
+        logo: "/chains/movement.svg",
+        aliases: &["move", "movement-mainnet", "movement-labs"],
+        pinned: false,
+    },
+    ChainMeta {
+        id: "ink",
+        label: "Ink",
+        logo: "/chains/ink.svg",
+        aliases: &["ink-mainnet", "inkchain"],
+        pinned: false,
+    },
+    ChainMeta {
+        id: "flare",
+        label: "Flare",
+        logo: "/chains/flare.svg",
+        aliases: &["flr", "flare-networks", "flare-mainnet"],
+        pinned: false,
+    },
+    ChainMeta {
+        id: "rootstock",
+        label: "Rootstock",
+        logo: "/chains/rootstock.svg",
+        aliases: &["rsk", "rbtc"],
+        pinned: false,
+    },
+    ChainMeta {
+        id: "megaeth",
+        label: "MegaETH",
+        logo: "/chains/megaeth.svg",
+        aliases: &["mega-eth"],
+        pinned: false,
+    },
+    ChainMeta {
+        id: "stacks",
+        label: "Stacks",
+        logo: "/chains/stacks.svg",
+        aliases: &["stx", "blockstack"],
+        pinned: false,
+    },
+    ChainMeta {
+        id: "polkadot",
+        label: "Polkadot",
+        logo: "/chains/polkadot.svg",
+        aliases: &["dot", "polkadot-relay"],
+        pinned: false,
+    },
+    ChainMeta {
+        id: "kava",
+        label: "Kava",
+        logo: "/chains/kava.svg",
+        aliases: &["kava-mainnet"],
+        pinned: false,
+    },
+    ChainMeta {
+        id: "ton",
+        label: "TON",
+        logo: "/chains/ton.svg",
+        aliases: &["the-open-network", "ton-mainnet"],
+        pinned: false,
+    },
+    ChainMeta {
+        id: "taiko",
+        label: "Taiko",
+        logo: "/chains/taiko.svg",
+        aliases: &["taiko-mainnet"],
+        pinned: false,
+    },
+    ChainMeta {
+        id: "immutable",
+        label: "Immutable",
+        logo: "/chains/immutable.svg",
+        aliases: &["imx", "immutablex", "immutable-x", "immutable-zkevm"],
+        pinned: false,
+    },
+    ChainMeta {
+        id: "zora",
+        label: "Zora",
+        logo: "/chains/zora.svg",
+        aliases: &["zora-mainnet"],
+        pinned: false,
+    },
 ];
 
 /// Primary-row chain tiles (excluding the All tile).
@@ -756,7 +861,7 @@ mod tests {
     #[test]
     fn strip_primary_visible_leaves_overflow_for_expand_control() {
         assert_eq!(STRIP_PRIMARY_VISIBLE, 20);
-        assert_eq!(CHAIN_CATALOG.len(), 36);
+        assert_eq!(CHAIN_CATALOG.len(), 51);
 
         let counts: Vec<(String, i64)> = CHAIN_CATALOG
             .iter()

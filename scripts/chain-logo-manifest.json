@@ -1,6 +1,6 @@
 {
-  "harness_round": 11,
-  "goal": "official chain logos from brand sites (optimism.io Token.svg)",
+  "harness_round": 12,
+  "goal": "official chain logos + DeFiLlama icons for extension chains (icons.llama.fi / icons.llamao.fi)",
   "raw_logos_dir": "raw-logos",
   "forbidden": [
     "font-size=\"12\"",
@@ -254,6 +254,111 @@
       "kind": "wrap",
       "source": "xlayer_official.svg",
       "markers": ["fill=\"black\"", "path"]
+    },
+    {
+      "id": "monad",
+      "label": "Monad",
+      "kind": "wrap_raster",
+      "source": "monad_llama.png",
+      "markers": ["data:image/png;base64,"]
+    },
+    {
+      "id": "mantle",
+      "label": "Mantle",
+      "kind": "wrap_raster",
+      "source": "mantle_llama.png",
+      "markers": ["data:image/png;base64,"]
+    },
+    {
+      "id": "cronos",
+      "label": "Cronos",
+      "kind": "wrap_raster",
+      "source": "cronos_llama.png",
+      "markers": ["data:image/png;base64,"]
+    },
+    {
+      "id": "movement",
+      "label": "Movement",
+      "kind": "wrap_raster",
+      "source": "movement_llama.png",
+      "markers": ["data:image/png;base64,"]
+    },
+    {
+      "id": "ink",
+      "label": "Ink",
+      "kind": "wrap_raster",
+      "source": "ink_llama.png",
+      "markers": ["data:image/png;base64,"]
+    },
+    {
+      "id": "flare",
+      "label": "Flare",
+      "kind": "wrap_raster",
+      "source": "flare_llama.png",
+      "markers": ["data:image/png;base64,"]
+    },
+    {
+      "id": "rootstock",
+      "label": "Rootstock",
+      "kind": "wrap_raster",
+      "source": "rootstock_llama.png",
+      "markers": ["data:image/png;base64,"]
+    },
+    {
+      "id": "megaeth",
+      "label": "MegaETH",
+      "kind": "wrap_raster",
+      "source": "megaeth_llama.png",
+      "markers": ["data:image/png;base64,"]
+    },
+    {
+      "id": "stacks",
+      "label": "Stacks",
+      "kind": "wrap_raster",
+      "source": "stacks_llama.png",
+      "markers": ["data:image/png;base64,"]
+    },
+    {
+      "id": "polkadot",
+      "label": "Polkadot",
+      "kind": "wrap_raster",
+      "source": "polkadot_llama.png",
+      "markers": ["data:image/png;base64,"]
+    },
+    {
+      "id": "kava",
+      "label": "Kava",
+      "kind": "wrap_raster",
+      "source": "kava_llama.png",
+      "markers": ["data:image/png;base64,"]
+    },
+    {
+      "id": "ton",
+      "label": "TON",
+      "kind": "wrap_raster",
+      "source": "ton_llama.png",
+      "markers": ["data:image/png;base64,"]
+    },
+    {
+      "id": "taiko",
+      "label": "Taiko",
+      "kind": "wrap_raster",
+      "source": "taiko_llama.png",
+      "markers": ["data:image/png;base64,"]
+    },
+    {
+      "id": "immutable",
+      "label": "Immutable",
+      "kind": "wrap_raster",
+      "source": "immutable_llama.png",
+      "markers": ["data:image/png;base64,"]
+    },
+    {
+      "id": "zora",
+      "label": "Zora",
+      "kind": "wrap_raster",
+      "source": "zora_llama.png",
+      "markers": ["data:image/png;base64,"]
     }
   ]
 }

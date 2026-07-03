@@ -43,6 +43,21 @@ export const CHAIN_CATALOG: ChainMeta[] = [
   { id: "dogecoin", label: "Dogecoin", logo: "/chains/dogecoin.svg", aliases: ["doge", "dogecoin-mainnet"], pinned: false },
   { id: "aurora", label: "Aurora", logo: "/chains/aurora.svg", aliases: ["aurora-mainnet"], pinned: false },
   { id: "okx", label: "OKX Chain", logo: "/chains/okx.svg", aliases: ["okc", "okex-chain"], pinned: false },
+  { id: "monad", label: "Monad", logo: "/chains/monad.svg", aliases: ["mon", "monad-mainnet"], pinned: false },
+  { id: "mantle", label: "Mantle", logo: "/chains/mantle.svg", aliases: ["mnt", "mantle-mainnet"], pinned: false },
+  { id: "cronos", label: "Cronos", logo: "/chains/cronos.svg", aliases: ["cro", "crypto-com-chain", "cronos-mainnet"], pinned: false },
+  { id: "movement", label: "Movement", logo: "/chains/movement.svg", aliases: ["move", "movement-mainnet", "movement-labs"], pinned: false },
+  { id: "ink", label: "Ink", logo: "/chains/ink.svg", aliases: ["ink-mainnet", "inkchain"], pinned: false },
+  { id: "flare", label: "Flare", logo: "/chains/flare.svg", aliases: ["flr", "flare-networks", "flare-mainnet"], pinned: false },
+  { id: "rootstock", label: "Rootstock", logo: "/chains/rootstock.svg", aliases: ["rsk", "rbtc"], pinned: false },
+  { id: "megaeth", label: "MegaETH", logo: "/chains/megaeth.svg", aliases: ["mega-eth"], pinned: false },
+  { id: "stacks", label: "Stacks", logo: "/chains/stacks.svg", aliases: ["stx", "blockstack"], pinned: false },
+  { id: "polkadot", label: "Polkadot", logo: "/chains/polkadot.svg", aliases: ["dot", "polkadot-relay"], pinned: false },
+  { id: "kava", label: "Kava", logo: "/chains/kava.svg", aliases: ["kava-mainnet"], pinned: false },
+  { id: "ton", label: "TON", logo: "/chains/ton.svg", aliases: ["the-open-network", "ton-mainnet"], pinned: false },
+  { id: "taiko", label: "Taiko", logo: "/chains/taiko.svg", aliases: ["taiko-mainnet"], pinned: false },
+  { id: "immutable", label: "Immutable", logo: "/chains/immutable.svg", aliases: ["imx", "immutablex", "immutable-x", "immutable-zkevm"], pinned: false },
+  { id: "zora", label: "Zora", logo: "/chains/zora.svg", aliases: ["zora-mainnet"], pinned: false },
 ];
 
 export const STRIP_PRIMARY_VISIBLE = 20;
