@@ -34,7 +34,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libssl3 ca-certificates && rm -rf /var/lib/apt/lists/*
 COPY --from=builder /app/target/release/onchainai /app/onchainai
 COPY --from=builder /app/migrations /app/migrations
-COPY --from=builder /app/public /app/public
+COPY public/ /app/public/
 
 ENV PORT=3000
 ENV RUST_LOG=info
