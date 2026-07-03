@@ -316,6 +316,24 @@ function buildToolClientBlocks(
       : null;
 
   switch (client) {
+    case "codex": {
+      const codexCopy = httpUrl
+        ? `codex mcp add ${slug} --url ${httpUrl}`
+        : command;
+      return [
+        {
+          title: "Codex CLI",
+          steps: [
+            "Install Codex CLI: npm i -g @openai/codex",
+            "Run the command below to register this tool's MCP server.",
+            "Complete OAuth in the browser when Codex prompts you.",
+          ],
+          copyText: codexCopy,
+          copyLabel: "Copy command",
+          showShellPrefix: true,
+        },
+      ];
+    }
     case "chatgpt":
       if (httpUrl) {
         return [
@@ -448,7 +466,7 @@ function buildToolClientBlocks(
           title: "Terminal install",
           steps: [
             "Run the install command in your terminal.",
-            "See all MCP clients on the Connect page.",
+            "Use npx or your package manager as shown below.",
           ],
           copyText: command,
           copyLabel: "Copy command",
@@ -456,7 +474,9 @@ function buildToolClientBlocks(
         },
         {
           title: "More clients",
-          steps: ["Codex, Windsurf, Gemini, Goose, Devin, Raycast, and Generic JSON."],
+          steps: [
+            "Windsurf, Gemini, Goose, Devin, Raycast, and Generic JSON are on the Connect page.",
+          ],
           copyText: null,
           copyLabel: "Copy",
         },

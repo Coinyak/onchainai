@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import Link from "next/link";
 import type { Tool } from "@/lib/api";
 import { ConnectGuideBlocks } from "@/components/connect/ConnectGuideBlocks";
 import {
@@ -23,7 +22,7 @@ export function InstallGuidePanel({
   compact = false,
   showProgress = false,
 }: InstallGuidePanelProps) {
-  const [client, setClient] = useState<ToolInstallClient>("chatgpt");
+  const [client, setClient] = useState<ToolInstallClient>("codex");
   const [copyRevealed, setCopyRevealed] = useState(false);
 
   const guide = useMemo(
@@ -46,34 +45,22 @@ export function InstallGuidePanel({
         Safe install
       </h3>
       <div className="install-platform-group" role="tablist" aria-label="Choose client">
-        {TOOL_INSTALL_CLIENTS.map((value) =>
-          value === "more" ? (
-            <Link
-              key={value}
-              href="/connect"
-              className="install-platform-btn"
-              data-testid="install-more-clients-link"
-            >
-              {toolInstallClientLabel(value)} →
-            </Link>
-          ) : (
-            <button
-              key={value}
-              type="button"
-              role="tab"
-              aria-selected={client === value}
-              className={
-                client === value ? "install-platform-btn active" : "install-platform-btn"
-              }
-              onClick={() => {
-                setClient(value);
-                setCopyRevealed(false);
-              }}
-            >
-              {toolInstallClientLabel(value)}
-            </button>
-          ),
-        )}
+        {TOOL_INSTALL_CLIENTS.map((value) => (
+          <button
+            key={value}
+            type="button"
+            role="tab"
+            aria-selected={client === value}
+            className={client === value ? "install-platform-btn active" : "install-platform-btn"}
+            data-testid={value === "more" ? "install-more-tab" : undefined}
+            onClick={() => {
+              setClient(value);
+              setCopyRevealed(false);
+            }}
+          >
+            {toolInstallClientLabel(value)}
+          </button>
+        ))}
       </div>
       {guide.warning && (
         <p className="install-warning" role="alert">

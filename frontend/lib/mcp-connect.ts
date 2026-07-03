@@ -51,6 +51,22 @@ export function buildOnchainaiConnectGuide(
   );
 
   switch (client) {
+    case "codex":
+      return {
+        client,
+        blocks: [
+          {
+            steps: [
+              "Install Codex CLI: npm i -g @openai/codex",
+              "Run the command below to register OnchainAI MCP.",
+              "Complete OAuth in the browser when Codex prompts you.",
+            ],
+            copyText: `codex mcp add ${ONCHAINAI_MCP_SERVER_NAME} --url ${ONCHAINAI_MCP_HTTP_URL}`,
+            copyLabel: "Copy command",
+            showShellPrefix: true,
+          },
+        ],
+      };
     case "chatgpt":
       return {
         client,

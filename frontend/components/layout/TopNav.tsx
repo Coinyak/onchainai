@@ -3,7 +3,6 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import Image from "next/image";
 import { useAuth } from "@/lib/auth";
 import { LoginModal } from "@/components/auth/LoginModal";
 import { monogramFromName } from "@/lib/format";
@@ -118,17 +117,7 @@ export function TopNav() {
     <>
       <LoginModal open={showLogin} onClose={() => setShowLogin(false)} />
       <header className="site-top-nav">
-        <div className="site-top-nav-inner">
-          <Link href="/" className="site-top-nav-logo" aria-label="OnchainAI home">
-            <Image
-              className="site-top-nav-mark"
-              src="/brand/onchainai-logo.png"
-              alt=""
-              width={34}
-              height={34}
-            />
-            <span>OnchainAI</span>
-          </Link>
+        <div className="site-top-nav-inner site-top-nav-inner-actions">
           <nav className="site-top-nav-actions" aria-label="Site actions">
             <Link href="/submit" className="site-top-nav-btn site-top-nav-btn-primary">
               Submit
