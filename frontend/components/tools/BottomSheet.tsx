@@ -5,6 +5,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { Tool } from "@/lib/api";
 import { ToolDetail } from "@/components/tools/ToolDetail";
+import { PreviewPanelContent } from "@/components/tools/PreviewPanelContent";
+import { PreviewActionBar } from "@/components/tools/PreviewActionBar";
 
 const DRAG_EXPAND_THRESHOLD = 48;
 const DRAG_COLLAPSE_THRESHOLD = 48;
@@ -32,7 +34,7 @@ export function BottomSheet({
   tool,
   closeHref,
   fullPageHref,
-  commentCount,
+  commentCount = 0,
   addMode = false,
   addMcpQueryBase = "",
   compareReturnHref = "",
@@ -169,20 +171,38 @@ export function BottomSheet({
           <span className="bottom-sheet-handle-bar" aria-hidden="true" />
         </button>
         <div className="bottom-sheet-body">
-          <ToolDetail
-            tool={tool}
-            compact
-            commentCount={commentCount}
-            addMode={addMode}
-            addMcpQueryBase={addMcpQueryBase}
-            compareReturnHref={compareReturnHref}
-          />
+          {addMode ? (
+            <ToolDetail
+              tool={tool}
+              compact
+              commentCount={commentCount}
+              addMode={addMode}
+              addMcpQueryBase={addMcpQueryBase}
+              compareReturnHref={compareReturnHref}
+            />
+          ) : (
+            <PreviewPanelContent
+              key={tool.slug}
+              tool={tool}
+              closeHref={closeHref}
+              fullPageHref={fullPageHref}
+              commentCount={commentCount}
+            />
+          )}
           {!addMode && (
             <Link href={fullPageHref} className="bottom-sheet-view-full">
               View full page
             </Link>
           )}
         </div>
+        {!addMode && (
+          <PreviewActionBar
+            key={`${tool.slug}-actions`}
+            tool={tool}
+            fullPageHref={fullPageHref}
+            addMcpQueryBase={addMcpQueryBase}
+          />
+        )}
       </div>
     </>
   );
