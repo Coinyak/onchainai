@@ -103,6 +103,25 @@ sync_vars() {
   if [[ -n "${GITHUB_REDIRECT_URI:-}" ]]; then
     vars+=("GITHUB_REDIRECT_URI=${GITHUB_REDIRECT_URI}")
   fi
+  if [[ -n "${X402_FACILITATOR_URL:-}" ]]; then
+    vars+=("X402_FACILITATOR_URL=${X402_FACILITATOR_URL}")
+  fi
+  if [[ -n "${X402_PAY_TO_ADDRESS:-}" ]]; then
+    vars+=("X402_PAY_TO_ADDRESS=${X402_PAY_TO_ADDRESS}")
+  fi
+  if [[ -n "${X402_NETWORK:-}" ]]; then
+    vars+=("X402_NETWORK=${X402_NETWORK}")
+  fi
+  if [[ -n "${X402_PREMIUM_PRICE_USD:-}" ]]; then
+    # Quote so literal "$0.001" is not expanded by bash or the Railway CLI.
+    vars+=('X402_PREMIUM_PRICE_USD='"${X402_PREMIUM_PRICE_USD}")
+  fi
+  if [[ -n "${CDP_API_KEY_NAME:-}" ]]; then
+    vars+=("CDP_API_KEY_NAME=${CDP_API_KEY_NAME}")
+  fi
+  if [[ -n "${CDP_API_KEY_PRIVATE_KEY:-}" ]]; then
+    vars+=("CDP_API_KEY_PRIVATE_KEY=${CDP_API_KEY_PRIVATE_KEY}")
+  fi
   railway variable set -s "${SERVICE_NAME}" --skip-deploys "${vars[@]}"
 }
 

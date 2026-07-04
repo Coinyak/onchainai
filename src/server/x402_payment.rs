@@ -3,6 +3,7 @@
 //! Uses a facilitator for verify/settle only — no custody, no third-party proxy.
 //! Spec: docs/X402_OPEN_LISTING_SPEC.md §M2/M3, docs/PRODUCT_ENHANCEMENT_SPEC.md §K2.
 
+use std::sync::LazyLock;
 use std::time::Duration;
 
 use axum::http::{HeaderMap, HeaderName, HeaderValue, StatusCode};
@@ -15,6 +16,13 @@ use serde_json::{json, Value};
 pub const HEADER_PAYMENT_SIGNATURE: &str = "PAYMENT-SIGNATURE";
 pub const HEADER_PAYMENT_REQUIRED: &str = "PAYMENT-REQUIRED";
 pub const HEADER_PAYMENT_RESPONSE: &str = "PAYMENT-RESPONSE";
+
+static PAYMENT_REQUIRED_HEADER: LazyLock<HeaderName> = LazyLock::new(|| {
+    HeaderName::try_from(HEADER_PAYMENT_REQUIRED).expect("valid x402 payment-required header")
+});
+static PAYMENT_RESPONSE_HEADER: LazyLock<HeaderName> = LazyLock::new(|| {
+    HeaderName::try_from(HEADER_PAYMENT_RESPONSE).expect("valid x402 payment-response header")
+});
 
 pub const DEFAULT_FACILITATOR_URL: &str = "https://x402.org/facilitator";
 pub const DEFAULT_NETWORK: &str = "eip155:84532";
@@ -243,7 +251,7 @@ pub fn payment_required_response(
         HeaderValue::from_static("application/json"),
     );
     headers.insert(
-        HeaderName::from_static(HEADER_PAYMENT_REQUIRED),
+        PAYMENT_REQUIRED_HEADER.clone(),
         HeaderValue::from_str(&encoded).map_err(|e| e.to_string())?,
     );
     Ok((StatusCode::PAYMENT_REQUIRED, headers, body.to_string()).into_response())
@@ -266,7 +274,7 @@ pub fn payment_success_response(
         });
         let encoded = encode_payment_header(&header_body)?;
         headers.insert(
-            HeaderName::from_static(HEADER_PAYMENT_RESPONSE),
+            PAYMENT_RESPONSE_HEADER.clone(),
             HeaderValue::from_str(&encoded).map_err(|e| e.to_string())?,
         );
     }
@@ -544,6 +552,25 @@ mod tests {
         accepted.pay_to = "0xabcdef0000000000000000000000000000000001".into();
         accepted.asset = accepted.asset.to_uppercase();
         assert!(requirements_match(&accepted, &expected));
+    }
+
+    #[test]
+    fn payment_required_response_sets_x402_header_without_panic() {
+        let req = PaymentRequirementsV2 {
+            scheme: "exact".into(),
+            network: DEFAULT_NETWORK.into(),
+            asset: USDC_BASE_SEPOLIA.into(),
+            amount: "1000".into(),
+            pay_to: "0x0000000000000000000000000000000000000001".into(),
+            max_timeout_seconds: 300,
+            extra: None,
+            resource: None,
+        };
+        let required = build_payment_required(req, Some("Payment required"));
+        let body = serde_json::to_value(&required).unwrap();
+        let resp = payment_required_response(&required, body).expect("response");
+        assert_eq!(resp.status(), StatusCode::PAYMENT_REQUIRED);
+        assert!(resp.headers().get(HEADER_PAYMENT_REQUIRED).is_some());
     }
 
     #[test]
