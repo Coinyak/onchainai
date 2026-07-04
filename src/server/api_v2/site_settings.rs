@@ -60,6 +60,12 @@ async fn update_site_settings(
         default_referral_bps: payload.default_referral_bps,
         default_referral_payout_address: payload.default_referral_payout_address.as_deref(),
         x402_builder_code: payload.x402_builder_code.as_deref(),
+        mcp_premium_enabled: payload.mcp_premium_enabled,
+        mcp_premium_pay_to_address: payload.mcp_premium_pay_to_address.as_deref(),
+        mcp_premium_price: payload.mcp_premium_price.as_deref(),
+        mcp_premium_network: &payload.mcp_premium_network,
+        mcp_premium_asset: payload.mcp_premium_asset.as_deref(),
+        mcp_premium_display_price: payload.mcp_premium_display_price.as_deref(),
         hero_title: payload.hero_title.as_deref(),
         hero_subtitle: payload.hero_subtitle.as_deref(),
         about_content: payload.about_content.as_deref(),
@@ -84,10 +90,16 @@ async fn update_site_settings(
             default_referral_bps = $9,
             default_referral_payout_address = $10,
             x402_builder_code = $11,
-            hero_title = $12,
-            hero_subtitle = $13,
-            about_content = $14,
-            footer_links = $15,
+            mcp_premium_enabled = $12,
+            mcp_premium_pay_to_address = $13,
+            mcp_premium_price = $14,
+            mcp_premium_network = $15,
+            mcp_premium_asset = $16,
+            mcp_premium_display_price = $17,
+            hero_title = $18,
+            hero_subtitle = $19,
+            about_content = $20,
+            footer_links = $21,
             updated_at = now()
         WHERE id = 1
         RETURNING *
@@ -109,6 +121,22 @@ async fn update_site_settings(
             .map(str::trim),
     )
     .bind(payload.x402_builder_code.as_deref().map(str::trim))
+    .bind(payload.mcp_premium_enabled)
+    .bind(
+        payload
+            .mcp_premium_pay_to_address
+            .as_deref()
+            .map(str::trim),
+    )
+    .bind(payload.mcp_premium_price.as_deref().map(str::trim))
+    .bind(payload.mcp_premium_network.trim())
+    .bind(payload.mcp_premium_asset.as_deref().map(str::trim))
+    .bind(
+        payload
+            .mcp_premium_display_price
+            .as_deref()
+            .map(str::trim),
+    )
     .bind(payload.hero_title.as_deref().map(str::trim))
     .bind(payload.hero_subtitle.as_deref().map(str::trim))
     .bind(payload.about_content.as_deref().map(str::trim))

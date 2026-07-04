@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { HighlightedCommand } from "@/components/tools/HighlightedCommand";
 import { CopyButton } from "@/components/ui/CopyButton";
+import { CodingClientLogo } from "@/components/tools/CodingClientLogo";
+import { logoIdForDeeplinkLabel } from "@/lib/coding-clients";
 import type { ConnectGuideBlock } from "@/lib/install-guide";
 import { copyLabelAria } from "@/lib/install-guide";
 
@@ -46,7 +48,22 @@ function ConnectGuideBlockView({
           className="connect-deeplink-btn"
           data-testid="connect-deeplink-btn"
         >
-          {block.deeplinkLabel}
+          {(() => {
+            const logoId = logoIdForDeeplinkLabel(block.deeplinkLabel);
+            return (
+              <>
+                {logoId && (
+                  <CodingClientLogo
+                    id={logoId}
+                    label={block.deeplinkLabel}
+                    size={18}
+                    decorative
+                  />
+                )}
+                <span>{block.deeplinkLabel}</span>
+              </>
+            );
+          })()}
         </a>
       )}
       {block.copyText ? (

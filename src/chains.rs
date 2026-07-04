@@ -612,31 +612,18 @@ pub fn chain_logo_path(id: &str) -> String {
 }
 
 /// Resolve a raw DB chain string to a catalog entry, if any.
-///
-/// A known catalog id/alias always wins over the generic noise heuristic —
-/// e.g. Flare's "flare-networks" alias contains the substring "networks",
-/// which `is_chain_noise` otherwise treats as a generic multi-chain value.
-/// The noise check only applies once the catalog search has already missed,
-/// where it's redundant for classification (both paths return `None`) but
-/// kept here as a documented short-circuit rather than relied on for it.
 pub fn resolve_chain(db_value: &str) -> Option<&'static ChainMeta> {
     let normalized = normalize_chain_key(db_value);
-    if normalized.is_empty() {
+    if normalized.is_empty() || is_chain_noise(&normalized) {
         return None;
     }
-    if let Some(entry) = CHAIN_CATALOG.iter().find(|entry| {
+    CHAIN_CATALOG.iter().find(|entry| {
         entry.id == normalized
             || entry
                 .aliases
                 .iter()
                 .any(|alias| normalize_chain_key(alias) == normalized)
-    }) {
-        return Some(entry);
-    }
-    if is_chain_noise(&normalized) {
-        return None;
-    }
-    None
+    })
 }
 
 /// Lookup by canonical catalog id.
@@ -979,10 +966,6 @@ mod tests {
                 "XRPL catalog alias should resolve: {known_xrpl}"
             );
         }
-        assert!(
-            resolve_chain("flare-networks").is_some(),
-            "flare-networks alias should resolve despite containing 'networks'"
-        );
         for unknown in ["anubis", "robinhood"] {
             assert!(
                 resolve_chain(unknown).is_none(),

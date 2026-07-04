@@ -1,5 +1,5 @@
 import { ConnectOnchainAiMcpCard } from "@/components/tools/ConnectOnchainAiMcpCard";
-import { PluginSkillPromoCard } from "@/components/tools/PluginSkillPromoCard";
+import { QuickInstallPromoCard } from "@/components/tools/QuickInstallPromoCard";
 
 interface PromoCardsProps {
   mcpEndpoint: string;
@@ -7,9 +7,11 @@ interface PromoCardsProps {
 
 export function PromoCards({ mcpEndpoint }: PromoCardsProps) {
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 min-w-0">
-      <PluginSkillPromoCard />
-      <ConnectOnchainAiMcpCard mcpEndpoint={mcpEndpoint} />
-    </div>
+    <section className="promo-cards-section" aria-label="Connect OnchainAI">
+      <div className="promo-cards-grid min-w-0">
+        <ConnectOnchainAiMcpCard mcpEndpoint={mcpEndpoint} />
+        <QuickInstallPromoCard />
+      </div>
+    </section>
   );
 }

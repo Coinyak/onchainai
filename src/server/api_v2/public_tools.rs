@@ -457,10 +457,19 @@ async fn fetch_user_toolkit(
                     "failed to decode toolkit updated_at: {e}"
                 ))
             })?;
+        let source = row
+            .try_get::<String, _>("bookmark_source")
+            .unwrap_or_else(|_| "web".into());
+        let source_client = row
+            .try_get::<Option<String>, _>("bookmark_source_client")
+            .ok()
+            .flatten();
         items.push(ToolkitToolView {
             tool,
             note,
             tags,
+            source,
+            source_client,
             saved_at,
             updated_at,
         });

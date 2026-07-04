@@ -1,11 +1,12 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import { ConnectPageContent } from "@/components/connect/ConnectPageContent";
 import { SITE_ORIGIN } from "@/lib/site";
 
 export const metadata: Metadata = {
-  title: "Connect OnchainAI MCP — Client Setup | OnchainAI",
+  title: "Connect OnchainAI to Your Agent | OnchainAI",
   description:
-    "Install the OnchainAI MCP search server in Claude, Cursor, VS Code, ChatGPT, Codex, Windsurf, Gemini, and other MCP clients.",
+    "Universal MCP install plus setup for Claude, Cursor, VS Code, ChatGPT, Codex, Windsurf, Gemini, and other agents.",
   alternates: {
     canonical: `${SITE_ORIGIN}/connect`,
   },
@@ -19,5 +20,9 @@ export const metadata: Metadata = {
 };
 
 export default function ConnectPage() {
-  return <ConnectPageContent />;
+  return (
+    <Suspense fallback={null}>
+      <ConnectPageContent />
+    </Suspense>
+  );
 }

@@ -57,9 +57,11 @@ export function ToolDetailPageClient({ slug }: ToolDetailPageClientProps) {
         ← All Tools
       </Link>
       <ToolDetail tool={tool} commentCount={countQuery.data ?? 0} />
-      <ToolListingActions tool={tool} />
-      <RelatedToolsSection slug={slug} />
-      <CommentsSection slug={slug} toolName={tool.name} />
+      <div className="detail-page-tail">
+        <ToolListingActions tool={tool} />
+        <RelatedToolsSection slug={slug} />
+        <CommentsSection slug={slug} toolName={tool.name} />
+      </div>
     </>
   );
 }

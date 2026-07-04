@@ -87,21 +87,26 @@ interface SidebarSectionProps {
 }
 
 function SidebarSection({ title, open, collapsed, onToggle, children }: SidebarSectionProps) {
+  const panelOpen = !collapsed && open;
   return (
-    <section className="sidebar-section">
+    <section className={panelOpen ? "sidebar-section sidebar-section--open" : "sidebar-section"}>
       <button
         type="button"
-        className="sidebar-title sidebar-toggle min-h-touch"
-        aria-expanded={open}
+        className="sidebar-title sidebar-toggle"
+        aria-expanded={panelOpen}
         onClick={onToggle}
       >
         <span className="sidebar-title-text">{title}</span>
-        <span className="sidebar-chevron" aria-hidden="true">
-          {open ? "▾" : "▸"}
-        </span>
+        <span
+          className={panelOpen ? "sidebar-chevron sidebar-chevron--open" : "sidebar-chevron"}
+          aria-hidden="true"
+        />
       </button>
-      <div className={collapsed || !open ? "sidebar-panel collapsed" : "sidebar-panel open"}>
-        {children}
+      <div
+        className={panelOpen ? "sidebar-panel open" : "sidebar-panel collapsed"}
+        aria-hidden={!panelOpen}
+      >
+        <div className="sidebar-panel-inner">{children}</div>
       </div>
     </section>
   );
@@ -219,10 +224,24 @@ export function Sidebar({
     writeCollapsed(next);
   }
 
+  function accordionSections(
+    prev: Record<string, boolean>,
+    openId: string | null,
+  ): Record<string, boolean> {
+    const next: Record<string, boolean> = {};
+    for (const key of Object.keys(prev)) {
+      next[key] = openId !== null && key === openId;
+    }
+    return next;
+  }
+
   function toggleSection(id: string) {
     setSections((prev) => {
-      const next = { ...prev, [id]: !prev[id] };
-      localStorage.setItem(SIDEBAR_SECTIONS_KEY, JSON.stringify(next));
+      const willOpen = !prev[id];
+      const next = accordionSections(prev, willOpen ? id : null);
+      if (loaded) {
+        localStorage.setItem(SIDEBAR_SECTIONS_KEY, JSON.stringify(next));
+      }
       return next;
     });
   }
@@ -249,10 +268,17 @@ export function Sidebar({
     }
   }
 
+  function firstActiveSectionId(): string {
+    for (const { id } of RAIL_ICONS) {
+      if (railSectionActive(id)) return id;
+    }
+    return "function";
+  }
+
   function openRailSection(sectionId: string) {
     persistCollapsed(false);
     setSections((prev) => {
-      const next = { ...prev, [sectionId]: true };
+      const next = accordionSections(prev, sectionId);
       if (loaded) {
         localStorage.setItem(SIDEBAR_SECTIONS_KEY, JSON.stringify(next));
       }
@@ -335,7 +361,13 @@ export function Sidebar({
               const next = !collapsed;
               persistCollapsed(next);
               if (wasCollapsed) {
-                setSections((s) => ({ ...s, function: true }));
+                setSections((prev) => {
+                  const nextSections = accordionSections(prev, firstActiveSectionId());
+                  if (loaded) {
+                    localStorage.setItem(SIDEBAR_SECTIONS_KEY, JSON.stringify(nextSections));
+                  }
+                  return nextSections;
+                });
               }
             }}
           >

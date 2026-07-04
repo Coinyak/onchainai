@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Curl smoke for the local Leptos SSR release binary (CI + restart-dev).
+# Curl smoke for local Next.js UI + proxied Rust API (CI + restart-dev).
 #
 # Split production deploy:
 #   ./scripts/smoke-test-api.sh      — Railway API-only service
@@ -12,6 +12,9 @@ set -euo pipefail
 
 BASE="${1:-http://localhost:3000}"
 BASE="${BASE%/}"
+# Local split stack (Next :3000 + API :3001): set ONCHAINAI_SMOKE_API_BASE for MCP POST.
+API_BASE="${ONCHAINAI_SMOKE_API_BASE:-$BASE}"
+API_BASE="${API_BASE%/}"
 
 fail() {
   echo "SMOKE FAIL: $*" >&2
@@ -48,44 +51,35 @@ grep -q '>Sign in<' "$home_body" || fail "GET / missing Sign in label"
 grep -q 'data-testid="profile-menu"' "$home_body" && fail "GET / unexpected profile-menu when signed out"
 grep -q 'site-top-nav-link-dashboard' "$home_body" && fail "GET / unexpected top-nav Dashboard link when signed out"
 grep -q 'site-top-nav-link-toolkit' "$home_body" && fail "GET / unexpected top-nav Toolkit link when signed out"
-login_body="$(check_get "/login")"
-grep -q 'Continue with GitHub' "$login_body" || fail "GET /login missing GitHub sign-in option"
-grep -q 'data-testid="github-sign-in"' "$login_body" || fail "GET /login missing github-sign-in test id"
-grep -q 'href="/auth/github"[^>]*rel="external"' "$login_body" || fail "GET /login missing rel=external on GitHub sign-in link"
-grep -q 'wallet-sign-in' "$login_body" || fail "GET /login missing wallet sign-in option"
+grep -q '_next/static' "$home_body" || fail "GET / missing Next.js bundle markers"
 grep -q 'category-grid' "$home_body" && fail "GET / unexpected category-grid markup"
 
+login_body="$(check_get "/login")"
+grep -qE 'Continue with GitHub|Loading sign-in' "$login_body" \
+  || fail "GET /login missing sign-in shell (Next.js client page)"
+grep -q '_next/static' "$login_body" || fail "GET /login missing Next.js bundle markers"
+
 tools_body="$(check_get "/tools")"
-grep -q 'toolbar-filter-row' "$tools_body" || fail "GET /tools missing toolbar-filter-row markup"
-grep -q '>Verified<' "$tools_body" || fail "GET /tools missing Verified status tab"
-grep -q '>Official<' "$tools_body" || fail "GET /tools missing Official status tab"
-grep -q '>MCP<' "$tools_body" || fail "GET /tools missing MCP type tab"
-grep -q '>CLI<' "$tools_body" || fail "GET /tools missing CLI type tab"
-grep -q '>API<' "$tools_body" || fail "GET /tools missing API type tab"
-grep -q '>SDK<' "$tools_body" || fail "GET /tools missing SDK type tab"
-grep -q '>Skill<' "$tools_body" || fail "GET /tools missing Skill type tab"
-grep -q '>x402<' "$tools_body" || fail "GET /tools missing x402 type tab"
-if echo "$tools_body" | grep -q 'class="tool-list"'; then
-  tool_cards="$(echo "$tools_body" | grep -c 'tool-card' || true)"
-  if [[ "$tool_cards" -ge 50 ]] || [[ ${#tools_body} -gt 20000 ]]; then
-    echo "$tools_body" | grep -qE 'load-more-btn|load-more-row' \
-      || fail "GET /tools missing load-more markup (large listing)"
-  fi
-fi
+grep -q 'tool-card' "$tools_body" || fail "GET /tools missing tool-card markup"
+grep -q '_next/static' "$tools_body" || fail "GET /tools missing Next.js bundle markers"
 
 check_get "/tools?function=bridge&type=mcp"
 check_get "/tools?pricing=x402"
 check_get "/tools?chain=ethereum&page=2"
-check_chain_markup "/tools"
-check_chain_markup "/tools?chain=ethereum"
-check_chain_markup "/categories/bridge"
+if grep -q 'chain-strip' "$tools_body"; then
+  check_chain_markup "/tools?chain=ethereum"
+fi
+check_get "/categories/bridge" >/dev/null
 
 dashboard_body="$(check_get "/dashboard")"
-grep -q 'Crypto tool coverage' "$dashboard_body" || fail "GET /dashboard missing dashboard heading"
+grep -qE 'admin_required|Loading sign-in|Sign in to OnchainAI' "$dashboard_body" \
+  || fail "GET /dashboard should gate anonymous users to login"
 
 toolkit_body="$(check_get "/toolkit")"
-grep -q 'Sign in to save your stack' "$toolkit_body" || fail "GET /toolkit missing anonymous sign-in state"
+grep -q 'Sign in to save' "$toolkit_body" || fail "GET /toolkit missing anonymous sign-in state"
 grep -q 'data-testid="toolkit-sign-in"' "$toolkit_body" || fail "GET /toolkit missing Sign in control"
+connect_body="$(check_get "/connect")"
+grep -q '_next/static' "$connect_body" || fail "GET /connect missing Next.js bundle markers"
 
 # Fresh filter links should not carry pagination from a prior page (SSR heuristic).
 filter_body="$(check_get "/tools?function=bridge&type=mcp")"
@@ -103,7 +97,7 @@ mcp_body="$(mktemp)"
 mcp_code="$(curl -sS -o "$mcp_body" -w "%{http_code}" \
   -H "Content-Type: application/json" \
   -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' \
-  "${BASE}/mcp")" || fail "POST /mcp curl failed"
+  "${API_BASE}/mcp")" || fail "POST /mcp curl failed"
 [[ "$mcp_code" == "200" ]] || fail "POST /mcp returned ${mcp_code}"
 grep -q '"serverInfo"' "$mcp_body" || fail "POST /mcp missing serverInfo"
 
@@ -111,7 +105,7 @@ mcp_tools_body="$(mktemp)"
 mcp_tools_code="$(curl -sS -o "$mcp_tools_body" -w "%{http_code}" \
   -H "Content-Type: application/json" \
   -d '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}' \
-  "${BASE}/mcp")" || fail "POST /mcp tools/list curl failed"
+  "${API_BASE}/mcp")" || fail "POST /mcp tools/list curl failed"
 [[ "$mcp_tools_code" == "200" ]] || fail "POST /mcp tools/list returned ${mcp_tools_code}"
 grep -q '"get_dashboard_snapshot"' "$mcp_tools_body" || fail "POST /mcp tools/list missing get_dashboard_snapshot"
 

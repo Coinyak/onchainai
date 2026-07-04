@@ -158,7 +158,15 @@ echo "[6] 트랙5 신뢰 카드"
 absent D7-icon "북마크 ☆ 글리프 제거(SVG화)" '☆' src/components/tool_card.rs
 present D7-trust "카드가 install_risk 시각화" 'install_risk' src/components/tool_card.rs frontend/components/tools/ToolCard.tsx
 
-echo "[7] Next (구현 시)"
+echo "[7] Free Tier Guardian (OD-FTG 2026-07-04)"
+exists FTG-C "FTG 정책 스펙" docs/superpowers/specs/2026-07-04-free-tier-guardian-spec.md
+present FTG-C2 "영구 무료 선언" '영구 무료' docs/superpowers/specs/2026-07-04-free-tier-guardian-spec.md
+absent FTG-D "K2 compare 유료 문구 제거" '호출당 x402 마이크로페이먼트|export_toolkit`·`compare_tools`·대량' docs/PRODUCT_ENHANCEMENT_SPEC.md
+absent FTG-A "MCP discovery 402 게이트 없음" 'paymentRequired|require_x402_payment|x402_gate' src/server/mcp.rs
+present FTG-E "README 무료 MCP 선언" 'free.*read-only|read-only.*free' README.md
+curl_has FTG-B "compare API 비인증 200" "$PROD_URL/api/v2/tools/compare?slugs=aave,uniswap" '\[|\{'
+
+echo "[8] Next (구현 시)"
 present C4-tradfi "TradFi asset_class 분기" 'tradfi' src/crawler/normalizer.rs
 present C4-ws "WebSocket type 분기" 'websocket' src/crawler/normalizer.rs
 if want E2; then big=$(find src/server -name '*.rs' 2>/dev/null -exec wc -l {} \; | awk '$1>800{print $2}'); [ -z "$big" ] && ok E2 "서버 .rs 800LOC 초과 0" || no E2 "800LOC 초과: $(echo "$big" | tr '\n' ' ')"; fi

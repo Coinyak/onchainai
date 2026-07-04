@@ -43,6 +43,14 @@ export const metadata: Metadata = {
     description: "Crypto tool directory — MCP, CLI, SDK, API, x402, RWA, AI agents",
     images: [DEFAULT_OG_IMAGE_PATH],
   },
+  icons: {
+    icon: [
+      { url: "/brand/onchainai-icon-32.png", sizes: "32x32", type: "image/png" },
+      { url: "/brand/onchainai-icon-16.png", sizes: "16x16", type: "image/png" },
+    ],
+    apple: [{ url: "/brand/onchainai-icon-180.png", sizes: "180x180", type: "image/png" }],
+  },
+  manifest: "/site.webmanifest",
   // Base.dev domain verification (dashboard.base.org → Settings → Builder Codes)
   other: {
     "base:app_id": "6a479e8a2876ee6c1138a70a",
@@ -62,7 +70,7 @@ export default function RootLayout({
       <body className="site-app-shell min-h-screen flex flex-col bg-neutral-bg text-primary font-sans">
         <Providers>
           <TopNav />
-          <main className="site-page-body flex-1 min-h-0 flex flex-col">{children}</main>
+          <main className="site-page-body flex-1 flex flex-col">{children}</main>
           <SiteFooter />
         </Providers>
       </body>

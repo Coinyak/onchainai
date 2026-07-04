@@ -68,21 +68,33 @@ function DetailMainContent({
             ← Back to compare
           </Link>
         )}
-        <TrustFacts tool={tool} facts={trustFacts} />
-        <InstallGuidePanel tool={tool} compact={compact} showProgress />
+        <InstallGuidePanel tool={tool} compact={compact} showProgress={compact} />
+        <TrustFacts
+          tool={tool}
+          facts={trustFacts}
+          variant={compact ? "preview" : "default"}
+        />
         {tool.description && (
-          <section className="detail-section">
-            <h2 className="text-h2 mb-3">Description</h2>
-            <p className="text-body-md md:text-mobile-body leading-relaxed detail-desc">
+          <section className={compact ? "preview-description" : "detail-section"}>
+            <h3 className={compact ? "preview-section-heading" : "text-h2 mb-3"}>Description</h3>
+            <p
+              className={
+                compact
+                  ? "preview-desc preview-desc-clamped"
+                  : "text-body-md md:text-mobile-body leading-relaxed detail-desc"
+              }
+            >
               {tool.description}
             </p>
           </section>
         )}
-        <div className="detail-compare-row">
-          <Link href={compareHref([tool.slug])} className="detail-compare-link">
-            Compare this tool
-          </Link>
-        </div>
+        {!compact && (
+          <div className="detail-compare-row">
+            <Link href={compareHref([tool.slug])} className="detail-compare-link">
+              Compare this tool
+            </Link>
+          </div>
+        )}
       </>
     );
   }
@@ -149,8 +161,11 @@ export function ToolDetail({
       ? "detail-content compact"
       : "detail-content";
 
+  const hideHeader = compact && addMode;
+
   return (
     <article className={`tool-detail ${contentClass}`}>
+      {!hideHeader && (
       <header className="tool-detail-header detail-header">
         <ToolLogo
           name={tool.name}
@@ -224,6 +239,7 @@ export function ToolDetail({
           )}
         </div>
       </header>
+      )}
 
       {showSidebar ? (
         <div className="detail-layout">

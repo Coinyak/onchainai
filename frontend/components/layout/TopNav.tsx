@@ -62,14 +62,16 @@ function ProfileMenu() {
             data-testid="profile-menu-dropdown"
             onClick={(e) => e.stopPropagation()}
           >
-            <Link
-              href="/dashboard"
-              role="menuitem"
-              className="site-profile-dropdown-item"
-              data-testid="profile-menu-dashboard"
-            >
-              Dashboard
-            </Link>
+            {user.is_admin && (
+              <Link
+                href="/dashboard"
+                role="menuitem"
+                className="site-profile-dropdown-item"
+                data-testid="profile-menu-dashboard"
+              >
+                Dashboard
+              </Link>
+            )}
             <Link
               href="/toolkit"
               role="menuitem"
@@ -77,6 +79,14 @@ function ProfileMenu() {
               data-testid="profile-menu-toolkit"
             >
               My Toolkit
+            </Link>
+            <Link
+              href="/connect#agent-sync"
+              role="menuitem"
+              className="site-profile-dropdown-item"
+              data-testid="profile-menu-link-agent"
+            >
+              Link your agent
             </Link>
             <Link
               href="/blueprints"

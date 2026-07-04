@@ -30,11 +30,11 @@ export interface OnchainaiConnectGuide {
   blocks: ConnectGuideBlock[];
 }
 
-function httpMcpJsonConfig(serverName: string, url: string): string {
+export function httpMcpJsonConfig(serverName: string, url: string): string {
   return JSON.stringify(
     {
       mcpServers: {
-        [serverName]: { url },
+        [serverName]: { type: "http", url },
       },
     },
     null,
@@ -42,15 +42,67 @@ function httpMcpJsonConfig(serverName: string, url: string): string {
   );
 }
 
+export function stdioMcpRemoteConfig(serverName: string, url: string): string {
+  return JSON.stringify(
+    {
+      mcpServers: {
+        [serverName]: {
+          command: "npx",
+          args: ["mcp-remote", url],
+        },
+      },
+    },
+    null,
+    2,
+  );
+}
+
+export const ONCHAINAI_MCP_HTTP_JSON = httpMcpJsonConfig(
+  ONCHAINAI_MCP_SERVER_NAME,
+  ONCHAINAI_MCP_HTTP_URL,
+);
+
+export const ONCHAINAI_MCP_STDIO_JSON = stdioMcpRemoteConfig(
+  ONCHAINAI_MCP_SERVER_NAME,
+  ONCHAINAI_MCP_HTTP_URL,
+);
+
+const cursorJsonSnippet = JSON.stringify(
+  {
+    mcpServers: {
+      [ONCHAINAI_MCP_SERVER_NAME]: { url: ONCHAINAI_MCP_HTTP_URL },
+    },
+  },
+  null,
+  2,
+);
+
 export function buildOnchainaiConnectGuide(
   client: ConnectCardClient,
 ): OnchainaiConnectGuide {
-  const jsonSnippet = httpMcpJsonConfig(
-    ONCHAINAI_MCP_SERVER_NAME,
-    ONCHAINAI_MCP_HTTP_URL,
-  );
-
   switch (client) {
+    case "generic":
+      return {
+        client,
+        blocks: [
+          {
+            steps: [
+              "Run the universal installer — it auto-detects many agents.",
+              "Or paste the HTTP JSON into any MCP client.",
+            ],
+            copyText: ONCHAINAI_MCP_UNIVERSAL_CMD,
+            copyLabel: "Copy command",
+            showShellPrefix: true,
+          },
+          {
+            title: "HTTP config",
+            steps: ["For clients that accept streamable HTTP MCP."],
+            copyText: ONCHAINAI_MCP_HTTP_JSON,
+            copyLabel: "Copy config",
+            configJson: ONCHAINAI_MCP_HTTP_JSON,
+          },
+        ],
+      };
     case "codex":
       return {
         client,
@@ -59,7 +111,7 @@ export function buildOnchainaiConnectGuide(
             steps: [
               "Install Codex CLI: npm i -g @openai/codex",
               "Run the command below to register OnchainAI MCP.",
-              "Complete OAuth in the browser when Codex prompts you.",
+              "Sign in to Codex if prompted — OnchainAI itself needs no API key.",
             ],
             copyText: `codex mcp add ${ONCHAINAI_MCP_SERVER_NAME} --url ${ONCHAINAI_MCP_HTTP_URL}`,
             copyLabel: "Copy command",
@@ -76,7 +128,7 @@ export function buildOnchainaiConnectGuide(
               "Enable Developer mode in ChatGPT (Settings → Connectors → Advanced settings).",
               "Open Settings → Connectors and create a new connector.",
               "Set Name to OnchainAI and MCP server URL to the endpoint below.",
-              "Choose OAuth if prompted, then use Developer mode in chat to invoke the connector.",
+              "Use Developer mode in chat to invoke the connector.",
             ],
             copyText: ONCHAINAI_MCP_HTTP_URL,
             copyLabel: "Copy endpoint URL",
@@ -102,6 +154,7 @@ export function buildOnchainaiConnectGuide(
             steps: [
               "Run the command below in your project terminal.",
               "Restart Claude Code and verify the server with /mcp.",
+              "Optional: install the Claude Code plugin on /connect for MCP + skill + /find-tool.",
             ],
             copyText: ONCHAINAI_CLAUDE_CODE_CMD,
             copyLabel: "Copy command",
@@ -118,9 +171,9 @@ export function buildOnchainaiConnectGuide(
               "Click Add to Cursor for a one-click install, or paste the JSON into .cursor/mcp.json.",
               "Reload MCP servers in Cursor after saving.",
             ],
-            copyText: jsonSnippet,
+            copyText: cursorJsonSnippet,
             copyLabel: "Copy config",
-            configJson: jsonSnippet,
+            configJson: cursorJsonSnippet,
             deeplinkHref: onchainaiCursorDeeplink(),
             deeplinkLabel: "Add to Cursor",
           },
@@ -147,15 +200,15 @@ export function buildOnchainaiConnectGuide(
 }
 
 export type ConnectPageClientId =
-  | "claude_code"
-  | "claude_desktop"
+  | "generic"
+  | "chatgpt"
   | "cursor"
   | "vscode"
+  | "claude_desktop"
+  | "claude_code"
   | "codex"
   | "windsurf"
-  | "gemini"
-  | "chatgpt"
-  | "generic";
+  | "gemini";
 
 export interface ConnectPageClient {
   id: ConnectPageClientId;
@@ -166,32 +219,45 @@ export interface ConnectPageClient {
 
 export const CONNECT_PAGE_CLIENTS: ConnectPageClient[] = [
   {
-    id: "claude_code",
-    label: "Claude Code",
-    icon: "terminal",
+    id: "generic",
+    label: "Generic MCP",
+    icon: "plug",
     blocks: [
       {
         steps: [
-          "Install Claude Code if needed: npm install -g @anthropic-ai/claude-code",
-          "Run the command below from your project directory.",
-          "Type /mcp in Claude Code to authenticate if required.",
+          "Use the universal installer for any detected agent, or paste the JSON into your client.",
+          "Streamable HTTP endpoint — no API key required.",
         ],
-        copyText: ONCHAINAI_CLAUDE_CODE_CMD,
+        copyText: ONCHAINAI_MCP_UNIVERSAL_CMD,
         copyLabel: "Copy command",
         showShellPrefix: true,
+      },
+      {
+        title: "HTTP config",
+        steps: ["Paste into clients that accept mcpServers JSON."],
+        copyText: ONCHAINAI_MCP_HTTP_JSON,
+        copyLabel: "Copy config",
+        configJson: ONCHAINAI_MCP_HTTP_JSON,
+      },
+      {
+        title: "Stdio bridge",
+        steps: ["For older clients that only support stdio MCP."],
+        copyText: ONCHAINAI_MCP_STDIO_JSON,
+        copyLabel: "Copy config",
+        configJson: ONCHAINAI_MCP_STDIO_JSON,
       },
     ],
   },
   {
-    id: "claude_desktop",
-    label: "Claude Desktop and Web",
-    icon: "message-square",
+    id: "chatgpt",
+    label: "ChatGPT connector",
+    icon: "bot",
     blocks: [
       {
         steps: [
-          "Open Settings → Connectors → Add custom connector.",
-          "Name: OnchainAI. URL: the MCP endpoint below.",
-          "Enable the connector in Claude Desktop or claude.ai.",
+          "Enable Developer mode (Settings → Connectors → Advanced settings).",
+          "Create a connector with Name OnchainAI and the MCP URL below.",
+          "Invoke the connector from Developer mode in chat.",
         ],
         copyText: ONCHAINAI_MCP_HTTP_URL,
         copyLabel: "Copy endpoint URL",
@@ -208,9 +274,9 @@ export const CONNECT_PAGE_CLIENTS: ConnectPageClient[] = [
           "Use Add to Cursor for one-click install, or add the JSON to .cursor/mcp.json.",
           "Reload MCP after saving the config.",
         ],
-        copyText: httpMcpJsonConfig(ONCHAINAI_MCP_SERVER_NAME, ONCHAINAI_MCP_HTTP_URL),
+        copyText: cursorJsonSnippet,
         copyLabel: "Copy config",
-        configJson: httpMcpJsonConfig(ONCHAINAI_MCP_SERVER_NAME, ONCHAINAI_MCP_HTTP_URL),
+        configJson: cursorJsonSnippet,
         deeplinkHref: onchainaiCursorDeeplink(),
         deeplinkLabel: "Add to Cursor",
       },
@@ -235,6 +301,40 @@ export const CONNECT_PAGE_CLIENTS: ConnectPageClient[] = [
     ],
   },
   {
+    id: "claude_desktop",
+    label: "Claude Desktop and Web",
+    icon: "message-square",
+    blocks: [
+      {
+        steps: [
+          "Open Settings → Connectors → Add custom connector.",
+          "Name: OnchainAI. URL: the MCP endpoint below.",
+          "Enable the connector in Claude Desktop or claude.ai.",
+        ],
+        copyText: ONCHAINAI_MCP_HTTP_URL,
+        copyLabel: "Copy endpoint URL",
+      },
+    ],
+  },
+  {
+    id: "claude_code",
+    label: "Claude Code",
+    icon: "terminal",
+    blocks: [
+      {
+        steps: [
+          "Install Claude Code if needed: npm install -g @anthropic-ai/claude-code",
+          "Run the command below from your project directory.",
+          "Restart Claude Code and check with /mcp.",
+          "Optional: use the Claude Code plugin section on this page for MCP + skill + /find-tool.",
+        ],
+        copyText: ONCHAINAI_CLAUDE_CODE_CMD,
+        copyLabel: "Copy command",
+        showShellPrefix: true,
+      },
+    ],
+  },
+  {
     id: "codex",
     label: "Codex CLI",
     icon: "terminal",
@@ -243,7 +343,7 @@ export const CONNECT_PAGE_CLIENTS: ConnectPageClient[] = [
         steps: [
           "Install Codex CLI: npm i -g @openai/codex",
           "Run the command below to register OnchainAI MCP.",
-          "Complete OAuth in the browser when Codex prompts you.",
+          "Sign in to Codex if prompted — OnchainAI itself needs no API key.",
         ],
         copyText: `codex mcp add ${ONCHAINAI_MCP_SERVER_NAME} --url ${ONCHAINAI_MCP_HTTP_URL}`,
         copyLabel: "Copy command",
@@ -290,73 +390,19 @@ export const CONNECT_PAGE_CLIENTS: ConnectPageClient[] = [
     blocks: [
       {
         steps: [
-          "Add the JSON to ~/.gemini/settings.json under mcpServers.",
-          "Restart your IDE or Gemini CLI and authenticate when prompted.",
+          "Prefer HTTP config when your client supports streamable HTTP MCP.",
+          "Otherwise add the stdio bridge JSON to ~/.gemini/settings.json under mcpServers.",
         ],
-        copyText: JSON.stringify(
-          {
-            mcpServers: {
-              [ONCHAINAI_MCP_SERVER_NAME]: {
-                command: "npx",
-                args: ["mcp-remote", ONCHAINAI_MCP_HTTP_URL],
-              },
-            },
-          },
-          null,
-          2,
-        ),
-        copyLabel: "Copy config",
-        configJson: JSON.stringify(
-          {
-            mcpServers: {
-              [ONCHAINAI_MCP_SERVER_NAME]: {
-                command: "npx",
-                args: ["mcp-remote", ONCHAINAI_MCP_HTTP_URL],
-              },
-            },
-          },
-          null,
-          2,
-        ),
-      },
-    ],
-  },
-  {
-    id: "chatgpt",
-    label: "ChatGPT (connector)",
-    icon: "bot",
-    blocks: [
-      {
-        steps: [
-          "Enable Developer mode (Settings → Connectors → Advanced settings).",
-          "Create a connector with Name OnchainAI and the MCP URL below.",
-          "Invoke the connector from Developer mode in chat.",
-        ],
-        copyText: ONCHAINAI_MCP_HTTP_URL,
-        copyLabel: "Copy endpoint URL",
-      },
-    ],
-  },
-  {
-    id: "generic",
-    label: "Generic MCP",
-    icon: "plug",
-    blocks: [
-      {
-        steps: [
-          "Use the universal installer for any detected agent, or paste the JSON into your client.",
-          "Official endpoint URL is listed below.",
-        ],
-        copyText: ONCHAINAI_MCP_UNIVERSAL_CMD,
-        copyLabel: "Copy command",
-        showShellPrefix: true,
+        copyText: ONCHAINAI_MCP_HTTP_JSON,
+        copyLabel: "Copy HTTP config",
+        configJson: ONCHAINAI_MCP_HTTP_JSON,
       },
       {
-        title: "HTTP config",
-        steps: ["Paste into clients that accept mcpServers JSON."],
-        copyText: httpMcpJsonConfig(ONCHAINAI_MCP_SERVER_NAME, ONCHAINAI_MCP_HTTP_URL),
-        copyLabel: "Copy config",
-        configJson: httpMcpJsonConfig(ONCHAINAI_MCP_SERVER_NAME, ONCHAINAI_MCP_HTTP_URL),
+        title: "Stdio bridge",
+        steps: ["Fallback for clients that require stdio transport."],
+        copyText: ONCHAINAI_MCP_STDIO_JSON,
+        copyLabel: "Copy stdio config",
+        configJson: ONCHAINAI_MCP_STDIO_JSON,
       },
     ],
   },

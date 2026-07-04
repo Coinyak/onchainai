@@ -9,14 +9,14 @@ This page is the wiki-style operating contract for coding agents. Keep `AGENTS.m
 | When | Command | Purpose |
 |------|---------|---------|
 | Once after clone | `./scripts/install-agent-hooks.sh` | Git pre-commit blocks stale UI commits (any tool) |
-| While iterating | `./scripts/dev-watch.sh` | Coherent SSR+WASM rebuild + live reload |
-| Before handoff/commit | `./scripts/ui-change-gate.sh` | Release build, restart, smoke, screenshots |
+| While iterating | `./scripts/dev-watch.sh` | Next.js HMR + local Rust API (no cargo-leptos) |
+| Before handoff/commit | `./scripts/ui-change-gate.sh` | API + Next release build, restart, smoke, screenshots |
 
 `restart-dev.sh`, `verify-bundle.sh`, and deploy scripts run inside the gate or operator deploy flow — not as separate agent UI steps.
 
 ## Principle
 
-Agents should rely on executable gates, not memory. The repo's common failure mode is a Leptos SSR/WASM/CSS mismatch: code changes are present, but localhost serves an old binary or the browser hydrates with old WASM. That makes UI changes look missing and can make existing buttons, sidebar controls, filters, or auth UI stop working.
+Agents should rely on executable gates, not memory. The repo's common failure mode is a **stale Next.js bundle** (`frontend/.next` older than edited `frontend/` sources) or a **split-stack mismatch** (Next.js up but Rust API down on `API_PORT`). That makes UI changes look missing and breaks auth, toolkit, or MCP proxy routes.
 
 ## Local Trouble Doctor
 
@@ -48,7 +48,7 @@ Future agent notes must follow the same LLM-wiki pattern:
 
 ## UI/Auth/Routing Gate
 
-Run this before final handoff if the change touches `src/pages`, `src/components`, `style`, `src/app.rs`, auth shell/nav code, UI server functions, browser smoke expectations, or route behavior:
+Run this before final handoff if the change touches `frontend/`, auth shell/nav code, routing/middleware, browser smoke expectations, or page behavior:
 
 ```bash
 ./scripts/ui-change-gate.sh
@@ -57,14 +57,14 @@ Run this before final handoff if the change touches `src/pages`, `src/components
 The gate runs:
 
 - `agent-harness-check.sh`
-- coherent Leptos release build and restart via `restart-dev.sh`
+- coherent API + Next.js release build and restart via `restart-dev.sh`
 - `verify-bundle.sh`
 - curl smoke
 - browser smoke
 - local auth smoke when available
 - desktop/mobile visual snapshots
 
-Do not use `cargo build --features ssr`, `cargo build --release --features ssr`, or `cargo run --features ssr` as final verification for UI/auth/routing work. Use `cargo check --features ssr` for non-UI compile checks only.
+Do not use `cargo build --release --features ssr` or `cargo run --features ssr` alone as final verification for UI/auth/routing work — run `./scripts/ui-change-gate.sh`. Use `cargo check --features ssr` for API-only compile checks.
 
 ## Universal Enforcement (Any Coding Tool)
 
@@ -77,7 +77,7 @@ rules apply. Run once after clone:
 
 **Primary (tool-agnostic):** sets `git config core.hooksPath scripts/git-hooks`.
 The pre-commit hook runs `ui-staleness-check.sh --staged` and blocks commits when
-staged UI sources are newer than the built WASM bundle. No IDE integration required.
+staged UI sources are newer than `frontend/.next/BUILD_ID`. No IDE integration required.
 
 **Optional (IDE-only):** committed stop hooks give earlier feedback before commit
 when the tool supports them:

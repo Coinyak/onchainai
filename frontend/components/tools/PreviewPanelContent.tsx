@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Star } from "lucide-react";
 import type { Tool } from "@/lib/api";
@@ -50,13 +50,23 @@ export function PreviewPanelContent({
   commentCount,
 }: PreviewPanelContentProps) {
   const [descExpanded, setDescExpanded] = useState(false);
+  const [descOverflows, setDescOverflows] = useState(false);
+  const descRef = useRef<HTMLParagraphElement>(null);
   const chains = chainTagsForTool(tool.chains);
   const visibleChains = chains.slice(0, PREVIEW_CHAINS_MAX);
   const extraChains = Math.max(0, chains.length - PREVIEW_CHAINS_MAX);
   const updated = timeAgo(tool.last_commit_at || tool.updated_at);
   const source = tool.official_team || tool.source || "—";
   const license = tool.license?.trim() || "—";
-  const hasLongDescription = (tool.description?.length ?? 0) > 180;
+
+  useLayoutEffect(() => {
+    const el = descRef.current;
+    if (!el || descExpanded || !tool.description) {
+      setDescOverflows(false);
+      return;
+    }
+    setDescOverflows(el.scrollHeight > el.clientHeight + 1);
+  }, [tool.description, descExpanded]);
 
   return (
     <>
@@ -127,10 +137,13 @@ export function PreviewPanelContent({
       {tool.description && (
         <section className="preview-description">
           <h3 className="preview-section-heading">Description</h3>
-          <p className={descExpanded ? "preview-desc" : "preview-desc preview-desc-clamped"}>
+          <p
+            ref={descRef}
+            className={descExpanded ? "preview-desc" : "preview-desc preview-desc-clamped"}
+          >
             {tool.description}
           </p>
-          {hasLongDescription && !descExpanded && (
+          {descOverflows && !descExpanded && (
             <button
               type="button"
               className="preview-desc-more"

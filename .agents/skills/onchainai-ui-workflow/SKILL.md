@@ -1,6 +1,6 @@
 ---
 name: onchainai-ui-workflow
-description: Use when changing or reviewing OnchainAI UI, Leptos components, Tailwind/CSS, responsive behavior, visual polish, accessibility, screenshots, browser smoke checks, or any public page layout in /src/pages, /src/components, /style, DESIGN.md, or docs/UI_UX_DESIGN.md.
+description: Use when changing or reviewing OnchainAI UI, Next.js components, Tailwind/CSS, responsive behavior, visual polish, accessibility, screenshots, browser smoke checks, or any public page layout in frontend/, DESIGN.md, or docs/UI_UX_DESIGN.md.
 ---
 
 # OnchainAI UI Workflow
@@ -16,7 +16,7 @@ Read these first for any UI change:
 3. `docs/UI_UX_DESIGN.md`
 4. `docs/BUILD_DEPLOY_RULES.md`
 
-Then inspect the affected Rust/Leptos component, page, CSS, and script files. Do not infer UI intent from screenshots alone when a design doc covers the surface.
+Then inspect the affected `frontend/` component, page, CSS, and script files. Do not infer UI intent from screenshots alone when a design doc covers the surface.
 
 ## Design Invariants
 
@@ -99,7 +99,7 @@ For **final** local verification after UI/auth/routing changes, run:
 ./scripts/ui-change-gate.sh
 ```
 
-This is the preferred agent path because it does a coherent Leptos release build, restarts the matching binary, verifies bundle timestamps, runs curl/browser/auth smoke, and captures desktop/mobile screenshots.
+This is the preferred agent path because it does a coherent API + Next.js release build, restarts both servers, verifies bundle timestamps, runs curl/browser/auth smoke, and captures desktop/mobile screenshots.
 
 ### 5. Visual QA Gate
 
@@ -118,7 +118,7 @@ Use the smallest set that matches the risk:
 | Change | Minimum verification |
 |---|---|
 | Text or tiny style change | `cargo fmt --check`, targeted visual screenshot |
-| Leptos component/layout | `./scripts/ui-change-gate.sh` before final handoff |
+| Next.js component/layout | `./scripts/ui-change-gate.sh` before final handoff |
 | Public route behavior | `./scripts/smoke-test.sh`, `node scripts/browser-smoke.mjs` |
 | Auth shell, routing, or server-function UI | `./scripts/ui-change-gate.sh` |
 | Release/deploy-facing UI | `./scripts/ui-change-gate.sh`, then deploy/post-deploy checks if shipping |

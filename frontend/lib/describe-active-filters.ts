@@ -1,6 +1,5 @@
 import type { CategoryWithCount } from "@/lib/api";
 import { type BrowserQueryParams, parseMulti } from "@/lib/browser-query";
-import { chainFallbackLabel } from "@/lib/chains";
 
 type LabeledOption = { id: string; label: string };
 
@@ -83,7 +82,8 @@ export function describeActiveFilters(
   pushAxisLines(lines, "Install risk", parseMulti(params.install_risk), INSTALL_RISK_LABELS);
 
   for (const id of parseMulti(params.chain)) {
-    lines.push(`Chain: ${chainFallbackLabel(id)}`);
+    const chainLabel = id.charAt(0).toUpperCase() + id.slice(1);
+    lines.push(`Chain: ${chainLabel}`);
   }
 
   const q = params.q?.trim();
