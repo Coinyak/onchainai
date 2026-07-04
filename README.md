@@ -28,7 +28,9 @@ afternoon of research.
 
 ## Use it from your agent (60 seconds)
 
-The OnchainAI MCP server is a free, read-only, no-auth endpoint:
+The OnchainAI MCP server is a no-auth endpoint. All discovery tools are free and
+read-only; the one exception is `check_endpoint_health`, an optional premium trust
+tool paid per call via x402:
 
 ```
 https://www.onchain-ai.xyz/mcp
@@ -61,6 +63,7 @@ Full per-client walkthroughs (Codex, Windsurf, Gemini CLI, …): [docs/CONNECT.m
 | `get_install_guide` | Platform-specific install steps (claude / cursor / generic / cli) with safety gating — `critical`-risk commands are withheld |
 | `list_categories` | Browse the taxonomy with tool counts |
 | `get_dashboard_snapshot` | Public coverage snapshot: totals, categories, trust, x402, featured |
+| `check_endpoint_health` | Endpoint liveness + 30-day probe uptime for a listed x402 tool — the one x402-paid call (HTTP 402 handshake) |
 
 ### Claude Code plugin
 
@@ -89,7 +92,7 @@ It ships with the plugin; you can also copy the skill directory into
 - **3-axis classification** — Function × Asset Class × Actor, plus chain tagging
 - **Trust & safety pipeline** — trust scores, identity-cluster checks (repo/npm/homepage), install-risk analysis with a hard block on `critical` commands, operator review queue, quarantine
 - **x402 awareness** — paid tools carry price metadata, verification flags, and referral/attribution disclosure ([policy below](#x402--referral-policy))
-- **MCP server for agents** — the five read-only tools above, rate-limited and sanitized
+- **MCP server for agents** — the read-only tools above, rate-limited and sanitized
 - **Claude Code plugin + skill** — one-command onboarding for agent users
 - **3-way auth** — GitHub OAuth + email magic link + SIWX wallet sign-in (CAIP-122)
 - **Community layer** — submissions, comments, upvotes, bookmarks, toolkit, compare, blueprints

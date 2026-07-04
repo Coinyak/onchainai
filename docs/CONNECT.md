@@ -2,7 +2,7 @@
 
 > Canonical connection guide. Live interactive version: [onchain-ai.xyz/connect](https://www.onchain-ai.xyz/connect).
 
-OnchainAI exposes one free, read-only, no-auth MCP endpoint:
+OnchainAI exposes one read-only, no-auth MCP endpoint:
 
 ```
 https://www.onchain-ai.xyz/mcp
@@ -10,7 +10,7 @@ https://www.onchain-ai.xyz/mcp
 
 - Transport: **streamable HTTP** (JSON-RPC 2.0 over `POST /mcp`; `GET` returns `405 Allow: POST` by design)
 - Auth: none. Rate limited per IP.
-- Tools: `search_tools`, `get_tool_detail`, `get_install_guide`, `list_categories`, `get_dashboard_snapshot`
+- Free tools: `search_tools`, `get_tool_detail`, `get_install_guide`, `list_categories`, `get_dashboard_snapshot` · Paid: `check_endpoint_health` (x402 per call)
 - This is the **only** official endpoint. Anything else claiming to be OnchainAI is not ours.
 
 ## Claude Code (CLI)

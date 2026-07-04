@@ -41,6 +41,10 @@
 - [[AGENT_READINESS_REPORT]] — Environment readiness report for coding agents
 - [[../CLAUDE.md]] — Claude Code entry point (imports AGENTS.md)
 
+## Archive
+
+- [[archive/README]] — 완료된 일회성 스펙·작업 지시서 보관소 (현행 규칙 아님; 에이전트는 작업 근거로 사용 금지)
+
 ## External References
 
 - [AGENTS.md spec](https://agents.md/) — Open standard, Linux Foundation
