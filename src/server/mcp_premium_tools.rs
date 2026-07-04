@@ -3,9 +3,7 @@
 use crate::discovery::normalize_compare_slugs;
 use crate::models::tool::sanitize_tool_for_public_response;
 use crate::models::Tool;
-use crate::server::functions::{
-    build_toolkit_payload, ToolComparisonView, ToolkitToolView,
-};
+use crate::server::functions::{build_toolkit_payload, ToolComparisonView, ToolkitToolView};
 use crate::server::queries::{APPROVED_TOOLS_BY_SLUGS_SQL, PUBLIC_TOOL_WHERE};
 use crate::server::review_persistence::list_public_official_links;
 use crate::trust_verification::verify_tool_trust;

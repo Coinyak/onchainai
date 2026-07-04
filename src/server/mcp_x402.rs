@@ -1,14 +1,21 @@
 //! Axis B MCP premium pricing — HTTP 402 on POST /mcp (no custody, no third-party proxy).
+//!
+//! Reuses the same facilitator verify/settle gate as K2 (`x402_payment`); the
+//! payee, network, and price come from operator-managed `site_settings` instead
+//! of env. Default disabled: all Axis B tools stay free until the operator
+//! enables MCP premium in admin settings.
 
-use base64::{engine::general_purpose::STANDARD, Engine as _};
+use axum::http::{HeaderMap, StatusCode};
+use axum::response::{IntoResponse, Response};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sqlx::PgPool;
 
 use crate::models::SiteSettings;
-
-pub const PAYMENT_REQUIRED_HEADER: &str = "PAYMENT-REQUIRED";
-pub const PAYMENT_SIGNATURE_HEADER: &str = "PAYMENT-SIGNATURE";
+use crate::server::x402_payment::{
+    default_usdc_asset, facilitator_client, payment_signature_from_headers, require_payment,
+    usd_to_usdc_atomic, PaymentSettlement, X402PaymentConfig,
+};
 
 /// MCP tools that may require OnchainAI's own x402 payment when premium is enabled.
 pub const PREMIUM_MCP_TOOLS: &[&str] = &["compare_tools", "export_toolkit"];
@@ -57,165 +64,120 @@ pub async fn load_mcp_premium_config(pool: &PgPool) -> Result<McpPremiumConfig, 
     })
 }
 
-pub fn build_payment_required_header(config: &McpPremiumConfig, tool_name: &str) -> String {
-    let mut accept = json!({
-        "scheme": "exact",
-        "network": config.network,
-        "price": config.price,
-        "payTo": config.pay_to,
-    });
-    if let Some(asset) = config.asset.as_deref().filter(|v| !v.is_empty()) {
-        accept["asset"] = json!(asset);
-    }
-    let body = json!({
-        "x402Version": 2,
-        "accepts": [accept],
-        "resource": {
-            "url": format!("mcp://tool/{tool_name}"),
-            "description": format!("OnchainAI MCP {tool_name}"),
-            "mimeType": "application/json",
-        },
-    });
-    STANDARD.encode(body.to_string())
+/// Payment-gate config for Axis B: env supplies facilitator URL + CDP auth;
+/// `site_settings` supplies payee, network, price, and (optionally) asset.
+fn axis_b_gate_config(config: &McpPremiumConfig) -> Result<X402PaymentConfig, String> {
+    let mut gate = X402PaymentConfig::from_env();
+    gate.pay_to = config.pay_to.clone();
+    gate.network = config.network.clone();
+    gate.asset = match config.asset.as_deref().filter(|v| !v.is_empty()) {
+        Some(asset) => asset.to_string(),
+        None => default_usdc_asset(&config.network),
+    };
+    gate.amount = usd_to_usdc_atomic(&config.price)
+        .ok_or_else(|| format!("invalid MCP premium price '{}'", config.price))?;
+    gate.price_display = config
+        .display_price
+        .clone()
+        .filter(|v| !v.is_empty())
+        .unwrap_or_else(|| config.price.clone());
+    // Caller has already checked `is_active()`; env `enabled` reflects K2 config,
+    // not the operator toggle, so force it on for this gate instance.
+    gate.enabled = true;
+    Ok(gate)
 }
 
-#[derive(Debug, Deserialize)]
-struct PaymentPayloadEnvelope {
-    #[serde(default)]
-    x402_version: Option<u8>,
-    #[serde(rename = "x402Version", default)]
-    x402_version_camel: Option<u8>,
-}
-
-/// Structural validation only — settlement verification uses an external facilitator when configured.
-pub fn payment_signature_structurally_valid(header: Option<&str>) -> bool {
-    let Some(raw) = header.map(str::trim).filter(|v| !v.is_empty()) else {
-        return false;
-    };
-    let decoded = match STANDARD.decode(raw) {
-        Ok(bytes) => bytes,
-        Err(_) => return payment_signature_is_json(raw),
-    };
-    let text = match std::str::from_utf8(&decoded) {
-        Ok(text) => text,
-        Err(_) => return false,
-    };
-    payment_signature_is_json(text)
-}
-
-fn payment_signature_is_json(text: &str) -> bool {
-    let parsed: PaymentPayloadEnvelope = match serde_json::from_str(text) {
-        Ok(parsed) => parsed,
-        Err(_) => return false,
-    };
-    parsed.x402_version == Some(2) || parsed.x402_version_camel == Some(2)
-}
-
-pub async fn payment_granted(
+/// Gate an Axis B premium tool call through facilitator verify + settle.
+///
+/// - `Ok(None)` — dev bypass accepted (local dev only)
+/// - `Ok(Some(settlement))` — payment verified and settled
+/// - `Err(response)` — HTTP 402 (PAYMENT-REQUIRED header + accepts body) or
+///   503 when premium is misconfigured; return verbatim from the handler.
+pub async fn require_axis_b_payment(
     config: &McpPremiumConfig,
-    payment_signature: Option<&str>,
-) -> Result<bool, String> {
-    if !config.is_active() {
-        return Ok(true);
-    }
-    if !payment_signature_structurally_valid(payment_signature) {
-        return Ok(false);
-    }
+    tool_name: &str,
+    headers: &HeaderMap,
+) -> Result<Option<PaymentSettlement>, Response> {
     if dev_accept_bypass_allowed()
         && std::env::var("ONCHAINAI_MCP_X402_DEV_ACCEPT")
             .ok()
             .is_some_and(|v| matches!(v.as_str(), "1" | "true" | "yes"))
+        && payment_signature_from_headers(headers).is_some()
     {
-        tracing::warn!("ONCHAINAI_MCP_X402_DEV_ACCEPT set — accepting MCP premium without facilitator verify");
-        return Ok(true);
-    }
-    let facilitator = std::env::var("X402_FACILITATOR_URL")
-        .ok()
-        .filter(|v| !v.trim().is_empty());
-    let Some(facilitator_url) = facilitator else {
         tracing::warn!(
-            "X402_FACILITATOR_URL unset — MCP premium payment signature present but not verified"
+            "ONCHAINAI_MCP_X402_DEV_ACCEPT set — accepting MCP premium without facilitator verify"
         );
-        return Ok(false);
-    };
-    verify_with_facilitator(&facilitator_url, payment_signature.unwrap_or_default(), config).await
-}
-
-async fn verify_with_facilitator(
-    facilitator_url: &str,
-    payment_signature: &str,
-    config: &McpPremiumConfig,
-) -> Result<bool, String> {
-    let base = facilitator_url.trim_end_matches('/');
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(10))
-        .build()
-        .map_err(|e| format!("facilitator client: {e}"))?;
-    let response = client
-        .post(format!("{base}/verify"))
-        .header(PAYMENT_SIGNATURE_HEADER, payment_signature)
-        .json(&json!({
-            "network": config.network,
-            "payTo": config.pay_to,
-            "price": config.price,
-        }))
-        .send()
-        .await
-        .map_err(|e| format!("facilitator verify failed: {e}"))?;
-    Ok(response.status().is_success())
-}
-
-pub fn premium_tool_notice(config: &McpPremiumConfig, tool_name: &str) -> Option<String> {
-    if !config.is_active() || !is_premium_mcp_tool(tool_name) {
-        return None;
+        return Ok(None);
     }
-    let price = config
-        .display_price
-        .as_deref()
-        .filter(|v| !v.is_empty())
-        .unwrap_or(config.price.as_str());
-    Some(format!(
-        "x402 premium tool ({price} per call). Retry POST /mcp with PAYMENT-SIGNATURE after wallet payment. Free discovery tools: search_tools, get_tool_detail, get_install_guide."
-    ))
+
+    let gate = match axis_b_gate_config(config) {
+        Ok(gate) => gate,
+        Err(message) => {
+            let body = json!({
+                "error": "mcp_premium_misconfigured",
+                "message": message,
+            });
+            return Err((StatusCode::SERVICE_UNAVAILABLE, axum::Json(body)).into_response());
+        }
+    };
+    let requirements = gate.requirement_for(
+        &format!("mcp://tool/{tool_name}"),
+        &format!("OnchainAI MCP {tool_name}"),
+        "application/json",
+    );
+    let client = facilitator_client();
+    require_payment(&client, &gate, headers, requirements)
+        .await
+        .map(Some)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    #[test]
-    fn premium_tool_names_are_stable() {
-        assert!(is_premium_mcp_tool("compare_tools"));
-        assert!(is_premium_mcp_tool("export_toolkit"));
-        assert!(!is_premium_mcp_tool("search_tools"));
-    }
-
-    #[test]
-    fn payment_required_header_is_base64_json() {
-        let config = McpPremiumConfig {
+    fn premium_config() -> McpPremiumConfig {
+        McpPremiumConfig {
             enabled: true,
             pay_to: "0x0000000000000000000000000000000000000001".into(),
             price: "$0.01".into(),
             network: "eip155:8453".into(),
             asset: None,
             display_price: Some("$0.01/call".into()),
-        };
-        let encoded = build_payment_required_header(&config, "compare_tools");
-        let decoded = STANDARD.decode(encoded).expect("base64");
-        let json: serde_json::Value = serde_json::from_slice(&decoded).expect("json");
-        assert_eq!(json["x402Version"], 2);
-        assert_eq!(json["accepts"][0]["payTo"], config.pay_to);
-        assert!(json["resource"]["url"]
-            .as_str()
-            .unwrap()
-            .contains("compare_tools"));
+        }
     }
 
     #[test]
-    fn payment_signature_requires_v2_marker() {
-        let payload = r#"{"x402Version":2,"payload":{}}"#;
-        let encoded = STANDARD.encode(payload);
-        assert!(payment_signature_structurally_valid(Some(&encoded)));
-        assert!(!payment_signature_structurally_valid(Some(r#"{"v":1}"#)));
+    fn premium_tool_names_are_stable() {
+        assert!(is_premium_mcp_tool("compare_tools"));
+        assert!(is_premium_mcp_tool("export_toolkit"));
+        assert!(!is_premium_mcp_tool("search_tools"));
+        assert!(!is_premium_mcp_tool("check_endpoint_health"));
+    }
+
+    #[test]
+    fn inactive_until_payee_and_price_set() {
+        let mut config = premium_config();
+        assert!(config.is_active());
+        config.pay_to.clear();
+        assert!(!config.is_active());
+    }
+
+    #[test]
+    fn axis_b_gate_overrides_env_with_site_settings() {
+        let config = premium_config();
+        let gate = axis_b_gate_config(&config).expect("gate config");
+        assert_eq!(gate.pay_to, config.pay_to);
+        assert_eq!(gate.network, "eip155:8453");
+        assert_eq!(gate.amount, "10000"); // $0.01 → USDC 6-decimals atomic
+        assert_eq!(gate.price_display, "$0.01/call");
+        assert!(gate.enabled);
+        assert!(!gate.asset.is_empty(), "asset defaults from network");
+    }
+
+    #[test]
+    fn axis_b_gate_rejects_unparseable_price() {
+        let mut config = premium_config();
+        config.price = "one cent".into();
+        assert!(axis_b_gate_config(&config).is_err());
     }
 }

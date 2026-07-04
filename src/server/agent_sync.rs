@@ -433,7 +433,7 @@ pub async fn device_approve(
     )
     .await?;
 
-    sqlx::query(
+    let updated = sqlx::query(
         r#"
         UPDATE agent_device_sessions
         SET status = 'approved',
@@ -441,7 +441,7 @@ pub async fn device_approve(
             agent_token_id = $3,
             pending_token = $4,
             approved_at = now()
-        WHERE id = $1
+        WHERE id = $1 AND status = 'pending'
         "#,
     )
     .bind(session.id)
@@ -451,6 +451,13 @@ pub async fn device_approve(
     .execute(pool)
     .await
     .map_err(|e| FnError::new(format!("device approve failed: {e}")))?;
+
+    if updated.rows_affected() == 0 {
+        // Lost a concurrent approve race — revoke the token we just minted so
+        // no orphaned-but-valid credential remains.
+        let _ = revoke_token(pool, user_id, minted.id).await;
+        return Err(FnError::new("code already used"));
+    }
 
     Ok(MintTokenResponse {
         id: minted.id,
@@ -482,8 +489,15 @@ pub async fn device_poll(pool: &PgPool, device_code: &str) -> Result<DevicePollR
     .ok_or_else(|| FnError::new("unknown device session"))?;
 
     if row.expires_at < Utc::now() {
+        // Expire the session and drop any unclaimed plaintext token so it
+        // never lingers at rest past the TTL.
         let _ = sqlx::query(
-            "UPDATE agent_device_sessions SET status = 'expired' WHERE device_code_hash = $1 AND status = 'pending'",
+            r#"
+            UPDATE agent_device_sessions
+            SET status = CASE WHEN status = 'pending' THEN 'expired' ELSE status END,
+                pending_token = NULL
+            WHERE device_code_hash = $1
+            "#,
         )
         .bind(&hash)
         .execute(pool)

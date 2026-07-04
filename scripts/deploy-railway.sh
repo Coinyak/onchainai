@@ -12,6 +12,13 @@
 #
 # Normal prod path: merge to main → Railway GitHub deploy (watchPatterns in railway.json).
 # See docs/superpowers/specs/2026-07-05-split-deploy-automation-spec.md
+#
+# `railway up` is called with an explicit `"${ROOT}" --path-as-root` — do not
+# drop this. `~/.railway/config.json` links this project to a fixed directory
+# path (whichever checkout first ran `railway link`); if that path differs
+# from where this script lives (e.g. running from a `git worktree` checkout),
+# a bare `railway up` silently uploads/builds from the *linked* path instead
+# of the caller's cwd, producing a stale image with no error.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -123,6 +130,25 @@ sync_vars() {
   if [[ -n "${GITHUB_REDIRECT_URI:-}" ]]; then
     vars+=("GITHUB_REDIRECT_URI=${GITHUB_REDIRECT_URI}")
   fi
+  if [[ -n "${X402_FACILITATOR_URL:-}" ]]; then
+    vars+=("X402_FACILITATOR_URL=${X402_FACILITATOR_URL}")
+  fi
+  if [[ -n "${X402_PAY_TO_ADDRESS:-}" ]]; then
+    vars+=("X402_PAY_TO_ADDRESS=${X402_PAY_TO_ADDRESS}")
+  fi
+  if [[ -n "${X402_NETWORK:-}" ]]; then
+    vars+=("X402_NETWORK=${X402_NETWORK}")
+  fi
+  if [[ -n "${X402_PREMIUM_PRICE_USD:-}" ]]; then
+    # Quote so literal "$0.001" is not expanded by bash or the Railway CLI.
+    vars+=('X402_PREMIUM_PRICE_USD='"${X402_PREMIUM_PRICE_USD}")
+  fi
+  if [[ -n "${CDP_API_KEY_NAME:-}" ]]; then
+    vars+=("CDP_API_KEY_NAME=${CDP_API_KEY_NAME}")
+  fi
+  if [[ -n "${CDP_API_KEY_PRIVATE_KEY:-}" ]]; then
+    vars+=("CDP_API_KEY_PRIVATE_KEY=${CDP_API_KEY_PRIVATE_KEY}")
+  fi
   railway variable set -s "${SERVICE_NAME}" --skip-deploys "${vars[@]}"
 }
 
@@ -137,13 +163,13 @@ fi
 # with production env (not the empty/default first boot).
 if ! railway status --json 2>/dev/null | /usr/bin/grep -q '"services"'; then
   echo "Initial deploy (creates service; production env applied on the next up)..."
-  railway up -y --detach -s "${SERVICE_NAME}"
+  railway up "${ROOT}" --path-as-root -y --detach -s "${SERVICE_NAME}"
 fi
 
 sync_vars
 
 echo "Deploying from Dockerfile with production env..."
-railway up -y --detach -s "${SERVICE_NAME}"
+railway up "${ROOT}" --path-as-root -y --detach -s "${SERVICE_NAME}"
 
 DEPLOY_WAIT_ATTEMPTS="${DEPLOY_WAIT_ATTEMPTS:-120}"
 DEPLOY_WAIT_INTERVAL="${DEPLOY_WAIT_INTERVAL:-5}"

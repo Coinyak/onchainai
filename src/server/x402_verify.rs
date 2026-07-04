@@ -46,6 +46,29 @@ struct PaymentAccept {
     #[serde(rename = "maxAmount")]
     max_amount: Option<String>,
     asset: Option<String>,
+    network: Option<String>,
+    #[serde(rename = "payTo")]
+    pay_to: Option<String>,
+    description: Option<String>,
+}
+
+/// Full first-accept payment details for the self-listing probe preview.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct X402ProbeDetails {
+    pub amount: Option<String>,
+    pub asset: Option<String>,
+    pub network: Option<String>,
+    pub pay_to: Option<String>,
+    pub description: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ProbeDetailsOutcome {
+    Live(X402ProbeDetails),
+    NotPaymentRequired,
+    SsrfBlocked(String),
+    RequestFailed(String),
+    ParseFailed,
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -174,18 +197,27 @@ fn truncate_body(body: &str) -> &str {
     &body[..end]
 }
 
-fn parse_payment_requirements(body: &str) -> Option<(Option<String>, Option<String>)> {
+fn parse_first_payment_accept(body: &str) -> Option<X402ProbeDetails> {
     let trimmed = truncate_body(body.trim());
     if trimmed.is_empty() {
         return None;
     }
-    let parsed: PaymentRequirements = serde_json::from_str(trimmed).ok()?;
-    let first = parsed.accepts.first()?;
-    let amount = first
-        .max_amount_required
-        .clone()
-        .or_else(|| first.max_amount.clone());
-    Some((amount, first.asset.clone()))
+    let mut parsed: PaymentRequirements = serde_json::from_str(trimmed).ok()?;
+    if parsed.accepts.is_empty() {
+        return None;
+    }
+    let first = parsed.accepts.swap_remove(0);
+    Some(X402ProbeDetails {
+        amount: first.max_amount_required.or(first.max_amount),
+        asset: first.asset,
+        network: first.network,
+        pay_to: first.pay_to,
+        description: first.description,
+    })
+}
+
+fn parse_payment_requirements(body: &str) -> Option<(Option<String>, Option<String>)> {
+    parse_first_payment_accept(body).map(|d| (d.amount, d.asset))
 }
 
 /// Normalize advertised x402_price text for comparison with probe amount strings.
@@ -222,36 +254,68 @@ fn pinned_probe_client(host: &str, addr: SocketAddr) -> reqwest::Client {
         .unwrap_or_else(|_| reqwest::Client::new())
 }
 
-/// Probe an x402 endpoint. Builds a per-host DNS-pinned client (shared pools are not reused).
-pub async fn probe_x402_endpoint(url_str: &str) -> ProbeOutcome {
-    let parsed = match validate_probe_url(url_str) {
-        Ok(url) => url,
-        Err(reason) => return ProbeOutcome::SsrfBlocked(reason),
-    };
+enum ProbeFetchError {
+    SsrfBlocked(String),
+    RequestFailed(String),
+}
+
+/// Shared SSRF-guarded fetch: validate URL, pin DNS, POST-then-GET, bounded read.
+async fn fetch_probe_response(url_str: &str) -> Result<(StatusCode, String), ProbeFetchError> {
+    let parsed = validate_probe_url(url_str).map_err(ProbeFetchError::SsrfBlocked)?;
     let host = match parsed.host_str() {
         Some(host) => host,
-        None => return ProbeOutcome::SsrfBlocked("url must include a host".into()),
+        None => {
+            return Err(ProbeFetchError::SsrfBlocked(
+                "url must include a host".into(),
+            ))
+        }
     };
-    let pinned_addr = match resolve_public_probe_addr(host).await {
-        Ok(addr) => addr,
-        Err(reason) => return ProbeOutcome::SsrfBlocked(reason),
-    };
+    let pinned_addr = resolve_public_probe_addr(host)
+        .await
+        .map_err(ProbeFetchError::SsrfBlocked)?;
     let pinned_client = pinned_probe_client(host, pinned_addr);
 
     let response = match pinned_client.post(parsed.clone()).send().await {
         Ok(resp) => resp,
-        Err(_) => match pinned_client.get(parsed).send().await {
-            Ok(resp) => resp,
-            Err(e) => return ProbeOutcome::RequestFailed(e.to_string()),
-        },
+        Err(_) => pinned_client
+            .get(parsed)
+            .send()
+            .await
+            .map_err(|e| ProbeFetchError::RequestFailed(e.to_string()))?,
     };
     let status = response.status();
-    let body = match read_limited_response_body(response).await {
-        Ok(text) => text,
-        Err(e) => return ProbeOutcome::RequestFailed(e),
-    };
+    let body = read_limited_response_body(response)
+        .await
+        .map_err(ProbeFetchError::RequestFailed)?;
+    Ok((status, body))
+}
 
-    classify_probe_response(status, &body)
+/// Probe an x402 endpoint. Builds a per-host DNS-pinned client (shared pools are not reused).
+pub async fn probe_x402_endpoint(url_str: &str) -> ProbeOutcome {
+    match fetch_probe_response(url_str).await {
+        Ok((status, body)) => classify_probe_response(status, &body),
+        Err(ProbeFetchError::SsrfBlocked(reason)) => ProbeOutcome::SsrfBlocked(reason),
+        Err(ProbeFetchError::RequestFailed(reason)) => ProbeOutcome::RequestFailed(reason),
+    }
+}
+
+/// Probe an x402 endpoint and return full payment details (self-listing preview/publish).
+pub async fn probe_x402_details(url_str: &str) -> ProbeDetailsOutcome {
+    match fetch_probe_response(url_str).await {
+        Ok((status, body)) => classify_probe_details(status, &body),
+        Err(ProbeFetchError::SsrfBlocked(reason)) => ProbeDetailsOutcome::SsrfBlocked(reason),
+        Err(ProbeFetchError::RequestFailed(reason)) => ProbeDetailsOutcome::RequestFailed(reason),
+    }
+}
+
+pub fn classify_probe_details(status: StatusCode, body: &str) -> ProbeDetailsOutcome {
+    if status != StatusCode::PAYMENT_REQUIRED {
+        return ProbeDetailsOutcome::NotPaymentRequired;
+    }
+    match parse_first_payment_accept(body) {
+        Some(details) => ProbeDetailsOutcome::Live(details),
+        None => ProbeDetailsOutcome::ParseFailed,
+    }
 }
 
 pub fn classify_probe_response(status: StatusCode, body: &str) -> ProbeOutcome {

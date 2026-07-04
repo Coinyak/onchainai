@@ -195,11 +195,17 @@ pub(crate) fn validate_mcp_premium_settings(
             .strip_prefix("eip155:")
             .is_some_and(|id| !id.is_empty() && id.chars().all(|c| c.is_ascii_digit()));
     let valid_solana = network.starts_with("solana:")
-        && network.strip_prefix("solana:").is_some_and(|c| !c.is_empty());
+        && network
+            .strip_prefix("solana:")
+            .is_some_and(|c| !c.is_empty());
     if !(valid_eip155 || valid_solana) {
         return Err("MCP premium network must be eip155:<chainId> or solana:<cluster>");
     }
-    validate_optional_text_len(asset, 200, "MCP premium asset must be 200 characters or fewer")?;
+    validate_optional_text_len(
+        asset,
+        200,
+        "MCP premium asset must be 200 characters or fewer",
+    )?;
     validate_optional_text_len(
         display_price,
         100,
@@ -215,7 +221,11 @@ pub(crate) fn validate_mcp_premium_settings(
     if !pay_to.starts_with("0x") || pay_to.len() != 42 {
         return Err("MCP premium pay-to must be a 42-character 0x EVM address");
     }
-    validate_optional_text_len(Some(price), 50, "MCP premium price must be 50 characters or fewer")?;
+    validate_optional_text_len(
+        Some(price),
+        50,
+        "MCP premium price must be 50 characters or fewer",
+    )?;
     Ok(())
 }
 

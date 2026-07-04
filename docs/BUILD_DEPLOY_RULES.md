@@ -97,6 +97,7 @@ Older docs, skills, and comments may still mention `cargo leptos watch`, `target
 | API 401/502 from UI | API not running or wrong `API_PROXY_TARGET` | Check API on `API_PORT`; restart `dev-watch.sh` |
 | Gate fails bundle verify | Partial rebuild | `./scripts/release-build.sh` |
 | Low disk before release build | Large `target/` | `./scripts/disk-guard.sh` — see `docs/DISK_MAINTENANCE.md` |
+| Railway deploy "succeeds" but runtime crashes on stale code (e.g. a migration version mismatch) | `railway up` run from a `git worktree` or any directory other than the one `~/.railway/config.json` has linked — it silently uploads/builds from the *linked* path, not cwd, with no error | Already fixed in `deploy-railway.sh` (`railway up "${ROOT}" --path-as-root`) — never call bare `railway up` from a worktree |
 
 ```bash
 ./scripts/local-doctor.sh

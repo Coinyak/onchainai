@@ -42,6 +42,7 @@ ssr = [
     "dep:governor",
     "dep:tower_governor",
     "dep:base64",
+    "dep:ed25519-dalek",
     "dep:tracing",
     "dep:tracing-subscriber",
 ]
@@ -61,6 +62,7 @@ sqlx = { version = "0.8", features = ["postgres", "uuid", "chrono", "json", "mac
 reqwest = { version = "0.12", features = ["json"], optional = true }
 scraper = { version = "0.22", optional = true }
 base64 = { version = "0.22", optional = true }
+ed25519-dalek = { version = "2", optional = true }
 urlencoding = "2"
 url = "2"
 tokio = { version = "1", features = ["full"], optional = true }

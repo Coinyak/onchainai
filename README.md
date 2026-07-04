@@ -28,7 +28,9 @@ afternoon of research.
 
 ## Use it from your agent (60 seconds)
 
-The OnchainAI MCP server is a free, read-only, no-auth endpoint:
+The OnchainAI MCP server is a no-auth endpoint. All discovery tools are free and
+read-only; the one exception is `check_endpoint_health`, an optional premium trust
+tool paid per call via x402:
 
 ```
 https://www.onchain-ai.xyz/mcp
@@ -61,6 +63,12 @@ Full per-client walkthroughs (Codex, Windsurf, Gemini CLI, …): [docs/CONNECT.m
 | `get_install_guide` | Platform-specific install steps (claude / cursor / generic / cli) with safety gating — `critical`-risk commands are withheld |
 | `list_categories` | Browse the taxonomy with tool counts |
 | `get_dashboard_snapshot` | Public coverage snapshot: totals, categories, trust, x402, featured |
+| `compare_tools` | Side-by-side comparison of 2–4 tools on trust, risk, chains, pricing (free today; operator can enable x402 premium) |
+| `export_toolkit` | Export a JSON + markdown install kit by slugs or category (free today; operator can enable x402 premium) |
+| `check_endpoint_health` | Endpoint liveness + 30-day probe uptime for a listed x402 tool — x402-paid per call (HTTP 402 handshake) |
+
+Linking your account from a coding agent (`/connect#agent-sync`) unlocks three more:
+`save_to_toolkit`, `save_stack_to_blueprint`, and `link_status`.
 
 ### Claude Code plugin
 
@@ -89,7 +97,7 @@ It ships with the plugin; you can also copy the skill directory into
 - **3-axis classification** — Function × Asset Class × Actor, plus chain tagging
 - **Trust & safety pipeline** — trust scores, identity-cluster checks (repo/npm/homepage), install-risk analysis with a hard block on `critical` commands, operator review queue, quarantine
 - **x402 awareness** — paid tools carry price metadata, verification flags, and referral/attribution disclosure ([policy below](#x402--referral-policy))
-- **MCP server for agents** — the five read-only tools above, rate-limited and sanitized
+- **MCP server for agents** — the read-only tools above, rate-limited and sanitized
 - **Claude Code plugin + skill** — one-command onboarding for agent users
 - **3-way auth** — GitHub OAuth + email magic link + SIWX wallet sign-in (CAIP-122)
 - **Community layer** — submissions, comments, upvotes, bookmarks, toolkit, compare, blueprints

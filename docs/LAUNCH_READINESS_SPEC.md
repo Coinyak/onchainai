@@ -47,9 +47,10 @@ Rust 바이너리는 API/MCP/크롤러(Railway), DB는 Supabase. Vercel이 `/api
 ### 1.2 공개 유지 결정 (스캔 결과 이상 없음)
 - 추적 파일 시크릿 스캔: 토큰 패턴(ghp_/sk-/JWT/AKIA/service key) 0건. 지갑주소는 테스트
   벡터·제로주소·dev seed뿐. `.env`류가 히스토리에 add된 적 없음(`git log --diff-filter=A` 확인).
-- `docs/superpowers/`, `GROK_FULL_SPEC_TASK.md`, `.cursor/.factory/.grok/.agents` 등 내부
+- `docs/superpowers/`, `.cursor/.factory/.grok/.agents` 등 내부
   에이전트 운영 파일: **공개 유지**. 민감정보 없고 "에이전트 네이티브 레포" 증거 가치가 있음.
-  (원하면 P2에서 `docs/archive/`로 이동만.)
+- ✅ 완료된 일회성 작업 지시서(`GROK_FULL_SPEC_TASK.md`, `UI_UX_IMPROVEMENT_SPEC.md` 등)와
+  일회성 검증 스크립트는 `docs/archive/`, `scripts/archive/`로 이동 (목록: `docs/archive/README.md`).
 - `seeds/`, `supabase/config.toml`, `scripts/dns-records.txt`: 공개 무해 확인.
 - `ADMIN_GITHUB_LOGINS`는 서버 env로만 동작 — 코드/례시에 남은 값은 공개 GitHub 핸들이라 무해.
 

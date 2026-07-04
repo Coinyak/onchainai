@@ -28,6 +28,8 @@ pub const AGENT_TOKEN_MINT_PER_HOUR: u32 = 5;
 pub const AGENT_BLUEPRINT_SYNC_PER_MINUTE: u32 = 30;
 /// Unauthenticated device-flow start: at most 10 per minute per IP.
 pub const AGENT_DEVICE_START_PER_MINUTE: u32 = 10;
+/// x402 self-listing probe previews: at most 10 per minute per user (outbound fetch).
+pub const X402_PROBE_PER_MINUTE: u32 = 10;
 /// General API traffic baseline (see [`crate::build_app`] — burst is 2× this, 5 req/s refill).
 pub const GENERAL_PER_MINUTE: u32 = 60;
 
@@ -47,6 +49,8 @@ static AGENT_BLUEPRINT_SYNC_LIMITER: LazyLock<DefaultKeyedRateLimiter<Uuid>> =
     LazyLock::new(|| RateLimiter::dashmap(agent_blueprint_sync_quota()));
 static AGENT_DEVICE_START_LIMITER: LazyLock<DefaultKeyedRateLimiter<String>> =
     LazyLock::new(|| RateLimiter::dashmap(agent_device_start_quota()));
+static X402_PROBE_LIMITER: LazyLock<DefaultKeyedRateLimiter<Uuid>> =
+    LazyLock::new(|| RateLimiter::dashmap(x402_probe_quota()));
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum UserRateLimitAction {
@@ -55,6 +59,7 @@ pub enum UserRateLimitAction {
     ToggleBookmark,
     AdminX402Verify,
     AgentBlueprintSync,
+    X402Probe,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -107,9 +112,12 @@ pub fn agent_blueprint_sync_quota() -> Quota {
 
 pub fn agent_device_start_quota() -> Quota {
     Quota::per_minute(
-        NonZeroU32::new(AGENT_DEVICE_START_PER_MINUTE)
-            .expect("non-zero agent device start quota"),
+        NonZeroU32::new(AGENT_DEVICE_START_PER_MINUTE).expect("non-zero agent device start quota"),
     )
+}
+
+pub fn x402_probe_quota() -> Quota {
+    Quota::per_minute(NonZeroU32::new(X402_PROBE_PER_MINUTE).expect("non-zero x402 probe quota"))
 }
 
 /// Check a per-user rate limit before mutating state.
@@ -123,6 +131,7 @@ pub fn check_user_rate_limit(
         UserRateLimitAction::ToggleBookmark => &BOOKMARK_LIMITER,
         UserRateLimitAction::AdminX402Verify => &ADMIN_X402_VERIFY_LIMITER,
         UserRateLimitAction::AgentBlueprintSync => &AGENT_BLUEPRINT_SYNC_LIMITER,
+        UserRateLimitAction::X402Probe => &X402_PROBE_LIMITER,
     };
     limiter.check_key(&user_id).map_err(|_| RateLimitExceeded {
         message: "too many requests; try again later",
@@ -158,10 +167,7 @@ pub fn check_mcp_ip_rate_limit(ip: &str) -> Result<(), RateLimitExceeded> {
 
 /// Best-effort client IP from Axum headers + peer address.
 pub fn client_ip_from_connect(headers: &HeaderMap, addr: SocketAddr) -> String {
-    if let Some(forwarded) = headers
-        .get("x-forwarded-for")
-        .and_then(|v| v.to_str().ok())
-    {
+    if let Some(forwarded) = headers.get("x-forwarded-for").and_then(|v| v.to_str().ok()) {
         if let Some(first) = forwarded.split(',').next() {
             let ip = first.trim();
             if !ip.is_empty() {

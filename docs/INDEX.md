@@ -19,6 +19,7 @@
 - [[CONNECT]] — Connect any MCP client, install the Claude Code plugin/skill (user-facing)
 - [[LAUNCH_READINESS_SPEC]] — GitHub 공개 전환 체크리스트, 온보딩 표면, 등재 채널, x402 검증 잡, 어댑션 계측
 - [[X402_MONETIZATION_SPEC]] — x402 수익·제품 정본 (가격, 무료 티어, 금지, DoD)
+- [[X402_OPEN_LISTING_SPEC]] — x402 self-serve open listing + K2 check_endpoint_health premium (facilitator settle, no-custody)
 - [[X402_ROADMAP]] — x402 로드맵 (living plan: 페이즈 체크리스트·스프린트·KPI; **자문용, 변동 가능**)
 - [[X402_REFERRAL_SPEC]] — x402 레퍼럴/어트리뷰션 설계 (no-custody 원칙)
 - [[MCP_X402_MONETIZATION_SPEC]] — MCP premium Axis B x402 (compare_tools/export_toolkit)
@@ -39,6 +40,10 @@
 - [[handoff-packet-template]] — Copy-paste handoff between subagents
 - [[AGENT_READINESS_REPORT]] — Environment readiness report for coding agents
 - [[../CLAUDE.md]] — Claude Code entry point (imports AGENTS.md)
+
+## Archive
+
+- [[archive/README]] — 완료된 일회성 스펙·작업 지시서 보관소 (현행 규칙 아님; 에이전트는 작업 근거로 사용 금지)
 
 ## External References
 

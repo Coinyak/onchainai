@@ -39,6 +39,23 @@ async fn submit_tool(
         return Err(ApiError::BadRequest(limit.to_string()));
     }
 
+    // x402 listings go through the probe-gated open-listing flow, and only when
+    // the operator switch is on (X402_OPEN_LISTING_SPEC §L1 / activation spec X8).
+    if input.tool_type.trim() == "x402" {
+        let allow = sqlx::query_scalar::<_, bool>(
+            "SELECT allow_x402_registration FROM site_settings LIMIT 1",
+        )
+        .fetch_optional(&state.pool)
+        .await
+        .map_err(|e| ApiError::Internal(format!("failed to load site settings: {e}")))?
+        .unwrap_or(false);
+        if !allow {
+            return Err(ApiError::BadRequest(
+                "x402 submissions are currently disabled".into(),
+            ));
+        }
+    }
+
     let scan = scan_submission(&input);
     let chains = parse_submission_chains(&input.chains_raw);
     let slug = base_slug(input.name.trim());
@@ -148,5 +165,6 @@ fn submission_payload(
         official_team_claim: input.official_team_claim,
         verification_note: normalized_optional_string(input.verification_note.as_deref()),
         slug,
+        x402_endpoint_url: None,
     }
 }

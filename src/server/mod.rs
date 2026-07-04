@@ -29,4 +29,8 @@ pub mod secret_redaction;
 #[cfg(feature = "ssr")]
 pub mod tool_categories;
 #[cfg(feature = "ssr")]
+pub mod x402_payment;
+#[cfg(feature = "ssr")]
+pub mod x402_premium;
+#[cfg(feature = "ssr")]
 pub mod x402_verify;

@@ -4,12 +4,15 @@ interface EmptyStateProps {
   message?: string;
   filterLines?: string[];
   clearHref?: string;
+  /** x402 filter active with no results: point to the open-listing hub. */
+  showX402Cta?: boolean;
 }
 
 export function EmptyState({
   message = "No tools match your filters.",
   filterLines = [],
   clearHref = "",
+  showX402Cta = false,
 }: EmptyStateProps) {
   const hasFilters = filterLines.length > 0;
   const showClear = hasFilters && clearHref;
@@ -41,9 +44,19 @@ export function EmptyState({
             Clear filters
           </Link>
         )}
-        <Link href="/submit" className="empty-state-submit-btn">
-          Suggest a tool
-        </Link>
+        {showX402Cta ? (
+          <Link
+            href="/x402"
+            className="empty-state-submit-btn"
+            data-testid="empty-state-x402-cta"
+          >
+            List an x402 endpoint
+          </Link>
+        ) : (
+          <Link href="/submit" className="empty-state-submit-btn">
+            Suggest a tool
+          </Link>
+        )}
       </div>
     </div>
   );

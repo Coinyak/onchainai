@@ -122,21 +122,11 @@ async fn update_site_settings(
     )
     .bind(payload.x402_builder_code.as_deref().map(str::trim))
     .bind(payload.mcp_premium_enabled)
-    .bind(
-        payload
-            .mcp_premium_pay_to_address
-            .as_deref()
-            .map(str::trim),
-    )
+    .bind(payload.mcp_premium_pay_to_address.as_deref().map(str::trim))
     .bind(payload.mcp_premium_price.as_deref().map(str::trim))
     .bind(payload.mcp_premium_network.trim())
     .bind(payload.mcp_premium_asset.as_deref().map(str::trim))
-    .bind(
-        payload
-            .mcp_premium_display_price
-            .as_deref()
-            .map(str::trim),
-    )
+    .bind(payload.mcp_premium_display_price.as_deref().map(str::trim))
     .bind(payload.hero_title.as_deref().map(str::trim))
     .bind(payload.hero_subtitle.as_deref().map(str::trim))
     .bind(payload.about_content.as_deref().map(str::trim))
