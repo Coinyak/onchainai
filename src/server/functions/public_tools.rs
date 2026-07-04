@@ -168,7 +168,7 @@ pub struct ToolListRequest {
     pub query: Option<String>,
 }
 
-/// Optional axis filters for tool list/count queries (AND across axes; OR within axis via ANY).
+/// Optional axis filters for tool list/count queries (AND across axes and within each axis).
 #[derive(Debug, Clone, Default, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct ToolFilters {
     #[serde(default)]
@@ -190,54 +190,31 @@ pub struct ToolFilters {
 }
 
 #[cfg(feature = "ssr")]
+fn append_scalar_intersection<'qb>(
+    query: &mut sqlx::QueryBuilder<'qb, sqlx::Postgres>,
+    column: &str,
+    values: &'qb [String],
+) {
+    for value in values {
+        query.push(" AND ").push(column).push(" = ").push_bind(value);
+    }
+}
+
+#[cfg(feature = "ssr")]
 pub(crate) fn append_tool_filters<'qb>(
     query: &mut sqlx::QueryBuilder<'qb, sqlx::Postgres>,
     filters: &'qb ToolFilters,
 ) {
-    if !filters.function.is_empty() {
-        query
-            .push(" AND function = ANY(")
-            .push_bind(&filters.function)
-            .push(")");
-    }
-    if !filters.asset_class.is_empty() {
-        query
-            .push(" AND asset_class = ANY(")
-            .push_bind(&filters.asset_class)
-            .push(")");
-    }
-    if !filters.actor.is_empty() {
-        query
-            .push(" AND actor = ANY(")
-            .push_bind(&filters.actor)
-            .push(")");
-    }
-    if !filters.tool_type.is_empty() {
-        query
-            .push(" AND type = ANY(")
-            .push_bind(&filters.tool_type)
-            .push(")");
-    }
-    if !filters.status.is_empty() {
-        query
-            .push(" AND status = ANY(")
-            .push_bind(&filters.status)
-            .push(")");
-    }
-    if !filters.pricing.is_empty() {
-        query
-            .push(" AND pricing = ANY(")
-            .push_bind(&filters.pricing)
-            .push(")");
-    }
-    if !filters.install_risk.is_empty() {
-        query
-            .push(" AND install_risk_level = ANY(")
-            .push_bind(&filters.install_risk)
-            .push(")");
-    }
+    append_scalar_intersection(query, "function", &filters.function);
+    append_scalar_intersection(query, "asset_class", &filters.asset_class);
+    append_scalar_intersection(query, "actor", &filters.actor);
+    append_scalar_intersection(query, "type", &filters.tool_type);
+    append_scalar_intersection(query, "status", &filters.status);
+    append_scalar_intersection(query, "pricing", &filters.pricing);
+    append_scalar_intersection(query, "install_risk_level", &filters.install_risk);
     if !filters.chain.is_empty() {
-        query.push(" AND chains && ").push_bind(&filters.chain);
+        // Intersection: tool must support every selected chain.
+        query.push(" AND chains @> ").push_bind(&filters.chain);
     }
 }
 

@@ -124,8 +124,21 @@ mod tests {
             ..Default::default()
         };
         append_tool_filters(&mut query, &filters);
-        assert!(query.sql().contains("function = ANY($1)"));
-        assert!(query.sql().contains("pricing = ANY($2)"));
+        assert!(query.sql().contains("function = $1"));
+        assert!(query.sql().contains("function = $2"));
+        assert!(query.sql().contains("pricing = $3"));
+    }
+
+    #[cfg(feature = "ssr")]
+    #[test]
+    fn append_tool_filters_chain_uses_contains_all_operator() {
+        let mut query = sqlx::QueryBuilder::new("SELECT * FROM tools WHERE true");
+        let filters = ToolFilters {
+            chain: vec!["ethereum".into(), "base".into()],
+            ..Default::default()
+        };
+        append_tool_filters(&mut query, &filters);
+        assert!(query.sql().contains("chains @> $1"));
     }
 
     #[test]

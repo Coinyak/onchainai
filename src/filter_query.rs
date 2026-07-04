@@ -270,7 +270,7 @@ pub fn describe_active_filters(
             .iter()
             .map(|id| label_with_map(id, function_labels))
             .collect();
-        lines.push(format!("Function: {}", labels.join(", ")));
+        lines.push(format!("Function: {}", labels.join(" + ")));
     }
     if !summary.asset_class.is_empty() {
         let labels: Vec<String> = summary
@@ -278,7 +278,7 @@ pub fn describe_active_filters(
             .iter()
             .map(|id| humanize_filter_id(id))
             .collect();
-        lines.push(format!("Asset class: {}", labels.join(", ")));
+        lines.push(format!("Asset class: {}", labels.join(" + ")));
     }
     if !summary.actor.is_empty() {
         let labels: Vec<String> = summary
@@ -286,7 +286,7 @@ pub fn describe_active_filters(
             .iter()
             .map(|id| humanize_filter_id(id))
             .collect();
-        lines.push(format!("Actor: {}", labels.join(", ")));
+        lines.push(format!("Actor: {}", labels.join(" + ")));
     }
     if !summary.tool_type.is_empty() {
         let labels: Vec<String> = summary
@@ -294,7 +294,7 @@ pub fn describe_active_filters(
             .iter()
             .map(|id| id.to_uppercase())
             .collect();
-        lines.push(format!("Type: {}", labels.join(", ")));
+        lines.push(format!("Type: {}", labels.join(" + ")));
     }
     if !summary.status.is_empty() {
         let labels: Vec<String> = summary
@@ -302,7 +302,7 @@ pub fn describe_active_filters(
             .iter()
             .map(|id| humanize_filter_id(id))
             .collect();
-        lines.push(format!("Status: {}", labels.join(", ")));
+        lines.push(format!("Status: {}", labels.join(" + ")));
     }
     if !summary.pricing.is_empty() {
         let labels: Vec<String> = summary
@@ -310,7 +310,7 @@ pub fn describe_active_filters(
             .iter()
             .map(|id| humanize_filter_id(id))
             .collect();
-        lines.push(format!("Pricing: {}", labels.join(", ")));
+        lines.push(format!("Pricing: {}", labels.join(" + ")));
     }
     if !summary.install_risk.is_empty() {
         let labels: Vec<String> = summary
@@ -318,11 +318,11 @@ pub fn describe_active_filters(
             .iter()
             .map(|id| humanize_filter_id(id))
             .collect();
-        lines.push(format!("Install risk: {}", labels.join(", ")));
+        lines.push(format!("Install risk: {}", labels.join(" + ")));
     }
     if !summary.chain.is_empty() {
         let labels: Vec<String> = summary.chain.iter().map(|id| id.to_uppercase()).collect();
-        lines.push(format!("Chain: {}", labels.join(", ")));
+        lines.push(format!("Chain: {}", labels.join(" + ")));
     }
     if let Some(q) = &summary.search {
         lines.push(format!("Search: \"{q}\""));
@@ -514,7 +514,7 @@ mod tests {
         labels.insert("bridge".into(), "Bridge".into());
         labels.insert("swap".into(), "Swap".into());
         let lines = describe_active_filters(&summary, &labels);
-        assert!(lines.iter().any(|l| l.contains("Function: Bridge, Swap")));
+        assert!(lines.iter().any(|l| l.contains("Function: Bridge + Swap")));
         assert!(lines.iter().any(|l| l.contains("Asset class: Crypto")));
         assert!(lines.iter().any(|l| l.contains("Type: MCP")));
         assert!(lines.iter().any(|l| l.contains("Pricing: X402")));
