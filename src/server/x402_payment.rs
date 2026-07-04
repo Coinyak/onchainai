@@ -85,7 +85,7 @@ impl X402PaymentConfig {
             amount: self.amount.clone(),
             pay_to: self.pay_to.clone(),
             max_timeout_seconds: DEFAULT_TIMEOUT_SECS,
-            extra: None,
+            extra: usdc_eip712_extra(&self.network, &self.asset),
             resource: Some(ResourceInfo {
                 url: resource_url.into(),
                 description: Some(description.into()),
@@ -112,6 +112,17 @@ fn default_usdc_asset(network: &str) -> String {
     } else {
         USDC_BASE_SEPOLIA.into()
     }
+}
+
+/// EIP-3009 signing metadata required by @x402/evm clients for USDC on Base.
+fn usdc_eip712_extra(network: &str, asset: &str) -> Option<Value> {
+    if network == "eip155:8453" && asset.eq_ignore_ascii_case(USDC_BASE_MAINNET) {
+        return Some(json!({ "name": "USD Coin", "version": "2" }));
+    }
+    if network == "eip155:84532" && asset.eq_ignore_ascii_case(USDC_BASE_SEPOLIA) {
+        return Some(json!({ "name": "USDC", "version": "2" }));
+    }
+    None
 }
 
 /// Convert a dollar string like "$0.001" to USDC atomic units (6 decimals).
@@ -528,6 +539,13 @@ pub async fn require_payment(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn mainnet_usdc_extra_includes_eip712_domain() {
+        let extra = usdc_eip712_extra("eip155:8453", USDC_BASE_MAINNET).expect("extra");
+        assert_eq!(extra["name"], "USD Coin");
+        assert_eq!(extra["version"], "2");
+    }
 
     #[test]
     fn usd_to_atomic_converts_micropayment() {
