@@ -124,10 +124,26 @@ mod tests {
             ..Default::default()
         };
         append_tool_filters(&mut query, &filters);
-        assert!(query.sql().contains("function = $1"));
-        assert!(query.sql().contains("function = $2"));
-        assert!(query.sql().contains("x402_price IS NOT NULL"));
-        assert!(!query.sql().contains("pricing = $"));
+        let sql = query.sql();
+        assert!(sql.contains("function = $1"));
+        assert!(sql.contains(" OR "));
+        assert!(sql.contains("function = $2"));
+        assert!(sql.contains("x402_price IS NOT NULL"));
+        assert!(!sql.contains("pricing = $"));
+    }
+
+    #[cfg(feature = "ssr")]
+    #[test]
+    fn append_tool_filters_scalar_multi_value_uses_or_not_and() {
+        let mut query = sqlx::QueryBuilder::new("SELECT * FROM tools WHERE true");
+        let filters = ToolFilters {
+            function: vec!["bridge".into(), "swap".into()],
+            ..Default::default()
+        };
+        append_tool_filters(&mut query, &filters);
+        let sql = query.sql();
+        assert!(sql.contains("(function = $1 OR function = $2)"));
+        assert!(!sql.contains("function = $1 AND function = $2"));
     }
 
     #[cfg(feature = "ssr")]
