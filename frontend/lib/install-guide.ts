@@ -269,10 +269,6 @@ export {
 
 import type { ToolInstallClient } from "@/lib/mcp-connect-clients";
 
-function httpMcpJsonConfig(serverName: string, url: string): string {
-  return JSON.stringify({ mcpServers: { [serverName]: { url } } }, null, 2);
-}
-
 function stdioMcpJsonConfig(
   serverName: string,
   command: string,

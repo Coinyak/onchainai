@@ -3,10 +3,35 @@ use super::*;
 /// Returns all function categories with live **approved** tool counts.
 #[cfg(feature = "ssr")]
 pub(crate) async fn fetch_categories(pool: &sqlx::PgPool) -> Result<Vec<(Category, i64)>, FnError> {
-    let rows = sqlx::query_as::<_, CategoryWithCount>(CATEGORIES_WITH_COUNTS_SQL)
+    fetch_filtered_category_counts(pool, &ToolFilters::default()).await
+}
+
+/// Per-function counts for the sidebar, respecting active filters (function axis excluded).
+#[cfg(feature = "ssr")]
+pub(crate) async fn fetch_filtered_category_counts(
+    pool: &sqlx::PgPool,
+    filters: &ToolFilters,
+) -> Result<Vec<(Category, i64)>, FnError> {
+    let mut facet_filters = filters.clone();
+    facet_filters.function.clear();
+
+    let mut q = sqlx::QueryBuilder::new(
+        "SELECT c.id, c.label, c.icon, c.description, c.sort_order, COUNT(t.id)::bigint AS count \
+         FROM categories c \
+         LEFT JOIN tools t ON t.function = c.id AND ",
+    );
+    q.push(PUBLIC_TOOL_WHERE);
+    append_tool_filters(&mut q, &facet_filters);
+    q.push(
+        " GROUP BY c.id, c.label, c.icon, c.description, c.sort_order \
+          ORDER BY c.sort_order ASC",
+    );
+
+    let rows = q
+        .build_query_as::<CategoryWithCount>()
         .fetch_all(pool)
         .await
-        .map_err(|e| FnError::new(format!("failed to load categories: {e}")))?;
+        .map_err(|e| FnError::new(format!("failed to load filtered category counts: {e}")))?;
 
     Ok(rows.into_iter().map(CategoryWithCount::into_pair).collect())
 }
@@ -168,7 +193,7 @@ pub struct ToolListRequest {
     pub query: Option<String>,
 }
 
-/// Optional axis filters for tool list/count queries (AND across axes; OR within axis via ANY).
+/// Optional axis filters for tool list/count queries (AND across axes and within each axis).
 #[derive(Debug, Clone, Default, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct ToolFilters {
     #[serde(default)]
@@ -190,54 +215,66 @@ pub struct ToolFilters {
 }
 
 #[cfg(feature = "ssr")]
+fn append_scalar_intersection<'qb>(
+    query: &mut sqlx::QueryBuilder<'qb, sqlx::Postgres>,
+    column: &str,
+    values: &'qb [String],
+) {
+    for value in values {
+        query.push(" AND ").push(column).push(" = ").push_bind(value);
+    }
+}
+
+/// x402 catalog slice: matches dashboard snapshot semantics (not only `type`/`pricing` = x402).
+#[cfg(feature = "ssr")]
+fn append_x402_catalog_predicate(query: &mut sqlx::QueryBuilder<'_, sqlx::Postgres>) {
+    query.push(
+        " AND (type = 'x402' OR pricing = 'x402' OR x402_price IS NOT NULL OR referral_enabled = true)",
+    );
+}
+
+#[cfg(feature = "ssr")]
+fn append_scalar_intersection_except<'qb>(
+    query: &mut sqlx::QueryBuilder<'qb, sqlx::Postgres>,
+    column: &str,
+    values: &'qb [String],
+    skip: &str,
+) {
+    for value in values {
+        if value == skip {
+            continue;
+        }
+        query.push(" AND ").push(column).push(" = ").push_bind(value);
+    }
+}
+
+#[cfg(feature = "ssr")]
+fn filters_include_x402(filters: &ToolFilters) -> bool {
+    filters
+        .tool_type
+        .iter()
+        .any(|value| value == "x402")
+        || filters.pricing.iter().any(|value| value == "x402")
+}
+
+#[cfg(feature = "ssr")]
 pub(crate) fn append_tool_filters<'qb>(
     query: &mut sqlx::QueryBuilder<'qb, sqlx::Postgres>,
     filters: &'qb ToolFilters,
 ) {
-    if !filters.function.is_empty() {
-        query
-            .push(" AND function = ANY(")
-            .push_bind(&filters.function)
-            .push(")");
-    }
-    if !filters.asset_class.is_empty() {
-        query
-            .push(" AND asset_class = ANY(")
-            .push_bind(&filters.asset_class)
-            .push(")");
-    }
-    if !filters.actor.is_empty() {
-        query
-            .push(" AND actor = ANY(")
-            .push_bind(&filters.actor)
-            .push(")");
-    }
-    if !filters.tool_type.is_empty() {
-        query
-            .push(" AND type = ANY(")
-            .push_bind(&filters.tool_type)
-            .push(")");
-    }
-    if !filters.status.is_empty() {
-        query
-            .push(" AND status = ANY(")
-            .push_bind(&filters.status)
-            .push(")");
-    }
-    if !filters.pricing.is_empty() {
-        query
-            .push(" AND pricing = ANY(")
-            .push_bind(&filters.pricing)
-            .push(")");
-    }
-    if !filters.install_risk.is_empty() {
-        query
-            .push(" AND install_risk_level = ANY(")
-            .push_bind(&filters.install_risk)
-            .push(")");
+    append_scalar_intersection(query, "function", &filters.function);
+    append_scalar_intersection(query, "asset_class", &filters.asset_class);
+    append_scalar_intersection(query, "actor", &filters.actor);
+    append_scalar_intersection_except(query, "type", &filters.tool_type, "x402");
+    append_scalar_intersection(query, "status", &filters.status);
+    append_scalar_intersection_except(query, "pricing", &filters.pricing, "x402");
+    append_scalar_intersection(query, "install_risk_level", &filters.install_risk);
+    if filters_include_x402(filters) {
+        append_x402_catalog_predicate(query);
     }
     if !filters.chain.is_empty() {
-        query.push(" AND chains && ").push_bind(&filters.chain);
+        // Intersection: tool must support every selected chain.
+        query.push(" AND chains @> ").push_bind(&filters.chain);
     }
 }
 

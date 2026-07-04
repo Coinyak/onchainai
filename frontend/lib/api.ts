@@ -399,8 +399,28 @@ export interface AdminCategoryView {
 
 // --- Helpers ---
 
+export function normalizeCategoryRow(row: unknown): CategoryWithCount | null {
+  if (Array.isArray(row) && row.length >= 2 && row[0] && typeof row[0] === "object") {
+    const count = Number(row[1]);
+    return { category: row[0] as Category, count: Number.isFinite(count) ? count : 0 };
+  }
+  if (row && typeof row === "object" && "id" in row && "label" in row && "count" in row) {
+    const flat = row as Category & { count: number };
+    const { count, ...category } = flat;
+    const n = Number(count);
+    return { category: category as Category, count: Number.isFinite(n) ? n : 0 };
+  }
+  return null;
+}
+
 function normalizeCategory(row: CategoryRow): CategoryWithCount {
-  return { category: row[0], count: row[1] };
+  return normalizeCategoryRow(row) ?? { category: row[0], count: row[1] };
+}
+
+export function normalizeCategoryRows(rows: unknown[]): CategoryWithCount[] {
+  return rows
+    .map((row) => normalizeCategoryRow(row))
+    .filter((row): row is CategoryWithCount => row !== null && Boolean(row.category.id));
 }
 
 function filtersToQuery(filters: ToolFilters): URLSearchParams {
@@ -653,6 +673,19 @@ export async function deleteBlueprint(id: string): Promise<void> {
   await apiFetch(`/api/v2/blueprints/${encodeURIComponent(id)}`, {
     method: "DELETE",
   });
+}
+
+export interface BlueprintAgentExport {
+  title: string;
+  markdown: string;
+  slugs: string[];
+  filename: string;
+}
+
+export async function getBlueprintAgentExport(id: string): Promise<BlueprintAgentExport> {
+  return apiFetch<BlueprintAgentExport>(
+    `/api/v2/blueprints/${encodeURIComponent(id)}/agent-export`,
+  );
 }
 
 // --- Agent Sync ---

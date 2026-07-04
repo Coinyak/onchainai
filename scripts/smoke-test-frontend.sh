@@ -17,6 +17,22 @@ check_get() {
   smoke_check_get "$BASE" "$1"
 }
 
+# Blueprint v2 share panel controls are client-only; assert via linked JS/CSS bundles.
+smoke_page_bundle_has() {
+  local page_body="$1"
+  local needle="$2"
+  local asset
+  while IFS= read -r asset; do
+    [[ -z "$asset" ]] && continue
+    local asset_body
+    asset_body="$(curl -sS "${BASE}/${asset}" 2>/dev/null)" || continue
+    if smoke_body_has "$asset_body" "$needle"; then
+      return 0
+    fi
+  done < <(printf '%s' "$page_body" | grep -oE '_next/static/chunks/[^" ]+\.(js|css)' | sort -u)
+  return 1
+}
+
 home_body="$(check_get "/")"
 smoke_body_has "$home_body" 'site-top-nav' || smoke_fail "GET / missing site-top-nav markup"
 smoke_body_has "$home_body" 'auth-sign-in' || smoke_fail "GET / missing auth-sign-in markup"
@@ -43,6 +59,17 @@ smoke_body_has "$connect_body" 'data-testid="connect-page"' || smoke_fail "GET /
 
 blueprints_body="$(check_get "/blueprints")"
 smoke_body_has "$blueprints_body" 'data-testid="blueprint-list"' || smoke_fail "GET /blueprints missing blueprint-list test id"
+
+blueprint_draft_body="$(check_get "/blueprints/draft")"
+smoke_body_has "$blueprint_draft_body" 'data-testid="blueprint-canvas"' || smoke_fail "GET /blueprints/draft missing blueprint-canvas test id"
+smoke_body_has "$blueprint_draft_body" 'data-testid="blueprint-share-dock"' || smoke_fail "GET /blueprints/draft missing blueprint-share-dock test id"
+smoke_body_has "$blueprint_draft_body" 'blueprint-share-dock-fab' || smoke_fail "GET /blueprints/draft missing blueprint-share-dock FAB"
+smoke_page_bundle_has "$blueprint_draft_body" 'blueprint-share-prompt-edit' \
+  || smoke_fail "GET /blueprints/draft missing blueprint-share-prompt-edit bundle marker"
+if ! smoke_page_bundle_has "$blueprint_draft_body" 'blueprint-copy-prompt'; then
+  smoke_page_bundle_has "$blueprint_draft_body" 'blueprint-share-copy-btn' \
+    || smoke_fail "GET /blueprints/draft missing blueprint-copy-prompt bundle marker"
+fi
 
 check_get "/compare" >/dev/null
 check_get "/dashboard" >/dev/null

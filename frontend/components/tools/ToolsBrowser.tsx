@@ -6,9 +6,12 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import {
   loadBrowserData,
+  getCategories,
   getToolBySlug,
+  normalizeCategoryRows,
   type CategoryWithCount,
 } from "@/lib/api";
+import { FUNCTION_CATEGORY_FALLBACK } from "@/lib/function-categories";
 import {
   type BrowserBase,
   ADD_MCP_INTENT,
@@ -17,7 +20,9 @@ import {
   forFilterNavigation,
   forSort,
   forStatusFilter,
+  forPricingFilter,
   forTypeFilter,
+  isX402FilterActive,
   forNextPage,
   withSelected,
   withoutSelected,
@@ -41,8 +46,16 @@ import {
   describeActiveFilters,
 } from "@/lib/describe-active-filters";
 
-function normalizeCategories(rows: [import("@/lib/api").Category, number][]): CategoryWithCount[] {
-  return rows.map(([category, count]) => ({ category, count }));
+function mergeCategoryCounts(
+  labels: CategoryWithCount[],
+  scoped: CategoryWithCount[] | null,
+): CategoryWithCount[] {
+  if (!scoped?.length) return labels;
+  const countById = new Map(scoped.map((row) => [row.category.id, row.count]));
+  return labels.map((row) => ({
+    category: row.category,
+    count: countById.get(row.category.id) ?? 0,
+  }));
 }
 
 interface ToolbarSearchProps {
@@ -78,6 +91,7 @@ interface MobileToolbarStripProps {
   typeHrefs: Record<string, string>;
   statusHrefs: Record<string, string>;
   activeType?: string;
+  x402Active?: boolean;
   activeStatus?: string;
   toolCount: number;
 }
@@ -90,6 +104,7 @@ function MobileToolbarStrip({
   typeHrefs,
   statusHrefs,
   activeType,
+  x402Active = false,
   activeStatus,
   toolCount,
 }: MobileToolbarStripProps) {
@@ -128,7 +143,11 @@ function MobileToolbarStrip({
               key={id}
               href={typeHrefs[id]}
               scroll={false}
-              className={activeType === id ? "toolbar-type-chip active" : "toolbar-type-chip"}
+              className={
+                (id === "x402" ? x402Active : activeType === id)
+                  ? "toolbar-type-chip active"
+                  : "toolbar-type-chip"
+              }
             >
               {label}
             </Link>
@@ -219,6 +238,12 @@ export function ToolsBrowser({ base, showToolbarSearch = false, children }: Tool
     queryBase,
   );
 
+  const catalogCategoriesQuery = useQuery({
+    queryKey: ["catalog-categories"],
+    queryFn: getCategories,
+    staleTime: 5 * 60 * 1000,
+  });
+
   const browserQuery = useQuery({
     queryKey: ["browser-data", base, params.sort, filters, params.q, params.page],
     queryFn: () =>
@@ -238,11 +263,23 @@ export function ToolsBrowser({ base, showToolbarSearch = false, children }: Tool
     enabled: !!selectedSlug,
   });
 
-  const categories = useMemo(
+  const scopedCategoryCounts = useMemo(
     () =>
-      browserQuery.data ? normalizeCategories(browserQuery.data.categories) : [],
+      browserQuery.data
+        ? normalizeCategoryRows(browserQuery.data.categories as unknown[])
+        : null,
     [browserQuery.data],
   );
+
+  const categories = useMemo(() => {
+    const labelSource =
+      catalogCategoriesQuery.data?.length
+        ? catalogCategoriesQuery.data
+        : scopedCategoryCounts?.length
+          ? scopedCategoryCounts
+          : FUNCTION_CATEGORY_FALLBACK;
+    return mergeCategoryCounts(labelSource, scopedCategoryCounts);
+  }, [catalogCategoriesQuery.data, scopedCategoryCounts]);
 
   // Clear query filters on the current base; preserve sort. Category routes stay in-category.
   const emptyClearHref = buildQueryBase(
@@ -268,7 +305,8 @@ export function ToolsBrowser({ base, showToolbarSearch = false, children }: Tool
   const typeApi = buildQueryBase(base, forTypeFilter(params, "api"));
   const typeSdk = buildQueryBase(base, forTypeFilter(params, "sdk"));
   const typeSkill = buildQueryBase(base, forTypeFilter(params, "skill"));
-  const typeX402 = buildQueryBase(base, forTypeFilter(params, "x402"));
+  const typeX402 = buildQueryBase(base, forPricingFilter(params, "x402"));
+  const x402Active = isX402FilterActive(params);
   const loadMoreHref = buildQueryBase(base, forNextPage(params));
   const closePreviewHref = withoutSelected(base, queryBase);
   const previewOpen = Boolean(selectedSlug && previewQuery.data);
@@ -309,7 +347,7 @@ export function ToolsBrowser({ base, showToolbarSearch = false, children }: Tool
         <>
           <Sidebar
             base={base}
-            categories={[]}
+            categories={categories}
             queryBase={filterQueryBase}
             filterRevision={filterRevision}
             defaultFunctionOpen={base === "tools"}
@@ -385,7 +423,7 @@ export function ToolsBrowser({ base, showToolbarSearch = false, children }: Tool
                     <Link href={typeApi} scroll={false} className={params.type === "api" ? "sort-link active" : "sort-link"}>API</Link>
                     <Link href={typeSdk} scroll={false} className={params.type === "sdk" ? "sort-link active" : "sort-link"}>SDK</Link>
                     <Link href={typeSkill} scroll={false} className={params.type === "skill" ? "sort-link active" : "sort-link"}>Skill</Link>
-                    <Link href={typeX402} scroll={false} className={params.type === "x402" ? "sort-link active" : "sort-link"}>x402</Link>
+                    <Link href={typeX402} scroll={false} className={x402Active ? "sort-link active" : "sort-link"}>x402</Link>
                     <Link href={statusVerified} scroll={false} className={params.status === "verified" ? "sort-link active" : "sort-link"}>Verified</Link>
                     <Link href={statusOfficial} scroll={false} className={params.status === "official" ? "sort-link active" : "sort-link"}>Official</Link>
                   </div>
@@ -410,6 +448,7 @@ export function ToolsBrowser({ base, showToolbarSearch = false, children }: Tool
                   official: statusOfficial,
                 }}
                 activeType={params.type}
+                x402Active={x402Active}
                 activeStatus={params.status}
                 toolCount={browserQuery.data.total}
               />

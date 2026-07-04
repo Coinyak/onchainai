@@ -17,11 +17,12 @@ export const BLUEPRINT_EDGE_COLORS = [
   { id: "purple", label: "Purple", value: "#5C6BC0" },
 ] as const;
 
-export const BLUEPRINT_NODE_TOOL_WIDTH = 220;
-export const BLUEPRINT_NODE_TOOL_HEIGHT = 64;
-export const BLUEPRINT_NODE_NOTE_WIDTH = 220;
-export const BLUEPRINT_NODE_NOTE_HEIGHT = 80;
-export const BLUEPRINT_NODE_CHAIN_SIZE = 56;
+export const BLUEPRINT_NODE_TOOL_WIDTH = 260;
+export const BLUEPRINT_NODE_TOOL_HEIGHT = 88;
+export const BLUEPRINT_NODE_NOTE_WIDTH = 260;
+export const BLUEPRINT_NODE_NOTE_HEIGHT = 88;
+export const BLUEPRINT_NODE_CHAIN_SIZE = 48;
+export const BLUEPRINT_NODE_CHAIN_WRAP_HEIGHT = 66;
 
 export function snapToGrid(value: number, grid = BLUEPRINT_GRID): number {
   return Math.round(value / grid) * grid;
@@ -56,7 +57,7 @@ export function getNodeBounds(node: BlueprintNode): {
       x: node.x,
       y: node.y,
       w: BLUEPRINT_NODE_CHAIN_SIZE,
-      h: BLUEPRINT_NODE_CHAIN_SIZE,
+      h: BLUEPRINT_NODE_CHAIN_WRAP_HEIGHT,
     };
   }
   if (node.kind === "note") {

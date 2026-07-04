@@ -82,6 +82,32 @@ export function toggleMulti(
   return buildFromMap(basePath, map);
 }
 
+/** Single-select toggle: pick one value per axis; re-click clears. */
+export function toggleSingle(
+  basePath: string,
+  queryBase: string,
+  key: string,
+  value: string,
+  active: string[],
+): string {
+  const query = queryBase.replace(basePath, "").replace(/^\?/, "");
+  const map = new Map<string, string[]>();
+
+  for (const part of query.split("&").filter(Boolean)) {
+    const [k, v] = part.split("=");
+    if (!k || k === key) continue;
+    const decoded = decodeParam(v ?? "");
+    map.set(k, SCALAR_KEYS.has(k) ? [decoded] : parseMulti(decoded));
+  }
+
+  const isActive = active.includes(value);
+  if (!isActive) {
+    map.set(key, [value]);
+  }
+
+  return buildFromMap(basePath, map);
+}
+
 export function clearAxis(basePath: string, queryBase: string, key: string): string {
   const query = queryBase.replace(basePath, "").replace(/^\?/, "");
   const map = new Map<string, string[]>();
@@ -211,6 +237,16 @@ export function forStatusFilter(params: BrowserQueryParams, status?: string): Br
 export function forTypeFilter(params: BrowserQueryParams, toolType?: string): BrowserQueryParams {
   const next = toolType && params.type === toolType ? undefined : toolType;
   return { ...params, type: next, selected: undefined, intent: undefined, page: 1 };
+}
+
+export function forPricingFilter(params: BrowserQueryParams, pricing?: string): BrowserQueryParams {
+  const next = pricing && params.pricing === pricing ? undefined : pricing;
+  return { ...params, pricing: next, selected: undefined, intent: undefined, page: 1 };
+}
+
+/** True when the x402 catalog slice is active (`type` or `pricing` axis). */
+export function isX402FilterActive(params: BrowserQueryParams): boolean {
+  return parseMulti(params.type).includes("x402") || parseMulti(params.pricing).includes("x402");
 }
 
 export function forNextPage(params: BrowserQueryParams): BrowserQueryParams {

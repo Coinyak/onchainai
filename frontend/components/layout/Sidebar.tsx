@@ -17,7 +17,7 @@ import { CategoryList } from "@/components/layout/CategoryList";
 import { FilterChip } from "@/components/layout/FilterChip";
 import {
   type BrowserBase,
-  toggleMulti,
+  toggleSingle,
   parseMulti,
   clearAxis,
   browserBasePath,
@@ -308,7 +308,7 @@ export function Sidebar({
         {options.map((opt) => (
           <FilterChip
             key={opt.id}
-            href={toggleMulti(basePath, queryBase, key, opt.id, activeList)}
+            href={toggleSingle(basePath, queryBase, key, opt.id, activeList)}
             label={opt.label}
             active={activeList.includes(opt.id)}
             onNavigate={collapseMobile}

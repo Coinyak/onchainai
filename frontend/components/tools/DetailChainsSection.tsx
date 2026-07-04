@@ -1,8 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { ChainLogo } from "@/components/tools/ChainLogo";
-import { DetailFilterChip } from "@/components/tools/DetailFilterChip";
 import { chainTagsForTool } from "@/lib/chains";
 import { singleFilterHref } from "@/lib/browser-query";
 
@@ -24,15 +24,17 @@ export function DetailChainsSection({ chains: chainIds }: DetailChainsSectionPro
   return (
     <section className="detail-section">
       <h2 className="text-h2 mb-3">Chains</h2>
-      <div className="detail-chains">
+      <div className="detail-chains-list">
         {visible.map((c) => (
-          <DetailFilterChip
+          <Link
             key={c.id}
             href={singleFilterHref("chain", c.id)}
-            label={c.label}
+            scroll={false}
+            className="detail-chain-row no-underline"
           >
             <ChainLogo id={c.id} label={c.label} size={24} className="detail-chain-logo" decorative />
-          </DetailFilterChip>
+            <span className="detail-chain-label">{c.label}</span>
+          </Link>
         ))}
         {!expanded && extra > 0 && (
           <button

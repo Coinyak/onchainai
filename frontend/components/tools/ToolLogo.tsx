@@ -13,6 +13,7 @@ interface ToolLogoProps {
 export function ToolLogo({ name, logoUrl, logoMonogram, size = 48 }: ToolLogoProps) {
   const [showImg, setShowImg] = useState(!!logoUrl);
   const monogram = logoMonogram?.trim() || monogramFromName(name);
+  const isBrandLogo = !!logoUrl?.startsWith("/brand/");
 
   return (
     <div className="tool-logo" style={{ width: size, height: size }}>
@@ -21,7 +22,7 @@ export function ToolLogo({ name, logoUrl, logoMonogram, size = 48 }: ToolLogoPro
       </span>
       {showImg && logoUrl && (
         <img
-          className="tool-logo-img"
+          className={isBrandLogo ? "tool-logo-img tool-logo-img-brand" : "tool-logo-img"}
           src={logoUrl}
           alt=""
           width={size}

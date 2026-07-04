@@ -5,7 +5,7 @@ import Link from "next/link";
 import {
   type BrowserBase,
   clearAxis,
-  toggleMulti,
+  toggleSingle,
   parseMulti,
   browserBasePath,
 } from "@/lib/browser-query";
@@ -54,7 +54,7 @@ export function ChainStrip({ base, queryBase, activeChain, chainCounts }: ChainS
           </Link>
 
           {tileChains.map((entry) => {
-            const href = toggleMulti(basePath, queryBase, "chain", entry.id, chainActive);
+            const href = toggleSingle(basePath, queryBase, "chain", entry.id, chainActive);
             const isActive = chainFilterActive(entry, chainActive);
             return (
               <Link
@@ -97,7 +97,7 @@ export function ChainStrip({ base, queryBase, activeChain, chainCounts }: ChainS
       {expanded && overflowCount > 0 && (
         <ul className="chain-strip-overflow-list" role="list">
           {overflowChains.map((entry) => {
-            const href = toggleMulti(basePath, queryBase, "chain", entry.id, chainActive);
+            const href = toggleSingle(basePath, queryBase, "chain", entry.id, chainActive);
             const isActive = chainFilterActive(entry, chainActive);
             return (
               <li key={entry.id}>

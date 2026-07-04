@@ -2,7 +2,7 @@ import type { CategoryWithCount } from "@/lib/api";
 import { FilterChip } from "@/components/layout/FilterChip";
 import {
   type BrowserBase,
-  toggleMulti,
+  toggleSingle,
   parseMulti,
   clearAxis,
   browserBasePath,
@@ -28,7 +28,7 @@ function functionLink(
     return { href, active: base.category === catId };
   }
   const basePath = browserBasePath(base);
-  const href = toggleMulti(basePath, queryBase, "function", catId, active);
+  const href = toggleSingle(basePath, queryBase, "function", catId, active);
   return { href, active: active.includes(catId) };
 }
 

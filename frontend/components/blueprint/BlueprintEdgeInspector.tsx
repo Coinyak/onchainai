@@ -5,56 +5,58 @@ import {
   type BlueprintEdgeStyle,
 } from "@/lib/blueprint-utils";
 
-interface BlueprintConnectToolbarProps {
-  connectMode: boolean;
+interface BlueprintEdgeInspectorProps {
+  visible: boolean;
   edgeStyle: BlueprintEdgeStyle;
   edgeColor: string;
   selectedEdgeId: string | null;
   readOnly: boolean;
-  onToggleConnectMode: () => void;
-  onEdgeStyleChange: (style: BlueprintEdgeStyle) => void;
-  onEdgeColorChange: (color: string) => void;
+  onStyleChange: (style: BlueprintEdgeStyle) => void;
+  onColorChange: (color: string) => void;
   onDeleteEdge: () => void;
 }
 
-export function BlueprintConnectToolbar({
-  connectMode,
+export function BlueprintEdgeInspector({
+  visible,
   edgeStyle,
   edgeColor,
   selectedEdgeId,
   readOnly,
-  onToggleConnectMode,
-  onEdgeStyleChange,
-  onEdgeColorChange,
+  onStyleChange,
+  onColorChange,
   onDeleteEdge,
-}: BlueprintConnectToolbarProps) {
-  if (readOnly) return null;
-
+}: BlueprintEdgeInspectorProps) {
   return (
-    <div className="blueprint-connect-toolbar" data-testid="blueprint-connect-toolbar">
-      <button
-        type="button"
-        className={`blueprint-toolbar-btn${connectMode ? " blueprint-toolbar-btn-active" : ""}`}
-        data-testid="blueprint-connect-toggle"
-        onClick={onToggleConnectMode}
-        aria-pressed={connectMode}
-      >
-        {connectMode ? "Connecting..." : "Connect"}
-      </button>
+    <div
+      className="blueprint-edge-inspector"
+      data-testid="blueprint-edge-inspector"
+      style={{
+        visibility: visible ? "visible" : "hidden",
+        pointerEvents: visible ? "auto" : "none",
+        minHeight: 36,
+        display: "flex",
+        alignItems: "center",
+        gap: 8,
+        flexWrap: "wrap",
+      }}
+      aria-hidden={!visible}
+    >
       <div className="blueprint-edge-style-group" role="group" aria-label="Line style">
         <button
           type="button"
           className={`blueprint-edge-style-btn${edgeStyle === "solid" ? " blueprint-edge-style-btn-active" : ""}`}
-          onClick={() => onEdgeStyleChange("solid")}
+          onClick={() => onStyleChange("solid")}
           aria-pressed={edgeStyle === "solid"}
+          disabled={readOnly}
         >
           Solid
         </button>
         <button
           type="button"
           className={`blueprint-edge-style-btn${edgeStyle === "arrow" ? " blueprint-edge-style-btn-active" : ""}`}
-          onClick={() => onEdgeStyleChange("arrow")}
+          onClick={() => onStyleChange("arrow")}
           aria-pressed={edgeStyle === "arrow"}
+          disabled={readOnly}
         >
           Arrow
         </button>
@@ -68,7 +70,8 @@ export function BlueprintConnectToolbar({
             style={{ backgroundColor: option.value }}
             aria-label={option.label}
             aria-pressed={edgeColor === option.value}
-            onClick={() => onEdgeColorChange(option.value)}
+            onClick={() => onColorChange(option.value)}
+            disabled={readOnly}
           />
         ))}
       </div>
@@ -78,6 +81,7 @@ export function BlueprintConnectToolbar({
           className="blueprint-toolbar-btn blueprint-toolbar-btn-danger"
           data-testid="blueprint-delete-edge"
           onClick={onDeleteEdge}
+          disabled={readOnly}
         >
           Delete link
         </button>

@@ -141,6 +141,13 @@ pub fn parse_page_value(raw: &str) -> Option<u32> {
 
 /// Whether `logo_url` is safe to render as an external image.
 pub fn logo_url_is_safe_for_img(url: &str) -> bool {
+    let trimmed = url.trim();
+    if trimmed.starts_with("/brand/")
+        && trimmed.len() > "/brand/".len()
+        && !trimmed.contains("..")
+    {
+        return true;
+    }
     LogoUrlCandidate::parse(url).is_some_and(|candidate| candidate.is_renderable())
 }
 
@@ -314,16 +321,25 @@ pub fn homepage_favicon_url(homepage: Option<&str>) -> Option<String> {
     Some(format!("https://{host}{port}/favicon.ico"))
 }
 
+/// First-party catalog tools ship a bundled brand asset (not GitHub avatars).
+fn first_party_brand_logo(slug: &str) -> Option<String> {
+    match slug {
+        "onchainai" => Some("/brand/onchainai-logo.png".to_string()),
+        _ => None,
+    }
+}
+
 /// Logo URL to render for a tool, if safe.
 pub fn tool_logo_img_url(tool: &Tool) -> Option<String> {
-    sanitize_logo_url(tool.logo_url.clone())
+    first_party_brand_logo(&tool.slug)
+        .or_else(|| sanitize_logo_url(tool.logo_url.clone()))
         .or_else(|| github_owner_avatar_url(tool.repo_url.as_deref()))
         .or_else(|| homepage_favicon_url(tool.homepage.as_deref()))
 }
 
 /// Strip unsafe `logo_url` and operator payout addresses before public API/MCP list/detail.
 pub fn sanitize_tool_for_public_response(mut tool: Tool) -> Tool {
-    tool.logo_url = sanitize_logo_url(tool.logo_url.take());
+    tool.logo_url = tool_logo_img_url(&tool);
     tool.referral_payout_address = None;
     tool.x402_pay_to_address = None;
     tool.x402_endpoint = None;
@@ -528,6 +544,8 @@ mod tests {
             ("file:///etc/passwd", false),
             ("blob:https://example.com/uuid", false),
             ("//example.com/logo.png", false),
+            ("/brand/onchainai-logo.png", true),
+            ("/brand/../etc/passwd", false),
             ("/chains/ethereum.svg", false),
             ("https:///logo.png", false),
             ("https://user:pass@evil.example/logo", false),
@@ -621,6 +639,22 @@ mod tests {
         assert_eq!(
             tool_logo_img_url(&tool).as_deref(),
             Some("https://avatars.githubusercontent.com/bob-collective")
+        );
+    }
+
+    #[test]
+    fn tool_logo_img_url_prefers_first_party_brand_for_onchainai() {
+        let mut tool = sample_tool();
+        tool.slug = "onchainai".into();
+        tool.logo_url = Some("https://avatars.githubusercontent.com/love".into());
+        assert_eq!(
+            tool_logo_img_url(&tool).as_deref(),
+            Some("/brand/onchainai-logo.png")
+        );
+        let sanitized = sanitize_tool_for_public_response(tool);
+        assert_eq!(
+            sanitized.logo_url.as_deref(),
+            Some("/brand/onchainai-logo.png")
         );
     }
 

@@ -76,7 +76,6 @@ export function ToolCard({
 
   const status = adminStatus ?? tool.status;
 
-  const href = `/tools/${tool.slug}`;
   const chains = chainTagsForTool(tool.chains);
   const chainDesktop = chains.slice(0, CHAINS_VISIBLE_DESKTOP);
   const chainMobile = chains.slice(0, CHAINS_VISIBLE_MOBILE);

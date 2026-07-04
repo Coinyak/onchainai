@@ -6,33 +6,51 @@
 #   .env with DATABASE_URL, Supabase keys, GitHub OAuth, JWT_SECRET
 #
 # Usage:
-#   ./scripts/deploy-railway.sh              # link/create project + push vars + deploy
-#   ./scripts/deploy-railway.sh --vars-only  # sync env vars only (no deploy)
+#   ./scripts/deploy-railway.sh                    # sync vars + deploy (main only)
+#   ./scripts/deploy-railway.sh --vars-only          # sync env vars only (no deploy)
+#   ./scripts/deploy-railway.sh --force-non-main     # emergency: deploy from current branch
+#
+# Normal prod path: merge to main → Railway GitHub deploy (watchPatterns in railway.json).
+# See docs/superpowers/specs/2026-07-05-split-deploy-automation-spec.md
 #
 # `railway up` is called with an explicit `"${ROOT}" --path-as-root` — do not
 # drop this. `~/.railway/config.json` links this project to a fixed directory
 # path (whichever checkout first ran `railway link`); if that path differs
 # from where this script lives (e.g. running from a `git worktree` checkout),
 # a bare `railway up` silently uploads/builds from the *linked* path instead
-# of the caller's cwd, producing a stale image with no error. Cost us a
-# production incident (2026-07-04): crash-looped on a migration mismatch
-# because the deployed image was hours-old code from an unrelated branch.
+# of the caller's cwd, producing a stale image with no error.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
+DEPLOY_BRANCH=""
 if command -v git >/dev/null 2>&1 && git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   DEPLOY_BRANCH="$(git branch --show-current 2>/dev/null || true)"
-  echo "Git branch: ${DEPLOY_BRANCH:-unknown}"
-  if [[ -n "${DEPLOY_BRANCH}" && "${DEPLOY_BRANCH}" != "main" ]]; then
-    echo "Note: production deploys are normally cut from main (current: ${DEPLOY_BRANCH})." >&2
-  fi
 fi
 
 VARS_ONLY=false
-if [[ "${1:-}" == "--vars-only" ]]; then
-  VARS_ONLY=true
+FORCE_NON_MAIN=false
+for arg in "$@"; do
+  case "${arg}" in
+    --vars-only) VARS_ONLY=true ;;
+    --force-non-main) FORCE_NON_MAIN=true ;;
+  esac
+done
+
+echo "Git branch: ${DEPLOY_BRANCH:-unknown}"
+
+if [[ "${VARS_ONLY}" != true && "${FORCE_NON_MAIN}" != true && -n "${DEPLOY_BRANCH}" && "${DEPLOY_BRANCH}" != "main" ]]; then
+  echo "Refusing production deploy from branch '${DEPLOY_BRANCH}'." >&2
+  echo "Merge to main and push — Railway auto-deploys API when watchPatterns match." >&2
+  echo "Vercel already previews frontend on every push." >&2
+  echo "Env sync only: ./scripts/deploy-railway.sh --vars-only" >&2
+  echo "Emergency override: ./scripts/deploy-railway.sh --force-non-main" >&2
+  exit 1
+fi
+
+if [[ "${FORCE_NON_MAIN}" == true && -n "${DEPLOY_BRANCH}" && "${DEPLOY_BRANCH}" != "main" ]]; then
+  echo "WARNING: deploying non-main branch '${DEPLOY_BRANCH}' to production. Merge to main ASAP." >&2
 fi
 
 if ! command -v railway >/dev/null 2>&1; then

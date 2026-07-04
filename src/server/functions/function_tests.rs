@@ -124,8 +124,54 @@ mod tests {
             ..Default::default()
         };
         append_tool_filters(&mut query, &filters);
-        assert!(query.sql().contains("function = ANY($1)"));
-        assert!(query.sql().contains("pricing = ANY($2)"));
+        assert!(query.sql().contains("function = $1"));
+        assert!(query.sql().contains("function = $2"));
+        assert!(query.sql().contains("x402_price IS NOT NULL"));
+        assert!(!query.sql().contains("pricing = $"));
+    }
+
+    #[cfg(feature = "ssr")]
+    #[test]
+    fn fetch_filtered_category_counts_sql_applies_non_function_filters() {
+        let mut facet_filters = ToolFilters {
+            pricing: vec!["x402".into()],
+            ..Default::default()
+        };
+        facet_filters.function.clear();
+
+        let mut q = sqlx::QueryBuilder::new(
+            "SELECT c.id FROM categories c LEFT JOIN tools t ON t.function = c.id AND ",
+        );
+        q.push(crate::server::queries::PUBLIC_TOOL_WHERE);
+        append_tool_filters(&mut q, &facet_filters);
+
+        assert!(q.sql().contains("x402_price IS NOT NULL"));
+        assert!(!q.sql().contains("function = $"));
+    }
+
+    #[cfg(feature = "ssr")]
+    #[test]
+    fn append_tool_filters_type_x402_uses_catalog_predicate() {
+        let mut query = sqlx::QueryBuilder::new("SELECT * FROM tools WHERE true");
+        let filters = ToolFilters {
+            tool_type: vec!["x402".into()],
+            ..Default::default()
+        };
+        append_tool_filters(&mut query, &filters);
+        assert!(query.sql().contains("referral_enabled = true"));
+        assert!(!query.sql().contains("type = $"));
+    }
+
+    #[cfg(feature = "ssr")]
+    #[test]
+    fn append_tool_filters_chain_uses_contains_all_operator() {
+        let mut query = sqlx::QueryBuilder::new("SELECT * FROM tools WHERE true");
+        let filters = ToolFilters {
+            chain: vec!["ethereum".into(), "base".into()],
+            ..Default::default()
+        };
+        append_tool_filters(&mut query, &filters);
+        assert!(query.sql().contains("chains @> $1"));
     }
 
     #[test]

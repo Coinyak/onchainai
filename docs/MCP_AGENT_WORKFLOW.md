@@ -49,7 +49,7 @@ Vercel rewrites `/api`, `/auth`, `/onboarding`, `/mcp` to Railway. Classify fail
 1. **MCP is read-first** — deployment status, build/runtime logs, env *names* (never values), domain/rewrite health.
 2. **Scripts perform deploys** — `./scripts/deploy-railway.sh`, `./scripts/post-deploy-verify.sh https://www.onchain-ai.xyz`. Do not redeploy via MCP unless the user explicitly asks in the same session.
 3. **Pre-deploy checklist** (user-requested Railway deploy): `disk-guard.sh` → tests → `release-build.sh` → `verify-bundle.sh` → deploy script → `post-deploy-verify.sh`.
-4. **Production cuts from `main`** — warn if branch ≠ `main`; do not deploy without confirmation.
+4. **Production cuts from `main`** — Railway/Vercel auto-deploy on `main` push; `deploy-railway.sh` **refuses** non-`main` unless `--force-non-main`. Spec: `docs/superpowers/specs/2026-07-05-split-deploy-automation-spec.md`.
 5. **Report evidence** — list MCP queries (read-only), scripts run, and PASS/FAIL markers. Do not claim prod healthy without smoke/post-deploy output.
 
 ## Security rules
