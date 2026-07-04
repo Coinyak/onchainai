@@ -56,7 +56,7 @@ PROD_URL=https://staging.example ./scripts/spec-verify.sh
 | F1-gh | GitHub OAuth 앱에 www 콜백 등록 + 실제 로그인 왕복 | 로그인 성공, redirect_uri 오류 없음 | **MANUAL** |
 | H1 | `curl -sI $PROD_URL_APEX/` (apex) | 301/308 → `Location: https://www.onchain-ai.xyz/...` | auto (현재 🔴 404) |
 | F2 | 지갑(SIWX) 로그인 + Safari 세션 유지 | 재현 실패 0 | **MANUAL** |
-| C3 | About 카피·핸들 정리 | `app.rs`에 `MVP does not include self-service`·`hoyeon4315-cpu` **0건** | auto |
+| C3 | About 카피·핸들 정리 | `app.rs`에 `MVP does not include self-service`·`Coinyak` **0건** | auto |
 
 ### 트랙 2 — 발견 커버리지 (B1·B2)
 | ID | 검사 | PASS 조건 | 유형 |

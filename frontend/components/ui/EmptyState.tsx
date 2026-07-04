@@ -32,7 +32,12 @@ export function EmptyState({
       </p>
       <div className="empty-state-actions">
         {showClear && (
-          <Link href={clearHref} scroll={false} className="empty-state-clear-btn">
+          <Link
+            href={clearHref}
+            scroll={false}
+            className="empty-state-clear-btn"
+            data-testid="empty-state-clear-filters"
+          >
             Clear filters
           </Link>
         )}

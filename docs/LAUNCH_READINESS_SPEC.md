@@ -67,7 +67,7 @@ Rust 바이너리는 API/MCP/크롤러(Railway), DB는 Supabase. Vercel이 `/api
    (공개 전환 시 보호 규칙이 유지되는지 확인).
 5. **CI 예산 가드 확인**: `ci.yml`은 `workflow_dispatch` 전용(외부 PR이 Actions를 못 태움) — 유지.
    fork PR 정책: 공개 직후에는 수동 dispatch 리뷰 플로 유지, P2에서 paths-filter 기반 자동 CI 검토.
-6. **Visibility flip** → 직후 스모크: README 배지/링크, `/plugin marketplace add hoyeon4315-cpu/onchainai`
+6. **Visibility flip** → 직후 스모크: README 배지/링크, `/plugin marketplace add Coinyak/onchainai`
    → `/plugin install onchainai@onchainai` 실설치, `claude mcp add --transport http ...` 연결,
    `https://www.onchain-ai.xyz/llms.txt` 200.
 7. 실패 항목 있으면 되돌리지 말고 fast-follow 수정(플러그인은 version bump 필요 주의).

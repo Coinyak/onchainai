@@ -1,10 +1,9 @@
 import Link from "next/link";
 import { SiteShell } from "@/components/layout/SiteShell";
-import { API_BASE } from "@/lib/api";
 
 export default function OnboardingProfilePage() {
-  const completeAction = `${API_BASE}/onboarding/complete`;
-  const skipAction = `${API_BASE}/onboarding/skip`;
+  const completeAction = "/onboarding/complete";
+  const skipAction = "/onboarding/skip";
 
   return (
     <SiteShell>

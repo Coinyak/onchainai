@@ -92,7 +92,7 @@ A4 Tier2 임베딩 · 관측성·헬스(A3+H3+E5 통합) · B2 잔여 소스 · 
 - 영향: 리포 노이즈, 비밀/내부 DNS 노출 위험, 신규 기여자 혼란. `AGENTS.md` "Never commit … stray …" 정신에 위배.
 
 ### F7. 문서·기능 드리프트
-- 근거: [src/app.rs:206-207](src/app.rs) About 페이지: "MVP does not include self-service registration yet" — 그러나 `/submit` 라우트와 `SubmitPage`가 실재([src/app.rs:177](src/app.rs), [src/pages/submit.rs](src/pages/submit.rs)). 또한 GitHub 이슈 URL이 개인 핸들 `hoyeon4315-cpu` 하드코딩.
+- 근거: [src/app.rs:206-207](src/app.rs) About 페이지: "MVP does not include self-service registration yet" — 그러나 `/submit` 라우트와 `SubmitPage`가 실재([src/app.rs:177](src/app.rs), [src/pages/submit.rs](src/pages/submit.rs)). 또한 GitHub 이슈 URL이 개인 핸들 `Coinyak` 하드코딩.
 - 영향: 신뢰도 저하, 깨진 안내.
 
 ### F8. 견고성 신호: 핫패스 `expect`/`unwrap` 점검 필요

@@ -36,6 +36,10 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { ToolListSkeleton } from "@/components/ui/Skeleton";
 import { ToolSearchCombobox } from "@/components/tools/ToolSearchCombobox";
+import {
+  buildEmptyIntersectionMessage,
+  describeActiveFilters,
+} from "@/lib/describe-active-filters";
 
 function normalizeCategories(rows: [import("@/lib/api").Category, number][]): CategoryWithCount[] {
   return rows.map(([category, count]) => ({ category, count }));
@@ -97,48 +101,50 @@ function MobileToolbarStrip({
   };
 
   return (
-    <div className="toolbar-mobile-strip sticky-toolbar">
-      <label className="toolbar-sort-label">
-        <span className="sr-only">Sort tools</span>
-        <select
-          className="toolbar-sort-select"
-          value={sort}
-          aria-label="Sort tools"
-          onChange={(ev) => {
-            const href = sortHrefs[ev.target.value];
-            if (href) router.push(href, { scroll: false });
-          }}
-        >
-          {SORT_OPTIONS.map(({ value, label }) => (
-            <option key={value} value={value}>
+    <div className="toolbar-mobile">
+      <span className="tool-count tool-count-mobile toolbar-mobile-count">{toolCount} tools</span>
+      <div className="toolbar-mobile-strip sticky-toolbar">
+        <label className="toolbar-sort-label">
+          <span className="sr-only">Sort tools</span>
+          <select
+            className="toolbar-sort-select"
+            value={sort}
+            aria-label="Sort tools"
+            onChange={(ev) => {
+              const href = sortHrefs[ev.target.value];
+              if (href) router.push(href, { scroll: false });
+            }}
+          >
+            {SORT_OPTIONS.map(({ value, label }) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <div className="toolbar-type-chips" role="group" aria-label="Filter by type or status" tabIndex={0}>
+          {TYPE_CHIPS.map(({ id, label }) => (
+            <Link
+              key={id}
+              href={typeHrefs[id]}
+              scroll={false}
+              className={activeType === id ? "toolbar-type-chip active" : "toolbar-type-chip"}
+            >
               {label}
-            </option>
+            </Link>
           ))}
-        </select>
-      </label>
-      <div className="toolbar-type-chips" role="group" aria-label="Filter by type or status" tabIndex={0}>
-        {TYPE_CHIPS.map(({ id, label }) => (
-          <Link
-            key={id}
-            href={typeHrefs[id]}
-            scroll={false}
-            className={activeType === id ? "toolbar-type-chip active" : "toolbar-type-chip"}
-          >
-            {label}
-          </Link>
-        ))}
-        {STATUS_CHIPS.map(({ id, label }) => (
-          <Link
-            key={id}
-            href={statusHrefs[id]}
-            scroll={false}
-            className={activeStatus === id ? "toolbar-type-chip active" : "toolbar-type-chip"}
-          >
-            {label}
-          </Link>
-        ))}
+          {STATUS_CHIPS.map(({ id, label }) => (
+            <Link
+              key={id}
+              href={statusHrefs[id]}
+              scroll={false}
+              className={activeStatus === id ? "toolbar-type-chip active" : "toolbar-type-chip"}
+            >
+              {label}
+            </Link>
+          ))}
+        </div>
       </div>
-      <span className="tool-count tool-count-mobile">{toolCount} tools</span>
     </div>
   );
 }
@@ -172,7 +178,6 @@ function ToolbarSearch({ base, initialQ }: ToolbarSearchProps) {
         variant="toolbar"
         defaultValue={initialQ}
         onSubmitSearch={navigateWithQuery}
-        onDebouncedQueryChange={navigateWithQuery}
         data-testid="toolbar-search-bar"
       />
     </div>
@@ -233,9 +238,25 @@ export function ToolsBrowser({ base, showToolbarSearch = false, children }: Tool
     enabled: !!selectedSlug,
   });
 
-  const categories = browserQuery.data
-    ? normalizeCategories(browserQuery.data.categories)
-    : [];
+  const categories = useMemo(
+    () =>
+      browserQuery.data ? normalizeCategories(browserQuery.data.categories) : [],
+    [browserQuery.data],
+  );
+
+  // Clear query filters on the current base; preserve sort. Category routes stay in-category.
+  const emptyClearHref = buildQueryBase(
+    base === "home" ? "home" : base,
+    { sort: params.sort, page: 1 },
+  );
+  const emptyFilterLines = useMemo(
+    () => describeActiveFilters(params, categories),
+    [params, categories],
+  );
+  const emptyMessage = useMemo(
+    () => buildEmptyIntersectionMessage(params, categories),
+    [params, categories],
+  );
 
   const sortHot = buildQueryBase(base, forSort(params, "hot"));
   const sortNew = buildQueryBase(base, forSort(params, "new"));
@@ -356,16 +377,17 @@ export function ToolsBrowser({ base, showToolbarSearch = false, children }: Tool
                     <Link href={sortHot} scroll={false} className={params.sort === "hot" ? "sort-link active" : "sort-link"}>HOT ↓</Link>
                     <Link href={sortNew} scroll={false} className={params.sort === "new" ? "sort-link active" : "sort-link"}>New</Link>
                     <Link href={sortComments} scroll={false} className={params.sort === "comments" ? "sort-link active" : "sort-link"}>Comments</Link>
-                    <Link href={statusVerified} scroll={false} className={params.status === "verified" ? "sort-link active" : "sort-link"}>Verified</Link>
-                    <Link href={statusOfficial} scroll={false} className={params.status === "official" ? "sort-link active" : "sort-link"}>Official</Link>
                   </div>
                   <div className="toolbar-filter-row">
+                    <span className="toolbar-filter-label">Filter:</span>
                     <Link href={typeMcp} scroll={false} className={params.type === "mcp" ? "sort-link active" : "sort-link"}>MCP</Link>
                     <Link href={typeCli} scroll={false} className={params.type === "cli" ? "sort-link active" : "sort-link"}>CLI</Link>
                     <Link href={typeApi} scroll={false} className={params.type === "api" ? "sort-link active" : "sort-link"}>API</Link>
                     <Link href={typeSdk} scroll={false} className={params.type === "sdk" ? "sort-link active" : "sort-link"}>SDK</Link>
                     <Link href={typeSkill} scroll={false} className={params.type === "skill" ? "sort-link active" : "sort-link"}>Skill</Link>
                     <Link href={typeX402} scroll={false} className={params.type === "x402" ? "sort-link active" : "sort-link"}>x402</Link>
+                    <Link href={statusVerified} scroll={false} className={params.status === "verified" ? "sort-link active" : "sort-link"}>Verified</Link>
+                    <Link href={statusOfficial} scroll={false} className={params.status === "official" ? "sort-link active" : "sort-link"}>Official</Link>
                   </div>
                 </div>
                 <span className="tool-count">{browserQuery.data.total} tools</span>
@@ -394,20 +416,37 @@ export function ToolsBrowser({ base, showToolbarSearch = false, children }: Tool
             </div>
 
             {browserQuery.data.tools.length === 0 ? (
-              <EmptyState clearHref={base === "home" ? "/" : base === "tools" ? "/tools" : `/categories/${(base as { category: string }).category}`} />
+              <EmptyState
+                message={emptyMessage}
+                filterLines={emptyFilterLines}
+                clearHref={emptyClearHref}
+              />
             ) : (
               <>
                 <div className="tool-list">
-                  {browserQuery.data.tools.map((tool) => (
-                    <ToolCard
-                      key={tool.slug}
-                      tool={tool}
-                      previewHref={withSelected(base, queryBase, tool.slug)}
-                      queryBase={cardQueryBase}
-                      isSelected={selectedSlug === tool.slug}
-                      commentCount={browserQuery.data!.comment_counts[tool.slug] ?? 0}
-                    />
-                  ))}
+                  {browserQuery.data.tools.map((tool) => {
+                    const isSelected = selectedSlug === tool.slug;
+                    const cardPreviewOpen = isSelected && previewOpen;
+                    return (
+                      <div
+                        key={tool.slug}
+                        className={
+                          cardPreviewOpen
+                            ? "tool-card-host tool-card-host--preview-open"
+                            : "tool-card-host"
+                        }
+                        data-preview-open={cardPreviewOpen ? "" : undefined}
+                      >
+                        <ToolCard
+                          tool={tool}
+                          previewHref={withSelected(base, queryBase, tool.slug)}
+                          queryBase={cardQueryBase}
+                          isSelected={isSelected}
+                          commentCount={browserQuery.data!.comment_counts[tool.slug] ?? 0}
+                        />
+                      </div>
+                    );
+                  })}
                 </div>
                 {shouldShowLoadMore(
                   browserQuery.data.tools.length,

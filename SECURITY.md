@@ -7,7 +7,7 @@ Please **do not open a public issue** for security problems.
 - Preferred: GitHub → Security tab → **Report a vulnerability** (private advisory)
   on this repository.
 - If that is unavailable, email the maintainer listed on the GitHub profile of
-  [@hoyeon4315-cpu](https://github.com/hoyeon4315-cpu) with subject
+  [@Coinyak](https://github.com/Coinyak) with subject
   `[onchainai security]`.
 
 Include reproduction steps, the affected endpoint or component, and impact. You

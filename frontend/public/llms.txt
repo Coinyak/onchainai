@@ -2,12 +2,12 @@
 
 > Crypto tool directory for humans and AI agents. Discover, vet, and install MCP servers, CLIs, SDKs, APIs, x402 services, and AI-agent tools across chains — with trust scores, install-risk gating, and x402 payment disclosure.
 
-For AI agents: connect to the free, read-only MCP endpoint `https://www.onchain-ai.xyz/mcp` (streamable HTTP, JSON-RPC over POST, no auth). Tools: search_tools, get_tool_detail, get_install_guide, list_categories, get_dashboard_snapshot. Never install tools whose install_risk_level is "critical"; always disclose x402 pricing before a paid tool is called. Claude Code users can install the plugin: `/plugin marketplace add hoyeon4315-cpu/onchainai` then `/plugin install onchainai@onchainai`.
+For AI agents: connect to the free, read-only MCP endpoint `https://www.onchain-ai.xyz/mcp` (streamable HTTP, JSON-RPC over POST, no auth). Tools: search_tools, get_tool_detail, get_install_guide, list_categories, get_dashboard_snapshot. Never install tools whose install_risk_level is "critical"; always disclose x402 pricing before a paid tool is called. Claude Code users can install the plugin: `/plugin marketplace add Coinyak/onchainai` then `/plugin install onchainai@onchainai`.
 
 ## Connect
 
 - [Connect hub](https://www.onchain-ai.xyz/connect): per-client MCP setup (Claude, Cursor, VS Code, ChatGPT, more) with one-click deeplinks
-- [Connection guide](https://github.com/hoyeon4315-cpu/onchainai/blob/main/docs/CONNECT.md): canonical markdown guide for every client
+- [Connection guide](https://github.com/Coinyak/onchainai/blob/main/docs/CONNECT.md): canonical markdown guide for every client
 
 ## Browse
 
@@ -19,7 +19,7 @@ For AI agents: connect to the free, read-only MCP endpoint `https://www.onchain-
 ## Contribute
 
 - [Submit a tool](https://www.onchain-ai.xyz/submit): add a missing crypto tool to the directory
-- [Source code](https://github.com/hoyeon4315-cpu/onchainai): MIT-licensed Rust API + Next.js frontend
+- [Source code](https://github.com/Coinyak/onchainai): MIT-licensed Rust API + Next.js frontend
 
 ## Policy
 

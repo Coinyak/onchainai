@@ -88,8 +88,8 @@ export function useToolSearchTypeahead({
   const results = useMemo(() => searchQuery.data ?? [], [searchQuery.data]);
 
   const resolvedActiveIndex = useMemo(() => {
-    if (!isOpen || results.length === 0) return -1;
-    if (activeIndex < 0 || activeIndex >= results.length) return 0;
+    if (!isOpen || results.length === 0 || activeIndex < 0) return -1;
+    if (activeIndex >= results.length) return results.length - 1;
     return activeIndex;
   }, [activeIndex, isOpen, results.length]);
 
@@ -100,9 +100,11 @@ export function useToolSearchTypeahead({
   }, []);
 
   const selectActive = useCallback((): Tool | undefined => {
-    if (resolvedActiveIndex < 0 || resolvedActiveIndex >= results.length) return undefined;
+    if (!isOpen || resolvedActiveIndex < 0 || resolvedActiveIndex >= results.length) {
+      return undefined;
+    }
     return results[resolvedActiveIndex];
-  }, [resolvedActiveIndex, results]);
+  }, [resolvedActiveIndex, isOpen, results]);
 
   const activeDescendantId = useMemo(() => {
     if (!isOpen || resolvedActiveIndex < 0 || resolvedActiveIndex >= results.length) {

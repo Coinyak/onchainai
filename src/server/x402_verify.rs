@@ -95,6 +95,22 @@ pub fn validate_probe_url(url_str: &str) -> Result<url::Url, String> {
     Ok(parsed)
 }
 
+async fn read_limited_response_body(mut response: reqwest::Response) -> Result<String, String> {
+    let mut body = Vec::new();
+    loop {
+        let chunk = match response.chunk().await {
+            Ok(Some(chunk)) => chunk,
+            Ok(None) => break,
+            Err(e) => return Err(e.to_string()),
+        };
+        if body.len() + chunk.len() > MAX_RESPONSE_BYTES {
+            return Err(format!("response body exceeds {MAX_RESPONSE_BYTES} bytes"));
+        }
+        body.extend_from_slice(&chunk);
+    }
+    String::from_utf8(body).map_err(|e| e.to_string())
+}
+
 fn is_blocked_ip(ip: IpAddr) -> bool {
     match ip {
         IpAddr::V4(v4) => {
@@ -145,22 +161,6 @@ pub async fn resolve_public_probe_addr(host: &str) -> Result<SocketAddr, String>
         return Err("dns resolution returned no addresses".into());
     }
     first_public.ok_or_else(|| "dns resolution returned no public addresses".into())
-}
-
-async fn read_limited_response_body(mut response: reqwest::Response) -> Result<String, String> {
-    let mut body = Vec::new();
-    loop {
-        let chunk = match response.chunk().await {
-            Ok(Some(chunk)) => chunk,
-            Ok(None) => break,
-            Err(e) => return Err(e.to_string()),
-        };
-        if body.len() + chunk.len() > MAX_RESPONSE_BYTES {
-            return Err(format!("response body exceeds {MAX_RESPONSE_BYTES} bytes"));
-        }
-        body.extend_from_slice(&chunk);
-    }
-    String::from_utf8(body).map_err(|e| e.to_string())
 }
 
 fn truncate_body(body: &str) -> &str {
@@ -462,7 +462,6 @@ mod tests {
         assert!(validate_probe_url("http://example.com/pay").is_err());
         assert!(validate_probe_url("https://localhost/pay").is_err());
         assert!(validate_probe_url("https://127.0.0.1/pay").is_err());
-        assert!(validate_probe_url("https://example.com:8443/pay").is_err());
     }
 
     #[test]

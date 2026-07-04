@@ -20,12 +20,13 @@ import {
   ONCHAINAI_MCP_UNIVERSAL_CMD,
   type ConnectPageClient,
 } from "@/lib/mcp-connect";
+import {
+  ONCHAINAI_PLUGIN_INSTALL_CMD,
+  ONCHAINAI_PLUGIN_MARKETPLACE_CMD,
+} from "@/lib/mcp-deeplinks";
 import { copyLabelAria } from "@/lib/install-guide";
-
-const PLUGIN_MARKETPLACE_CMD = "/plugin marketplace add hoyeon4315-cpu/onchainai";
-const PLUGIN_INSTALL_CMD = "/plugin install onchainai@onchainai";
 const GITHUB_CONNECT_GUIDE =
-  "https://github.com/hoyeon4315-cpu/onchainai/blob/main/docs/CONNECT.md";
+  "https://github.com/Coinyak/onchainai/blob/main/docs/CONNECT.md";
 
 const CLIENT_ICONS: Record<ConnectPageClient["icon"], ReactNode> = {
   terminal: <Terminal size={20} strokeWidth={1.75} aria-hidden />,
@@ -97,18 +98,26 @@ export function ConnectPageContent() {
           </ol>
           <div className="tool-install-stack mt-3">
             <div className="tool-install">
-              <HighlightedCommand command={PLUGIN_MARKETPLACE_CMD} showPrefix={false} showCopy={false} />
+              <HighlightedCommand
+                command={ONCHAINAI_PLUGIN_MARKETPLACE_CMD}
+                showPrefix={false}
+                showCopy={false}
+              />
               <CopyButton
-                text={PLUGIN_MARKETPLACE_CMD}
+                text={ONCHAINAI_PLUGIN_MARKETPLACE_CMD}
                 label={copyLabelAria("Copy marketplace command")}
               />
             </div>
           </div>
           <div className="tool-install-stack mt-3">
             <div className="tool-install">
-              <HighlightedCommand command={PLUGIN_INSTALL_CMD} showPrefix={false} showCopy={false} />
+              <HighlightedCommand
+                command={ONCHAINAI_PLUGIN_INSTALL_CMD}
+                showPrefix={false}
+                showCopy={false}
+              />
               <CopyButton
-                text={PLUGIN_INSTALL_CMD}
+                text={ONCHAINAI_PLUGIN_INSTALL_CMD}
                 label={copyLabelAria("Copy install command")}
               />
             </div>

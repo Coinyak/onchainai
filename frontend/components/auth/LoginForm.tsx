@@ -1,16 +1,18 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { API_BASE } from "@/lib/api";
+import { useState } from "react";
+import { clientApiBase, githubSignInHref, githubSwitchHref, isVercelPreviewHost, productionLoginHref } from "@/lib/auth-origin";
 import { useAuth } from "@/lib/auth";
 import { GitHubMarkIcon } from "@/components/icons/GitHubMarkIcon";
 import { connectWalletSiwx, SiwxError } from "@/lib/siwx";
+import { consumeReturnTo } from "@/lib/return-to";
 
 interface LoginFormProps {
   compact?: boolean;
   onCancel?: () => void;
   headingId?: string;
   authError?: string | null;
+  signedOut?: boolean;
 }
 
 export function LoginForm({
@@ -18,6 +20,7 @@ export function LoginForm({
   onCancel,
   headingId = "login-title",
   authError = null,
+  signedOut = false,
 }: LoginFormProps) {
   const { refetch } = useAuth();
   const [email, setEmail] = useState("");
@@ -25,15 +28,12 @@ export function LoginForm({
   const [emailBusy, setEmailBusy] = useState(false);
   const [walletBusy, setWalletBusy] = useState(false);
   const [walletMsg, setWalletMsg] = useState<string | null>(null);
-  const [isVercelPreview, setIsVercelPreview] = useState(false);
 
-  useEffect(() => {
-    const host = window.location.hostname;
-    setIsVercelPreview(host.endsWith(".vercel.app"));
-  }, []);
-
-  const githubHref = `${API_BASE}/auth/github`;
-  const githubSwitchAction = `${API_BASE}/auth/github/switch`;
+  const apiBase = clientApiBase();
+  const githubHref = githubSignInHref();
+  const githubSwitchAction = githubSwitchHref();
+  const previewHost =
+    typeof window !== "undefined" && isVercelPreviewHost(window.location.hostname);
 
   const headingClass = compact
     ? "text-[18px] font-semibold mb-2"
@@ -48,7 +48,7 @@ export function LoginForm({
     setEmailBusy(true);
     setEmailMsg("Sending magic link...");
     try {
-      const res = await fetch(`${API_BASE}/auth/email`, {
+      const res = await fetch(`${apiBase}/auth/email`, {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
@@ -70,9 +70,10 @@ export function LoginForm({
     setWalletBusy(true);
     setWalletMsg(null);
     try {
-      const { redirect } = await connectWalletSiwx(API_BASE);
+      const { redirect } = await connectWalletSiwx(apiBase);
       await refetch();
-      window.location.href = redirect;
+      const returnTo = consumeReturnTo();
+      window.location.href = returnTo || redirect;
     } catch (err) {
       const message =
         err instanceof SiwxError
@@ -101,21 +102,30 @@ export function LoginForm({
           {authError}
         </p>
       )}
-      {isVercelPreview && (
+      {signedOut && (
+        <p
+          className="mb-4 rounded-md border border-border px-4 py-3 text-body-sm text-secondary"
+          role="status"
+          data-testid="signed-out-notice"
+        >
+          You are signed out of OnchainAI. If &quot;Continue with GitHub&quot; signs you back in
+          immediately, GitHub still has an active session — use{" "}
+          <strong>Sign out of GitHub</strong> below first, then sign in again.
+        </p>
+      )}
+      {previewHost && (
         <p
           className="mb-4 rounded-md border border-border bg-neutral-hover px-4 py-3 text-body-sm text-secondary"
           role="status"
           data-testid="preview-auth-notice"
         >
-          GitHub sign-in does not work on Vercel preview URLs — OAuth callbacks are
-          registered for production only. Use{" "}
-          <a
-            href="https://www.onchain-ai.xyz/login"
-            className="text-primary underline hover:no-underline"
-          >
+          GitHub sign-in does not work on Vercel preview URLs — OAuth callbacks are registered
+          for production only. Use{" "}
+          <a href={productionLoginHref()} className="text-primary underline hover:no-underline">
             www.onchain-ai.xyz
           </a>{" "}
-          or local dev (<code className="text-body-sm">localhost:3000</code>).
+          or local dev (<code className="text-body-sm">localhost:3000</code>). Use wallet or email
+          sign-in below to stay authenticated on this preview deployment.
         </p>
       )}
       <a

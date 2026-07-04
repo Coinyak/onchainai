@@ -13,7 +13,6 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import type { CategoryWithCount } from "@/lib/api";
-import { SidebarBrand } from "@/components/layout/SidebarBrand";
 import { CategoryList } from "@/components/layout/CategoryList";
 import { FilterChip } from "@/components/layout/FilterChip";
 import {
@@ -325,7 +324,6 @@ export function Sidebar({
           }
         }}
       >
-        <SidebarBrand collapsed={collapsed} />
         <div className="sidebar-controls">
           <button
             type="button"
