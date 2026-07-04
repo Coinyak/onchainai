@@ -321,11 +321,17 @@ pub fn tool_logo_img_url(tool: &Tool) -> Option<String> {
         .or_else(|| homepage_favicon_url(tool.homepage.as_deref()))
 }
 
-/// Strip unsafe `logo_url` and operator payout addresses before public API/MCP list/detail.
+/// Strip unsafe `logo_url`, operator payout addresses, and internal x402
+/// probe bookkeeping before public API/MCP list/detail. Only the boolean
+/// trust flags (payment_verified, x402_endpoint_verified, price_verified)
+/// are meant to be public display signals — see migrations/028_x402_verification.sql.
 pub fn sanitize_tool_for_public_response(mut tool: Tool) -> Tool {
     tool.logo_url = sanitize_logo_url(tool.logo_url.take());
     tool.referral_payout_address = None;
     tool.x402_pay_to_address = None;
+    tool.x402_endpoint = None;
+    tool.x402_last_checked_at = None;
+    tool.x402_check_failures = 0;
     tool
 }
 
@@ -567,6 +573,18 @@ mod tests {
         let sanitized = sanitize_tool_for_public_response(tool);
         assert_eq!(sanitized.referral_payout_address, None);
         assert_eq!(sanitized.x402_pay_to_address, None);
+    }
+
+    #[test]
+    fn sanitize_tool_for_public_response_strips_x402_probe_bookkeeping() {
+        let mut tool = sample_tool();
+        tool.x402_endpoint = Some("https://example.com/x402".into());
+        tool.x402_last_checked_at = Some(chrono::Utc::now());
+        tool.x402_check_failures = 7;
+        let sanitized = sanitize_tool_for_public_response(tool);
+        assert_eq!(sanitized.x402_endpoint, None);
+        assert_eq!(sanitized.x402_last_checked_at, None);
+        assert_eq!(sanitized.x402_check_failures, 0);
     }
 
     #[test]

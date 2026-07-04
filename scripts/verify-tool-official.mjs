@@ -487,8 +487,15 @@ const RANK = { community: 0, verified: 1, official: 2 };
 
 async function applyStatus(db, tool, decision) {
   const target = decision.decision;
+  const currentRank = RANK[tool.status];
+  if (currentRank === undefined) {
+    return {
+      applied: false,
+      note: `no-op: unrecognized current status '${tool.status}' — manual review required`,
+    };
+  }
   const upgradesTeam = target === "official" && decision.team && !tool.official_team;
-  if (RANK[target] < RANK[tool.status] || (RANK[target] === RANK[tool.status] && !upgradesTeam)) {
+  if (RANK[target] < currentRank || (RANK[target] === currentRank && !upgradesTeam)) {
     return { applied: false, note: `no-op: current status '${tool.status}' >= '${target}'` };
   }
   const patch = { status: target };

@@ -497,9 +497,7 @@ pub(crate) fn validate_tool_referral_payload(
     }
     if let Some(endpoint) = payload.x402_endpoint.as_deref() {
         let trimmed = endpoint.trim();
-        if !trimmed.is_empty()
-            && crate::server::x402_verify::validate_probe_url(trimmed).is_err()
-        {
+        if !trimmed.is_empty() && crate::server::x402_verify::validate_probe_url(trimmed).is_err() {
             return Err("x402 endpoint must be a valid https probe URL");
         }
     }

@@ -6,8 +6,8 @@ use axum::{
     routing::{get, post, put},
     Json, Router,
 };
-use uuid::Uuid;
 use serde::Deserialize;
+use uuid::Uuid;
 
 use crate::models::Tool;
 use crate::server::functions::{
@@ -388,7 +388,9 @@ async fn trigger_x402_verify(
     let status = crate::server::x402_verify::verify_tool_by_id(&state.pool, &client, id)
         .await
         .map_err(|e| ApiError::Internal(format!("x402 verify failed: {e}")))?
-        .ok_or_else(|| ApiError::NotFound(format!("tool not found or missing x402_endpoint: {id}")))?;
+        .ok_or_else(|| {
+            ApiError::NotFound(format!("tool not found or missing x402_endpoint: {id}"))
+        })?;
 
     Ok(Json(status))
 }

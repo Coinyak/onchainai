@@ -276,7 +276,9 @@ fn apply_outcome_to_flags(
                 .is_some_and(|(probed, advertised)| price_matches_advertised(probed, advertised));
             (endpoint_verified, price_verified, 0)
         }
-        ProbeOutcome::NotPaymentRequired | ProbeOutcome::ParseFailed | ProbeOutcome::RequestFailed(_) => {
+        ProbeOutcome::NotPaymentRequired
+        | ProbeOutcome::ParseFailed
+        | ProbeOutcome::RequestFailed(_) => {
             let failures = current_failures.saturating_add(1);
             let endpoint_verified = if failures >= FAILURE_DEMOTE_THRESHOLD {
                 false
@@ -547,22 +549,14 @@ mod tests {
 
     #[test]
     fn apply_outcome_demotes_after_three_failures() {
-        let (endpoint, price, failures) = apply_outcome_to_flags(
-            &ProbeOutcome::NotPaymentRequired,
-            Some("1000"),
-            true,
-            1,
-        );
+        let (endpoint, price, failures) =
+            apply_outcome_to_flags(&ProbeOutcome::NotPaymentRequired, Some("1000"), true, 1);
         assert!(endpoint);
         assert!(!price);
         assert_eq!(failures, 2);
 
-        let (endpoint, _, failures) = apply_outcome_to_flags(
-            &ProbeOutcome::NotPaymentRequired,
-            Some("1000"),
-            true,
-            2,
-        );
+        let (endpoint, _, failures) =
+            apply_outcome_to_flags(&ProbeOutcome::NotPaymentRequired, Some("1000"), true, 2);
         assert!(!endpoint);
         assert_eq!(failures, 3);
     }

@@ -97,9 +97,7 @@ pub(crate) fn referral_metadata_for_tool(
 ) -> Option<ReferralMetadata> {
     tool.referral_enabled.then(|| ReferralMetadata {
         enabled: tool.referral_enabled,
-        bps: tool
-            .referral_bps
-            .or_else(|| defaults.and_then(|d| d.bps)),
+        bps: tool.referral_bps.or_else(|| defaults.and_then(|d| d.bps)),
         payout_address: tool
             .referral_payout_address
             .clone()

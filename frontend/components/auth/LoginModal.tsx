@@ -16,7 +16,10 @@ export function LoginModal({ open, onClose }: LoginModalProps) {
     document.body.style.overflow = "hidden";
 
     function onKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") {
+        e.stopPropagation();
+        onClose();
+      }
     }
     document.addEventListener("keydown", onKeyDown);
 

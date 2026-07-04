@@ -12,8 +12,6 @@ import { createRequire } from "node:module";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
-const APPLY = process.env.SEED_ENV === "prod-curate";
-const DRY = !APPLY;
 
 function parseEnvFile(path) {
   const out = {};
@@ -40,6 +38,8 @@ const env = {
   ...parseEnvFile(process.env.ENV_FILE || resolve(ROOT, ".env")),
   ...process.env,
 };
+const APPLY = env.SEED_ENV === "prod-curate";
+const DRY = !APPLY;
 
 /** @param {Partial<ToolRow> & Pick<ToolRow, "slug"|"name"|"description"|"function"|"type"|"homepage">} row */
 function tool(row) {
@@ -706,35 +706,42 @@ const client = new pg.Client({
 
 await client.connect();
 const results = [];
-for (const t of TOOLS) {
-  const r = await client.query(UPSERT_SQL, [
-    t.name,
-    t.slug,
-    t.description,
-    t.function,
-    t.asset_class,
-    t.actor,
-    t.type,
-    t.repo_url,
-    t.homepage,
-    t.npm_package,
-    t.install_command,
-    t.mcp_endpoint,
-    t.chains,
-    t.crypto_relevance_score,
-    t.crypto_relevance_reasons,
-    t.relevance_status,
-    t.install_risk_level,
-    t.install_risk_reasons,
-    t.requires_secret,
-    t.license,
-    t.stars,
-    t.source,
-  ]);
-  results.push({
-    slug: t.slug,
-    action: r.rows[0].inserted ? "inserted" : "updated",
-  });
+try {
+  for (const t of TOOLS) {
+    try {
+      const r = await client.query(UPSERT_SQL, [
+        t.name,
+        t.slug,
+        t.description,
+        t.function,
+        t.asset_class,
+        t.actor,
+        t.type,
+        t.repo_url,
+        t.homepage,
+        t.npm_package,
+        t.install_command,
+        t.mcp_endpoint,
+        t.chains,
+        t.crypto_relevance_score,
+        t.crypto_relevance_reasons,
+        t.relevance_status,
+        t.install_risk_level,
+        t.install_risk_reasons,
+        t.requires_secret,
+        t.license,
+        t.stars,
+        t.source,
+      ]);
+      results.push({
+        slug: t.slug,
+        action: r.rows[0].inserted ? "inserted" : "updated",
+      });
+    } catch (err) {
+      results.push({ slug: t.slug, action: "error", error: err.message });
+    }
+  }
+} finally {
+  await client.end();
 }
-await client.end();
 console.log(JSON.stringify({ ok: true, mode: "apply", tools: results }, null, 2));
