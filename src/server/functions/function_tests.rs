@@ -132,6 +132,25 @@ mod tests {
 
     #[cfg(feature = "ssr")]
     #[test]
+    fn fetch_filtered_category_counts_sql_applies_non_function_filters() {
+        let mut facet_filters = ToolFilters {
+            pricing: vec!["x402".into()],
+            ..Default::default()
+        };
+        facet_filters.function.clear();
+
+        let mut q = sqlx::QueryBuilder::new(
+            "SELECT c.id FROM categories c LEFT JOIN tools t ON t.function = c.id AND ",
+        );
+        q.push(crate::server::queries::PUBLIC_TOOL_WHERE);
+        append_tool_filters(&mut q, &facet_filters);
+
+        assert!(q.sql().contains("x402_price IS NOT NULL"));
+        assert!(!q.sql().contains("function = $"));
+    }
+
+    #[cfg(feature = "ssr")]
+    #[test]
     fn append_tool_filters_type_x402_uses_catalog_predicate() {
         let mut query = sqlx::QueryBuilder::new("SELECT * FROM tools WHERE true");
         let filters = ToolFilters {

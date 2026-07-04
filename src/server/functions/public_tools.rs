@@ -3,10 +3,35 @@ use super::*;
 /// Returns all function categories with live **approved** tool counts.
 #[cfg(feature = "ssr")]
 pub(crate) async fn fetch_categories(pool: &sqlx::PgPool) -> Result<Vec<(Category, i64)>, FnError> {
-    let rows = sqlx::query_as::<_, CategoryWithCount>(CATEGORIES_WITH_COUNTS_SQL)
+    fetch_filtered_category_counts(pool, &ToolFilters::default()).await
+}
+
+/// Per-function counts for the sidebar, respecting active filters (function axis excluded).
+#[cfg(feature = "ssr")]
+pub(crate) async fn fetch_filtered_category_counts(
+    pool: &sqlx::PgPool,
+    filters: &ToolFilters,
+) -> Result<Vec<(Category, i64)>, FnError> {
+    let mut facet_filters = filters.clone();
+    facet_filters.function.clear();
+
+    let mut q = sqlx::QueryBuilder::new(
+        "SELECT c.id, c.label, c.icon, c.description, c.sort_order, COUNT(t.id)::bigint AS count \
+         FROM categories c \
+         LEFT JOIN tools t ON t.function = c.id AND ",
+    );
+    q.push(PUBLIC_TOOL_WHERE);
+    append_tool_filters(&mut q, &facet_filters);
+    q.push(
+        " GROUP BY c.id, c.label, c.icon, c.description, c.sort_order \
+          ORDER BY c.sort_order ASC",
+    );
+
+    let rows = q
+        .build_query_as::<CategoryWithCount>()
         .fetch_all(pool)
         .await
-        .map_err(|e| FnError::new(format!("failed to load categories: {e}")))?;
+        .map_err(|e| FnError::new(format!("failed to load filtered category counts: {e}")))?;
 
     Ok(rows.into_iter().map(CategoryWithCount::into_pair).collect())
 }

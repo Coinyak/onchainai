@@ -6,6 +6,7 @@ use crate::models::{Category, Tool};
 use crate::server::functions::{
     browser_visible_limit_for_page, build_toolkit_payload, clamp_browser_page_param,
     clamp_dashboard_list_limit, fetch_categories, fetch_chain_counts, fetch_count_tools,
+    fetch_filtered_category_counts,
     fetch_list_tools, fetch_public_dashboard_snapshot, fetch_tool_by_slug,
     fetch_tool_comment_counts, resolve_bookmark_tool_id, validate_search_tools_input,
     validate_tool_filters, validate_tool_list_request, BrowserDataPayload, LoadBrowserDataRequest,
@@ -226,7 +227,7 @@ async fn load_browser_data(
     let preview_slug = req.selected.filter(|s| !s.is_empty());
 
     let (categories, chains, total, tools, preview_tool) = futures::join!(
-        fetch_categories(&state.pool),
+        fetch_filtered_category_counts(&state.pool, &req.filters),
         fetch_chain_counts(&state.pool, 100),
         fetch_count_tools(&state.pool, &req.filters),
         fetch_list_tools(

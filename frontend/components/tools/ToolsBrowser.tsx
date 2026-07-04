@@ -6,9 +6,12 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import {
   loadBrowserData,
+  getCategories,
   getToolBySlug,
+  normalizeCategoryRows,
   type CategoryWithCount,
 } from "@/lib/api";
+import { FUNCTION_CATEGORY_FALLBACK } from "@/lib/function-categories";
 import {
   type BrowserBase,
   ADD_MCP_INTENT,
@@ -43,8 +46,16 @@ import {
   describeActiveFilters,
 } from "@/lib/describe-active-filters";
 
-function normalizeCategories(rows: [import("@/lib/api").Category, number][]): CategoryWithCount[] {
-  return rows.map(([category, count]) => ({ category, count }));
+function mergeCategoryCounts(
+  labels: CategoryWithCount[],
+  scoped: CategoryWithCount[] | null,
+): CategoryWithCount[] {
+  if (!scoped?.length) return labels;
+  const countById = new Map(scoped.map((row) => [row.category.id, row.count]));
+  return labels.map((row) => ({
+    category: row.category,
+    count: countById.get(row.category.id) ?? 0,
+  }));
 }
 
 interface ToolbarSearchProps {
@@ -227,6 +238,12 @@ export function ToolsBrowser({ base, showToolbarSearch = false, children }: Tool
     queryBase,
   );
 
+  const catalogCategoriesQuery = useQuery({
+    queryKey: ["catalog-categories"],
+    queryFn: getCategories,
+    staleTime: 5 * 60 * 1000,
+  });
+
   const browserQuery = useQuery({
     queryKey: ["browser-data", base, params.sort, filters, params.q, params.page],
     queryFn: () =>
@@ -246,11 +263,23 @@ export function ToolsBrowser({ base, showToolbarSearch = false, children }: Tool
     enabled: !!selectedSlug,
   });
 
-  const categories = useMemo(
+  const scopedCategoryCounts = useMemo(
     () =>
-      browserQuery.data ? normalizeCategories(browserQuery.data.categories) : [],
+      browserQuery.data
+        ? normalizeCategoryRows(browserQuery.data.categories as unknown[])
+        : null,
     [browserQuery.data],
   );
+
+  const categories = useMemo(() => {
+    const labelSource =
+      catalogCategoriesQuery.data?.length
+        ? catalogCategoriesQuery.data
+        : scopedCategoryCounts?.length
+          ? scopedCategoryCounts
+          : FUNCTION_CATEGORY_FALLBACK;
+    return mergeCategoryCounts(labelSource, scopedCategoryCounts);
+  }, [catalogCategoriesQuery.data, scopedCategoryCounts]);
 
   // Clear query filters on the current base; preserve sort. Category routes stay in-category.
   const emptyClearHref = buildQueryBase(
@@ -318,7 +347,7 @@ export function ToolsBrowser({ base, showToolbarSearch = false, children }: Tool
         <>
           <Sidebar
             base={base}
-            categories={[]}
+            categories={categories}
             queryBase={filterQueryBase}
             filterRevision={filterRevision}
             defaultFunctionOpen={base === "tools"}
