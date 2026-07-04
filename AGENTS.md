@@ -58,7 +58,7 @@ Also once after clone (macOS): `./scripts/install-disk-autoclean.sh` schedules a
 - Never commit `.env`, `target/`, `.playwright-cli/`, `frontend/.next/`, or build artifacts.
 - Never expose `SUPABASE_SERVICE_KEY` or `JWT_SECRET` to client code.
 - Validate user input; use sqlx parameterized queries; do not inject raw HTML.
-- x402 is attribution/trust metadata only: do not build custody, facilitator, gateway, fund-moving, undocumented `referrer`, or `split` payment fields.
+- x402: attribution/trust metadata for third-party tools; selling OnchainAI-owned services via x402 (K2) is allowed when payee is our wallet. Never build custody, third-party payment proxy/gateway, fund-moving for others, undocumented `referrer`, or `split` fields.
 - Auth is required for comments, upvotes, bookmarks, and admin routes; admin checks must be server-side.
 - After schema changes, run migrations and `sqlx prepare`.
 - Before commits/PRs, run relevant tests plus clippy/format, or state exactly why not.

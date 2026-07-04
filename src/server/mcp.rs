@@ -12,8 +12,8 @@ use crate::server::tool_categories::PUBLIC_TOOL_CATEGORY_IDS;
 use crate::AppState;
 use axum::{
     extract::State,
-    http::{Request, StatusCode},
-    response::IntoResponse,
+    http::{HeaderMap, Request, StatusCode},
+    response::{IntoResponse, Response},
     Json,
 };
 use serde::{Deserialize, Serialize};
@@ -57,7 +57,8 @@ pub async fn handle_mcp(
         return (
             StatusCode::TOO_MANY_REQUESTS,
             Json(error_response(Value::Null, -32099, &limit.to_string())),
-        );
+        )
+            .into_response();
     }
 
     let body_bytes = match axum::body::to_bytes(body, 1024 * 1024).await {
@@ -66,7 +67,8 @@ pub async fn handle_mcp(
             return (
                 StatusCode::BAD_REQUEST,
                 Json(error_response(Value::Null, -32700, "Parse error")),
-            );
+            )
+                .into_response();
         }
     };
     let rpc_req: JsonRpcRequest = match serde_json::from_slice(&body_bytes) {
@@ -75,7 +77,8 @@ pub async fn handle_mcp(
             return (
                 StatusCode::BAD_REQUEST,
                 Json(error_response(Value::Null, -32700, "Parse error")),
-            );
+            )
+                .into_response();
         }
     };
 
@@ -85,7 +88,8 @@ pub async fn handle_mcp(
         return (
             StatusCode::OK,
             Json(error_response(id, -32600, "Invalid Request")),
-        );
+        )
+            .into_response();
     }
 
     let result = match rpc_req.method.as_str() {
@@ -115,14 +119,24 @@ pub async fn handle_mcp(
                     .and_then(|v| v.to_str().ok()),
             )
             .await;
-            tools_call(&state.pool, rpc_req.params, agent.as_ref()).await
+            return match tools_call(&state.pool, rpc_req.params, agent.as_ref(), &parts.headers)
+                .await
+            {
+                ToolsCallOutcome::Ok(value) => {
+                    (StatusCode::OK, Json(ok_response(id, value))).into_response()
+                }
+                ToolsCallOutcome::Http(response) => response,
+                ToolsCallOutcome::Err((code, msg)) => {
+                    (StatusCode::OK, Json(error_response(id, code, &msg))).into_response()
+                }
+            };
         }
         other => Err((-32601, format!("Method not found: {other}"))),
     };
 
     match result {
-        Ok(value) => (StatusCode::OK, Json(ok_response(id, value))),
-        Err((code, msg)) => (StatusCode::OK, Json(error_response(id, code, &msg))),
+        Ok(value) => (StatusCode::OK, Json(ok_response(id, value))).into_response(),
+        Err((code, msg)) => (StatusCode::OK, Json(error_response(id, code, &msg))).into_response(),
     }
 }
 
@@ -159,6 +173,7 @@ fn tool_definitions(authenticated: bool) -> Vec<Value> {
         list_categories_definition(),
         get_dashboard_snapshot_definition(),
         get_install_guide_definition(),
+        check_endpoint_health_definition(),
     ];
     if authenticated {
         tools.push(save_to_toolkit_definition());
@@ -308,6 +323,23 @@ fn get_dashboard_snapshot_definition() -> Value {
     })
 }
 
+fn check_endpoint_health_definition() -> Value {
+    json!({
+        "name": "check_endpoint_health",
+        "description": "Premium x402 trust data: endpoint liveness, 30-day probe uptime, and last probe time for a listed x402 tool. Requires x402 micropayment per call (HTTP 402 handshake via PAYMENT-SIGNATURE). Free discovery tools remain search_tools/get_tool_detail.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "slug": {
+                    "type": "string",
+                    "description": "Tool slug from search_tools — must be an x402-listed tool"
+                }
+            },
+            "required": ["slug"]
+        }
+    })
+}
+
 fn get_install_guide_definition() -> Value {
     json!({
         "name": "get_install_guide",
@@ -330,14 +362,34 @@ fn get_install_guide_definition() -> Value {
     })
 }
 
+enum ToolsCallOutcome {
+    Ok(Value),
+    Http(Response),
+    Err((i32, String)),
+}
+
 async fn tools_call(
     pool: &PgPool,
     params: Option<Value>,
     agent: Option<&crate::server::agent_sync::AgentAuth>,
-) -> Result<Value, (i32, String)> {
-    let request = ToolCallRequest::parse(params)?;
-    let content = dispatch_tool_call(pool, &request.name, &request.args, agent).await?;
-    Ok(tool_call_text_response(content))
+    headers: &HeaderMap,
+) -> ToolsCallOutcome {
+    let request = match ToolCallRequest::parse(params) {
+        Ok(req) => req,
+        Err(err) => return ToolsCallOutcome::Err(err),
+    };
+    match dispatch_tool_call(pool, &request.name, &request.args, agent, headers).await {
+        Ok(DispatchOutcome::Text(content)) => {
+            ToolsCallOutcome::Ok(tool_call_text_response(content))
+        }
+        Ok(DispatchOutcome::Http(response)) => ToolsCallOutcome::Http(response),
+        Err((code, msg)) => ToolsCallOutcome::Err((code, msg)),
+    }
+}
+
+enum DispatchOutcome {
+    Text(String),
+    Http(Response),
 }
 
 struct ToolCallRequest {
@@ -362,18 +414,85 @@ async fn dispatch_tool_call(
     name: &str,
     args: &Value,
     agent: Option<&crate::server::agent_sync::AgentAuth>,
-) -> Result<String, (i32, String)> {
+    headers: &HeaderMap,
+) -> Result<DispatchOutcome, (i32, String)> {
     match name {
-        "search_tools" => call_search_tools(pool, args).await,
-        "get_tool_detail" => call_get_tool_detail(pool, args).await,
-        "list_categories" => call_list_categories(pool).await,
-        "get_dashboard_snapshot" => call_dashboard_snapshot(pool, args).await,
-        "get_install_guide" => call_install_guide(pool, args).await,
-        "save_to_toolkit" => call_save_to_toolkit(pool, args, agent).await,
-        "save_stack_to_blueprint" => call_save_stack_to_blueprint(pool, args, agent).await,
-        "link_status" => call_link_status(agent).await,
+        "search_tools" => call_search_tools(pool, args)
+            .await
+            .map(DispatchOutcome::Text),
+        "get_tool_detail" => call_get_tool_detail(pool, args)
+            .await
+            .map(DispatchOutcome::Text),
+        "list_categories" => call_list_categories(pool).await.map(DispatchOutcome::Text),
+        "get_dashboard_snapshot" => call_dashboard_snapshot(pool, args)
+            .await
+            .map(DispatchOutcome::Text),
+        "get_install_guide" => call_install_guide(pool, args)
+            .await
+            .map(DispatchOutcome::Text),
+        "check_endpoint_health" => call_check_endpoint_health(pool, args, headers).await,
+        "save_to_toolkit" => call_save_to_toolkit(pool, args, agent)
+            .await
+            .map(DispatchOutcome::Text),
+        "save_stack_to_blueprint" => call_save_stack_to_blueprint(pool, args, agent)
+            .await
+            .map(DispatchOutcome::Text),
+        "link_status" => call_link_status(agent).await.map(DispatchOutcome::Text),
         other => Err((-32601, format!("Unknown tool: {other}"))),
     }
+}
+
+async fn call_check_endpoint_health(
+    pool: &PgPool,
+    args: &Value,
+    headers: &HeaderMap,
+) -> Result<DispatchOutcome, (i32, String)> {
+    use crate::server::x402_payment::{
+        facilitator_client, payment_success_response, require_payment, X402PaymentConfig,
+    };
+    use crate::server::x402_premium::{check_endpoint_health, PremiumDataError};
+
+    let slug = required_str(args, "slug", "slug required")?;
+    let config = X402PaymentConfig::from_env();
+    let resource_url = format!("/api/v2/premium/check-endpoint-health/{slug}");
+    let requirements = config.requirement_for(
+        &resource_url,
+        "x402 endpoint liveness, 30-day uptime, and last probe timestamp",
+        "application/json",
+    );
+    let client = facilitator_client();
+    let settlement = match require_payment(&client, &config, headers, requirements).await {
+        Ok(s) => s,
+        Err(resp) => return Ok(DispatchOutcome::Http(resp)),
+    };
+
+    let report = match check_endpoint_health(pool, slug).await {
+        Ok(report) => report,
+        Err(PremiumDataError::NotFound) => {
+            return Err((-32602, "tool not found".into()));
+        }
+        Err(PremiumDataError::NotX402) => {
+            return Err((-32602, "tool is not an x402 endpoint listing".into()));
+        }
+        Err(PremiumDataError::InvalidSlug) => {
+            return Err((-32602, "slug is required".into()));
+        }
+        Err(PremiumDataError::Database(e)) => {
+            return Err((-32000, format!("database error: {e}")));
+        }
+    };
+
+    let body = json!({
+        "data": report,
+        "payment": {
+            "payer": settlement.payer,
+            "transaction": settlement.transaction,
+            "price": config.price_display,
+        }
+    });
+    let response = payment_success_response(body.clone(), &settlement)
+        .unwrap_or_else(|_| (StatusCode::OK, Json(body)).into_response());
+    Ok(DispatchOutcome::Http(response))
 }
 
 async fn call_save_to_toolkit(
@@ -583,11 +702,14 @@ mod tests {
     use crate::server::queries::MCP_SEARCH_TOOLS_BASE_SQL;
 
     #[test]
-    fn tools_list_has_five_public_tools() {
+    fn tools_list_has_six_public_tools_including_premium() {
         let rt = tokio::runtime::Runtime::new().unwrap();
         let value = rt.block_on(tools_list(false)).unwrap();
         let tools = value["tools"].as_array().unwrap();
-        assert_eq!(tools.len(), 5);
+        assert_eq!(tools.len(), 6);
+        assert!(tools
+            .iter()
+            .any(|tool| tool["name"].as_str() == Some("check_endpoint_health")));
         assert!(tools
             .iter()
             .any(|tool| tool["name"].as_str() == Some("get_dashboard_snapshot")));

@@ -154,6 +154,13 @@ pub fn build_app(pool: sqlx::PgPool, config: Config) -> axum::Router {
             axum::http::header::AUTHORIZATION,
             axum::http::header::CONTENT_TYPE,
             axum::http::header::ACCEPT,
+            axum::http::HeaderName::from_static("payment-signature"),
+            axum::http::HeaderName::from_static("payment-required"),
+            axum::http::HeaderName::from_static("payment-response"),
+        ])
+        .expose_headers([
+            axum::http::HeaderName::from_static("payment-required"),
+            axum::http::HeaderName::from_static("payment-response"),
         ])
         .allow_credentials(true);
 
