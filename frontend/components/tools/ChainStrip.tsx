@@ -91,7 +91,7 @@ export function ChainStrip({ base, queryBase, activeChain, chainCounts }: ChainS
           </div>
         )}
 
-        <div className="chain-strip-fade" aria-hidden="true" />
+        {overflowCount > 0 && <div className="chain-strip-fade" aria-hidden="true" />}
       </div>
 
       {expanded && overflowCount > 0 && (
