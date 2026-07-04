@@ -483,9 +483,31 @@ fn migrations_dir() -> std::path::PathBuf {
 
 #[cfg(feature = "ssr")]
 async fn run_migrations(pool: &sqlx::PgPool) -> anyhow::Result<()> {
-    let migrator = sqlx::migrate::Migrator::new(migrations_dir().as_path())
+    let dir = migrations_dir();
+    match std::fs::read_dir(&dir) {
+        Ok(entries) => {
+            let mut names: Vec<String> = entries
+                .filter_map(|e| e.ok())
+                .map(|e| e.file_name().to_string_lossy().into_owned())
+                .collect();
+            names.sort();
+            tracing::info!(
+                "migrations_dir={} entries={} files={:?}",
+                dir.display(),
+                names.len(),
+                names
+            );
+        }
+        Err(e) => tracing::error!("migrations_dir={} unreadable: {e}", dir.display()),
+    }
+    let migrator = sqlx::migrate::Migrator::new(dir.as_path())
         .await
         .map_err(|e| anyhow::anyhow!("failed to load migrations: {e}"))?;
+    tracing::info!(
+        "resolved {} migrations, versions: {:?}",
+        migrator.iter().count(),
+        migrator.iter().map(|m| m.version).collect::<Vec<_>>()
+    );
     migrator
         .run(pool)
         .await
