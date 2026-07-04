@@ -61,9 +61,14 @@ blueprints_code="$(curl -sS -o /dev/null -w "%{http_code}" "${BASE}/api/v2/bluep
   || smoke_fail "GET /api/v2/blueprints curl failed"
 [[ "$blueprints_code" == "401" ]] || smoke_fail "GET /api/v2/blueprints expected 401, got ${blueprints_code}"
 
-agent_export_code="$(curl -sS -o /dev/null -w "%{http_code}" "${BASE}/api/v2/blueprints/00000000-0000-0000-0000-000000000001/agent-export")" \
+agent_export_body="$(mktemp)"
+agent_export_code="$(curl -sS -o "$agent_export_body" -w "%{http_code}" \
+  "${BASE}/api/v2/blueprints/00000000-0000-0000-0000-000000000001/agent-export")" \
   || smoke_fail "GET /api/v2/blueprints/{id}/agent-export curl failed"
-[[ "$agent_export_code" == "401" ]] || smoke_fail "GET agent-export expected 401, got ${agent_export_code}"
+[[ "$agent_export_code" == "401" ]] || smoke_fail "GET agent-export expected 401 (cookie auth), got ${agent_export_code}"
+grep -q '"code":"unauthorized"' "$agent_export_body" \
+  || smoke_fail "GET agent-export 401 missing unauthorized error body"
+rm -f "$agent_export_body"
 
 agent_tokens_code="$(curl -sS -o /dev/null -w "%{http_code}" "${BASE}/api/v2/agent/tokens")" \
   || smoke_fail "GET /api/v2/agent/tokens curl failed"

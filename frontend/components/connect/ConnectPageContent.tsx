@@ -11,7 +11,6 @@ import {
   ONCHAINAI_MCP_HTTP_URL,
   ONCHAINAI_MCP_STDIO_JSON,
   ONCHAINAI_MCP_UNIVERSAL_CMD,
-  type ConnectPageClient,
 } from "@/lib/mcp-connect";
 import {
   ONCHAINAI_PLUGIN_INSTALL_CMD,

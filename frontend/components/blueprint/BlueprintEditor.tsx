@@ -255,7 +255,10 @@ function BlueprintEditorWorkspace({
     enabled: toolSlugs.length > 0,
   });
 
-  const toolsBySlug = toolsQuery.data ?? {};
+  const toolsBySlug = useMemo(
+    () => toolsQuery.data ?? {},
+    [toolsQuery.data],
+  );
 
   const selectedEdge = useMemo(
     () => edges.find((edge) => edge.id === selectedEdgeId) ?? null,
@@ -976,15 +979,6 @@ function BlueprintEditorWorkspace({
                     className="blueprint-rubber-band-layer"
                     aria-hidden="true"
                     data-testid="blueprint-rubber-band"
-                    style={{
-                      position: "absolute",
-                      inset: 0,
-                      width: "100%",
-                      height: "100%",
-                      pointerEvents: "none",
-                      overflow: "visible",
-                      zIndex: 6,
-                    }}
                   >
                     <line
                       x1={start.x}

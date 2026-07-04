@@ -6,7 +6,7 @@ import { ChainLogo } from "@/components/tools/ChainLogo";
 import type { ChainMeta } from "@/lib/chains";
 import { BLUEPRINT_MAX_TOOL_CHAINS } from "@/lib/blueprint-utils";
 
-const MAX_VISIBLE_CHAIN_BADGES = 5;
+const MAX_VISIBLE_CHAIN_BADGES = 8;
 
 interface BlueprintToolChainMemoProps {
   availableChains: ChainMeta[];

@@ -714,11 +714,11 @@ fn build_flow_section(nodes: &[ExportNode], edges: &Value) -> String {
             .map(|(from, to)| {
                 let from_label = node_map
                     .get(from.as_str())
-                    .map(|node| node_flow_label(*node))
+                    .map(|node| node_flow_label(node))
                     .unwrap_or_else(|| from.clone());
                 let to_label = node_map
                     .get(to.as_str())
-                    .map(|node| node_flow_label(*node))
+                    .map(|node| node_flow_label(node))
                     .unwrap_or_else(|| to.clone());
                 format!("- {from_label} → {to_label}")
             })
@@ -729,13 +729,13 @@ fn build_flow_section(nodes: &[ExportNode], edges: &Value) -> String {
     let sorted_set: HashSet<&str> = sorted.iter().map(String::as_str).collect();
     let mut labels: Vec<String> = sorted
         .iter()
-        .filter_map(|id| node_map.get(id.as_str()).map(|node| node_flow_label(*node)))
+        .filter_map(|id| node_map.get(id.as_str()).map(|node| node_flow_label(node)))
         .collect();
 
     let mut orphans: Vec<String> = nodes
         .iter()
         .filter(|node| !sorted_set.contains(node.id.as_str()) && !nodes_in_edges.contains(&node.id))
-        .map(|node| node_flow_label(node))
+        .map(node_flow_label)
         .collect();
     orphans.sort();
     labels.extend(orphans);

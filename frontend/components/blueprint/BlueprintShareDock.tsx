@@ -254,6 +254,7 @@ export function BlueprintShareDock({
           ) : (
             <div className="blueprint-share-image">
               {previewUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element -- data URL from html-to-image capture; next/image cannot preview dynamic blob/data URLs
                 <img
                   src={previewUrl}
                   alt="Blueprint preview"

@@ -9,7 +9,7 @@ interface ConnectOnchainAiMcpCardProps {
   mcpEndpoint?: string;
 }
 
-export function ConnectOnchainAiMcpCard(_props: ConnectOnchainAiMcpCardProps) {
+export function ConnectOnchainAiMcpCard({}: ConnectOnchainAiMcpCardProps) {
   return (
     <div
       className="promo-card promo-card--connect border border-border-strong rounded-lg p-6 bg-white min-w-0"
