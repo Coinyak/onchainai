@@ -273,9 +273,35 @@ export interface ToolkitToolView {
   tool: Tool;
   note: string | null;
   tags: string[];
-  starred: boolean;
-  created_at: string;
+  source?: string;
+  source_client?: string | null;
+  starred?: boolean;
+  saved_at?: string;
+  created_at?: string;
   updated_at: string;
+}
+
+export interface AgentTokenListItem {
+  id: string;
+  label: string;
+  token_prefix: string;
+  client: string;
+  last_used_at: string | null;
+  expires_at: string;
+  revoked_at: string | null;
+  created_at: string;
+}
+
+export interface AgentLinkStatus {
+  linked: boolean;
+}
+
+export interface AgentDeviceApproveResult {
+  ok: boolean;
+  id: string;
+  token_prefix: string;
+  expires_at: string;
+  message: string;
 }
 
 export interface MyToolkitPayload {
@@ -548,11 +574,22 @@ export async function toggleBookmark(slug: string): Promise<{ starred: boolean }
 
 export interface BlueprintNode {
   id: string;
-  kind: "tool" | "note";
+  kind: "tool" | "note" | "chain";
   slug?: string;
+  chainId?: string;
+  /** Tool nodes only: chains selected for this blueprint annotation. */
+  chains?: string[];
   text?: string;
   x: number;
   y: number;
+}
+
+export interface BlueprintEdge {
+  id: string;
+  fromId: string;
+  toId: string;
+  style: "solid" | "arrow";
+  color: string;
 }
 
 export interface BlueprintListItem {
@@ -566,6 +603,7 @@ export interface Blueprint {
   id: string;
   title: string;
   nodes: BlueprintNode[];
+  edges: BlueprintEdge[];
   created_at: string;
   updated_at: string;
 }
@@ -577,6 +615,7 @@ export async function listBlueprints(): Promise<BlueprintListItem[]> {
 export async function createBlueprint(payload: {
   title?: string;
   nodes?: BlueprintNode[];
+  edges?: BlueprintEdge[];
 }): Promise<Blueprint> {
   return apiFetch<Blueprint>("/api/v2/blueprints", {
     method: "POST",
@@ -590,7 +629,7 @@ export async function getBlueprint(id: string): Promise<Blueprint> {
 
 export async function updateBlueprint(
   id: string,
-  payload: { title?: string; nodes?: BlueprintNode[] },
+  payload: { title?: string; nodes?: BlueprintNode[]; edges?: BlueprintEdge[] },
 ): Promise<Blueprint> {
   return apiFetch<Blueprint>(`/api/v2/blueprints/${encodeURIComponent(id)}`, {
     method: "PUT",
@@ -600,6 +639,29 @@ export async function updateBlueprint(
 
 export async function deleteBlueprint(id: string): Promise<void> {
   await apiFetch(`/api/v2/blueprints/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  });
+}
+
+// --- Agent Sync ---
+
+export async function getAgentLinkStatus(): Promise<AgentLinkStatus> {
+  return apiFetch<AgentLinkStatus>("/api/v2/agent/link-status");
+}
+
+export async function listAgentTokens(): Promise<{ items: AgentTokenListItem[] }> {
+  return apiFetch<{ items: AgentTokenListItem[] }>("/api/v2/agent/tokens");
+}
+
+export async function approveAgentDevice(userCode: string, label?: string): Promise<AgentDeviceApproveResult> {
+  return apiFetch<AgentDeviceApproveResult>("/api/v2/agent/device/approve", {
+    method: "POST",
+    body: JSON.stringify({ user_code: userCode, label }),
+  });
+}
+
+export async function revokeAgentToken(id: string): Promise<void> {
+  await apiFetch(`/api/v2/agent/tokens/${encodeURIComponent(id)}`, {
     method: "DELETE",
   });
 }

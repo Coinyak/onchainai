@@ -86,6 +86,58 @@ Bridge with [`mcp-remote`](https://www.npmjs.com/package/mcp-remote):
 
 Or auto-detect your client with `npx add-mcp https://www.onchain-ai.xyz/mcp`.
 
+## Agent Sync — save tools to your web toolkit
+
+Link your OnchainAI account so coding tools can **explicitly** save tools to
+`/toolkit` and (optionally) append nodes to today's agent-session blueprint.
+
+**Canonical UI:** [onchain-ai.xyz/connect#agent-sync](https://www.onchain-ai.xyz/connect#agent-sync)
+
+### Recommended: device flow (no manual token copy)
+
+1. Sign in on the website → open **Connect** → **Link your agent**.
+2. In Claude Code / Cursor, start the device link (or use the guided steps on Connect).
+3. Enter the short code shown in your coding app on the website — the token is
+   delivered to the agent automatically.
+
+### Manual token (advanced)
+
+- Mint a token once on Connect (prefix shown later; plaintext shown **once**).
+- Set env `ONCHAINAI_AGENT_TOKEN=oai_ag_…` or add an HTTP header on the MCP client:
+
+```json
+{
+  "mcpServers": {
+    "onchainai": {
+      "type": "http",
+      "url": "https://www.onchain-ai.xyz/mcp",
+      "headers": {
+        "Authorization": "Bearer ${ONCHAINAI_AGENT_TOKEN:-}"
+      }
+    }
+  }
+}
+```
+
+Plugin **0.2.0+** ships this header pattern in `plugin/onchainai/.mcp.json`.
+
+### Authenticated MCP tools
+
+With a valid Bearer token, `tools/list` also exposes:
+
+- `save_to_toolkit` — save one slug to My Toolkit (`source=agent`)
+- `save_stack_to_blueprint` — save slugs to toolkit + today's `Agent session · {date}` blueprint
+- `link_status` — check whether the client is linked
+
+Without a token, `save_to_toolkit` returns `link_required` with
+`link_url` pointing to `/connect#agent-sync`. Read-only tools stay public.
+
+### Transport note
+
+**Prefer streamable HTTP** for Agent Sync (headers reach the server). Stdio
+`mcp-remote` bridges may not forward `Authorization` — use HTTP transport or REST
+`POST /api/v2/agent/sync/tool` with Bearer when bridging is required.
+
 ## Using the skill without the plugin
 
 Copy [`plugin/onchainai/skills/onchainai-crypto-tools/`](../plugin/onchainai/skills/onchainai-crypto-tools/)

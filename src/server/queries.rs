@@ -266,6 +266,8 @@ pub const USER_TOOLKIT_SQL: &str = concat!(
         SELECT t.*,
                b.note AS bookmark_note,
                b.tags AS bookmark_tags,
+               b.source AS bookmark_source,
+               b.source_client AS bookmark_source_client,
                b.created_at AS bookmark_created_at,
                b.updated_at AS bookmark_updated_at
         FROM bookmarks b

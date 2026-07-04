@@ -95,8 +95,28 @@ pub async fn handle_mcp(
             "serverInfo": { "name": "onchainai", "version": "0.1.0" }
         })),
         "notifications/initialized" => Ok(json!({})),
-        "tools/list" => tools_list().await,
-        "tools/call" => tools_call(&state.pool, rpc_req.params).await,
+        "tools/list" => {
+            let agent = agent_from_authorization(
+                &state.pool,
+                parts
+                    .headers
+                    .get(axum::http::header::AUTHORIZATION)
+                    .and_then(|v| v.to_str().ok()),
+            )
+            .await;
+            tools_list(agent.is_some()).await
+        }
+        "tools/call" => {
+            let agent = agent_from_authorization(
+                &state.pool,
+                parts
+                    .headers
+                    .get(axum::http::header::AUTHORIZATION)
+                    .and_then(|v| v.to_str().ok()),
+            )
+            .await;
+            tools_call(&state.pool, rpc_req.params, agent.as_ref()).await
+        }
         other => Err((-32601, format!("Method not found: {other}"))),
     };
 
@@ -128,18 +148,80 @@ fn error_response(id: Value, code: i32, message: &str) -> JsonRpcResponse {
     }
 }
 
-async fn tools_list() -> Result<Value, (i32, String)> {
-    Ok(json!({ "tools": tool_definitions() }))
+async fn tools_list(authenticated: bool) -> Result<Value, (i32, String)> {
+    Ok(json!({ "tools": tool_definitions(authenticated) }))
 }
 
-fn tool_definitions() -> Vec<Value> {
-    vec![
+fn tool_definitions(authenticated: bool) -> Vec<Value> {
+    let mut tools = vec![
         search_tools_definition(),
         get_tool_detail_definition(),
         list_categories_definition(),
         get_dashboard_snapshot_definition(),
         get_install_guide_definition(),
-    ]
+    ];
+    if authenticated {
+        tools.push(save_to_toolkit_definition());
+        tools.push(save_stack_to_blueprint_definition());
+        tools.push(link_status_definition());
+    }
+    tools
+}
+
+fn save_to_toolkit_definition() -> Value {
+    json!({
+        "name": "save_to_toolkit",
+        "description": "Save a tool to the linked user's OnchainAI toolkit. Requires Agent Sync link (Bearer token). Use only when the user explicitly asks to save or add to toolkit.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "slug": {
+                    "type": "string",
+                    "description": "Tool slug from search_tools or get_tool_detail"
+                },
+                "note": {
+                    "type": "string",
+                    "description": "Optional short note (max 500 chars); does not overwrite existing user notes"
+                },
+                "tags": {
+                    "type": "array",
+                    "items": { "type": "string" },
+                    "description": "Optional tags (max 8)"
+                }
+            },
+            "required": ["slug"]
+        }
+    })
+}
+
+fn save_stack_to_blueprint_definition() -> Value {
+    json!({
+        "name": "save_stack_to_blueprint",
+        "description": "Save multiple tools to the linked user's toolkit and append them to today's agent session blueprint. Requires Agent Sync link. Use when the user explicitly asks to save a stack or workflow.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "slugs": {
+                    "type": "array",
+                    "items": { "type": "string" },
+                    "description": "Tool slugs to save (max 25)"
+                },
+                "title": {
+                    "type": "string",
+                    "description": "Optional blueprint title; defaults to Agent session · {date}"
+                }
+            },
+            "required": ["slugs"]
+        }
+    })
+}
+
+fn link_status_definition() -> Value {
+    json!({
+        "name": "link_status",
+        "description": "Check whether the MCP client is linked to an OnchainAI account.",
+        "inputSchema": { "type": "object", "properties": {} }
+    })
 }
 
 fn search_tools_definition() -> Value {
@@ -248,9 +330,13 @@ fn get_install_guide_definition() -> Value {
     })
 }
 
-async fn tools_call(pool: &PgPool, params: Option<Value>) -> Result<Value, (i32, String)> {
+async fn tools_call(
+    pool: &PgPool,
+    params: Option<Value>,
+    agent: Option<&crate::server::agent_sync::AgentAuth>,
+) -> Result<Value, (i32, String)> {
     let request = ToolCallRequest::parse(params)?;
-    let content = dispatch_tool_call(pool, &request.name, &request.args).await?;
+    let content = dispatch_tool_call(pool, &request.name, &request.args, agent).await?;
     Ok(tool_call_text_response(content))
 }
 
@@ -275,6 +361,7 @@ async fn dispatch_tool_call(
     pool: &PgPool,
     name: &str,
     args: &Value,
+    agent: Option<&crate::server::agent_sync::AgentAuth>,
 ) -> Result<String, (i32, String)> {
     match name {
         "search_tools" => call_search_tools(pool, args).await,
@@ -282,8 +369,84 @@ async fn dispatch_tool_call(
         "list_categories" => call_list_categories(pool).await,
         "get_dashboard_snapshot" => call_dashboard_snapshot(pool, args).await,
         "get_install_guide" => call_install_guide(pool, args).await,
+        "save_to_toolkit" => call_save_to_toolkit(pool, args, agent).await,
+        "save_stack_to_blueprint" => call_save_stack_to_blueprint(pool, args, agent).await,
+        "link_status" => call_link_status(agent).await,
         other => Err((-32601, format!("Unknown tool: {other}"))),
     }
+}
+
+async fn call_save_to_toolkit(
+    pool: &PgPool,
+    args: &Value,
+    agent: Option<&crate::server::agent_sync::AgentAuth>,
+) -> Result<String, (i32, String)> {
+    let Some(auth) = agent else {
+        return Err((
+            -32001,
+            serde_json::to_string(&crate::server::agent_sync::link_required_payload())
+                .unwrap_or_else(|_| "link_required".into()),
+        ));
+    };
+    let slug = required_str(args, "slug", "slug required")?;
+    let note = optional_string(args, "note");
+    let tags = args.get("tags").and_then(|v| v.as_array()).map(|arr| {
+        arr.iter()
+            .filter_map(|v| v.as_str().map(str::to_string))
+            .collect::<Vec<_>>()
+    });
+    let req = crate::server::agent_sync::SyncToolRequest {
+        slug: slug.to_string(),
+        note,
+        tags,
+        source_client: Some("mcp".into()),
+        idempotency_key: None,
+    };
+    let result = crate::server::agent_sync::sync_tool(pool, auth, req)
+        .await
+        .map_err(|e| (-32000, e.to_string()))?;
+    serialize_tool_payload(&result)
+}
+
+async fn call_save_stack_to_blueprint(
+    pool: &PgPool,
+    args: &Value,
+    agent: Option<&crate::server::agent_sync::AgentAuth>,
+) -> Result<String, (i32, String)> {
+    let Some(auth) = agent else {
+        return Err((
+            -32001,
+            serde_json::to_string(&crate::server::agent_sync::link_required_payload())
+                .unwrap_or_else(|_| "link_required".into()),
+        ));
+    };
+    let slugs = args
+        .get("slugs")
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str().map(str::to_string))
+                .collect::<Vec<_>>()
+        })
+        .ok_or((-32602, "slugs required".into()))?;
+    let title = optional_string(args, "title");
+    let result = crate::server::agent_sync::save_stack_to_blueprint(pool, auth, slugs, title)
+        .await
+        .map_err(|e| (-32000, e.to_string()))?;
+    serialize_tool_payload(&result)
+}
+
+async fn call_link_status(
+    agent: Option<&crate::server::agent_sync::AgentAuth>,
+) -> Result<String, (i32, String)> {
+    let Some(auth) = agent else {
+        return serialize_tool_payload(&serde_json::json!({ "linked": false }));
+    };
+    serialize_tool_payload(&serde_json::json!({
+        "linked": true,
+        "user_id_prefix": &auth.user_id.to_string()[..8],
+        "client": auth.client,
+    }))
 }
 
 async fn call_search_tools(pool: &PgPool, args: &Value) -> Result<String, (i32, String)> {
@@ -405,8 +568,10 @@ async fn mcp_list_categories(pool: &PgPool) -> Result<Vec<CategoryMcp>, (i32, St
         .collect())
 }
 
+mod auth;
 mod install_guide;
 
+use auth::agent_from_authorization;
 use install_guide::mcp_install_guide;
 
 #[cfg(test)]
@@ -418,9 +583,9 @@ mod tests {
     use crate::server::queries::MCP_SEARCH_TOOLS_BASE_SQL;
 
     #[test]
-    fn tools_list_has_five_tools() {
+    fn tools_list_has_five_public_tools() {
         let rt = tokio::runtime::Runtime::new().unwrap();
-        let value = rt.block_on(tools_list()).unwrap();
+        let value = rt.block_on(tools_list(false)).unwrap();
         let tools = value["tools"].as_array().unwrap();
         assert_eq!(tools.len(), 5);
         assert!(tools

@@ -27,9 +27,11 @@ import {
   getToolBySlug,
   updateBlueprint,
   type Blueprint,
+  type BlueprintEdge,
   type BlueprintNode,
   type Tool,
 } from "@/lib/api";
+import { CHAIN_CATALOG } from "@/lib/chains";
 import { useAuth } from "@/lib/auth";
 import { LoginModal } from "@/components/auth/LoginModal";
 import {
@@ -41,12 +43,22 @@ import {
   type LocalBlueprintDraft,
 } from "@/lib/blueprint-storage";
 import {
+  BLUEPRINT_EDGE_COLORS,
+  BLUEPRINT_MAX_EDGES,
   BLUEPRINT_MAX_NODES,
+  BLUEPRINT_NODE_CHAIN_SIZE,
   clampCoord,
+  initialToolNodeChains,
+  newEdgeId,
   newNodeId,
+  normalizeToolNodeChains,
   pointerToCanvasCoords,
+  pruneEdgesForNodes,
+  type BlueprintEdgeStyle,
 } from "@/lib/blueprint-utils";
 import { timeAgo, typeBadgeLabel } from "@/lib/format";
+import { BlueprintConnectToolbar } from "@/components/blueprint/BlueprintConnectToolbar";
+import { BlueprintEdgesLayer } from "@/components/blueprint/BlueprintEdgesLayer";
 import { BlueprintPalette } from "@/components/blueprint/BlueprintPalette";
 import { BlueprintNodeView } from "@/components/blueprint/BlueprintNodeView";
 import { ToolLogo } from "@/components/tools/ToolLogo";
@@ -63,6 +75,7 @@ interface BlueprintEditorWorkspaceProps {
   isDraft: boolean;
   initialTitle: string;
   initialNodes: BlueprintNode[];
+  initialEdges: BlueprintEdge[];
   initialSavedAt: string;
   readOnlyLayout: boolean;
 }
@@ -121,6 +134,7 @@ function BlueprintEditorWorkspace({
   isDraft,
   initialTitle,
   initialNodes,
+  initialEdges,
   initialSavedAt,
   readOnlyLayout,
 }: BlueprintEditorWorkspaceProps) {
@@ -130,7 +144,13 @@ function BlueprintEditorWorkspace({
 
   const [title, setTitle] = useState(initialTitle);
   const [nodes, setNodes] = useState(initialNodes);
+  const [edges, setEdges] = useState(initialEdges);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
+  const [connectMode, setConnectMode] = useState(false);
+  const [connectFromId, setConnectFromId] = useState<string | null>(null);
+  const [edgeStyle, setEdgeStyle] = useState<BlueprintEdgeStyle>("arrow");
+  const [edgeColor, setEdgeColor] = useState<string>(BLUEPRINT_EDGE_COLORS[0].value);
   const [saveState, setSaveState] = useState<SaveState>("saved");
   const [savedAt, setSavedAt] = useState<string | null>(initialSavedAt);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -154,11 +174,18 @@ function BlueprintEditorWorkspace({
 
   const titleRef = useRef(title);
   const nodesRef = useRef(nodes);
+  const edgesRef = useRef(edges);
 
   useEffect(() => {
     titleRef.current = title;
     nodesRef.current = nodes;
-  }, [title, nodes]);
+    edgesRef.current = edges;
+  }, [title, nodes, edges]);
+
+  const chainLabelById = useMemo(
+    () => Object.fromEntries(CHAIN_CATALOG.map((chain) => [chain.id, chain.label])),
+    [],
+  );
 
   const toolSlugs = useMemo(
     () => [...new Set(nodes.filter((n) => n.kind === "tool" && n.slug).map((n) => n.slug!))],
@@ -189,21 +216,29 @@ function BlueprintEditorWorkspace({
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
   );
 
-  const persistDraft = useCallback((nextTitle: string, nextNodes: BlueprintNode[]) => {
-    const draft: LocalBlueprintDraft = {
-      title: nextTitle,
-      nodes: nextNodes,
-      updatedAt: new Date().toISOString(),
-    };
-    saveLocalBlueprintDraft(draft);
-    setSavedAt(draft.updatedAt);
-    setSaveState("saved");
-  }, []);
+  const persistDraft = useCallback(
+    (nextTitle: string, nextNodes: BlueprintNode[], nextEdges: BlueprintEdge[]) => {
+      const draft: LocalBlueprintDraft = {
+        title: nextTitle,
+        nodes: nextNodes,
+        edges: nextEdges,
+        updatedAt: new Date().toISOString(),
+      };
+      saveLocalBlueprintDraft(draft);
+      setSavedAt(draft.updatedAt);
+      setSaveState("saved");
+    },
+    [],
+  );
 
   const saveMutation = useMutation({
-    mutationFn: async (payload: { title: string; nodes: BlueprintNode[] }) => {
+    mutationFn: async (payload: {
+      title: string;
+      nodes: BlueprintNode[];
+      edges: BlueprintEdge[];
+    }) => {
       if (isDraft) {
-        persistDraft(payload.title, payload.nodes);
+        persistDraft(payload.title, payload.nodes, payload.edges);
         return null;
       }
       return updateBlueprint(blueprintId, payload);
@@ -226,12 +261,12 @@ function BlueprintEditorWorkspace({
   });
 
   const scheduleSave = useCallback(
-    (nextTitle: string, nextNodes: BlueprintNode[]) => {
+    (nextTitle: string, nextNodes: BlueprintNode[], nextEdges: BlueprintEdge[]) => {
       if (readOnly) return;
       setSaveState("pending");
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
       saveTimerRef.current = setTimeout(() => {
-        saveMutation.mutate({ title: nextTitle, nodes: nextNodes });
+        saveMutation.mutate({ title: nextTitle, nodes: nextNodes, edges: nextEdges });
       }, 2000);
     },
     [readOnly, saveMutation],
@@ -244,10 +279,14 @@ function BlueprintEditorWorkspace({
       saveTimerRef.current = null;
       if (readOnlyLayout) return;
       if (isDraft) {
-        persistDraft(titleRef.current, nodesRef.current);
+        persistDraft(titleRef.current, nodesRef.current, edgesRef.current);
         return;
       }
-      saveMutation.mutate({ title: titleRef.current, nodes: nodesRef.current });
+      saveMutation.mutate({
+        title: titleRef.current,
+        nodes: nodesRef.current,
+        edges: edgesRef.current,
+      });
     },
     [isDraft, persistDraft, readOnlyLayout, saveMutation],
   );
@@ -263,7 +302,11 @@ function BlueprintEditorWorkspace({
     const snapshotTitle = titleRef.current;
     const snapshotNodes = nodesRef.current;
     try {
-      const created = await createBlueprint({ title: snapshotTitle, nodes: snapshotNodes });
+      const created = await createBlueprint({
+        title: snapshotTitle,
+        nodes: snapshotNodes,
+        edges: edgesRef.current,
+      });
       clearLocalBlueprintDraft();
       queryClient.invalidateQueries({ queryKey: ["blueprints"] });
       router.replace(`/blueprints/${created.id}`);
@@ -285,19 +328,35 @@ function BlueprintEditorWorkspace({
     (updater: (prev: BlueprintNode[]) => BlueprintNode[]) => {
       setNodes((prev) => {
         const next = updater(prev);
-        scheduleSave(title, next);
+        const nextEdges = pruneEdgesForNodes(edgesRef.current, next);
+        if (nextEdges.length !== edgesRef.current.length) {
+          setEdges(nextEdges);
+          setSelectedEdgeId(null);
+        }
+        scheduleSave(title, next, nextEdges);
         return next;
       });
     },
     [scheduleSave, title],
   );
 
+  const updateEdges = useCallback(
+    (updater: (prev: BlueprintEdge[]) => BlueprintEdge[]) => {
+      setEdges((prev) => {
+        const next = updater(prev);
+        scheduleSave(title, nodes, next);
+        return next;
+      });
+    },
+    [nodes, scheduleSave, title],
+  );
+
   const updateTitle = useCallback(
     (nextTitle: string) => {
       setTitle(nextTitle);
-      scheduleSave(nextTitle, nodes);
+      scheduleSave(nextTitle, nodes, edges);
     },
-    [nodes, scheduleSave],
+    [edges, nodes, scheduleSave],
   );
 
   const addToolNode = useCallback(
@@ -312,6 +371,7 @@ function BlueprintEditorWorkspace({
         id: newNodeId(),
         kind: "tool",
         slug: tool.slug,
+        chains: initialToolNodeChains(tool.chains),
         x: clampCoord(x),
         y: clampCoord(y),
       };
@@ -331,6 +391,40 @@ function BlueprintEditorWorkspace({
       addToolNode(tool, x, y);
     },
     [addToolNode],
+  );
+
+  const addChainNode = useCallback(
+    (chainId: string, x: number, y: number) => {
+      if (readOnly) return;
+      if (nodes.length >= BLUEPRINT_MAX_NODES) {
+        setSaveError(`Blueprints accept at most ${BLUEPRINT_MAX_NODES} nodes.`);
+        setSaveState("error");
+        return;
+      }
+      const node: BlueprintNode = {
+        id: newNodeId(),
+        kind: "chain",
+        chainId,
+        x: clampCoord(x),
+        y: clampCoord(y),
+      };
+      updateNodes((prev) => [...prev, node]);
+      setSelectedId(node.id);
+      setSelectedEdgeId(null);
+      setLiveMessage(`Added ${chainLabelById[chainId] ?? chainId} sticker.`);
+    },
+    [chainLabelById, nodes.length, readOnly, updateNodes],
+  );
+
+  const addChainAtViewportCenter = useCallback(
+    (chain: { id: string }) => {
+      const viewport = viewportRef.current;
+      if (!viewport) return;
+      const x = viewport.scrollLeft + viewport.clientWidth / 2 - BLUEPRINT_NODE_CHAIN_SIZE / 2;
+      const y = viewport.scrollTop + viewport.clientHeight / 2 - BLUEPRINT_NODE_CHAIN_SIZE / 2;
+      addChainNode(chain.id, x, y);
+    },
+    [addChainNode],
   );
 
   const addNoteNode = useCallback(() => {
@@ -363,10 +457,81 @@ function BlueprintEditorWorkspace({
     (id: string) => {
       if (readOnly) return;
       updateNodes((prev) => prev.filter((n) => n.id !== id));
+      updateEdges((prev) => prev.filter((edge) => edge.fromId !== id && edge.toId !== id));
       if (selectedId === id) setSelectedId(null);
+      if (connectFromId === id) setConnectFromId(null);
+      setSelectedEdgeId(null);
       setLiveMessage("Node removed.");
     },
-    [readOnly, selectedId, updateNodes],
+    [connectFromId, readOnly, selectedId, updateEdges, updateNodes],
+  );
+
+  const removeEdge = useCallback(
+    (id: string) => {
+      if (readOnly) return;
+      updateEdges((prev) => prev.filter((edge) => edge.id !== id));
+      if (selectedEdgeId === id) setSelectedEdgeId(null);
+      setLiveMessage("Link removed.");
+    },
+    [readOnly, selectedEdgeId, updateEdges],
+  );
+
+  const addEdgeBetween = useCallback(
+    (fromId: string, toId: string) => {
+      if (readOnly || fromId === toId) return;
+      if (edges.length >= BLUEPRINT_MAX_EDGES) {
+        setSaveError(`Blueprints accept at most ${BLUEPRINT_MAX_EDGES} links.`);
+        setSaveState("error");
+        return;
+      }
+      const duplicate = edges.some(
+        (edge) =>
+          (edge.fromId === fromId && edge.toId === toId) ||
+          (edge.fromId === toId && edge.toId === fromId),
+      );
+      if (duplicate) {
+        setLiveMessage("These nodes are already linked.");
+        return;
+      }
+      const edge: BlueprintEdge = {
+        id: newEdgeId(),
+        fromId,
+        toId,
+        style: edgeStyle,
+        color: edgeColor,
+      };
+      updateEdges((prev) => [...prev, edge]);
+      setSelectedEdgeId(edge.id);
+      setSelectedId(null);
+      setLiveMessage("Link added.");
+    },
+    [edgeColor, edgeStyle, edges, readOnly, updateEdges],
+  );
+
+  const handleNodeSelect = useCallback(
+    (id: string) => {
+      if (connectMode && !readOnly) {
+        if (!connectFromId) {
+          setConnectFromId(id);
+          setSelectedId(id);
+          setSelectedEdgeId(null);
+          setLiveMessage("Select a target node to link.");
+          return;
+        }
+        if (connectFromId === id) {
+          setConnectFromId(null);
+          setSelectedId(null);
+          return;
+        }
+        addEdgeBetween(connectFromId, id);
+        setConnectFromId(null);
+        setSelectedId(null);
+        return;
+      }
+      setSelectedId(id);
+      setSelectedEdgeId(null);
+    },
+    [addEdgeBetween, connectFromId, connectMode, readOnly],
   );
 
   const updateNodeText = useCallback(
@@ -377,6 +542,24 @@ function BlueprintEditorWorkspace({
       );
     },
     [readOnly, updateNodes],
+  );
+
+  const updateNodeChains = useCallback(
+    (id: string, chains: string[]) => {
+      if (readOnly) return;
+      updateNodes((prev) =>
+        prev.map((n) => {
+          if (n.id !== id || n.kind !== "tool") return n;
+          const tool = n.slug ? toolsBySlug[n.slug] : null;
+          const normalized = tool
+            ? normalizeToolNodeChains(chains, tool.chains)
+            : chains;
+          return { ...n, chains: normalized };
+        }),
+      );
+      setLiveMessage("Chain selection updated.");
+    },
+    [readOnly, toolsBySlug, updateNodes],
   );
 
   const moveNode = useCallback(
@@ -422,6 +605,23 @@ function BlueprintEditorWorkspace({
       return;
     }
 
+    if (data?.type === "palette-chain" && over?.id === "blueprint-canvas") {
+      const chain = data.chain as { id: string };
+      const translated = active.rect.current.translated;
+      const viewport = viewportRef.current;
+      if (translated && viewport) {
+        const cx = translated.left + translated.width / 2;
+        const cy = translated.top + translated.height / 2;
+        const coords = pointerToCanvasCoords(cx, cy, viewport);
+        addChainNode(
+          chain.id,
+          coords.x - BLUEPRINT_NODE_CHAIN_SIZE / 2,
+          coords.y - BLUEPRINT_NODE_CHAIN_SIZE / 2,
+        );
+      }
+      return;
+    }
+
     if (data?.type === "canvas-node") {
       const nodeId = data.nodeId as string;
       const node = nodes.find((n) => n.id === nodeId);
@@ -450,6 +650,8 @@ function BlueprintEditorWorkspace({
     };
     viewport.setPointerCapture(e.pointerId);
     setSelectedId(null);
+    setSelectedEdgeId(null);
+    if (!connectMode) setConnectFromId(null);
   };
 
   const handleCanvasPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -470,7 +672,24 @@ function BlueprintEditorWorkspace({
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if (!selectedId || readOnly) return;
+      if (readOnly) return;
+      if (e.key === "Escape") {
+        if (connectMode || connectFromId) {
+          e.preventDefault();
+          setConnectMode(false);
+          setConnectFromId(null);
+          setLiveMessage("Connect mode cancelled.");
+        }
+        return;
+      }
+      if (selectedEdgeId && (e.key === "Delete" || e.key === "Backspace")) {
+        const target = e.target as HTMLElement;
+        if (target.tagName === "TEXTAREA" || target.tagName === "INPUT") return;
+        e.preventDefault();
+        removeEdge(selectedEdgeId);
+        return;
+      }
+      if (!selectedId) return;
       const step = e.shiftKey ? 40 : 8;
       if (e.key === "ArrowLeft") {
         e.preventDefault();
@@ -501,7 +720,17 @@ function BlueprintEditorWorkspace({
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [selectedId, readOnly, moveNode, removeNode, nodes]);
+  }, [
+    connectFromId,
+    connectMode,
+    moveNode,
+    nodes,
+    readOnly,
+    removeEdge,
+    removeNode,
+    selectedEdgeId,
+    selectedId,
+  ]);
 
   const saveLabel = useMemo(() => {
     if (saveState === "saving" || saveState === "pending") return "Saving...";
@@ -529,6 +758,21 @@ function BlueprintEditorWorkspace({
           onChange={(e) => updateTitle(e.target.value)}
           readOnly={readOnly}
           aria-label="Blueprint title"
+        />
+        <BlueprintConnectToolbar
+          connectMode={connectMode}
+          edgeStyle={edgeStyle}
+          edgeColor={edgeColor}
+          selectedEdgeId={selectedEdgeId}
+          readOnly={readOnly}
+          onToggleConnectMode={() => {
+            setConnectMode((prev) => !prev);
+            setConnectFromId(null);
+            setSelectedEdgeId(null);
+          }}
+          onEdgeStyleChange={setEdgeStyle}
+          onEdgeColorChange={setEdgeColor}
+          onDeleteEdge={() => selectedEdgeId && removeEdge(selectedEdgeId)}
         />
         <div className="blueprint-toolbar-actions">
           <button
@@ -566,7 +810,11 @@ function BlueprintEditorWorkspace({
           onDragEnd={handleDragEnd}
         >
           {!readOnlyLayout && (
-            <BlueprintPalette readOnly={readOnly} onAddTool={addToolAtViewportCenter} />
+            <BlueprintPalette
+              readOnly={readOnly}
+              onAddTool={addToolAtViewportCenter}
+              onAddChain={addChainAtViewportCenter}
+            />
           )}
 
           <CanvasDropZone
@@ -575,11 +823,24 @@ function BlueprintEditorWorkspace({
             onPointerMove={handleCanvasPointerMove}
             onPointerUp={handleCanvasPointerUp}
           >
-            <div className="blueprint-canvas-surface">
+            <div
+              className={`blueprint-canvas-surface${connectMode ? " blueprint-canvas-connect-mode" : ""}`}
+            >
+              <BlueprintEdgesLayer
+                edges={edges}
+                nodes={nodes}
+                selectedEdgeId={selectedEdgeId}
+                readOnly={readOnly}
+                onSelectEdge={(id) => {
+                  setSelectedEdgeId(id);
+                  setSelectedId(null);
+                  setConnectFromId(null);
+                }}
+              />
               {nodes.length === 0 && (
                 <div className="blueprint-empty-state">
                   <Compass size={32} strokeWidth={1.5} color="#4B4B4B" />
-                  <p>Drag tools from the left to start planning</p>
+                  <p>Drag tools or network stickers from the left to start planning</p>
                 </div>
               )}
               {nodes.map((node) => (
@@ -588,11 +849,14 @@ function BlueprintEditorWorkspace({
                   node={node}
                   tool={node.slug ? toolsBySlug[node.slug] : null}
                   toolMissing={!!node.slug && toolsBySlug[node.slug] === null}
+                  chainLabel={node.chainId ? chainLabelById[node.chainId] : undefined}
                   selected={selectedId === node.id}
+                  connectPending={connectFromId === node.id}
                   readOnly={readOnly}
-                  onSelect={setSelectedId}
+                  onSelect={handleNodeSelect}
                   onRemove={removeNode}
                   onTextChange={updateNodeText}
+                  onChainsChange={updateNodeChains}
                 />
               ))}
             </div>
@@ -635,6 +899,7 @@ function BlueprintDraftEditor({ readOnlyLayout }: { readOnlyLayout: boolean }) {
       isDraft
       initialTitle={initialDraft.title}
       initialNodes={initialDraft.nodes}
+      initialEdges={initialDraft.edges}
       initialSavedAt={initialDraft.updatedAt}
       readOnlyLayout={readOnlyLayout}
     />
@@ -701,6 +966,7 @@ export function BlueprintEditor({ blueprintId }: BlueprintEditorProps) {
       isDraft={false}
       initialTitle={blueprint.title}
       initialNodes={blueprint.nodes}
+      initialEdges={blueprint.edges ?? []}
       initialSavedAt={blueprint.updated_at}
       readOnlyLayout={readOnlyLayout}
     />

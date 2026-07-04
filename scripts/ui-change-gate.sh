@@ -1,10 +1,9 @@
 #!/usr/bin/env bash
 # Final local gate for UI/auth/routing changes.
 #
-# Runs one coherent Leptos release build, restarts the matching binary, then
+# Runs a coherent API + Next.js release build, restarts both servers, then
 # verifies curl smoke, browser interactivity, auth shell behavior, and
-# desktop/mobile screenshots. Use this instead of finishing UI work with a
-# standalone cargo build or cargo run.
+# desktop/mobile screenshots. No cargo-leptos — UI is frontend/ on Vercel.
 #
 # Usage:
 #   ./scripts/ui-change-gate.sh
@@ -151,7 +150,7 @@ echo "UI change gate starting for ${BASE} (tier=${TIER})"
 echo "Step 1/${total_steps}: agent harness contract"
 ./scripts/agent-harness-check.sh
 
-echo "Step 2/${total_steps}: coherent release build, restart, and curl smoke"
+echo "Step 2/${total_steps}: API + Next.js release build, restart, and curl smoke"
 if [[ "$SKIP_BUILD" == "true" ]]; then
   ./scripts/restart-dev.sh --no-build
 else

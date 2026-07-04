@@ -22,6 +22,10 @@ pub const MCP_PER_MINUTE: u32 = 100;
 pub const AUTH_PER_MINUTE: u32 = 5;
 /// Admin x402 manual re-probes: at most 10 per minute per admin.
 pub const ADMIN_X402_VERIFY_PER_MINUTE: u32 = 10;
+/// Agent token mint: at most 5 per hour per user.
+pub const AGENT_TOKEN_MINT_PER_HOUR: u32 = 5;
+/// Agent blueprint-node sync: at most 30 per minute per user.
+pub const AGENT_BLUEPRINT_SYNC_PER_MINUTE: u32 = 30;
 /// General API traffic baseline (see [`crate::build_app`] — burst is 2× this, 5 req/s refill).
 pub const GENERAL_PER_MINUTE: u32 = 60;
 
@@ -35,6 +39,10 @@ static MCP_IP_LIMITER: LazyLock<DefaultKeyedRateLimiter<String>> =
     LazyLock::new(|| RateLimiter::dashmap(mcp_ip_quota()));
 static ADMIN_X402_VERIFY_LIMITER: LazyLock<DefaultKeyedRateLimiter<Uuid>> =
     LazyLock::new(|| RateLimiter::dashmap(admin_x402_verify_quota()));
+static AGENT_TOKEN_MINT_LIMITER: LazyLock<DefaultKeyedRateLimiter<Uuid>> =
+    LazyLock::new(|| RateLimiter::dashmap(agent_token_mint_quota()));
+static AGENT_BLUEPRINT_SYNC_LIMITER: LazyLock<DefaultKeyedRateLimiter<Uuid>> =
+    LazyLock::new(|| RateLimiter::dashmap(agent_blueprint_sync_quota()));
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum UserRateLimitAction {
@@ -42,6 +50,7 @@ pub enum UserRateLimitAction {
     CreateComment,
     ToggleBookmark,
     AdminX402Verify,
+    AgentBlueprintSync,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -79,6 +88,19 @@ pub fn admin_x402_verify_quota() -> Quota {
     )
 }
 
+pub fn agent_token_mint_quota() -> Quota {
+    Quota::per_hour(
+        NonZeroU32::new(AGENT_TOKEN_MINT_PER_HOUR).expect("non-zero agent token mint quota"),
+    )
+}
+
+pub fn agent_blueprint_sync_quota() -> Quota {
+    Quota::per_minute(
+        NonZeroU32::new(AGENT_BLUEPRINT_SYNC_PER_MINUTE)
+            .expect("non-zero agent blueprint sync quota"),
+    )
+}
+
 /// Check a per-user rate limit before mutating state.
 pub fn check_user_rate_limit(
     user_id: Uuid,
@@ -89,10 +111,20 @@ pub fn check_user_rate_limit(
         UserRateLimitAction::CreateComment => &COMMENT_LIMITER,
         UserRateLimitAction::ToggleBookmark => &BOOKMARK_LIMITER,
         UserRateLimitAction::AdminX402Verify => &ADMIN_X402_VERIFY_LIMITER,
+        UserRateLimitAction::AgentBlueprintSync => &AGENT_BLUEPRINT_SYNC_LIMITER,
     };
     limiter.check_key(&user_id).map_err(|_| RateLimitExceeded {
         message: "too many requests; try again later",
     })
+}
+
+/// Check agent token mint rate (device approve + manual mint).
+pub fn check_agent_token_mint_limit(user_id: Uuid) -> Result<(), RateLimitExceeded> {
+    AGENT_TOKEN_MINT_LIMITER
+        .check_key(&user_id)
+        .map_err(|_| RateLimitExceeded {
+            message: "agent token mint limit exceeded; try again later",
+        })
 }
 
 /// Check MCP per-IP limit inside the JSON-RPC handler.

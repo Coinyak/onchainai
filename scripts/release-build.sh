@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Full release build (SSR + WASM). Uses rustup cargo when available (wasm std).
+# Coherent local release build: Rust API binary + Next.js production bundle.
+# No cargo-leptos / WASM — UI is Next.js on Vercel; API is Dockerfile.api on Railway.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -20,33 +21,26 @@ if ! ./scripts/disk-guard.sh; then
   ./scripts/disk-guard.sh
 fi
 
-echo "Building release (cargo leptos build --release)..."
-cargo leptos build --release
+echo "Building API release (cargo build --release --features ssr)..."
+cargo build --release --features ssr
 
-# wasm-bindgen JS loads onchainai_bg.wasm; cargo-leptos emits processed onchainai.wasm in site/pkg.
-if [[ ! -s target/site/pkg/onchainai.wasm ]]; then
-  echo "Missing or empty wasm-bindgen WASM: target/site/pkg/onchainai.wasm" >&2
-  echo "Do not copy target/front/*.wasm — that raw artifact does not match onchainai.js." >&2
-  exit 1
-fi
-ln -sf onchainai.wasm target/site/pkg/onchainai_bg.wasm
-
-# /pkg/onchainai.css is served from this manual stylesheet in src/lib.rs.
-# Cargo may reuse an unchanged release binary while regenerating pkg assets.
-# Refresh the served artifact mtimes only after the full build succeeds so
-# bundle verification catches real mixed builds without false-failing cache hits.
 if [[ ! -x target/release/onchainai ]]; then
   echo "Missing release binary: target/release/onchainai" >&2
   exit 1
 fi
-if [[ ! -s style/output.css ]]; then
-  echo "Missing or empty stylesheet: style/output.css" >&2
+
+echo "Building Next.js (cd frontend && npm run build)..."
+(cd frontend && npm run build)
+
+if [[ ! -f frontend/.next/BUILD_ID ]]; then
+  echo "Missing Next.js build: frontend/.next/BUILD_ID" >&2
   exit 1
 fi
-touch target/release/onchainai style/output.css
+
+touch target/release/onchainai frontend/.next/BUILD_ID
 
 echo "Artifacts:"
-ls -la target/release/onchainai target/site/pkg/onchainai.js target/site/pkg/onchainai.wasm target/site/pkg/onchainai_bg.wasm style/output.css
+ls -la target/release/onchainai frontend/.next/BUILD_ID
 
 ./scripts/verify-bundle.sh
 

@@ -2,7 +2,10 @@
   "mcpServers": {
     "onchainai": {
       "type": "http",
-      "url": "https://www.onchain-ai.xyz/mcp"
+      "url": "https://www.onchain-ai.xyz/mcp",
+      "headers": {
+        "Authorization": "Bearer ${ONCHAINAI_AGENT_TOKEN:-}"
+      }
     }
   }
 }

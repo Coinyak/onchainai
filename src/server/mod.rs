@@ -4,6 +4,8 @@ pub mod fn_error;
 pub mod functions;
 
 #[cfg(feature = "ssr")]
+pub mod agent_sync;
+#[cfg(feature = "ssr")]
 pub mod api_v2;
 #[cfg(feature = "ssr")]
 pub mod mcp;

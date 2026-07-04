@@ -61,4 +61,32 @@ blueprints_code="$(curl -sS -o /dev/null -w "%{http_code}" "${BASE}/api/v2/bluep
   || smoke_fail "GET /api/v2/blueprints curl failed"
 [[ "$blueprints_code" == "401" ]] || smoke_fail "GET /api/v2/blueprints expected 401, got ${blueprints_code}"
 
+agent_tokens_code="$(curl -sS -o /dev/null -w "%{http_code}" "${BASE}/api/v2/agent/tokens")" \
+  || smoke_fail "GET /api/v2/agent/tokens curl failed"
+[[ "$agent_tokens_code" == "401" ]] || smoke_fail "GET /api/v2/agent/tokens expected 401, got ${agent_tokens_code}"
+
+mcp_public_tools_body="$(mktemp)"
+mcp_public_tools_code="$(curl -sS -o "$mcp_public_tools_body" -w "%{http_code}" \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":3,"method":"tools/list","params":{}}' \
+  "${BASE}/mcp")" || smoke_fail "POST /mcp public tools/list curl failed"
+[[ "$mcp_public_tools_code" == "200" ]] || smoke_fail "POST /mcp public tools/list returned ${mcp_public_tools_code}"
+grep -q '"save_to_toolkit"' "$mcp_public_tools_body" \
+  && smoke_fail "POST /mcp tools/list must not expose save_to_toolkit without Bearer"
+grep -q '"search_tools"' "$mcp_public_tools_body" || smoke_fail "POST /mcp tools/list missing search_tools"
+rm -f "$mcp_public_tools_body"
+
+if [[ -n "${ONCHAINAI_SMOKE_AGENT_TOKEN:-}" ]]; then
+  mcp_auth_tools_body="$(mktemp)"
+  mcp_auth_tools_code="$(curl -sS -o "$mcp_auth_tools_body" -w "%{http_code}" \
+    -H "Content-Type: application/json" \
+    -H "Authorization: Bearer ${ONCHAINAI_SMOKE_AGENT_TOKEN}" \
+    -d '{"jsonrpc":"2.0","id":4,"method":"tools/list","params":{}}' \
+    "${BASE}/mcp")" || smoke_fail "POST /mcp authed tools/list curl failed"
+  [[ "$mcp_auth_tools_code" == "200" ]] || smoke_fail "POST /mcp authed tools/list returned ${mcp_auth_tools_code}"
+  grep -q '"save_to_toolkit"' "$mcp_auth_tools_body" \
+    || smoke_fail "POST /mcp authed tools/list missing save_to_toolkit"
+  rm -f "$mcp_auth_tools_body"
+fi
+
 echo "SMOKE API PASS ${BASE}"

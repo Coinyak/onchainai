@@ -13,7 +13,6 @@ For AI agents: connect to the free, read-only MCP endpoint `https://www.onchain-
 
 - [Tools](https://www.onchain-ai.xyz/tools): full searchable directory with category, chain, type, and pricing filters
 - [Categories](https://www.onchain-ai.xyz/categories): function taxonomy (bridge, swap, wallet, payments, data, ai-agent, ...)
-- [Dashboard](https://www.onchain-ai.xyz/dashboard): public coverage, trust, and x402 stats
 - [Blueprints](https://www.onchain-ai.xyz/blueprints): curated tool stacks for common agent jobs
 
 ## Contribute

@@ -11,6 +11,7 @@ import {
   Terminal,
   Wind,
 } from "lucide-react";
+import { AgentLinkSection } from "@/components/connect/AgentLinkSection";
 import { ConnectGuideBlocks } from "@/components/connect/ConnectGuideBlocks";
 import { HighlightedCommand } from "@/components/tools/HighlightedCommand";
 import { CopyButton } from "@/components/ui/CopyButton";
@@ -48,12 +49,24 @@ export function ConnectPageContent() {
       data-testid="connect-page"
     >
       <h1 className="text-h1 font-bold mb-3">Connect OnchainAI MCP</h1>
-      <p className="text-secondary text-body-md leading-relaxed mb-6 max-w-[720px]">
+      <p className="text-secondary text-body-md leading-relaxed mb-4 max-w-[720px]">
         Add the OnchainAI search MCP server to your agent or editor. Each client has its own
         install path below.
       </p>
+      <p
+        className="text-body-sm text-secondary mb-6 max-w-[720px] connect-agent-sync-callout"
+        data-testid="connect-agent-sync-callout"
+      >
+        <strong className="text-primary">Using Claude Code or Cursor?</strong>{" "}
+        <a href="#agent-sync" className="text-primary underline-offset-2 hover:underline">
+          Connect your coding app
+        </a>{" "}
+        first so saved tools show up in My Toolkit.
+      </p>
 
-      <section className="connect-universal mb-8" aria-labelledby="connect-universal-heading">
+      <AgentLinkSection />
+
+      <section className="connect-universal mb-8 mt-8" aria-labelledby="connect-universal-heading">
         <h2 id="connect-universal-heading" className="text-h3 font-semibold mb-3">
           Universal install
         </h2>

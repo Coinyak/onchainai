@@ -36,6 +36,14 @@ Use the connected `onchainai` MCP server to discover and safely install crypto t
 - Say "operator verified" only when `payment_verified`, `x402_endpoint_verified`, and `price_verified` are all true.
 - OnchainAI is discovery and trust metadata only. Do not create custody, facilitator, gateway, fund-moving, undocumented `referrer`, or `split` payment flows.
 
+## Agent Sync (save to web toolkit)
+
+- Saving to the user's OnchainAI toolkit requires an **Agent Sync** link (`ONCHAINAI_AGENT_TOKEN` or MCP `Authorization: Bearer` header).
+- Call `link_status` when unsure whether the client is linked.
+- Call `save_to_toolkit` only when the user **explicitly** asks to save, bookmark, or add to toolkit — not after every search.
+- If the tool returns `link_required`, direct the user to https://www.onchain-ai.xyz/connect#agent-sync (device flow; no manual token copy required on web).
+- For a confirmed multi-tool stack, `save_stack_to_blueprint` saves slugs to toolkit and appends nodes to today's `Agent session · {date}` blueprint.
+
 ## Response Shape
 
 For recommendations, return the top 1-3 tools with:

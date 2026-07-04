@@ -2,6 +2,7 @@ import type {
   CategoryRow,
   CategoryWithCount,
   PublicDashboardSnapshot,
+  SessionUser,
   Tool,
   ToolFilters,
   ToolListRequest,
@@ -141,6 +142,19 @@ export async function getPublicDashboardServer(
       `/api/v2/dashboard?limit=${limit}`,
       { revalidate: 300 },
     );
+  } catch {
+    return null;
+  }
+}
+
+export async function getSessionUserServer(cookieHeader: string): Promise<SessionUser | null> {
+  if (!cookieHeader) return null;
+
+  try {
+    return await serverApiFetch<SessionUser | null>("/api/v2/me", {
+      headers: { Cookie: cookieHeader },
+      revalidate: 0,
+    });
   } catch {
     return null;
   }

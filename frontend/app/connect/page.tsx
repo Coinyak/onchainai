@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import { ConnectPageContent } from "@/components/connect/ConnectPageContent";
 import { SITE_ORIGIN } from "@/lib/site";
 
@@ -19,5 +20,9 @@ export const metadata: Metadata = {
 };
 
 export default function ConnectPage() {
-  return <ConnectPageContent />;
+  return (
+    <Suspense fallback={null}>
+      <ConnectPageContent />
+    </Suspense>
+  );
 }

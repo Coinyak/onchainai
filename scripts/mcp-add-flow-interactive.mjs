@@ -57,9 +57,11 @@ try {
   for (const link of slugLinks) {
     const href = await link.getAttribute("href");
     if (!href) continue;
-    const m = href.match(/\/tools\/([^/?]+)/);
-    if (m && m[1]) {
-      selectedSlug = m[1];
+    const pathMatch = href.match(/\/tools\/([^/?]+)/);
+    const queryMatch = href.match(/[?&]selected=([^&]+)/);
+    const slug = pathMatch?.[1] ?? queryMatch?.[1];
+    if (slug) {
+      selectedSlug = decodeURIComponent(slug);
       break;
     }
   }

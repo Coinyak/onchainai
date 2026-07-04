@@ -203,6 +203,8 @@ mod tests {
             tool,
             note: Some("Use for Base bridge research".into()),
             tags: vec!["base".into(), "research".into()],
+            source: "web".into(),
+            source_client: None,
             saved_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
         };

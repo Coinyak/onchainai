@@ -4,32 +4,41 @@ import { useRef } from "react";
 import { useDraggable } from "@dnd-kit/core";
 import { ExternalLink, X } from "lucide-react";
 import type { BlueprintNode, Tool } from "@/lib/api";
+import { BlueprintToolChainMemo } from "@/components/blueprint/BlueprintToolChainMemo";
 import { ToolLogo } from "@/components/tools/ToolLogo";
+import { ChainLogo } from "@/components/tools/ChainLogo";
 import { Badge } from "@/components/ui/Badge";
 import { typeBadgeLabel } from "@/lib/format";
+import { toolChainsForNode } from "@/lib/blueprint-utils";
 
 interface BlueprintNodeViewProps {
   node: BlueprintNode;
   tool?: Tool | null;
   toolMissing?: boolean;
+  chainLabel?: string;
   selected: boolean;
+  connectPending?: boolean;
   readOnly: boolean;
   isDragging?: boolean;
   onSelect: (id: string) => void;
   onRemove: (id: string) => void;
   onTextChange: (id: string, text: string) => void;
+  onChainsChange: (id: string, chains: string[]) => void;
 }
 
 export function BlueprintNodeView({
   node,
   tool,
   toolMissing = false,
+  chainLabel,
   selected,
+  connectPending = false,
   readOnly,
   isDragging = false,
   onSelect,
   onRemove,
   onTextChange,
+  onChainsChange,
 }: BlueprintNodeViewProps) {
   const { attributes, listeners, setNodeRef, transform } = useDraggable({
     id: node.id,
@@ -45,8 +54,13 @@ export function BlueprintNodeView({
 
   const className = [
     "blueprint-node",
-    node.kind === "note" ? "blueprint-node-note" : "blueprint-node-tool",
+    node.kind === "note"
+      ? "blueprint-node-note"
+      : node.kind === "chain"
+        ? "blueprint-node-chain"
+        : "blueprint-node-tool",
     selected ? "blueprint-node-selected" : "",
+    connectPending ? "blueprint-node-connect-pending" : "",
     isDragging ? "blueprint-node-dragging" : "",
   ]
     .filter(Boolean)
@@ -82,10 +96,38 @@ export function BlueprintNodeView({
       aria-label={
         node.kind === "tool"
           ? tool?.name ?? node.slug ?? "Tool node"
-          : "Note node"
+          : node.kind === "chain"
+            ? chainLabel ?? node.chainId ?? "Network sticker"
+            : "Note node"
       }
     >
-      {node.kind === "tool" ? (
+      {node.kind === "chain" ? (
+        <>
+          {!readOnly && (
+            <button
+              type="button"
+              className="blueprint-node-remove"
+              aria-label="Remove network sticker"
+              onClick={(e) => {
+                e.stopPropagation();
+                onRemove(node.id);
+              }}
+              onPointerDown={(e) => e.stopPropagation()}
+            >
+              <X size={14} />
+            </button>
+          )}
+          <ChainLogo
+            id={node.chainId ?? ""}
+            label={chainLabel ?? node.chainId ?? "Network"}
+            size={36}
+            decorative
+          />
+          <span className="blueprint-node-chain-label">
+            {chainLabel ?? node.chainId ?? "Network"}
+          </span>
+        </>
+      ) : node.kind === "tool" ? (
         <>
           {!readOnly && (
             <button
@@ -108,27 +150,36 @@ export function BlueprintNodeView({
             </div>
           ) : (
             <>
-              <ToolLogo
-                name={tool.name}
-                logoUrl={tool.logo_url}
-                logoMonogram={tool.logo_monogram}
-                size={32}
+              <div className="blueprint-node-tool-body">
+                <ToolLogo
+                  name={tool.name}
+                  logoUrl={tool.logo_url}
+                  logoMonogram={tool.logo_monogram}
+                  size={32}
+                />
+                <span className="blueprint-node-tool-text">
+                  <span className="blueprint-node-tool-name">{tool.name}</span>
+                  <Badge variant="neutral">{typeBadgeLabel(tool.type)}</Badge>
+                </span>
+                <a
+                  href={`/tools/${tool.slug}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="blueprint-node-link"
+                  aria-label={`Open ${tool.name} in new tab`}
+                  onClick={(e) => e.stopPropagation()}
+                  onPointerDown={(e) => e.stopPropagation()}
+                >
+                  <ExternalLink size={14} />
+                </a>
+              </div>
+              <BlueprintToolChainMemo
+                availableChains={toolChainsForNode(tool.chains)}
+                selectedChainIds={node.chains ?? []}
+                nodeSelected={selected}
+                readOnly={readOnly}
+                onChange={(chains) => onChainsChange(node.id, chains)}
               />
-              <span className="blueprint-node-tool-text">
-                <span className="blueprint-node-tool-name">{tool.name}</span>
-                <Badge variant="neutral">{typeBadgeLabel(tool.type)}</Badge>
-              </span>
-              <a
-                href={`/tools/${tool.slug}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="blueprint-node-link"
-                aria-label={`Open ${tool.name} in new tab`}
-                onClick={(e) => e.stopPropagation()}
-                onPointerDown={(e) => e.stopPropagation()}
-              >
-                <ExternalLink size={14} />
-              </a>
             </>
           )}
         </>

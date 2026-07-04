@@ -1,25 +1,15 @@
 #!/usr/bin/env bash
-# Fast, COHERENT local dev loop for UI work (Leptos HMR-equivalent).
+# Local UI dev loop: Next.js HMR on PORT + Rust API on API_PORT.
 #
-# Runs `cargo leptos watch`, which rebuilds the SSR binary AND the WASM/JS
-# bundle together on every save and live-reloads the browser. This keeps SSR
-# markup and hydration WASM from diverging — the #1 cause of "I changed the UI
-# but the site looks stale / sidebar dead / buttons not clickable" (see
-# docs/BUILD_DEPLOY_RULES.md §3).
+# No cargo-leptos — the public UI is Next.js (frontend/). The Rust binary is
+# API/MCP only (Axum). Next rewrites /api, /auth, /mcp to API_PROXY_TARGET.
 #
-# Use this WHILE iterating. Finish with ./scripts/ui-change-gate.sh as the
-# final gate before handoff/commit (release build + full smoke + screenshots).
-#
-# Why not `cargo build --features ssr`? That rebuilds the server ONLY; the WASM
-# bundle and SSR markup drift apart and the browser hydrates a stale UI. Never
-# use it as a way to "preview" UI changes — use this watch loop instead.
-#
-# CSS note: style/output.css is hand-authored and served live by Axum
-# (ServeFile in src/lib.rs). Editing it only needs a browser refresh.
+# Use WHILE iterating on frontend/. Finish with ./scripts/ui-change-gate.sh
+# before handoff/commit.
 #
 # Usage:
 #   ./scripts/dev-watch.sh
-#   PORT=3000 ./scripts/dev-watch.sh
+#   PORT=3000 API_PORT=3001 ./scripts/dev-watch.sh
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -29,20 +19,22 @@ if [[ -x "${HOME}/.cargo/bin/cargo" ]]; then
   export PATH="${HOME}/.cargo/bin:${PATH}"
 fi
 
-# macOS linker workaround (same as release-build.sh): Apple clang can fail with
-# makeSymbolStringInPlace unless symbol mangling v0 is forced.
 if [[ "$(uname -s)" == "Darwin" && "${RUSTFLAGS:-}" != *"symbol-mangling-version"* ]]; then
   export RUSTFLAGS="${RUSTFLAGS:+${RUSTFLAGS} }-C symbol-mangling-version=v0"
   echo "Using macOS linker workaround: RUSTFLAGS=${RUSTFLAGS}"
 fi
 
 PORT_FROM_SHELL=false
+API_PORT_FROM_SHELL=false
 if [[ -n "${PORT+x}" && -n "$PORT" ]]; then
   PORT_FROM_SHELL=true
   SHELL_PORT="$PORT"
 fi
+if [[ -n "${API_PORT+x}" && -n "$API_PORT" ]]; then
+  API_PORT_FROM_SHELL=true
+  SHELL_API_PORT="$API_PORT"
+fi
 
-# Load .env before defaulting PORT so .env values apply unless the shell overrides.
 if [[ -f .env ]]; then
   set -a
   # shellcheck disable=SC1091
@@ -56,15 +48,14 @@ if [[ "$PORT_FROM_SHELL" == "true" ]]; then
 else
   PORT="${PORT:-3000}"
 fi
+if [[ "$API_PORT_FROM_SHELL" == "true" ]]; then
+  API_PORT="$SHELL_API_PORT"
+else
+  API_PORT="${API_PORT:-3001}"
+fi
 
 export SKIP_CRAWLER="${SKIP_CRAWLER:-1}"
-export ONCHAINAI_PKG_NO_CACHE="${ONCHAINAI_PKG_NO_CACHE:-1}"
-# Uncached /pkg/* (above) + fast iterative page loads would trip the IP rate
-# limiter (429 on wasm/js → broken hydration). Relax it locally; prod never
-# sets this flag. Same flag also relaxes the auth limiter for login/logout loops.
 export ONCHAINAI_RELAX_RATE_LIMIT="${ONCHAINAI_RELAX_RATE_LIMIT:-1}"
-# cargo-leptos reads LEPTOS_SITE_ADDR to override site-addr from Cargo.toml.
-export LEPTOS_SITE_ADDR="127.0.0.1:${PORT}"
 
 if [[ -x "$ROOT/scripts/disk-guard.sh" ]]; then
   if ! "$ROOT/scripts/disk-guard.sh"; then
@@ -72,18 +63,58 @@ if [[ -x "$ROOT/scripts/disk-guard.sh" ]]; then
   fi
 fi
 
-# Kill any stale server on the watch port — stale processes are the #1 cause of
-# "changes not showing" (docs/BUILD_DEPLOY_RULES.md §2).
-pids="$(lsof -ti ":${PORT}" 2>/dev/null || true)"
-if [[ -n "$pids" ]]; then
-  echo "Stopping stale process(es) on port ${PORT}: ${pids}"
-  # shellcheck disable=SC2086
-  kill ${pids} 2>/dev/null || true
-  sleep 1
-fi
+kill_port() {
+  local p="$1"
+  local pids
+  pids="$(lsof -ti ":${p}" 2>/dev/null || true)"
+  if [[ -n "$pids" ]]; then
+    echo "Stopping stale process(es) on port ${p}: ${pids}"
+    # shellcheck disable=SC2086
+    kill ${pids} 2>/dev/null || true
+    sleep 1
+  fi
+}
 
-echo "Starting cargo leptos watch on http://127.0.0.1:${PORT} (reload-port 3001)."
-echo "  Edit src/**.rs        -> auto rebuild (SSR + WASM) + browser live-reload"
-echo "  Edit style/output.css -> just refresh the browser (served live)"
-echo "  Ctrl+C to stop. Final gate before commit: ./scripts/ui-change-gate.sh"
-exec cargo leptos watch
+kill_port "$PORT"
+kill_port "$API_PORT"
+
+API_LOG="${ROOT}/target/api-dev.log"
+mkdir -p target
+
+echo "Starting Rust API on http://127.0.0.1:${API_PORT} (log: ${API_LOG})"
+PORT="$API_PORT" nohup cargo run --features ssr >"$API_LOG" 2>&1 &
+API_PID=$!
+echo "$API_PID" >"${ROOT}/target/api-dev.pid"
+
+cleanup() {
+  echo "Stopping dev processes..."
+  kill "$API_PID" 2>/dev/null || true
+  kill_port "$PORT"
+  kill_port "$API_PORT"
+}
+trap cleanup EXIT INT TERM
+
+echo "Waiting for API on port ${API_PORT}..."
+for _ in $(seq 1 120); do
+  if curl -sS -o /dev/null -w "%{http_code}" "http://127.0.0.1:${API_PORT}/mcp" \
+    -H "Content-Type: application/json" \
+    -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' 2>/dev/null | grep -q '^200$'; then
+    echo "API ready."
+    break
+  fi
+  if ! kill -0 "$API_PID" 2>/dev/null; then
+    echo "API process exited early. Log:" >&2
+    tail -40 "$API_LOG" >&2
+    exit 1
+  fi
+  sleep 1
+done
+
+echo "Starting Next.js on http://127.0.0.1:${PORT} (API proxy → ${API_PORT})"
+echo "  Edit frontend/**     -> HMR reload"
+echo "  Edit src/** (API)    -> restart this script (or run cargo watch separately)"
+echo "  Ctrl+C to stop both. Final gate: ./scripts/ui-change-gate.sh"
+
+cd "$ROOT/frontend"
+export API_PROXY_TARGET="http://127.0.0.1:${API_PORT}"
+exec npm run dev -- --port "$PORT"
