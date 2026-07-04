@@ -63,7 +63,12 @@ Full per-client walkthroughs (Codex, Windsurf, Gemini CLI, …): [docs/CONNECT.m
 | `get_install_guide` | Platform-specific install steps (claude / cursor / generic / cli) with safety gating — `critical`-risk commands are withheld |
 | `list_categories` | Browse the taxonomy with tool counts |
 | `get_dashboard_snapshot` | Public coverage snapshot: totals, categories, trust, x402, featured |
-| `check_endpoint_health` | Endpoint liveness + 30-day probe uptime for a listed x402 tool — the one x402-paid call (HTTP 402 handshake) |
+| `compare_tools` | Side-by-side comparison of 2–4 tools on trust, risk, chains, pricing (free today; operator can enable x402 premium) |
+| `export_toolkit` | Export a JSON + markdown install kit by slugs or category (free today; operator can enable x402 premium) |
+| `check_endpoint_health` | Endpoint liveness + 30-day probe uptime for a listed x402 tool — x402-paid per call (HTTP 402 handshake) |
+
+Linking your account from a coding agent (`/connect#agent-sync`) unlocks three more:
+`save_to_toolkit`, `save_stack_to_blueprint`, and `link_status`.
 
 ### Claude Code plugin
 
