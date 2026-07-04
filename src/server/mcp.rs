@@ -12,7 +12,7 @@ use crate::server::tool_categories::PUBLIC_TOOL_CATEGORY_IDS;
 use crate::AppState;
 use axum::{
     extract::State,
-    http::{HeaderMap, HeaderValue, Request, StatusCode},
+    http::{HeaderMap, Request, StatusCode},
     response::{IntoResponse, Response},
     Json,
 };
@@ -424,24 +424,18 @@ async fn tools_call(
     };
     // Axis B premium (compare_tools / export_toolkit): operator-toggled x402 via
     // site_settings. Default disabled, so these stay free until explicitly enabled.
+    // Same facilitator verify+settle gate as K2 check_endpoint_health.
     if crate::server::mcp_x402::is_premium_mcp_tool(&request.name) {
         let config = match crate::server::mcp_x402::load_mcp_premium_config(pool).await {
             Ok(config) => config,
             Err(e) => return ToolsCallOutcome::Err((-32603, format!("settings load failed: {e}"))),
         };
         if config.is_active() {
-            let payment_sig = headers
-                .get(crate::server::mcp_x402::PAYMENT_SIGNATURE_HEADER)
-                .and_then(|v| v.to_str().ok());
-            match crate::server::mcp_x402::payment_granted(&config, payment_sig).await {
-                Ok(true) => {}
-                Ok(false) => {
-                    return ToolsCallOutcome::Http(mcp_premium_payment_required_response(
-                        &config,
-                        &request.name,
-                    ));
-                }
-                Err(e) => return ToolsCallOutcome::Err((-32603, e)),
+            match crate::server::mcp_x402::require_axis_b_payment(&config, &request.name, headers)
+                .await
+            {
+                Ok(_settlement) => {}
+                Err(response) => return ToolsCallOutcome::Http(response),
             }
         }
     }
@@ -566,29 +560,6 @@ async fn call_check_endpoint_health(
     let response = payment_success_response(body.clone(), &settlement)
         .unwrap_or_else(|_| (StatusCode::OK, Json(body)).into_response());
     Ok(DispatchOutcome::Http(response))
-}
-
-/// HTTP 402 for Axis B premium tools (compare_tools / export_toolkit) when the
-/// operator has enabled MCP premium in site_settings. Carries the PAYMENT-REQUIRED
-/// header so wallet clients can retry with PAYMENT-SIGNATURE.
-fn mcp_premium_payment_required_response(
-    config: &crate::server::mcp_x402::McpPremiumConfig,
-    tool_name: &str,
-) -> Response {
-    let encoded = crate::server::mcp_x402::build_payment_required_header(config, tool_name);
-    let mut headers = HeaderMap::new();
-    if let Ok(value) = HeaderValue::from_str(&encoded) {
-        headers.insert(crate::server::mcp_x402::PAYMENT_REQUIRED_HEADER, value);
-    }
-    let message = format!(
-        "x402 payment required for {tool_name}. Retry POST /mcp with PAYMENT-SIGNATURE header."
-    );
-    (
-        StatusCode::PAYMENT_REQUIRED,
-        headers,
-        Json(error_response(Value::Null, 402, &message)),
-    )
-        .into_response()
 }
 
 async fn call_compare_tools(pool: &PgPool, args: &Value) -> Result<String, (i32, String)> {
@@ -827,17 +798,36 @@ mod tests {
     use crate::server::queries::MCP_SEARCH_TOOLS_BASE_SQL;
 
     #[test]
-    fn tools_list_has_six_public_tools_including_premium() {
+    fn tools_list_has_eight_public_tools_including_premium() {
         let rt = tokio::runtime::Runtime::new().unwrap();
         let value = rt.block_on(tools_list(false)).unwrap();
         let tools = value["tools"].as_array().unwrap();
-        assert_eq!(tools.len(), 6);
-        assert!(tools
-            .iter()
-            .any(|tool| tool["name"].as_str() == Some("check_endpoint_health")));
-        assert!(tools
-            .iter()
-            .any(|tool| tool["name"].as_str() == Some("get_dashboard_snapshot")));
+        assert_eq!(tools.len(), 8);
+        for name in [
+            "check_endpoint_health",
+            "get_dashboard_snapshot",
+            "compare_tools",
+            "export_toolkit",
+        ] {
+            assert!(
+                tools.iter().any(|tool| tool["name"].as_str() == Some(name)),
+                "missing public tool {name}"
+            );
+        }
+    }
+
+    #[test]
+    fn tools_list_authenticated_adds_agent_sync_tools() {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let value = rt.block_on(tools_list(true)).unwrap();
+        let tools = value["tools"].as_array().unwrap();
+        assert_eq!(tools.len(), 11);
+        for name in ["save_to_toolkit", "save_stack_to_blueprint", "link_status"] {
+            assert!(
+                tools.iter().any(|tool| tool["name"].as_str() == Some(name)),
+                "missing authenticated tool {name}"
+            );
+        }
     }
 
     #[test]

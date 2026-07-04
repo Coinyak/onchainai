@@ -106,7 +106,7 @@ fn is_configured_pay_to(pay_to: &str) -> bool {
         && trimmed.len() >= 42
 }
 
-fn default_usdc_asset(network: &str) -> String {
+pub(crate) fn default_usdc_asset(network: &str) -> String {
     if network == "eip155:8453" {
         USDC_BASE_MAINNET.into()
     } else {
