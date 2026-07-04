@@ -85,7 +85,30 @@ pub fn validate_probe_url(url_str: &str) -> Result<url::Url, String> {
     if parsed.username() != "" || parsed.password().is_some() {
         return Err("userinfo in url is not allowed".into());
     }
+    if host.parse::<IpAddr>().is_ok() {
+        return Err("ip literal hosts are not allowed".into());
+    }
+    match parsed.port() {
+        None | Some(443) => {}
+        Some(port) => return Err(format!("only port 443 is allowed (got {port})")),
+    }
     Ok(parsed)
+}
+
+async fn read_limited_response_body(mut response: reqwest::Response) -> Result<String, String> {
+    let mut body = Vec::new();
+    loop {
+        let chunk = match response.chunk().await {
+            Ok(Some(chunk)) => chunk,
+            Ok(None) => break,
+            Err(e) => return Err(e.to_string()),
+        };
+        if body.len() + chunk.len() > MAX_RESPONSE_BYTES {
+            return Err(format!("response body exceeds {MAX_RESPONSE_BYTES} bytes"));
+        }
+        body.extend_from_slice(&chunk);
+    }
+    String::from_utf8(body).map_err(|e| e.to_string())
 }
 
 fn is_blocked_ip(ip: IpAddr) -> bool {
@@ -220,9 +243,9 @@ pub async fn probe_x402_endpoint(url_str: &str) -> ProbeOutcome {
         },
     };
     let status = response.status();
-    let body = match response.text().await {
+    let body = match read_limited_response_body(response).await {
         Ok(text) => text,
-        Err(e) => return ProbeOutcome::RequestFailed(e.to_string()),
+        Err(e) => return ProbeOutcome::RequestFailed(e),
     };
 
     classify_probe_response(status, &body)
@@ -384,7 +407,13 @@ pub async fn run_scheduled_verification(pool: &PgPool, client: &reqwest::Client)
     for row in rows {
         let pool = pool.clone();
         let client = client.clone();
-        let permit = semaphore.clone().acquire_owned().await;
+        let permit = match semaphore.clone().acquire_owned().await {
+            Ok(permit) => permit,
+            Err(e) => {
+                tracing::error!("x402 scheduled verify: semaphore closed: {e}");
+                break;
+            }
+        };
         handles.push(tokio::spawn(async move {
             let _permit = permit;
             if let Err(e) = verify_tool_by_id(&pool, &client, row.id).await {
@@ -432,7 +461,7 @@ mod tests {
     fn validate_probe_url_rejects_http_and_localhost() {
         assert!(validate_probe_url("http://example.com/pay").is_err());
         assert!(validate_probe_url("https://localhost/pay").is_err());
-        assert!(validate_probe_url("https://127.0.0.1/pay").is_ok());
+        assert!(validate_probe_url("https://127.0.0.1/pay").is_err());
     }
 
     #[test]

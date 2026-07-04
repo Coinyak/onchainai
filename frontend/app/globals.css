@@ -893,9 +893,3 @@
   gap: 12px;
   flex-wrap: wrap;
 }
-
-/* P2 UI audit — card action keyboard focus (M5) */
-.card-action-btn:focus-visible {
-  outline: 2px solid rgba(231, 111, 0, 0.35);
-  outline-offset: 2px;
-}

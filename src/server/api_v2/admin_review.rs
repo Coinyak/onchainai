@@ -381,7 +381,7 @@ async fn trigger_x402_verify(
         crate::server::rate_limit::UserRateLimitAction::AdminX402Verify,
     )
     .map_err(|_| {
-        ApiError::BadRequest("x402 verify rate limit exceeded; try again later".into())
+        ApiError::TooManyRequests("x402 verify rate limit exceeded; try again later".into())
     })?;
 
     let client = crate::server::x402_verify::probe_client();
