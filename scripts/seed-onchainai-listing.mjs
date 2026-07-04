@@ -36,7 +36,7 @@ INSERT INTO tools (
   $8, 'community', 'OnchainAI', 'self', 'approved', NULL,
   100, $9, 'accepted',
   'low', $10, false,
-  'MIT', 'free', $11, 0,
+  'MIT', 'x402', $11, 0,
   false, 'bc_ljttbnhv',
   now(), now()
 )
@@ -57,7 +57,7 @@ ON CONFLICT (slug) DO UPDATE SET
   install_risk_level = 'low',
   install_risk_reasons = EXCLUDED.install_risk_reasons,
   license = EXCLUDED.license,
-  pricing = 'free',
+  pricing = 'x402',
   x402_price = EXCLUDED.x402_price,
   x402_builder_code = EXCLUDED.x402_builder_code,
   updated_at = now()

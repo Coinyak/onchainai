@@ -200,6 +200,38 @@ fn append_scalar_intersection<'qb>(
     }
 }
 
+/// x402 catalog slice: matches dashboard snapshot semantics (not only `type`/`pricing` = x402).
+#[cfg(feature = "ssr")]
+fn append_x402_catalog_predicate(query: &mut sqlx::QueryBuilder<'_, sqlx::Postgres>) {
+    query.push(
+        " AND (type = 'x402' OR pricing = 'x402' OR x402_price IS NOT NULL OR referral_enabled = true)",
+    );
+}
+
+#[cfg(feature = "ssr")]
+fn append_scalar_intersection_except<'qb>(
+    query: &mut sqlx::QueryBuilder<'qb, sqlx::Postgres>,
+    column: &str,
+    values: &'qb [String],
+    skip: &str,
+) {
+    for value in values {
+        if value == skip {
+            continue;
+        }
+        query.push(" AND ").push(column).push(" = ").push_bind(value);
+    }
+}
+
+#[cfg(feature = "ssr")]
+fn filters_include_x402(filters: &ToolFilters) -> bool {
+    filters
+        .tool_type
+        .iter()
+        .any(|value| value == "x402")
+        || filters.pricing.iter().any(|value| value == "x402")
+}
+
 #[cfg(feature = "ssr")]
 pub(crate) fn append_tool_filters<'qb>(
     query: &mut sqlx::QueryBuilder<'qb, sqlx::Postgres>,
@@ -208,10 +240,13 @@ pub(crate) fn append_tool_filters<'qb>(
     append_scalar_intersection(query, "function", &filters.function);
     append_scalar_intersection(query, "asset_class", &filters.asset_class);
     append_scalar_intersection(query, "actor", &filters.actor);
-    append_scalar_intersection(query, "type", &filters.tool_type);
+    append_scalar_intersection_except(query, "type", &filters.tool_type, "x402");
     append_scalar_intersection(query, "status", &filters.status);
-    append_scalar_intersection(query, "pricing", &filters.pricing);
+    append_scalar_intersection_except(query, "pricing", &filters.pricing, "x402");
     append_scalar_intersection(query, "install_risk_level", &filters.install_risk);
+    if filters_include_x402(filters) {
+        append_x402_catalog_predicate(query);
+    }
     if !filters.chain.is_empty() {
         // Intersection: tool must support every selected chain.
         query.push(" AND chains @> ").push_bind(&filters.chain);

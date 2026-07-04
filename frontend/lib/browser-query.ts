@@ -239,6 +239,16 @@ export function forTypeFilter(params: BrowserQueryParams, toolType?: string): Br
   return { ...params, type: next, selected: undefined, intent: undefined, page: 1 };
 }
 
+export function forPricingFilter(params: BrowserQueryParams, pricing?: string): BrowserQueryParams {
+  const next = pricing && params.pricing === pricing ? undefined : pricing;
+  return { ...params, pricing: next, selected: undefined, intent: undefined, page: 1 };
+}
+
+/** True when the x402 catalog slice is active (`type` or `pricing` axis). */
+export function isX402FilterActive(params: BrowserQueryParams): boolean {
+  return parseMulti(params.type).includes("x402") || parseMulti(params.pricing).includes("x402");
+}
+
 export function forNextPage(params: BrowserQueryParams): BrowserQueryParams {
   return { ...params, selected: undefined, intent: undefined, page: params.page + 1 };
 }

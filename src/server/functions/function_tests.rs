@@ -126,7 +126,21 @@ mod tests {
         append_tool_filters(&mut query, &filters);
         assert!(query.sql().contains("function = $1"));
         assert!(query.sql().contains("function = $2"));
-        assert!(query.sql().contains("pricing = $3"));
+        assert!(query.sql().contains("x402_price IS NOT NULL"));
+        assert!(!query.sql().contains("pricing = $"));
+    }
+
+    #[cfg(feature = "ssr")]
+    #[test]
+    fn append_tool_filters_type_x402_uses_catalog_predicate() {
+        let mut query = sqlx::QueryBuilder::new("SELECT * FROM tools WHERE true");
+        let filters = ToolFilters {
+            tool_type: vec!["x402".into()],
+            ..Default::default()
+        };
+        append_tool_filters(&mut query, &filters);
+        assert!(query.sql().contains("referral_enabled = true"));
+        assert!(!query.sql().contains("type = $"));
     }
 
     #[cfg(feature = "ssr")]
