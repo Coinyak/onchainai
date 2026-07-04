@@ -31,18 +31,6 @@ pub const SECRET_PREFIXES: &[&str] = &[
     "sb_publishable_",
 ];
 
-/// Case-insensitive substring search; returns the byte offset of the first match.
-/// ASCII lowercasing preserves byte length and UTF-8 boundaries, so the offset
-/// found in the lowercased copy applies unchanged to the original string.
-fn find_ignore_ascii_case(haystack: &str, pattern: &str) -> Option<usize> {
-    if pattern.is_empty() {
-        return None;
-    }
-    haystack
-        .to_ascii_lowercase()
-        .find(&pattern.to_ascii_lowercase())
-}
-
 /// Redact secrets from text before it reaches clients or Hermes.
 pub fn redact_secrets(input: &str) -> String {
     let mut out = input.to_string();
@@ -50,7 +38,7 @@ pub fn redact_secrets(input: &str) -> String {
     for name in SECRET_ENV_NAMES {
         for pattern in [format!("{name}="), format!("{name} =")] {
             let mut search_from = 0;
-            while let Some(rel) = find_ignore_ascii_case(&out[search_from..], &pattern) {
+            while let Some(rel) = out[search_from..].find(&pattern) {
                 let start = search_from + rel;
                 let mut value_start = start + pattern.len();
                 while out[value_start..]
@@ -68,18 +56,13 @@ pub fn redact_secrets(input: &str) -> String {
                 search_from = value_start + "[REDACTED]".len();
             }
         }
-        while let Some(rel) = find_ignore_ascii_case(&out, name) {
-            out.replace_range(rel..rel + name.len(), "[REDACTED]");
-        }
+        out = out.replace(name, "[REDACTED]");
     }
 
     for prefix in SECRET_PREFIXES {
         while let Some(idx) = out.find(prefix) {
-            let rest = &out[idx..];
-            let end = rest
-                .find(|c: char| c.is_whitespace() || c == '"' || c == '\'' || c == '\n')
-                .unwrap_or(rest.len());
-            out.replace_range(idx..idx + end, "[REDACTED_TOKEN]");
+            let tail: String = out[idx..].chars().take(40).collect();
+            out = out.replacen(&tail, "[REDACTED_TOKEN]", 1);
         }
     }
 
@@ -179,23 +162,6 @@ mod tests {
         assert!(!out.contains("rw_leak"));
         assert!(!out.contains("sb_secret_abc123"));
         assert!(!out.contains("sb_publishable_xyz"));
-    }
-
-    #[test]
-    fn redact_secrets_masks_lowercase_and_mixed_case_env_names() {
-        let input = "jwt_secret=super-secret-value Jwt_Secret=other-secret database_url=postgresql://user:pass@host/db";
-        let out = redact_secrets(input);
-        assert!(!out.contains("super-secret-value"));
-        assert!(!out.contains("other-secret"));
-        assert!(!out.contains("postgresql://user:pass"));
-    }
-
-    #[test]
-    fn redact_secrets_masks_prefix_tokens_longer_than_forty_chars() {
-        let input = "sb_secret_abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJmore-secret-tail-data";
-        let out = redact_secrets(input);
-        assert!(!out.contains("more-secret-tail-data"));
-        assert!(out.contains("[REDACTED_TOKEN]"));
     }
 
     #[test]

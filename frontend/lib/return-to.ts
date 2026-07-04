@@ -1,9 +1,15 @@
-import { safeReturnTo } from "./return-to-guard.mjs";
-
-export { safeReturnTo };
-
 const STORAGE_KEY = "onchain-ai-return-to";
 const INTENT_KEY = "onchain-ai-return-to-intent";
+
+/** Same-origin path (+ optional query) only — blocks open redirects. */
+export function safeReturnTo(raw: string | null | undefined): string | null {
+  if (!raw?.trim()) return null;
+  const path = raw.trim();
+  if (!path.startsWith("/") || path.startsWith("//")) return null;
+  const [pathname] = path.split(/[?#]/, 1);
+  if (!pathname || pathname.includes(":")) return null;
+  return path;
+}
 
 export function persistReturnTo(
   path: string | null,

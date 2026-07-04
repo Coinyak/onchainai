@@ -4,11 +4,17 @@ pub mod fn_error;
 pub mod functions;
 
 #[cfg(feature = "ssr")]
+pub mod agent_sync;
+#[cfg(feature = "ssr")]
 pub mod api_v2;
 #[cfg(feature = "ssr")]
 pub mod mcp;
 #[cfg(feature = "ssr")]
+pub mod mcp_premium_tools;
+#[cfg(feature = "ssr")]
 pub mod mcp_search;
+#[cfg(feature = "ssr")]
+pub mod mcp_x402;
 #[cfg(feature = "ssr")]
 pub mod operator_harness;
 #[cfg(feature = "ssr")]

@@ -12,8 +12,8 @@ use crate::server::tool_categories::PUBLIC_TOOL_CATEGORY_IDS;
 use crate::AppState;
 use axum::{
     extract::State,
-    http::{Request, StatusCode},
-    response::IntoResponse,
+    http::{HeaderMap, HeaderValue, Request, StatusCode},
+    response::{IntoResponse, Response},
     Json,
 };
 use serde::{Deserialize, Serialize};
@@ -57,7 +57,8 @@ pub async fn handle_mcp(
         return (
             StatusCode::TOO_MANY_REQUESTS,
             Json(error_response(Value::Null, -32099, &limit.to_string())),
-        );
+        )
+            .into_response();
     }
 
     let body_bytes = match axum::body::to_bytes(body, 1024 * 1024).await {
@@ -66,7 +67,8 @@ pub async fn handle_mcp(
             return (
                 StatusCode::BAD_REQUEST,
                 Json(error_response(Value::Null, -32700, "Parse error")),
-            );
+            )
+                .into_response();
         }
     };
     let rpc_req: JsonRpcRequest = match serde_json::from_slice(&body_bytes) {
@@ -75,35 +77,119 @@ pub async fn handle_mcp(
             return (
                 StatusCode::BAD_REQUEST,
                 Json(error_response(Value::Null, -32700, "Parse error")),
-            );
+            )
+                .into_response();
         }
     };
 
     let id = rpc_req.id.clone().unwrap_or(Value::Null);
 
     if rpc_req.jsonrpc.as_deref() != Some("2.0") {
-        return (
-            StatusCode::OK,
-            Json(error_response(id, -32600, "Invalid Request")),
-        );
+        return (StatusCode::OK, Json(error_response(id, -32600, "Invalid Request"))).into_response();
     }
 
     let result = match rpc_req.method.as_str() {
-        "initialize" => Ok(json!({
+        "initialize" => RpcDispatchOutcome::Success(json!({
             "protocolVersion": "2024-11-05",
             "capabilities": { "tools": {} },
             "serverInfo": { "name": "onchainai", "version": "0.1.0" }
         })),
-        "notifications/initialized" => Ok(json!({})),
-        "tools/list" => tools_list().await,
-        "tools/call" => tools_call(&state.pool, rpc_req.params).await,
-        other => Err((-32601, format!("Method not found: {other}"))),
+        "notifications/initialized" => RpcDispatchOutcome::Success(json!({})),
+        "tools/list" => {
+            let agent = agent_from_authorization(
+                &state.pool,
+                parts
+                    .headers
+                    .get(axum::http::header::AUTHORIZATION)
+                    .and_then(|v| v.to_str().ok()),
+            )
+            .await;
+            match tools_list(agent.is_some()).await {
+                Ok(value) => RpcDispatchOutcome::Success(value),
+                Err((code, msg)) => RpcDispatchOutcome::Error(code, msg),
+            }
+        }
+        "tools/call" => {
+            let agent = agent_from_authorization(
+                &state.pool,
+                parts
+                    .headers
+                    .get(axum::http::header::AUTHORIZATION)
+                    .and_then(|v| v.to_str().ok()),
+            )
+            .await;
+            match tools_call(
+                &state.pool,
+                rpc_req.params,
+                agent.as_ref(),
+                &parts.headers,
+            )
+            .await
+            {
+                Ok(ToolsCallOutcome::Success(value)) => RpcDispatchOutcome::Success(value),
+                Ok(ToolsCallOutcome::PaymentRequired {
+                    config,
+                    tool_name,
+                }) => RpcDispatchOutcome::PaymentRequired { config, tool_name },
+                Err((code, msg)) => RpcDispatchOutcome::Error(code, msg),
+            }
+        }
+        other => RpcDispatchOutcome::Error(-32601, format!("Method not found: {other}")),
     };
 
     match result {
-        Ok(value) => (StatusCode::OK, Json(ok_response(id, value))),
-        Err((code, msg)) => (StatusCode::OK, Json(error_response(id, code, &msg))),
+        RpcDispatchOutcome::Success(value) => {
+            (StatusCode::OK, Json(ok_response(id, value))).into_response()
+        }
+        RpcDispatchOutcome::PaymentRequired {
+            config,
+            tool_name,
+        } => payment_required_response(id, &config, &tool_name),
+        RpcDispatchOutcome::Error(code, msg) => {
+            (StatusCode::OK, Json(error_response(id, code, &msg))).into_response()
+        }
     }
+}
+
+enum RpcDispatchOutcome {
+    Success(Value),
+    PaymentRequired {
+        config: crate::server::mcp_x402::McpPremiumConfig,
+        tool_name: String,
+    },
+    Error(i32, String),
+}
+
+enum ToolsCallOutcome {
+    Success(Value),
+    PaymentRequired {
+        config: crate::server::mcp_x402::McpPremiumConfig,
+        tool_name: String,
+    },
+}
+
+fn payment_required_response(
+    id: Value,
+    config: &crate::server::mcp_x402::McpPremiumConfig,
+    tool_name: &str,
+) -> Response {
+    let encoded = crate::server::mcp_x402::build_payment_required_header(config, tool_name);
+    let mut headers = HeaderMap::new();
+    if let Ok(value) = HeaderValue::from_str(&encoded) {
+        headers.insert(
+            crate::server::mcp_x402::PAYMENT_REQUIRED_HEADER,
+            value,
+        );
+    }
+    let message = format!(
+        "x402 payment required for {tool_name}. Retry POST /mcp with PAYMENT-SIGNATURE header."
+    );
+    (
+        StatusCode::PAYMENT_REQUIRED,
+        headers,
+        Json(error_response(id, 402, &message)),
+    )
+        .into_response()
 }
 
 fn ok_response(id: Value, result: Value) -> JsonRpcResponse {
@@ -128,18 +214,82 @@ fn error_response(id: Value, code: i32, message: &str) -> JsonRpcResponse {
     }
 }
 
-async fn tools_list() -> Result<Value, (i32, String)> {
-    Ok(json!({ "tools": tool_definitions() }))
+async fn tools_list(authenticated: bool) -> Result<Value, (i32, String)> {
+    Ok(json!({ "tools": tool_definitions(authenticated) }))
 }
 
-fn tool_definitions() -> Vec<Value> {
-    vec![
+fn tool_definitions(authenticated: bool) -> Vec<Value> {
+    let mut tools = vec![
         search_tools_definition(),
         get_tool_detail_definition(),
         list_categories_definition(),
         get_dashboard_snapshot_definition(),
         get_install_guide_definition(),
-    ]
+        compare_tools_definition(),
+        export_toolkit_definition(),
+    ];
+    if authenticated {
+        tools.push(save_to_toolkit_definition());
+        tools.push(save_stack_to_blueprint_definition());
+        tools.push(link_status_definition());
+    }
+    tools
+}
+
+fn save_to_toolkit_definition() -> Value {
+    json!({
+        "name": "save_to_toolkit",
+        "description": "Save a tool to the linked user's OnchainAI toolkit. Requires Agent Sync link (Bearer token). Use only when the user explicitly asks to save or add to toolkit.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "slug": {
+                    "type": "string",
+                    "description": "Tool slug from search_tools or get_tool_detail"
+                },
+                "note": {
+                    "type": "string",
+                    "description": "Optional short note (max 500 chars); does not overwrite existing user notes"
+                },
+                "tags": {
+                    "type": "array",
+                    "items": { "type": "string" },
+                    "description": "Optional tags (max 8)"
+                }
+            },
+            "required": ["slug"]
+        }
+    })
+}
+
+fn save_stack_to_blueprint_definition() -> Value {
+    json!({
+        "name": "save_stack_to_blueprint",
+        "description": "Save multiple tools to the linked user's toolkit and append them to today's agent session blueprint. Requires Agent Sync link. Use when the user explicitly asks to save a stack or workflow.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "slugs": {
+                    "type": "array",
+                    "items": { "type": "string" },
+                    "description": "Tool slugs to save (max 25)"
+                },
+                "title": {
+                    "type": "string",
+                    "description": "Optional blueprint title; defaults to Agent session · {date}"
+                }
+            },
+            "required": ["slugs"]
+        }
+    })
+}
+
+fn link_status_definition() -> Value {
+    json!({
+        "name": "link_status",
+        "description": "Check whether the MCP client is linked to an OnchainAI account.",
+        "inputSchema": { "type": "object", "properties": {} }
+    })
 }
 
 fn search_tools_definition() -> Value {
@@ -226,6 +376,48 @@ fn get_dashboard_snapshot_definition() -> Value {
     })
 }
 
+fn compare_tools_definition() -> Value {
+    json!({
+        "name": "compare_tools",
+        "description": "Compare 2–4 approved tools side-by-side on trust, install risk, chains, pricing, and x402 status. May require x402 payment per call when OnchainAI MCP premium is enabled — HTTP 402 returns PAYMENT-REQUIRED on POST /mcp. Free alternative: call get_tool_detail for each slug.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "slugs": {
+                    "type": "array",
+                    "items": { "type": "string" },
+                    "minItems": 2,
+                    "maxItems": 4,
+                    "description": "Tool slugs to compare (2–4 unique)"
+                }
+            },
+            "required": ["slugs"]
+        }
+    })
+}
+
+fn export_toolkit_definition() -> Value {
+    json!({
+        "name": "export_toolkit",
+        "description": "Export a bundle of approved tools as JSON + markdown install kit for agents. Pass slugs or a function category id. May require x402 payment per call when OnchainAI MCP premium is enabled — HTTP 402 returns PAYMENT-REQUIRED on POST /mcp.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "slugs": {
+                    "type": "array",
+                    "items": { "type": "string" },
+                    "description": "Explicit tool slugs to export (max 25)"
+                },
+                "category": {
+                    "type": "string",
+                    "enum": PUBLIC_TOOL_CATEGORY_IDS,
+                    "description": "Alternatively export top tools for a function category"
+                }
+            }
+        }
+    })
+}
+
 fn get_install_guide_definition() -> Value {
     json!({
         "name": "get_install_guide",
@@ -248,10 +440,34 @@ fn get_install_guide_definition() -> Value {
     })
 }
 
-async fn tools_call(pool: &PgPool, params: Option<Value>) -> Result<Value, (i32, String)> {
+async fn tools_call(
+    pool: &PgPool,
+    params: Option<Value>,
+    agent: Option<&crate::server::agent_sync::AgentAuth>,
+    headers: &HeaderMap,
+) -> Result<ToolsCallOutcome, (i32, String)> {
     let request = ToolCallRequest::parse(params)?;
-    let content = dispatch_tool_call(pool, &request.name, &request.args).await?;
-    Ok(tool_call_text_response(content))
+    if crate::server::mcp_x402::is_premium_mcp_tool(&request.name) {
+        let config = crate::server::mcp_x402::load_mcp_premium_config(pool)
+            .await
+            .map_err(|e| (-32603, format!("settings load failed: {e}")))?;
+        if config.is_active() {
+            let payment_sig = headers
+                .get(crate::server::mcp_x402::PAYMENT_SIGNATURE_HEADER)
+                .and_then(|v| v.to_str().ok());
+            let granted = crate::server::mcp_x402::payment_granted(&config, payment_sig)
+                .await
+                .map_err(|e| (-32603, e))?;
+            if !granted {
+                return Ok(ToolsCallOutcome::PaymentRequired {
+                    config,
+                    tool_name: request.name.clone(),
+                });
+            }
+        }
+    }
+    let content = dispatch_tool_call(pool, &request.name, &request.args, agent).await?;
+    Ok(ToolsCallOutcome::Success(tool_call_text_response(content)))
 }
 
 struct ToolCallRequest {
@@ -275,6 +491,7 @@ async fn dispatch_tool_call(
     pool: &PgPool,
     name: &str,
     args: &Value,
+    agent: Option<&crate::server::agent_sync::AgentAuth>,
 ) -> Result<String, (i32, String)> {
     match name {
         "search_tools" => call_search_tools(pool, args).await,
@@ -282,8 +499,86 @@ async fn dispatch_tool_call(
         "list_categories" => call_list_categories(pool).await,
         "get_dashboard_snapshot" => call_dashboard_snapshot(pool, args).await,
         "get_install_guide" => call_install_guide(pool, args).await,
+        "save_to_toolkit" => call_save_to_toolkit(pool, args, agent).await,
+        "save_stack_to_blueprint" => call_save_stack_to_blueprint(pool, args, agent).await,
+        "link_status" => call_link_status(agent).await,
+        "compare_tools" => call_compare_tools(pool, args).await,
+        "export_toolkit" => call_export_toolkit(pool, args).await,
         other => Err((-32601, format!("Unknown tool: {other}"))),
     }
+}
+
+async fn call_save_to_toolkit(
+    pool: &PgPool,
+    args: &Value,
+    agent: Option<&crate::server::agent_sync::AgentAuth>,
+) -> Result<String, (i32, String)> {
+    let Some(auth) = agent else {
+        return Err((
+            -32001,
+            serde_json::to_string(&crate::server::agent_sync::link_required_payload())
+                .unwrap_or_else(|_| "link_required".into()),
+        ));
+    };
+    let slug = required_str(args, "slug", "slug required")?;
+    let note = optional_string(args, "note");
+    let tags = args.get("tags").and_then(|v| v.as_array()).map(|arr| {
+        arr.iter()
+            .filter_map(|v| v.as_str().map(str::to_string))
+            .collect::<Vec<_>>()
+    });
+    let req = crate::server::agent_sync::SyncToolRequest {
+        slug: slug.to_string(),
+        note,
+        tags,
+        source_client: Some("mcp".into()),
+        idempotency_key: None,
+    };
+    let result = crate::server::agent_sync::sync_tool(pool, auth, req)
+        .await
+        .map_err(|e| (-32000, e.to_string()))?;
+    serialize_tool_payload(&result)
+}
+
+async fn call_save_stack_to_blueprint(
+    pool: &PgPool,
+    args: &Value,
+    agent: Option<&crate::server::agent_sync::AgentAuth>,
+) -> Result<String, (i32, String)> {
+    let Some(auth) = agent else {
+        return Err((
+            -32001,
+            serde_json::to_string(&crate::server::agent_sync::link_required_payload())
+                .unwrap_or_else(|_| "link_required".into()),
+        ));
+    };
+    let slugs = args
+        .get("slugs")
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str().map(str::to_string))
+                .collect::<Vec<_>>()
+        })
+        .ok_or((-32602, "slugs required".into()))?;
+    let title = optional_string(args, "title");
+    let result = crate::server::agent_sync::save_stack_to_blueprint(pool, auth, slugs, title)
+        .await
+        .map_err(|e| (-32000, e.to_string()))?;
+    serialize_tool_payload(&result)
+}
+
+async fn call_link_status(
+    agent: Option<&crate::server::agent_sync::AgentAuth>,
+) -> Result<String, (i32, String)> {
+    let Some(auth) = agent else {
+        return serialize_tool_payload(&serde_json::json!({ "linked": false }));
+    };
+    serialize_tool_payload(&serde_json::json!({
+        "linked": true,
+        "user_id_prefix": &auth.user_id.to_string()[..8],
+        "client": auth.client,
+    }))
 }
 
 async fn call_search_tools(pool: &PgPool, args: &Value) -> Result<String, (i32, String)> {
@@ -319,6 +614,35 @@ async fn call_dashboard_snapshot(pool: &PgPool, args: &Value) -> Result<String, 
         .await
         .map_err(|e| (-32603, format!("dashboard snapshot failed: {e}")))?;
     serialize_tool_payload(&snapshot)
+}
+
+async fn call_compare_tools(pool: &PgPool, args: &Value) -> Result<String, (i32, String)> {
+    let slugs = args
+        .get("slugs")
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str())
+                .collect::<Vec<_>>()
+                .join(",")
+        })
+        .filter(|joined| !joined.is_empty())
+        .ok_or((-32602, "slugs required (2–4 items)".into()))?;
+    crate::server::mcp_premium_tools::mcp_compare_tools(pool, &slugs)
+        .await
+        .map_err(|msg| (-32000, msg))
+}
+
+async fn call_export_toolkit(pool: &PgPool, args: &Value) -> Result<String, (i32, String)> {
+    let slugs = args.get("slugs").and_then(|v| v.as_array()).map(|arr| {
+        arr.iter()
+            .filter_map(|v| v.as_str().map(str::to_string))
+            .collect::<Vec<_>>()
+    });
+    let category = optional_string(args, "category");
+    crate::server::mcp_premium_tools::mcp_export_toolkit(pool, slugs, category.as_deref())
+        .await
+        .map_err(|msg| (-32000, msg))
 }
 
 async fn call_install_guide(pool: &PgPool, args: &Value) -> Result<String, (i32, String)> {
@@ -405,8 +729,10 @@ async fn mcp_list_categories(pool: &PgPool) -> Result<Vec<CategoryMcp>, (i32, St
         .collect())
 }
 
+mod auth;
 mod install_guide;
 
+use auth::agent_from_authorization;
 use install_guide::mcp_install_guide;
 
 #[cfg(test)]
@@ -418,14 +744,20 @@ mod tests {
     use crate::server::queries::MCP_SEARCH_TOOLS_BASE_SQL;
 
     #[test]
-    fn tools_list_has_five_tools() {
+    fn tools_list_has_seven_public_tools_including_premium() {
         let rt = tokio::runtime::Runtime::new().unwrap();
-        let value = rt.block_on(tools_list()).unwrap();
+        let value = rt.block_on(tools_list(false)).unwrap();
         let tools = value["tools"].as_array().unwrap();
-        assert_eq!(tools.len(), 5);
+        assert_eq!(tools.len(), 7);
         assert!(tools
             .iter()
             .any(|tool| tool["name"].as_str() == Some("get_dashboard_snapshot")));
+        assert!(tools
+            .iter()
+            .any(|tool| tool["name"].as_str() == Some("compare_tools")));
+        assert!(tools
+            .iter()
+            .any(|tool| tool["name"].as_str() == Some("export_toolkit")));
     }
 
     #[test]

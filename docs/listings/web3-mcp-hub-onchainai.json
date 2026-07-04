@@ -1,0 +1,21 @@
+{
+  "id": "onchainai",
+  "name": "OnchainAI",
+  "description": "Crypto tool directory for AI agents — search MCP/CLI/SDK/API/x402 tools, compare install risk, get install guides. Free streamable HTTP MCP; Claude Code plugin with /find-tool and crypto-tools skill.",
+  "category": "developer-tools",
+  "repository": "https://github.com/Coinyak/onchainai",
+  "homepage": "https://www.onchain-ai.xyz",
+  "features": [
+    "tool-discovery",
+    "x402-metadata",
+    "install-risk-gating",
+    "mcp-directory",
+    "agent-trust"
+  ],
+  "networks": ["base", "ethereum", "solana", "multi-chain"],
+  "verified": true,
+  "installationType": "remote",
+  "config": {
+    "url": "https://www.onchain-ai.xyz/mcp"
+  }
+}

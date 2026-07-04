@@ -3,6 +3,8 @@
 import { useMemo, useState } from "react";
 import type { Tool } from "@/lib/api";
 import { ConnectGuideBlocks } from "@/components/connect/ConnectGuideBlocks";
+import { CodingClientLogo } from "@/components/tools/CodingClientLogo";
+import { logoIdForToolInstallClient } from "@/lib/coding-clients";
 import {
   TOOL_INSTALL_CLIENTS,
   buildPublicInstallGuide,
@@ -10,6 +12,8 @@ import {
   type PublicInstallGuide,
   type ToolInstallClient,
 } from "@/lib/install-guide";
+
+const COMPACT_INSTALL_CLIENTS: ToolInstallClient[] = ["cursor", "vscode", "generic", "more"];
 
 interface InstallGuidePanelProps {
   tool: Tool;
@@ -22,15 +26,20 @@ export function InstallGuidePanel({
   compact = false,
   showProgress = false,
 }: InstallGuidePanelProps) {
-  const [client, setClient] = useState<ToolInstallClient>("codex");
+  const [client, setClient] = useState<ToolInstallClient>(compact ? "cursor" : "generic");
   const [copyRevealed, setCopyRevealed] = useState(false);
+  const clientOptions = compact ? COMPACT_INSTALL_CLIENTS : TOOL_INSTALL_CLIENTS;
 
   const guide = useMemo(
     () => buildPublicInstallGuide(tool, tool.slug, client),
     [tool, client],
   );
 
-  const blocks = guide.connect_blocks ?? [];
+  const blocks = useMemo(() => {
+    const raw = guide.connect_blocks ?? [];
+    if (!compact) return raw;
+    return raw.filter((block) => block.title !== "Stdio bridge").slice(0, 1);
+  }, [compact, guide.connect_blocks]);
   return (
     <section
       className={`install-section install-guide-panel${compact ? " install-guide-panel-compact" : ""}`}
@@ -38,14 +47,16 @@ export function InstallGuidePanel({
     >
       {showProgress && (
         <p className="install-progress-hint text-body-sm text-secondary mb-3" role="status">
-          Choose a client, review install risk, then copy the config.
+          {compact
+            ? "Pick a client and copy the config."
+            : "Choose a client, review install risk, then copy the config."}
         </p>
       )}
-      <h3 id="install-guide-heading" className="install-heading">
-        Safe install
+      <h3 id="install-guide-heading" className={compact ? "preview-section-heading" : "install-heading"}>
+        {compact ? "Install" : "Safe install"}
       </h3>
       <div className="install-platform-group" role="tablist" aria-label="Choose client">
-        {TOOL_INSTALL_CLIENTS.map((value) => (
+        {clientOptions.map((value) => (
           <button
             key={value}
             type="button"
@@ -58,7 +69,22 @@ export function InstallGuidePanel({
               setCopyRevealed(false);
             }}
           >
-            {toolInstallClientLabel(value)}
+            {(() => {
+              const logoId = logoIdForToolInstallClient(value);
+              return (
+                <>
+                  {logoId && (
+                    <CodingClientLogo
+                      id={logoId}
+                      label={toolInstallClientLabel(value)}
+                      size={16}
+                      decorative
+                    />
+                  )}
+                  <span>{toolInstallClientLabel(value)}</span>
+                </>
+              );
+            })()}
           </button>
         ))}
       </div>

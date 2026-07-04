@@ -389,8 +389,9 @@ X402_PAY_TO_ADDRESS=0x...
 
 ### 6.1 MCP 서버 보안
 
-- **인증 필수**: MCP 엔드포인트는 API 키 또는 인증 토큰 필요 (MVP 이후)
-- **Rate limiting**: MCP 호출 100회/분/클라이언트
+- **공개 읽기**: `POST /mcp` 조회 툴(`search_tools`, `get_tool_detail`, …)은 무인증 허용 (IP rate limit)
+- **Agent Sync (쓰기)**: `Authorization: Bearer oai_ag_…` — SHA-256 해시만 DB 저장, plaintext는 발급 시 1회; revoke 즉시 무효; scopes `toolkit:write` / `blueprint:write`; 커밋·플러그인 번들에 실토큰 금지
+- **Rate limiting**: MCP 100회/분/IP; agent token mint 5회/시간/유저; sync 60회/분/유저
 - **입력 검증**: 검색어, 카테고리, 체인 파라미터 검증
 - **SQL 인젝션**: rmcp 핸들러도 sqlx 파라미터화 쿼리 사용
 

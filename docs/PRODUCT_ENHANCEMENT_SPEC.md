@@ -112,7 +112,7 @@ A4 Tier2 임베딩 · 관측성·헬스(A3+H3+E5 통합) · B2 잔여 소스 · 
 
 **A2. MCP 툴 표면 확장 (P1)**
 - 신규 툴:
-  - `compare_tools(slugs: [string])` — 2~5개 툴을 trust/x402/chains/stars 축으로 비교 표 반환.
+  - `compare_tools(slugs: [string])` — 2~4개 툴을 trust/x402/chains/pricing/install 축으로 비교 표 반환. **영구 무료 공개 MCP** ([Free Tier Guardian](superpowers/specs/2026-07-04-free-tier-guardian-spec.md) §5).
   - `export_toolkit(slugs|category)` — 에이전트가 한 번에 설치 가능한 설치 묶음(JSON + markdown). 기존 [build_toolkit_payload](src/server/functions.rs:1205) 재사용.
   - `get_changes(since: ISO8601)` — 신규/갱신 툴 델타(폴링 기반 "구독" 대용).
 - `search_tools` 개선: `limit`/`cursor`/`sort`(`stars|trust|recent|relevance`) 파라미터 추가, 응답에 `next_cursor`·`total`. 현재 50 고정 제거.
@@ -392,10 +392,10 @@ A4 Tier2 임베딩 · 관측성·헬스(A3+H3+E5 통합) · B2 잔여 소스 · 
 - 핵심 전략: **규모 = 협상력.** 전환/설치가이드 호출을 모아 툴 측과 revenue-share 협상(track1 협조 split, track2 데이터만). 상세는 [X402_REFERRAL_SPEC.md](docs/X402_REFERRAL_SPEC.md).
 - 고도화: MCP·Skill·웹 경유 호출의 어트리뷰션을 일관 기록 + 유저 투명 고지.
 
-**K2. x402-게이트 프리미엄 MCP/API (축 B — 신규, on-brand) ⭐**
-- OnchainAI MCP 자신이 x402 툴이 됨(도그푸딩): `search_tools`/`get_tool_detail`는 무료, **`export_toolkit`·`compare_tools`·대량 export·고급 랭킹**은 **호출당 x402 마이크로페이먼트**.
-- 의의: x402를 *설명*하는 디렉터리가 x402로 *작동* → 가장 강력한 신뢰 데모이자 자기 정합성. 하드룰 위배 아님(자기 서비스 대가 수취).
-- 수용 기준: 무료/유료 툴 분리, 프리미엄 호출 시 402 핸드셰이크 E2E 1건.
+**K2. x402-게이트 프리미엄 MCP/API (축 B — ⏸ 보류, compare 제외)**
+- ~~`compare_tools` 호출당 과금~~ → **폐기(OD-FTG 2026-07-04)**. `compare_tools`·`/compare`·`/api/v2/tools/compare`는 **영구 무료** — [Free Tier Guardian](superpowers/specs/2026-07-04-free-tier-guardian-spec.md).
+- 미래 실험 후보(§3 FTG와 비겹침): **대량 export**(100+ slug)·**고급 랭킹 API**(임베딩 티어)만 검토. 핵심 발견(`search_tools`/`get_tool_detail`/`get_install_guide`/`list_categories`/`get_dashboard_snapshot`/`compare_tools`)은 **402 게이트 금지**.
+- 수용 기준(착수 시): §3 후보만 유료 실험; §2 FTG 영구 무료 목록 회귀 0(`scripts/spec-verify.sh` FTG-*).
 
 **K3. 유료 노출/검증 티어 (축 B)**
 - Featured 배치(G1)·우선 검증·"verified" 배지 신청을 **x402로 결제**(메이커가 OnchainAI에 USDC). 반드시 **"Sponsored" 명시 라벨**(규제/신뢰).

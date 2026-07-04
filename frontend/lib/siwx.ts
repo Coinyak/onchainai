@@ -51,11 +51,7 @@ export async function connectWalletSiwx(apiBase = ""): Promise<{ redirect: strin
   }
 
   const chainIdHex = (await eth.request({ method: "eth_chainId" })) as string;
-  const chainIdNum = Number.parseInt(chainIdHex, 16);
-  if (!Number.isInteger(chainIdNum) || chainIdNum < 0) {
-    throw new SiwxError("Wallet returned an invalid chain ID.");
-  }
-  const chainId = chainIdNum.toString();
+  const chainId = Number.parseInt(chainIdHex, 16).toString();
 
   const challenge = await postJson<{ nonce: string; message: string }>(
     `${apiBase}/auth/siwx/challenge`,

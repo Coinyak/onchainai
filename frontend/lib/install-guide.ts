@@ -316,6 +316,46 @@ function buildToolClientBlocks(
       : null;
 
   switch (client) {
+    case "generic": {
+      if (httpUrl) {
+        const httpJson = JSON.stringify(
+          { mcpServers: { [slug]: { type: "http", url: httpUrl } } },
+          null,
+          2,
+        );
+        const stdioJson = stdioMcpJsonConfig(slug, "npx", ["mcp-remote", httpUrl]);
+        return [
+          {
+            title: "HTTP config",
+            steps: [
+              "Paste the JSON into any MCP client that supports streamable HTTP.",
+              "No API key required for public read-only tools.",
+            ],
+            copyText: httpJson,
+            copyLabel: "Copy config",
+            configJson: httpJson,
+          },
+          {
+            title: "Stdio bridge",
+            steps: ["For clients that only support stdio MCP."],
+            copyText: stdioJson,
+            copyLabel: "Copy config",
+            configJson: stdioJson,
+          },
+        ];
+      }
+      return [
+        {
+          steps: [
+            "Run the install command in your terminal.",
+            "Use npx or your package manager as shown below.",
+          ],
+          copyText: command,
+          copyLabel: "Copy command",
+          showShellPrefix: true,
+        },
+      ];
+    }
     case "codex": {
       const codexCopy = httpUrl
         ? `codex mcp add ${slug} --url ${httpUrl}`
@@ -326,7 +366,7 @@ function buildToolClientBlocks(
           steps: [
             "Install Codex CLI: npm i -g @openai/codex",
             "Run the command below to register this tool's MCP server.",
-            "Complete OAuth in the browser when Codex prompts you.",
+            "Sign in to Codex if prompted — the tool endpoint itself may need no API key.",
           ],
           copyText: codexCopy,
           copyLabel: "Copy command",

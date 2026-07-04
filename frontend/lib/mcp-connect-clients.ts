@@ -1,17 +1,24 @@
-/** Phase 9.2 home card + tool detail tab clients (vendor-neutral order). */
-export type ConnectCardClient = "codex" | "chatgpt" | "claude" | "cursor" | "vscode";
+/** Home card + tool detail tab clients — general/universal path first (MCP_ADD_FLOW_SPEC). */
+export type ConnectCardClient =
+  | "generic"
+  | "claude"
+  | "cursor"
+  | "vscode"
+  | "chatgpt"
+  | "codex";
 
 export type ToolInstallClient = ConnectCardClient | "more";
 
 export const CONNECT_CARD_CLIENTS: ConnectCardClient[] = [
-  "codex",
-  "chatgpt",
+  "generic",
   "claude",
   "cursor",
   "vscode",
+  "chatgpt",
+  "codex",
 ];
 
-export const DEFAULT_CONNECT_CLIENT: ConnectCardClient = "codex";
+export const DEFAULT_CONNECT_CLIENT: ConnectCardClient = "generic";
 
 export const TOOL_INSTALL_CLIENTS: ToolInstallClient[] = [
   ...CONNECT_CARD_CLIENTS,
@@ -20,6 +27,8 @@ export const TOOL_INSTALL_CLIENTS: ToolInstallClient[] = [
 
 export function connectClientLabel(client: ConnectCardClient): string {
   switch (client) {
+    case "generic":
+      return "Universal";
     case "codex":
       return "Codex CLI";
     case "chatgpt":

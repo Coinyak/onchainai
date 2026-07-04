@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { Tool } from "@/lib/api";
 import { ToolDetail } from "@/components/tools/ToolDetail";
@@ -55,14 +56,27 @@ export function PreviewPanel({
     >
       <div className="preview-panel-scroll">
         {addMode ? (
-          <ToolDetail
-            tool={tool}
-            compact
-            commentCount={commentCount}
-            addMode={addMode}
-            addMcpQueryBase={addMcpQueryBase}
-            compareReturnHref={compareReturnHref}
-          />
+          <>
+            <header className="preview-panel-header preview-panel-header--add-mode">
+              <h2 className="preview-title">Add MCP: {tool.name}</h2>
+              <Link
+                href={closeHref}
+                scroll={false}
+                className="preview-close"
+                aria-label="Close preview"
+              >
+                ×
+              </Link>
+            </header>
+            <ToolDetail
+              tool={tool}
+              compact
+              commentCount={commentCount}
+              addMode={addMode}
+              addMcpQueryBase={addMcpQueryBase}
+              compareReturnHref={compareReturnHref}
+            />
+          </>
         ) : (
           <PreviewPanelContent
             key={tool.slug}

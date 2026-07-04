@@ -54,6 +54,14 @@ function HomeHero() {
             Connect MCP
           </Link>
           {" · "}
+          <Link
+            href="/connect#agent-sync"
+            className="text-primary underline-offset-2 hover:underline"
+            data-testid="hero-link-agent-sync"
+          >
+            Link your agent
+          </Link>
+          {" · "}
           <Link href="/llms.txt" className="text-primary underline-offset-2 hover:underline">
             llms.txt
           </Link>

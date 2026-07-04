@@ -14,6 +14,7 @@ style/node_modules/
 !.env.example
 .railway/
 *.pem
+.mcp-registry/
 secrets/
 credentials.json
 
@@ -54,6 +55,13 @@ undefined/
 # Agent scratch artifacts
 .superpowers/
 __pycache__/
+.audit-*/
+.audit-*.mjs
+.audit-screenshots/
+.audit-screenshots-*/
+
+# MCP Registry publisher CLI (installed by scripts/publish-mcp-registry.sh)
+/bin/mcp-publisher
 
 # Supabase / Vercel
 supabase/.branches

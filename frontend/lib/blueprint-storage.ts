@@ -1,4 +1,4 @@
-import type { BlueprintNode } from "@/lib/api";
+import type { BlueprintEdge, BlueprintNode } from "@/lib/api";
 
 export const BLUEPRINT_DRAFT_KEY = "onchainai-blueprint-draft";
 export const BLUEPRINT_DRAFT_ID = "draft";
@@ -6,6 +6,7 @@ export const BLUEPRINT_DRAFT_ID = "draft";
 export interface LocalBlueprintDraft {
   title: string;
   nodes: BlueprintNode[];
+  edges: BlueprintEdge[];
   updatedAt: string;
 }
 
@@ -21,7 +22,10 @@ export function loadLocalBlueprintDraft(): LocalBlueprintDraft | null {
     if (!parsed || typeof parsed.title !== "string" || !Array.isArray(parsed.nodes)) {
       return null;
     }
-    return parsed;
+    return {
+      ...parsed,
+      edges: Array.isArray(parsed.edges) ? parsed.edges : [],
+    };
   } catch {
     return null;
   }
@@ -70,6 +74,7 @@ export function createEmptyDraft(): LocalBlueprintDraft {
   return {
     title: "Untitled blueprint",
     nodes: [],
+    edges: [],
     updatedAt: new Date().toISOString(),
   };
 }

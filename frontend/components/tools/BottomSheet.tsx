@@ -46,8 +46,14 @@ export function BottomSheet({
   const [expanded, setExpanded] = useState(false);
 
   useEffect(() => {
-    document.body.style.overflow = "hidden";
+    const mq = window.matchMedia("(max-width: 1023px)");
+    function syncOverflow() {
+      document.body.style.overflow = mq.matches ? "hidden" : "";
+    }
+    syncOverflow();
+    mq.addEventListener("change", syncOverflow);
     return () => {
+      mq.removeEventListener("change", syncOverflow);
       document.body.style.overflow = "";
     };
   }, []);
@@ -56,7 +62,7 @@ export function BottomSheet({
     function onKeyDown(ev: KeyboardEvent) {
       if (ev.key === "Escape") {
         ev.stopPropagation();
-        router.push(closeHref);
+        router.push(closeHref, { scroll: false });
       }
     }
     window.addEventListener("keydown", onKeyDown);
@@ -102,7 +108,7 @@ export function BottomSheet({
         if (deltaY < -DRAG_EXPAND_THRESHOLD) {
           setExpanded(true);
         } else if (deltaY > DRAG_CLOSE_THRESHOLD) {
-          router.push(closeHref);
+          router.push(closeHref, { scroll: false });
         }
         return;
       }
@@ -159,18 +165,33 @@ export function BottomSheet({
         aria-label="Tool preview"
         data-testid="preview-bottom-sheet"
       >
-        <button
-          type="button"
-          className="bottom-sheet-handle"
-          aria-label={expanded ? "Tap to collapse" : "Tap to expand"}
-          onPointerDown={onHandlePointerDown}
-          onPointerMove={onHandlePointerMove}
-          onPointerUp={onHandlePointerUp}
-          onPointerCancel={onHandlePointerCancel}
-        >
-          <span className="bottom-sheet-handle-bar" aria-hidden="true" />
-        </button>
+        <div className="bottom-sheet-toolbar">
+          <button
+            type="button"
+            className="bottom-sheet-handle"
+            aria-label={expanded ? "Tap to collapse" : "Tap to expand"}
+            onPointerDown={onHandlePointerDown}
+            onPointerMove={onHandlePointerMove}
+            onPointerUp={onHandlePointerUp}
+            onPointerCancel={onHandlePointerCancel}
+          >
+            <span className="bottom-sheet-handle-bar" aria-hidden="true" />
+          </button>
+          <Link
+            href={closeHref}
+            scroll={false}
+            className="bottom-sheet-close"
+            aria-label="Close preview"
+          >
+            ×
+          </Link>
+        </div>
         <div className="bottom-sheet-body">
+          {addMode && (
+            <p className="bottom-sheet-add-title" data-testid="bottom-sheet-add-title">
+              Add MCP: <strong>{tool.name}</strong>
+            </p>
+          )}
           {addMode ? (
             <ToolDetail
               tool={tool}

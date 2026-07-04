@@ -1,22 +1,15 @@
 "use client";
 
-import type { ReactNode } from "react";
-import {
-  Bot,
-  Code,
-  MessageSquare,
-  MousePointerClick,
-  Plug,
-  Sparkles,
-  Terminal,
-  Wind,
-} from "lucide-react";
+import { AgentLinkSection } from "@/components/connect/AgentLinkSection";
+import { CodingClientLogo } from "@/components/tools/CodingClientLogo";
 import { ConnectGuideBlocks } from "@/components/connect/ConnectGuideBlocks";
 import { HighlightedCommand } from "@/components/tools/HighlightedCommand";
 import { CopyButton } from "@/components/ui/CopyButton";
 import {
   CONNECT_PAGE_CLIENTS,
+  ONCHAINAI_MCP_HTTP_JSON,
   ONCHAINAI_MCP_HTTP_URL,
+  ONCHAINAI_MCP_STDIO_JSON,
   ONCHAINAI_MCP_UNIVERSAL_CMD,
   type ConnectPageClient,
 } from "@/lib/mcp-connect";
@@ -25,19 +18,12 @@ import {
   ONCHAINAI_PLUGIN_MARKETPLACE_CMD,
 } from "@/lib/mcp-deeplinks";
 import { copyLabelAria } from "@/lib/install-guide";
+import { logoIdForConnectPageClient } from "@/lib/coding-clients";
+
 const GITHUB_CONNECT_GUIDE =
   "https://github.com/Coinyak/onchainai/blob/main/docs/CONNECT.md";
 
-const CLIENT_ICONS: Record<ConnectPageClient["icon"], ReactNode> = {
-  terminal: <Terminal size={20} strokeWidth={1.75} aria-hidden />,
-  "message-square": <MessageSquare size={20} strokeWidth={1.75} aria-hidden />,
-  "mouse-pointer-click": <MousePointerClick size={20} strokeWidth={1.75} aria-hidden />,
-  code: <Code size={20} strokeWidth={1.75} aria-hidden />,
-  wind: <Wind size={20} strokeWidth={1.75} aria-hidden />,
-  sparkles: <Sparkles size={20} strokeWidth={1.75} aria-hidden />,
-  bot: <Bot size={20} strokeWidth={1.75} aria-hidden />,
-  plug: <Plug size={20} strokeWidth={1.75} aria-hidden />,
-};
+const PLUGIN_INSTALL_BOTH = `${ONCHAINAI_PLUGIN_MARKETPLACE_CMD}\n${ONCHAINAI_PLUGIN_INSTALL_CMD}`;
 
 export function ConnectPageContent() {
   const universalAria = copyLabelAria("Copy command");
@@ -47,16 +33,30 @@ export function ConnectPageContent() {
       className="connect-page px-gutter md:px-6 py-8 md:py-10 max-w-[960px]"
       data-testid="connect-page"
     >
-      <h1 className="text-h1 font-bold mb-3">Connect OnchainAI MCP</h1>
-      <p className="text-secondary text-body-md leading-relaxed mb-6 max-w-[720px]">
-        Add the OnchainAI search MCP server to your agent or editor. Each client has its own
-        install path below.
+      <h1 className="text-h1 font-bold mb-3">Connect OnchainAI to your agent</h1>
+      <p className="text-secondary text-body-md leading-relaxed mb-4 max-w-[720px]">
+        One free MCP endpoint for Claude, Cursor, ChatGPT, Codex, VS Code, and more. Start with
+        universal install, or pick a client below.
+      </p>
+      <p
+        className="text-body-sm text-secondary mb-6 max-w-[720px] connect-agent-sync-callout"
+        data-testid="connect-agent-sync-callout"
+      >
+        <strong className="text-primary">Using a coding agent?</strong>{" "}
+        <a href="#agent-sync" className="text-primary underline-offset-2 hover:underline">
+          Link your agent
+        </a>{" "}
+        so saved tools show up in My Toolkit.
       </p>
 
       <section className="connect-universal mb-8" aria-labelledby="connect-universal-heading">
         <h2 id="connect-universal-heading" className="text-h3 font-semibold mb-3">
           Universal install
         </h2>
+        <p className="text-body-sm text-secondary mb-3 max-w-[720px]">
+          Works with most HTTP-capable MCP clients. Official endpoint:{" "}
+          <code className="text-code">{ONCHAINAI_MCP_HTTP_URL}</code> (streamable HTTP, no auth).
+        </p>
         <div className="tool-install-stack">
           <div className="tool-install">
             <HighlightedCommand
@@ -67,14 +67,52 @@ export function ConnectPageContent() {
             <CopyButton text={ONCHAINAI_MCP_UNIVERSAL_CMD} label={universalAria} />
           </div>
         </div>
-        <p className="text-body-sm text-secondary mt-3">
-          Official endpoint:{" "}
-          <code className="text-code">{ONCHAINAI_MCP_HTTP_URL}</code>
-        </p>
-        <p className="text-body-sm text-secondary mt-2">
-          The only official OnchainAI MCP endpoint is{" "}
-          <code className="text-code">{ONCHAINAI_MCP_HTTP_URL}</code>.
-        </p>
+        <ConnectGuideBlocks
+          blocks={[
+            {
+              title: "HTTP config",
+              steps: ["Paste into clients that accept mcpServers JSON."],
+              copyText: ONCHAINAI_MCP_HTTP_JSON,
+              copyLabel: "Copy config",
+              configJson: ONCHAINAI_MCP_HTTP_JSON,
+            },
+            {
+              title: "Stdio bridge",
+              steps: ["For older clients that only support stdio MCP."],
+              copyText: ONCHAINAI_MCP_STDIO_JSON,
+              copyLabel: "Copy config",
+              configJson: ONCHAINAI_MCP_STDIO_JSON,
+            },
+          ]}
+        />
+      </section>
+
+      <section aria-labelledby="connect-clients-heading" className="mb-8">
+        <h2 id="connect-clients-heading" className="text-h3 font-semibold mb-4">
+          MCP clients
+        </h2>
+        <div className="connect-client-grid">
+          {CONNECT_PAGE_CLIENTS.map((client) => (
+            <article
+              key={client.id}
+              className="connect-client-card"
+              data-testid={`connect-client-${client.id}`}
+            >
+              <div className="connect-client-card-header">
+                <span className="connect-client-icon">
+                  <CodingClientLogo
+                    id={logoIdForConnectPageClient(client.id)}
+                    label={client.label}
+                    size={24}
+                    decorative
+                  />
+                </span>
+                <h3 className="connect-client-card-title">{client.label}</h3>
+              </div>
+              <ConnectGuideBlocks blocks={client.blocks} />
+            </article>
+          ))}
+        </div>
       </section>
 
       <section
@@ -83,20 +121,23 @@ export function ConnectPageContent() {
         data-testid="connect-plugin-card"
       >
         <h2 id="connect-plugin-heading" className="text-h3 font-semibold mb-3">
-          Claude Code plugin &amp; skill
+          Claude Code plugin (optional)
         </h2>
         <p className="text-secondary text-body-md leading-relaxed mb-4 max-w-[720px]">
-          Install the official plugin for MCP auto-connect, <code className="text-code">/find-tool</code>,
-          and the crypto-tools skill. Or copy the skill folder alone if you already have MCP wired.
+          Claude Code only. One install ships MCP auto-connect,{" "}
+          <code className="text-code">/find-tool</code>, and the{" "}
+          <code className="text-code">onchainai-crypto-tools</code> skill — no separate skill
+          command. Skip this if you already connected via universal install above.
         </p>
         <div className="connect-guide-block">
-          <h3 className="connect-guide-block-title">Plugin (recommended)</h3>
+          <h3 className="connect-guide-block-title">Plugin install</h3>
           <ol className="install-steps">
-            <li>In Claude Code, add this marketplace once.</li>
-            <li>Install the plugin — MCP + skill + command ship together.</li>
+            <li>Step 1 — In Claude Code, add the marketplace once.</li>
+            <li>Step 2 — Install the plugin (MCP + skill + command ship together).</li>
             <li>Restart Claude Code and run <code className="text-code">/mcp</code> to confirm.</li>
           </ol>
-          <div className="tool-install-stack mt-3">
+          <p className="text-body-sm text-secondary mt-3 mb-1">Step 1 — Add marketplace (once)</p>
+          <div className="tool-install-stack">
             <div className="tool-install">
               <HighlightedCommand
                 command={ONCHAINAI_PLUGIN_MARKETPLACE_CMD}
@@ -109,7 +150,10 @@ export function ConnectPageContent() {
               />
             </div>
           </div>
-          <div className="tool-install-stack mt-3">
+          <p className="text-body-sm text-secondary mt-3 mb-1">
+            Step 2 — Install plugin (includes skill)
+          </p>
+          <div className="tool-install-stack">
             <div className="tool-install">
               <HighlightedCommand
                 command={ONCHAINAI_PLUGIN_INSTALL_CMD}
@@ -121,6 +165,13 @@ export function ConnectPageContent() {
                 label={copyLabelAria("Copy install command")}
               />
             </div>
+          </div>
+          <div className="tool-install mt-3">
+            <CopyButton
+              text={PLUGIN_INSTALL_BOTH}
+              label={copyLabelAria("Copy both plugin commands")}
+            />
+            <span className="text-body-sm text-secondary">Copy both steps</span>
           </div>
         </div>
         <div className="connect-guide-block mt-6">
@@ -145,26 +196,7 @@ export function ConnectPageContent() {
         </div>
       </section>
 
-      <section aria-labelledby="connect-clients-heading">
-        <h2 id="connect-clients-heading" className="text-h3 font-semibold mb-4">
-          MCP clients
-        </h2>
-        <div className="connect-client-grid">
-          {CONNECT_PAGE_CLIENTS.map((client) => (
-            <article
-              key={client.id}
-              className="connect-client-card"
-              data-testid={`connect-client-${client.id}`}
-            >
-              <div className="connect-client-card-header">
-                <span className="connect-client-icon">{CLIENT_ICONS[client.icon]}</span>
-                <h3 className="connect-client-card-title">{client.label}</h3>
-              </div>
-              <ConnectGuideBlocks blocks={client.blocks} />
-            </article>
-          ))}
-        </div>
-      </section>
+      <AgentLinkSection />
     </div>
   );
 }

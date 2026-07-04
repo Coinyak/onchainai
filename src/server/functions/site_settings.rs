@@ -48,6 +48,12 @@ pub(crate) struct SiteSettingsValidationInput<'a> {
     pub default_referral_bps: Option<i32>,
     pub default_referral_payout_address: Option<&'a str>,
     pub x402_builder_code: Option<&'a str>,
+    pub mcp_premium_enabled: bool,
+    pub mcp_premium_pay_to_address: Option<&'a str>,
+    pub mcp_premium_price: Option<&'a str>,
+    pub mcp_premium_network: &'a str,
+    pub mcp_premium_asset: Option<&'a str>,
+    pub mcp_premium_display_price: Option<&'a str>,
     pub hero_title: Option<&'a str>,
     pub hero_subtitle: Option<&'a str>,
     pub about_content: Option<&'a str>,
@@ -80,6 +86,14 @@ pub(crate) fn validate_update_site_settings_input(
         input.x402_builder_code,
         100,
         "x402 builder code must be 100 characters or fewer",
+    )?;
+    validate_mcp_premium_settings(
+        input.mcp_premium_enabled,
+        input.mcp_premium_pay_to_address,
+        input.mcp_premium_price,
+        input.mcp_premium_network,
+        input.mcp_premium_asset,
+        input.mcp_premium_display_price,
     )?;
     validate_optional_text_len(
         input.hero_title,
@@ -167,6 +181,44 @@ fn validate_referral_bps(bps: Option<i32>) -> Result<(), &'static str> {
     })
 }
 
+pub(crate) fn validate_mcp_premium_settings(
+    enabled: bool,
+    pay_to: Option<&str>,
+    price: Option<&str>,
+    network: &str,
+    asset: Option<&str>,
+    display_price: Option<&str>,
+) -> Result<(), &'static str> {
+    let network = network.trim();
+    let valid_eip155 = network.starts_with("eip155:")
+        && network
+            .strip_prefix("eip155:")
+            .is_some_and(|id| !id.is_empty() && id.chars().all(|c| c.is_ascii_digit()));
+    let valid_solana = network.starts_with("solana:")
+        && network.strip_prefix("solana:").is_some_and(|c| !c.is_empty());
+    if !(valid_eip155 || valid_solana) {
+        return Err("MCP premium network must be eip155:<chainId> or solana:<cluster>");
+    }
+    validate_optional_text_len(asset, 200, "MCP premium asset must be 200 characters or fewer")?;
+    validate_optional_text_len(
+        display_price,
+        100,
+        "MCP premium display price must be 100 characters or fewer",
+    )?;
+    if !enabled {
+        return Ok(());
+    }
+    let pay_to = pay_to.map(str::trim).filter(|s| !s.is_empty());
+    let price = price.map(str::trim).filter(|s| !s.is_empty());
+    let pay_to = pay_to.ok_or("MCP premium pay-to address is required when enabled")?;
+    let price = price.ok_or("MCP premium price is required when enabled")?;
+    if !pay_to.starts_with("0x") || pay_to.len() != 42 {
+        return Err("MCP premium pay-to must be a 42-character 0x EVM address");
+    }
+    validate_optional_text_len(Some(price), 50, "MCP premium price must be 50 characters or fewer")?;
+    Ok(())
+}
+
 fn validate_optional_text_len(
     value: Option<&str>,
     max_len: usize,
@@ -193,6 +245,12 @@ pub struct UpdateSiteSettingsPayload {
     pub default_referral_bps: Option<i32>,
     pub default_referral_payout_address: Option<String>,
     pub x402_builder_code: Option<String>,
+    pub mcp_premium_enabled: bool,
+    pub mcp_premium_pay_to_address: Option<String>,
+    pub mcp_premium_price: Option<String>,
+    pub mcp_premium_network: String,
+    pub mcp_premium_asset: Option<String>,
+    pub mcp_premium_display_price: Option<String>,
     pub hero_title: Option<String>,
     pub hero_subtitle: Option<String>,
     pub about_content: Option<String>,

@@ -1,16 +1,19 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useDraggable } from "@dnd-kit/core";
 import { useQuery } from "@tanstack/react-query";
 import { listMyToolkit, searchTools, type Tool } from "@/lib/api";
+import { CHAIN_CATALOG, type ChainMeta } from "@/lib/chains";
 import { ToolLogo } from "@/components/tools/ToolLogo";
+import { ChainLogo } from "@/components/tools/ChainLogo";
 import { Badge } from "@/components/ui/Badge";
 import { typeBadgeLabel } from "@/lib/format";
 
 interface BlueprintPaletteProps {
   readOnly: boolean;
   onAddTool: (tool: Tool) => void;
+  onAddChain: (chain: ChainMeta) => void;
 }
 
 function PaletteToolItem({
@@ -51,9 +54,42 @@ function PaletteToolItem({
   );
 }
 
-export function BlueprintPalette({ readOnly, onAddTool }: BlueprintPaletteProps) {
-  const [tab, setTab] = useState<"search" | "toolkit">("search");
+function PaletteChainItem({
+  chain,
+  readOnly,
+  onAddChain,
+}: {
+  chain: ChainMeta;
+  readOnly: boolean;
+  onAddChain: (chain: ChainMeta) => void;
+}) {
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+    id: `palette-chain-${chain.id}`,
+    data: { type: "palette-chain", chain },
+    disabled: readOnly,
+  });
+
+  return (
+    <button
+      ref={setNodeRef}
+      type="button"
+      className={`blueprint-palette-item blueprint-palette-item-chain${isDragging ? " blueprint-palette-item-dragging" : ""}`}
+      onClick={() => !readOnly && onAddChain(chain)}
+      {...listeners}
+      {...attributes}
+    >
+      <ChainLogo id={chain.id} label={chain.label} size={32} decorative />
+      <span className="blueprint-palette-item-text">
+        <span className="blueprint-palette-item-name">{chain.label}</span>
+      </span>
+    </button>
+  );
+}
+
+export function BlueprintPalette({ readOnly, onAddTool, onAddChain }: BlueprintPaletteProps) {
+  const [tab, setTab] = useState<"search" | "networks" | "toolkit">("search");
   const [query, setQuery] = useState("");
+  const [chainQuery, setChainQuery] = useState("");
 
   const searchQuery = useQuery({
     queryKey: ["blueprint-search", query],
@@ -69,6 +105,20 @@ export function BlueprintPalette({ readOnly, onAddTool }: BlueprintPaletteProps)
 
   const searchResults = searchQuery.data ?? [];
   const toolkitTools = toolkitQuery.data?.items.map((item) => item.tool) ?? [];
+  const chainResults = useMemo(() => {
+    const q = chainQuery.trim().toLowerCase();
+    const sorted = [...CHAIN_CATALOG].sort((a, b) => {
+      if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
+      return a.label.localeCompare(b.label);
+    });
+    if (!q) return sorted;
+    return sorted.filter(
+      (chain) =>
+        chain.label.toLowerCase().includes(q) ||
+        chain.id.toLowerCase().includes(q) ||
+        chain.aliases.some((alias) => alias.toLowerCase().includes(q)),
+    );
+  }, [chainQuery]);
 
   return (
     <aside className="blueprint-palette" aria-label="Tool palette">
@@ -85,11 +135,20 @@ export function BlueprintPalette({ readOnly, onAddTool }: BlueprintPaletteProps)
         <button
           type="button"
           role="tab"
+          aria-selected={tab === "networks"}
+          className={`blueprint-palette-tab${tab === "networks" ? " blueprint-palette-tab-active" : ""}`}
+          onClick={() => setTab("networks")}
+        >
+          Networks
+        </button>
+        <button
+          type="button"
+          role="tab"
           aria-selected={tab === "toolkit"}
           className={`blueprint-palette-tab${tab === "toolkit" ? " blueprint-palette-tab-active" : ""}`}
           onClick={() => setTab("toolkit")}
         >
-          My Toolkit
+          Toolkit
         </button>
       </div>
 
@@ -119,6 +178,32 @@ export function BlueprintPalette({ readOnly, onAddTool }: BlueprintPaletteProps)
                 tool={tool}
                 readOnly={readOnly}
                 onAddTool={onAddTool}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {tab === "networks" && (
+        <div className="blueprint-palette-panel" role="tabpanel">
+          <input
+            type="search"
+            className="blueprint-palette-search"
+            placeholder="Search networks..."
+            value={chainQuery}
+            onChange={(e) => setChainQuery(e.target.value)}
+            disabled={readOnly}
+          />
+          <p className="blueprint-palette-hint">
+            Drag a network logo sticker onto the canvas.
+          </p>
+          <div className="blueprint-palette-list">
+            {chainResults.map((chain) => (
+              <PaletteChainItem
+                key={chain.id}
+                chain={chain}
+                readOnly={readOnly}
+                onAddChain={onAddChain}
               />
             ))}
           </div>

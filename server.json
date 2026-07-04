@@ -1,0 +1,24 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.Coinyak/onchainai",
+  "title": "OnchainAI",
+  "description": "Crypto tool directory MCP for AI agents — discover MCP/CLI/SDK/API/x402 tools with trust metadata.",
+  "version": "0.2.0",
+  "websiteUrl": "https://www.onchain-ai.xyz",
+  "repository": {
+    "url": "https://github.com/Coinyak/onchainai",
+    "source": "github"
+  },
+  "icons": [
+    {
+      "src": "https://www.onchain-ai.xyz/brand/onchainai-logo.png",
+      "mimeType": "image/png"
+    }
+  ],
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://www.onchain-ai.xyz/mcp"
+    }
+  ]
+}

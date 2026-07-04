@@ -2,20 +2,18 @@ import type {
   CategoryRow,
   CategoryWithCount,
   PublicDashboardSnapshot,
+  SessionUser,
   Tool,
   ToolFilters,
   ToolListRequest,
 } from "@/lib/api";
+import { resolveApiOrigin } from "@/lib/api-origin";
 import { SEO_REVALIDATE_SECONDS } from "@/lib/site";
 
 const SERVER_FETCH_TIMEOUT_MS = 8_000;
 
 function serverApiBase(): string {
-  const base =
-    process.env.API_PROXY_TARGET?.replace(/\/$/, "") ||
-    process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ||
-    "";
-  return base;
+  return resolveApiOrigin();
 }
 
 export class ServerApiError extends Error {
@@ -141,6 +139,19 @@ export async function getPublicDashboardServer(
       `/api/v2/dashboard?limit=${limit}`,
       { revalidate: 300 },
     );
+  } catch {
+    return null;
+  }
+}
+
+export async function getSessionUserServer(cookieHeader: string): Promise<SessionUser | null> {
+  if (!cookieHeader) return null;
+
+  try {
+    return await serverApiFetch<SessionUser | null>("/api/v2/me", {
+      headers: { Cookie: cookieHeader },
+      revalidate: 0,
+    });
   } catch {
     return null;
   }

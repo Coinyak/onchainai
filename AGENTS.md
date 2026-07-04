@@ -33,11 +33,11 @@ Also once after clone (macOS): `./scripts/install-disk-autoclean.sh` schedules a
 - MCP observability (Vercel/Railway): `docs/MCP_AGENT_WORKFLOW.md`
 - Multi-agent coordination (5 roles): `docs/MULTI_AGENT_COORDINATION.md`
 - UI/design/layout: `DESIGN.md`, `docs/UI_UX_DESIGN.md`, `.agents/skills/onchainai-ui-workflow/SKILL.md`
-- Build/deploy/SSR-WASM coherence: `docs/BUILD_DEPLOY_RULES.md`
+- Build/deploy (API + Next.js): `docs/BUILD_DEPLOY_RULES.md`
 - Security/auth/RLS/secrets: `docs/SECURITY.md`
 - Architecture/schema/crawler/MCP: `docs/MVP_DESIGN.md`
 - Disk/build cleanup: `docs/DISK_MAINTENANCE.md`
-- x402/referrals/trust signals: `docs/X402_REFERRAL_SPEC.md`
+- x402 정본: `docs/X402_MONETIZATION_SPEC.md`; 로드맵(자문·변동): `docs/X402_ROADMAP.md`; referrals: `docs/X402_REFERRAL_SPEC.md`; free tier: `docs/superpowers/specs/2026-07-04-free-tier-guardian-spec.md`
 - Public launch, plugin bundle (`plugin/onchainai/`), user connect surface: `docs/LAUNCH_READINESS_SPEC.md`, `docs/CONNECT.md`
 - Operator/admin behavior: `docs/OPERATOR_GUIDE.md`
 - Verified/official status requests: run `node scripts/verify-tool-official.mjs <slug> --apply` (rules: `docs/OPERATOR_GUIDE.md` §4) — never hand-set `tools.status`
@@ -54,11 +54,11 @@ Also once after clone (macOS): `./scripts/install-disk-autoclean.sh` schedules a
 
 ## Hard Rules
 
-- UI/auth/routing work must not finish with `cargo build --features ssr`, `cargo build --release --features ssr`, or `cargo run --features ssr`; iterate with `dev-watch.sh`, finish with the UI gate. Git pre-commit + `ui-staleness-check.sh` block stale UI (any tool); IDE stop hooks are optional extras.
-- Never commit `.env`, `target/`, `.playwright-cli/`, stray WASM, or build artifacts.
+- UI/auth/routing: iterate `./scripts/dev-watch.sh` (Next.js + API), finish `./scripts/ui-change-gate.sh`. `cargo check --features ssr` is for API-only compile checks. Pre-commit `ui-staleness-check.sh` blocks stale Next.js bundles.
+- Never commit `.env`, `target/`, `.playwright-cli/`, `frontend/.next/`, or build artifacts.
 - Never expose `SUPABASE_SERVICE_KEY` or `JWT_SECRET` to client code.
 - Validate user input; use sqlx parameterized queries; do not inject raw HTML.
-- x402 is attribution/trust metadata only: do not build custody, facilitator, gateway, fund-moving, undocumented `referrer`, or `split` payment fields.
+- Third-party x402 in the catalog is metadata/attribution only. Own x402 sales: Agent Trust + provider B2B per `docs/X402_MONETIZATION_SPEC.md`; discovery (`search_tools`, `compare_tools`, etc.) stays free. Never custody, third-party payment proxy, fund-moving, or undocumented `referrer`/`split` fields.
 - Auth is required for comments, upvotes, bookmarks, and admin routes; admin checks must be server-side.
 - After schema changes, run migrations and `sqlx prepare`.
 - Before commits/PRs, run relevant tests plus clippy/format, or state exactly why not.

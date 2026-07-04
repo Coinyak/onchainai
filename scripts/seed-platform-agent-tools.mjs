@@ -362,11 +362,6 @@ ON CONFLICT (slug) DO UPDATE SET
     WHEN $23::boolean THEN NULL
     ELSE tools.quarantined_at
   END,
-  status = CASE
-    WHEN $23::boolean THEN EXCLUDED.status
-    WHEN tools.status IN ('official', 'verified') THEN tools.status
-    ELSE EXCLUDED.status
-  END,
   updated_at = now()
 RETURNING slug, (xmax = 0) AS inserted;
 `;
@@ -397,44 +392,37 @@ const client = new pg.Client({
 
 await client.connect();
 const results = [];
-try {
-  for (const tool of TOOLS) {
-    try {
-      const r = await client.query(UPSERT_SQL, [
-        tool.name,
-        tool.slug,
-        tool.description,
-        tool.function,
-        tool.asset_class,
-        tool.actor,
-        tool.type,
-        tool.repo_url,
-        tool.homepage,
-        tool.npm_package,
-        tool.install_command,
-        tool.mcp_endpoint,
-        tool.chains,
-        tool.crypto_relevance_score,
-        tool.crypto_relevance_reasons,
-        tool.relevance_status,
-        tool.install_risk_level,
-        tool.install_risk_reasons,
-        tool.requires_secret,
-        tool.license,
-        tool.stars,
-        tool.source,
-        FORCE_APPROVE,
-      ]);
-      results.push({
-        slug: tool.slug,
-        action: r.rows[0].inserted ? "inserted" : "updated",
-      });
-    } catch (err) {
-      results.push({ slug: tool.slug, action: "error", error: err.message });
-    }
-  }
-} finally {
-  await client.end();
+for (const tool of TOOLS) {
+  const r = await client.query(UPSERT_SQL, [
+    tool.name,
+    tool.slug,
+    tool.description,
+    tool.function,
+    tool.asset_class,
+    tool.actor,
+    tool.type,
+    tool.repo_url,
+    tool.homepage,
+    tool.npm_package,
+    tool.install_command,
+    tool.mcp_endpoint,
+    tool.chains,
+    tool.crypto_relevance_score,
+    tool.crypto_relevance_reasons,
+    tool.relevance_status,
+    tool.install_risk_level,
+    tool.install_risk_reasons,
+    tool.requires_secret,
+    tool.license,
+    tool.stars,
+    tool.source,
+    FORCE_APPROVE,
+  ]);
+  results.push({
+    slug: tool.slug,
+    action: r.rows[0].inserted ? "inserted" : "updated",
+  });
 }
+await client.end();
 
 console.log(JSON.stringify({ ok: true, tools: results }, null, 2));

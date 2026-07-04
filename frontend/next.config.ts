@@ -1,10 +1,7 @@
 import type { NextConfig } from "next";
+import { resolveApiOrigin } from "./lib/api-origin";
 
-const DEFAULT_RAILWAY_API = "https://onchainai-production.up.railway.app";
-
-const API_PROXY_TARGET =
-  process.env.API_PROXY_TARGET ??
-  (process.env.VERCEL ? DEFAULT_RAILWAY_API : "http://localhost:3000");
+const API_PROXY_TARGET = process.env.API_PROXY_TARGET ?? resolveApiOrigin();
 
 const SECURITY_HEADERS = [
   { key: "X-Frame-Options", value: "DENY" },

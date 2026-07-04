@@ -506,6 +506,8 @@ pub struct ToolkitToolView {
     pub tool: Tool,
     pub note: Option<String>,
     pub tags: Vec<String>,
+    pub source: String,
+    pub source_client: Option<String>,
     pub saved_at: chrono::DateTime<chrono::Utc>,
     pub updated_at: chrono::DateTime<chrono::Utc>,
 }
@@ -517,6 +519,8 @@ impl ToolkitToolView {
             tool,
             note: None,
             tags: Vec::new(),
+            source: "web".into(),
+            source_client: None,
             saved_at: now,
             updated_at: now,
         }
@@ -844,10 +848,19 @@ async fn fetch_user_toolkit(
         let updated_at = row
             .try_get::<chrono::DateTime<chrono::Utc>, _>("bookmark_updated_at")
             .map_err(|e| FnError::new(format!("failed to decode toolkit updated_at: {e}")))?;
+        let source = row
+            .try_get::<String, _>("bookmark_source")
+            .unwrap_or_else(|_| "web".into());
+        let source_client = row
+            .try_get::<Option<String>, _>("bookmark_source_client")
+            .ok()
+            .flatten();
         items.push(ToolkitToolView {
             tool,
             note,
             tags,
+            source,
+            source_client,
             saved_at,
             updated_at,
         });
@@ -856,7 +869,7 @@ async fn fetch_user_toolkit(
     build_toolkit_payload(items)
 }
 
-fn validate_toolkit_tags(tags: &[String]) -> Result<Vec<String>, FnError> {
+pub(crate) fn validate_toolkit_tags(tags: &[String]) -> Result<Vec<String>, FnError> {
     if tags.len() > 8 {
         return Err(FnError::new("toolkit tags accept at most 8 values"));
     }

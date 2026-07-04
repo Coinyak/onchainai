@@ -21,9 +21,9 @@ export default function DashboardPage() {
   return (
     <SiteShell>
       <div className="px-gutter md:px-8 py-8 max-w-[1100px] mx-auto">
-        <h1 className="text-h1 mb-2">Public dashboard</h1>
+        <h1 className="text-h1 mb-2">Catalog dashboard</h1>
         <p className="text-secondary text-body-md mb-8">
-          Catalog snapshot as of {new Date(data.as_of).toLocaleString()}
+          Operator view of public catalog metrics as of {new Date(data.as_of).toLocaleString()}
         </p>
 
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 mb-8">

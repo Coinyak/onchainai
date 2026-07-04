@@ -9,6 +9,14 @@ function SettingsForm({ initial }: { initial: SiteSettings }) {
   const [slogan, setSlogan] = useState(initial.slogan);
   const [description, setDescription] = useState(initial.description);
   const [mcpEndpoint, setMcpEndpoint] = useState(initial.mcp_endpoint);
+  const [mcpPremiumEnabled, setMcpPremiumEnabled] = useState(initial.mcp_premium_enabled);
+  const [mcpPremiumPayTo, setMcpPremiumPayTo] = useState(initial.mcp_premium_pay_to_address ?? "");
+  const [mcpPremiumPrice, setMcpPremiumPrice] = useState(initial.mcp_premium_price ?? "");
+  const [mcpPremiumNetwork, setMcpPremiumNetwork] = useState(initial.mcp_premium_network);
+  const [mcpPremiumDisplayPrice, setMcpPremiumDisplayPrice] = useState(
+    initial.mcp_premium_display_price ?? "",
+  );
+  const [x402BuilderCode, setX402BuilderCode] = useState(initial.x402_builder_code ?? "");
 
   const saveMut = useMutation({
     mutationFn: () =>
@@ -23,7 +31,13 @@ function SettingsForm({ initial }: { initial: SiteSettings }) {
         allow_x402_registration: initial.allow_x402_registration,
         default_referral_bps: initial.default_referral_bps,
         default_referral_payout_address: initial.default_referral_payout_address,
-        x402_builder_code: initial.x402_builder_code,
+        x402_builder_code: x402BuilderCode.trim() || null,
+        mcp_premium_enabled: mcpPremiumEnabled,
+        mcp_premium_pay_to_address: mcpPremiumPayTo.trim() || null,
+        mcp_premium_price: mcpPremiumPrice.trim() || null,
+        mcp_premium_network: mcpPremiumNetwork.trim() || "eip155:8453",
+        mcp_premium_asset: initial.mcp_premium_asset ?? null,
+        mcp_premium_display_price: mcpPremiumDisplayPrice.trim() || null,
         hero_title: initial.hero_title,
         hero_subtitle: initial.hero_subtitle,
         about_content: initial.about_content,
@@ -55,6 +69,81 @@ function SettingsForm({ initial }: { initial: SiteSettings }) {
         <span className="text-body-sm text-secondary">MCP endpoint</span>
         <input className="mt-1 w-full min-h-touch px-4 rounded-md border border-border font-mono text-code" value={mcpEndpoint} onChange={(e) => setMcpEndpoint(e.target.value)} />
       </label>
+
+      <label className="block">
+        <span className="text-body-sm text-secondary">x402 Builder Code (Base)</span>
+        <input
+          className="mt-1 w-full min-h-touch px-4 rounded-md border border-border font-mono text-code"
+          value={x402BuilderCode}
+          onChange={(e) => setX402BuilderCode(e.target.value)}
+          placeholder="bc_..."
+          data-testid="x402-builder-code"
+        />
+        <p className="mt-1 text-body-sm text-secondary">
+          From{" "}
+          <a href="https://dashboard.base.org" className="underline" target="_blank" rel="noopener noreferrer">
+            dashboard.base.org
+          </a>
+          . Used for onchain attribution on OnchainAI x402 settlements.
+        </p>
+      </label>
+
+      <fieldset className="space-y-3 rounded-md border border-border p-4" data-testid="mcp-premium-settings">
+        <legend className="text-body-sm font-medium px-1">MCP premium (Axis B x402)</legend>
+        <p className="text-body-sm text-secondary">
+          Charge for compare_tools and export_toolkit via HTTP 402 on POST /mcp. Discovery tools stay free.
+        </p>
+        <label className="flex items-center gap-2 min-h-touch">
+          <input
+            type="checkbox"
+            checked={mcpPremiumEnabled}
+            onChange={(e) => setMcpPremiumEnabled(e.target.checked)}
+            data-testid="mcp-premium-enabled"
+          />
+          <span className="text-body-sm">Enable MCP premium x402</span>
+        </label>
+        <label className="block">
+          <span className="text-body-sm text-secondary">Pay-to address (EVM)</span>
+          <input
+            className="mt-1 w-full min-h-touch px-4 rounded-md border border-border font-mono text-code"
+            value={mcpPremiumPayTo}
+            onChange={(e) => setMcpPremiumPayTo(e.target.value)}
+            placeholder="0x..."
+            data-testid="mcp-premium-pay-to"
+          />
+        </label>
+        <label className="block">
+          <span className="text-body-sm text-secondary">Price (x402 accepts)</span>
+          <input
+            className="mt-1 w-full min-h-touch px-4 rounded-md border border-border"
+            value={mcpPremiumPrice}
+            onChange={(e) => setMcpPremiumPrice(e.target.value)}
+            placeholder="$0.01"
+            data-testid="mcp-premium-price"
+          />
+        </label>
+        <label className="block">
+          <span className="text-body-sm text-secondary">Network</span>
+          <input
+            className="mt-1 w-full min-h-touch px-4 rounded-md border border-border font-mono text-code"
+            value={mcpPremiumNetwork}
+            onChange={(e) => setMcpPremiumNetwork(e.target.value)}
+            placeholder="eip155:8453"
+            data-testid="mcp-premium-network"
+          />
+        </label>
+        <label className="block">
+          <span className="text-body-sm text-secondary">Display price (agent notice)</span>
+          <input
+            className="mt-1 w-full min-h-touch px-4 rounded-md border border-border"
+            value={mcpPremiumDisplayPrice}
+            onChange={(e) => setMcpPremiumDisplayPrice(e.target.value)}
+            placeholder="$0.01/call"
+            data-testid="mcp-premium-display-price"
+          />
+        </label>
+      </fieldset>
+
       <button type="submit" className="min-h-touch px-6 rounded-md bg-tertiary text-on-tertiary font-medium" disabled={saveMut.isPending}>
         Save settings
       </button>

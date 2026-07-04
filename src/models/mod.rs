@@ -98,6 +98,12 @@ pub struct SiteSettings {
     pub default_referral_bps: Option<i32>,
     pub default_referral_payout_address: Option<String>,
     pub x402_builder_code: Option<String>,
+    pub mcp_premium_enabled: bool,
+    pub mcp_premium_pay_to_address: Option<String>,
+    pub mcp_premium_price: Option<String>,
+    pub mcp_premium_network: String,
+    pub mcp_premium_asset: Option<String>,
+    pub mcp_premium_display_price: Option<String>,
     pub hero_title: Option<String>,
     pub hero_subtitle: Option<String>,
     pub about_content: Option<String>,
@@ -111,6 +117,9 @@ pub fn sanitize_site_settings_for_public(mut settings: SiteSettings) -> SiteSett
     settings.default_referral_bps = None;
     settings.default_referral_payout_address = None;
     settings.x402_builder_code = None;
+    settings.mcp_premium_pay_to_address = None;
+    settings.mcp_premium_price = None;
+    settings.mcp_premium_asset = None;
     settings
 }
 
@@ -187,6 +196,12 @@ mod tests {
                 "0x0000000000000000000000000000000000000000".into(),
             ),
             x402_builder_code: Some("onchainai".into()),
+            mcp_premium_enabled: false,
+            mcp_premium_pay_to_address: None,
+            mcp_premium_price: None,
+            mcp_premium_network: "eip155:8453".into(),
+            mcp_premium_asset: None,
+            mcp_premium_display_price: None,
             hero_title: Some("Find crypto tools".into()),
             hero_subtitle: Some("MCP, CLI, SDK, and more".into()),
             about_content: Some("About OnchainAI".into()),
@@ -225,6 +240,14 @@ mod tests {
                 "0x0000000000000000000000000000000000000000".into(),
             ),
             x402_builder_code: Some("onchainai".into()),
+            mcp_premium_enabled: true,
+            mcp_premium_pay_to_address: Some(
+                "0x0000000000000000000000000000000000000000".into(),
+            ),
+            mcp_premium_price: Some("$0.01".into()),
+            mcp_premium_network: "eip155:8453".into(),
+            mcp_premium_asset: None,
+            mcp_premium_display_price: Some("$0.01/call".into()),
             hero_title: None,
             hero_subtitle: None,
             about_content: None,
@@ -235,5 +258,7 @@ mod tests {
         assert_eq!(public.default_referral_bps, None);
         assert_eq!(public.default_referral_payout_address, None);
         assert_eq!(public.x402_builder_code, None);
+        assert_eq!(public.mcp_premium_pay_to_address, None);
+        assert_eq!(public.mcp_premium_price, None);
     }
 }

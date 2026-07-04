@@ -62,7 +62,7 @@ pub fn probe_client() -> reqwest::Client {
         .redirect(Policy::none())
         .timeout(PROBE_TIMEOUT)
         .build()
-        .expect("reqwest client")
+        .unwrap_or_else(|_| reqwest::Client::new())
 }
 
 /// Validate probe URL scheme/host before DNS resolution (sync guard).
@@ -219,7 +219,7 @@ fn pinned_probe_client(host: &str, addr: SocketAddr) -> reqwest::Client {
         .timeout(PROBE_TIMEOUT)
         .resolve(host, addr)
         .build()
-        .expect("pinned reqwest client")
+        .unwrap_or_else(|_| reqwest::Client::new())
 }
 
 /// Probe an x402 endpoint. Builds a per-host DNS-pinned client (shared pools are not reused).
@@ -228,7 +228,10 @@ pub async fn probe_x402_endpoint(url_str: &str) -> ProbeOutcome {
         Ok(url) => url,
         Err(reason) => return ProbeOutcome::SsrfBlocked(reason),
     };
-    let host = parsed.host_str().expect("validated host");
+    let host = match parsed.host_str() {
+        Some(host) => host,
+        None => return ProbeOutcome::SsrfBlocked("url must include a host".into()),
+    };
     let pinned_addr = match resolve_public_probe_addr(host).await {
         Ok(addr) => addr,
         Err(reason) => return ProbeOutcome::SsrfBlocked(reason),

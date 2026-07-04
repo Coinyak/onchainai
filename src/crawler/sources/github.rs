@@ -476,28 +476,48 @@ async fn fetch_repo_api(
 
 /// Insert the OnchainAI tool row into the database (idempotent).
 ///
-/// `source` is `'self'`, `status` is `'official'`, and the insert uses
-/// `ON CONFLICT (slug) DO NOTHING` so repeated calls are safe.
+/// `source` is `'self'`; listing status is left at default (`community`).
+/// Official/verified status must be set via `verify-tool-official.mjs` only.
+/// The insert uses `ON CONFLICT (slug) DO NOTHING` so repeated calls are safe.
 #[allow(dead_code)]
 pub async fn self_register(pool: &sqlx::PgPool) {
-    let repo_url = "https://github.com/love/onchainai";
+    let repo_url = "https://github.com/Coinyak/onchainai";
     let homepage = "https://www.onchain-ai.xyz";
+    let mcp_endpoint = "https://www.onchain-ai.xyz/mcp";
+    let install_command =
+        "claude mcp add --transport http onchainai https://www.onchain-ai.xyz/mcp";
     let result = sqlx::query(
         r#"
         INSERT INTO tools (
             name, slug, description, function, asset_class, actor, type,
-            repo_url, homepage, status, official_team, source, license, stars
+            repo_url, homepage, mcp_endpoint, install_command, chains,
+            status, official_team, source, license, pricing, x402_price,
+            approval_status, relevance_status, install_risk_level, stars,
+            x402_builder_code
         )
-        VALUES ($1, $2, $3, 'dev-tool', 'crypto', 'ai-agent', 'mcp',
-                $4, $5, 'official', 'OnchainAI', 'self', 'MIT', 0)
-        ON CONFLICT (slug) DO NOTHING
+        VALUES (
+            $1, $2, $3, 'dev-tool', 'crypto', 'ai-agent', 'mcp',
+            $4, $5, $6, $7, ARRAY['base','ethereum','solana']::text[],
+            'community', 'OnchainAI', 'self', 'MIT', 'free',
+            'Discovery free; check_endpoint_health $0.001/call (Agent Trust)',
+            'approved', 'accepted', 'low', 0, 'bc_ljttbnhv'
+        )
+        ON CONFLICT (slug) DO UPDATE SET
+            repo_url = EXCLUDED.repo_url,
+            homepage = EXCLUDED.homepage,
+            mcp_endpoint = EXCLUDED.mcp_endpoint,
+            install_command = EXCLUDED.install_command,
+            official_team = 'OnchainAI',
+            updated_at = now()
         "#,
     )
     .bind("OnchainAI")
     .bind("onchainai")
-    .bind("Crypto tool directory — discover, install, and share MCP, CLI, SDK, API, x402, RWA, and AI agent tools — all in one place.")
+    .bind("Crypto tool directory for AI agents — discover, vet, and install MCP, CLI, SDK, API, and x402 tools.")
     .bind(repo_url)
     .bind(homepage)
+    .bind(mcp_endpoint)
+    .bind(install_command)
     .execute(pool)
     .await;
 

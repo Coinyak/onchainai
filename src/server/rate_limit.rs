@@ -3,7 +3,7 @@
 //! User-scoped limits use in-memory keyed governors (per process).
 //! IP-scoped limits for Axum routes are configured in [`crate::build_app`].
 
-use axum::http::request::Parts;
+use axum::http::{request::Parts, HeaderMap};
 use governor::{DefaultKeyedRateLimiter, Quota, RateLimiter};
 use std::net::SocketAddr;
 use std::num::NonZeroU32;
@@ -22,6 +22,12 @@ pub const MCP_PER_MINUTE: u32 = 100;
 pub const AUTH_PER_MINUTE: u32 = 5;
 /// Admin x402 manual re-probes: at most 10 per minute per admin.
 pub const ADMIN_X402_VERIFY_PER_MINUTE: u32 = 10;
+/// Agent token mint: at most 5 per hour per user.
+pub const AGENT_TOKEN_MINT_PER_HOUR: u32 = 5;
+/// Agent blueprint-node sync: at most 30 per minute per user.
+pub const AGENT_BLUEPRINT_SYNC_PER_MINUTE: u32 = 30;
+/// Unauthenticated device-flow start: at most 10 per minute per IP.
+pub const AGENT_DEVICE_START_PER_MINUTE: u32 = 10;
 /// General API traffic baseline (see [`crate::build_app`] — burst is 2× this, 5 req/s refill).
 pub const GENERAL_PER_MINUTE: u32 = 60;
 
@@ -35,6 +41,12 @@ static MCP_IP_LIMITER: LazyLock<DefaultKeyedRateLimiter<String>> =
     LazyLock::new(|| RateLimiter::dashmap(mcp_ip_quota()));
 static ADMIN_X402_VERIFY_LIMITER: LazyLock<DefaultKeyedRateLimiter<Uuid>> =
     LazyLock::new(|| RateLimiter::dashmap(admin_x402_verify_quota()));
+static AGENT_TOKEN_MINT_LIMITER: LazyLock<DefaultKeyedRateLimiter<Uuid>> =
+    LazyLock::new(|| RateLimiter::dashmap(agent_token_mint_quota()));
+static AGENT_BLUEPRINT_SYNC_LIMITER: LazyLock<DefaultKeyedRateLimiter<Uuid>> =
+    LazyLock::new(|| RateLimiter::dashmap(agent_blueprint_sync_quota()));
+static AGENT_DEVICE_START_LIMITER: LazyLock<DefaultKeyedRateLimiter<String>> =
+    LazyLock::new(|| RateLimiter::dashmap(agent_device_start_quota()));
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum UserRateLimitAction {
@@ -42,6 +54,7 @@ pub enum UserRateLimitAction {
     CreateComment,
     ToggleBookmark,
     AdminX402Verify,
+    AgentBlueprintSync,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -79,6 +92,26 @@ pub fn admin_x402_verify_quota() -> Quota {
     )
 }
 
+pub fn agent_token_mint_quota() -> Quota {
+    Quota::per_hour(
+        NonZeroU32::new(AGENT_TOKEN_MINT_PER_HOUR).expect("non-zero agent token mint quota"),
+    )
+}
+
+pub fn agent_blueprint_sync_quota() -> Quota {
+    Quota::per_minute(
+        NonZeroU32::new(AGENT_BLUEPRINT_SYNC_PER_MINUTE)
+            .expect("non-zero agent blueprint sync quota"),
+    )
+}
+
+pub fn agent_device_start_quota() -> Quota {
+    Quota::per_minute(
+        NonZeroU32::new(AGENT_DEVICE_START_PER_MINUTE)
+            .expect("non-zero agent device start quota"),
+    )
+}
+
 /// Check a per-user rate limit before mutating state.
 pub fn check_user_rate_limit(
     user_id: Uuid,
@@ -89,10 +122,29 @@ pub fn check_user_rate_limit(
         UserRateLimitAction::CreateComment => &COMMENT_LIMITER,
         UserRateLimitAction::ToggleBookmark => &BOOKMARK_LIMITER,
         UserRateLimitAction::AdminX402Verify => &ADMIN_X402_VERIFY_LIMITER,
+        UserRateLimitAction::AgentBlueprintSync => &AGENT_BLUEPRINT_SYNC_LIMITER,
     };
     limiter.check_key(&user_id).map_err(|_| RateLimitExceeded {
         message: "too many requests; try again later",
     })
+}
+
+/// Check agent token mint rate (device approve + manual mint).
+pub fn check_agent_token_mint_limit(user_id: Uuid) -> Result<(), RateLimitExceeded> {
+    AGENT_TOKEN_MINT_LIMITER
+        .check_key(&user_id)
+        .map_err(|_| RateLimitExceeded {
+            message: "agent token mint limit exceeded; try again later",
+        })
+}
+
+/// Check unauthenticated agent device-flow start per IP.
+pub fn check_agent_device_start_limit(ip: &str) -> Result<(), RateLimitExceeded> {
+    AGENT_DEVICE_START_LIMITER
+        .check_key(&ip.to_string())
+        .map_err(|_| RateLimitExceeded {
+            message: "device flow start limit exceeded; try again later",
+        })
 }
 
 /// Check MCP per-IP limit inside the JSON-RPC handler.
@@ -102,6 +154,32 @@ pub fn check_mcp_ip_rate_limit(ip: &str) -> Result<(), RateLimitExceeded> {
         .map_err(|_| RateLimitExceeded {
             message: "MCP rate limit exceeded; try again later",
         })
+}
+
+/// Best-effort client IP from Axum headers + peer address.
+pub fn client_ip_from_connect(headers: &HeaderMap, addr: SocketAddr) -> String {
+    if let Some(forwarded) = headers
+        .get("x-forwarded-for")
+        .and_then(|v| v.to_str().ok())
+    {
+        if let Some(first) = forwarded.split(',').next() {
+            let ip = first.trim();
+            if !ip.is_empty() {
+                return ip.to_string();
+            }
+        }
+    }
+
+    if let Some(real_ip) = headers
+        .get("x-real-ip")
+        .and_then(|v| v.to_str().ok())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        return real_ip.to_string();
+    }
+
+    addr.ip().to_string()
 }
 
 /// Best-effort client IP extraction for server functions and MCP.
