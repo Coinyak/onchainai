@@ -142,9 +142,7 @@ pub fn parse_page_value(raw: &str) -> Option<u32> {
 /// Whether `logo_url` is safe to render as an external image.
 pub fn logo_url_is_safe_for_img(url: &str) -> bool {
     let trimmed = url.trim();
-    if trimmed.starts_with("/brand/")
-        && trimmed.len() > "/brand/".len()
-        && !trimmed.contains("..")
+    if trimmed.starts_with("/brand/") && trimmed.len() > "/brand/".len() && !trimmed.contains("..")
     {
         return true;
     }

@@ -6,12 +6,11 @@ use crate::models::{Category, Tool};
 use crate::server::functions::{
     browser_visible_limit_for_page, build_toolkit_payload, clamp_browser_page_param,
     clamp_dashboard_list_limit, fetch_categories, fetch_chain_counts, fetch_count_tools,
-    fetch_filtered_category_counts,
-    fetch_list_tools, fetch_public_dashboard_snapshot, fetch_tool_by_slug,
-    fetch_tool_comment_counts, resolve_bookmark_tool_id, validate_search_tools_input,
-    validate_tool_filters, validate_tool_list_request, BrowserDataPayload, LoadBrowserDataRequest,
-    MyToolkitPayload, PublicDashboardSnapshot, ToolComparisonView, ToolListRequest,
-    ToolkitToolView, UpdateToolkitItemPayload,
+    fetch_filtered_category_counts, fetch_list_tools, fetch_public_dashboard_snapshot,
+    fetch_tool_by_slug, fetch_tool_comment_counts, resolve_bookmark_tool_id,
+    validate_search_tools_input, validate_tool_filters, validate_tool_list_request,
+    BrowserDataPayload, LoadBrowserDataRequest, MyToolkitPayload, PublicDashboardSnapshot,
+    ToolComparisonView, ToolListRequest, ToolkitToolView, UpdateToolkitItemPayload,
 };
 use crate::server::queries::{
     APPROVED_TOOLS_BY_SLUGS_SQL, BOOKMARKED_SLUGS_SQL, RECENT_APPROVED_TOOLS_SQL,

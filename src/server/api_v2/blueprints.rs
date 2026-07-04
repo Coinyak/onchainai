@@ -627,10 +627,7 @@ fn node_flow_label(node: &ExportNode) -> String {
                 format!("note: {text}")
             }
         }
-        "chain" => format!(
-            "chain: {}",
-            node.chain_id.as_deref().unwrap_or("unknown")
-        ),
+        "chain" => format!("chain: {}", node.chain_id.as_deref().unwrap_or("unknown")),
         _ => node.id.clone(),
     }
 }
@@ -774,10 +771,7 @@ before installing.\n\n",
     } else {
         for node in tool_nodes {
             let slug = node.slug.as_deref().unwrap_or("unknown");
-            let display_name = tool_names
-                .get(slug)
-                .map(String::as_str)
-                .unwrap_or(slug);
+            let display_name = tool_names.get(slug).map(String::as_str).unwrap_or(slug);
             let chains = if node.chains.is_empty() {
                 "none specified".to_string()
             } else {

@@ -277,10 +277,7 @@ fn append_scalar_union_except<'qb>(
 
 #[cfg(feature = "ssr")]
 fn filters_include_x402(filters: &ToolFilters) -> bool {
-    filters
-        .tool_type
-        .iter()
-        .any(|value| value == "x402")
+    filters.tool_type.iter().any(|value| value == "x402")
         || filters.pricing.iter().any(|value| value == "x402")
 }
 
