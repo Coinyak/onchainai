@@ -8,6 +8,15 @@
 # Usage:
 #   ./scripts/deploy-railway.sh              # link/create project + push vars + deploy
 #   ./scripts/deploy-railway.sh --vars-only  # sync env vars only (no deploy)
+#
+# `railway up` is called with an explicit `"${ROOT}" --path-as-root` — do not
+# drop this. `~/.railway/config.json` links this project to a fixed directory
+# path (whichever checkout first ran `railway link`); if that path differs
+# from where this script lives (e.g. running from a `git worktree` checkout),
+# a bare `railway up` silently uploads/builds from the *linked* path instead
+# of the caller's cwd, producing a stale image with no error. Cost us a
+# production incident (2026-07-04): crash-looped on a migration mismatch
+# because the deployed image was hours-old code from an unrelated branch.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -136,13 +145,13 @@ fi
 # with production env (not the empty/default first boot).
 if ! railway status --json 2>/dev/null | /usr/bin/grep -q '"services"'; then
   echo "Initial deploy (creates service; production env applied on the next up)..."
-  railway up -y --detach -s "${SERVICE_NAME}"
+  railway up "${ROOT}" --path-as-root -y --detach -s "${SERVICE_NAME}"
 fi
 
 sync_vars
 
 echo "Deploying from Dockerfile with production env..."
-railway up -y --detach -s "${SERVICE_NAME}"
+railway up "${ROOT}" --path-as-root -y --detach -s "${SERVICE_NAME}"
 
 DEPLOY_WAIT_ATTEMPTS="${DEPLOY_WAIT_ATTEMPTS:-120}"
 DEPLOY_WAIT_INTERVAL="${DEPLOY_WAIT_INTERVAL:-5}"
