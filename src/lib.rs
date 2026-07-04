@@ -154,6 +154,13 @@ pub fn build_app(pool: sqlx::PgPool, config: Config) -> axum::Router {
             axum::http::header::AUTHORIZATION,
             axum::http::header::CONTENT_TYPE,
             axum::http::header::ACCEPT,
+            axum::http::HeaderName::from_static("payment-signature"),
+            axum::http::HeaderName::from_static("payment-required"),
+            axum::http::HeaderName::from_static("payment-response"),
+        ])
+        .expose_headers([
+            axum::http::HeaderName::from_static("payment-required"),
+            axum::http::HeaderName::from_static("payment-response"),
         ])
         .allow_credentials(true);
 
@@ -467,8 +474,19 @@ mod tests {
 }
 
 #[cfg(feature = "ssr")]
+fn migrations_dir() -> std::path::PathBuf {
+    if let Ok(dir) = std::env::var("MIGRATIONS_DIR") {
+        return std::path::PathBuf::from(dir);
+    }
+    std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("migrations")
+}
+
+#[cfg(feature = "ssr")]
 async fn run_migrations(pool: &sqlx::PgPool) -> anyhow::Result<()> {
-    sqlx::migrate!("./migrations")
+    let migrator = sqlx::migrate::Migrator::new(migrations_dir().as_path())
+        .await
+        .map_err(|e| anyhow::anyhow!("failed to load migrations: {e}"))?;
+    migrator
         .run(pool)
         .await
         .map_err(|e| anyhow::anyhow!("migration failed: {e}"))

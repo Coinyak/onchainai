@@ -420,6 +420,10 @@ export function ToolsBrowser({ base, showToolbarSearch = false, children }: Tool
                 message={emptyMessage}
                 filterLines={emptyFilterLines}
                 clearHref={emptyClearHref}
+                showX402Cta={
+                  (params.type ?? "").includes("x402") ||
+                  (params.pricing ?? "").includes("x402")
+                }
               />
             ) : (
               <>

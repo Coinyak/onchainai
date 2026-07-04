@@ -30,6 +30,12 @@ if [[ ! -x target/release/onchainai ]]; then
 fi
 
 echo "Building Next.js (cd frontend && npm run build)..."
+# Next.js bakes rewrite destinations into routes-manifest.json at build time
+# (next start does not re-evaluate next.config.ts's rewrites()), so the API
+# proxy target must be correct *before* this build, not just before runtime
+# start (restart-dev.sh sets it again for npm run start, which is too late
+# if the manifest was built with the wrong/default value).
+export API_PROXY_TARGET="${API_PROXY_TARGET:-http://127.0.0.1:3001}"
 (cd frontend && npm run build)
 
 if [[ ! -f frontend/.next/BUILD_ID ]]; then

@@ -362,6 +362,11 @@ ON CONFLICT (slug) DO UPDATE SET
     WHEN $23::boolean THEN NULL
     ELSE tools.quarantined_at
   END,
+  status = CASE
+    WHEN $23::boolean THEN EXCLUDED.status
+    WHEN tools.status IN ('official', 'verified') THEN tools.status
+    ELSE EXCLUDED.status
+  END,
   updated_at = now()
 RETURNING slug, (xmax = 0) AS inserted;
 `;

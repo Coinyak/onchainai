@@ -38,6 +38,9 @@ pub struct ToolSubmissionPayload {
     pub official_team_claim: bool,
     pub verification_note: Option<String>,
     pub slug: String,
+    /// x402 self-listing payment endpoint (open-listing flow only).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub x402_endpoint_url: Option<String>,
 }
 
 /// A row from `tool_reports`.
@@ -107,6 +110,7 @@ mod tests {
             official_team_claim: false,
             verification_note: None,
             slug: "bridge-mcp".into(),
+            x402_endpoint_url: None,
         };
         let json = serde_json::to_value(&payload).expect("serialize");
         assert_eq!(json["type"], "mcp");

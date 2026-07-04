@@ -9,7 +9,7 @@ pub struct SubmissionScanResult {
 }
 
 const SUBMIT_TOOL_TYPES: &[&str] = &["mcp", "cli", "sdk", "api", "skill", "x402"];
-const SUBMIT_FUNCTIONS: &[&str] = &[
+pub(crate) const SUBMIT_FUNCTIONS: &[&str] = &[
     "bridge",
     "swap",
     "wallet",

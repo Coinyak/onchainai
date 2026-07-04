@@ -241,9 +241,7 @@ mod tests {
             ),
             x402_builder_code: Some("onchainai".into()),
             mcp_premium_enabled: true,
-            mcp_premium_pay_to_address: Some(
-                "0x0000000000000000000000000000000000000000".into(),
-            ),
+            mcp_premium_pay_to_address: Some("0x0000000000000000000000000000000000000000".into()),
             mcp_premium_price: Some("$0.01".into()),
             mcp_premium_network: "eip155:8453".into(),
             mcp_premium_asset: None,

@@ -203,6 +203,7 @@ fn submission_payload(
         official_team_claim: input.official_team_claim,
         verification_note: normalized_optional_string(input.verification_note.as_deref()),
         slug,
+        x402_endpoint_url: None,
     }
 }
 

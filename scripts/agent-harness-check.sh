@@ -136,6 +136,10 @@ fi
 ./scripts/verify-dev-watch.sh --check-only >/dev/null
 ./scripts/configure-branch-protection.sh --check-only >/dev/null
 cargo check --features ssr >/dev/null
-(cd frontend && npm run build) >/dev/null
+# Next.js bakes rewrite destinations into routes-manifest.json at build time
+# (see scripts/release-build.sh) — without this, a bare build here defaults
+# to a self-referencing proxy target and corrupts the dev bundle for any
+# restart-dev.sh --no-build run that follows in the same gate invocation.
+(cd frontend && API_PROXY_TARGET="${API_PROXY_TARGET:-http://127.0.0.1:3001}" npm run build) >/dev/null
 
 echo "AGENT HARNESS PASS (AGENTS.md lines: ${agents_lines})"

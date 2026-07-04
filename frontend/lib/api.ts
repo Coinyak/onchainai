@@ -707,6 +707,60 @@ export async function listMySubmissions(): Promise<ToolSubmission[]> {
   return apiFetch<ToolSubmission[]>("/api/v2/my-submissions");
 }
 
+// --- x402 open listing ---
+
+export const X402_LISTING_TERMS_VERSION = "x402-open-listing-v1";
+
+export const X402_REFERRAL_DISCLOSURE =
+  "OnchainAI may receive referral fees from tools discovered through this directory. We never process payments or hold funds — attribution metadata only.";
+
+export interface X402ProbeDetails {
+  amount: string | null;
+  asset: string | null;
+  network: string | null;
+  pay_to: string | null;
+  description: string | null;
+}
+
+export interface X402ProbeResponse {
+  live: boolean;
+  status: string;
+  details: X402ProbeDetails | null;
+  reason: string | null;
+}
+
+export interface X402SubmitResponse {
+  published: boolean;
+  slug: string | null;
+  tool_id: string | null;
+  submission_id: string | null;
+  probe: X402ProbeResponse;
+}
+
+export async function probeX402Endpoint(url: string): Promise<X402ProbeResponse> {
+  return apiFetch<X402ProbeResponse>("/api/v2/x402/probe", {
+    method: "POST",
+    body: JSON.stringify({ url }),
+  });
+}
+
+export async function submitX402Listing(payload: {
+  name: string;
+  description: string;
+  endpoint_url: string;
+  homepage?: string | null;
+  repo_url?: string | null;
+}): Promise<X402SubmitResponse> {
+  return apiFetch<X402SubmitResponse>("/api/v2/x402/submit", {
+    method: "POST",
+    body: JSON.stringify({
+      ...payload,
+      terms_version: X402_LISTING_TERMS_VERSION,
+      terms_accepted: true,
+    }),
+  });
+}
+
 export async function reportTool(slug: string, reason: string): Promise<void> {
   await apiFetch(`/api/v2/tools/${encodeURIComponent(slug)}/report`, {
     method: "POST",

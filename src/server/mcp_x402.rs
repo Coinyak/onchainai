@@ -126,7 +126,9 @@ pub async fn payment_granted(
             .ok()
             .is_some_and(|v| matches!(v.as_str(), "1" | "true" | "yes"))
     {
-        tracing::warn!("ONCHAINAI_MCP_X402_DEV_ACCEPT set — accepting MCP premium without facilitator verify");
+        tracing::warn!(
+            "ONCHAINAI_MCP_X402_DEV_ACCEPT set — accepting MCP premium without facilitator verify"
+        );
         return Ok(true);
     }
     let facilitator = std::env::var("X402_FACILITATOR_URL")
@@ -138,7 +140,12 @@ pub async fn payment_granted(
         );
         return Ok(false);
     };
-    verify_with_facilitator(&facilitator_url, payment_signature.unwrap_or_default(), config).await
+    verify_with_facilitator(
+        &facilitator_url,
+        payment_signature.unwrap_or_default(),
+        config,
+    )
+    .await
 }
 
 async fn verify_with_facilitator(
