@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { chainFallbackLabel, chainLogoPath } from "@/lib/chains";
+import { chainFallbackLabel, chainLogoPath, hasChainLogo } from "@/lib/chains";
 
 interface ChainLogoProps {
   id: string;
@@ -19,11 +19,17 @@ export function ChainLogo({
   className = "chain-logo",
   decorative = false,
 }: ChainLogoProps) {
-  // Always attempt the committed SVG first; fall back to initials only on load error.
-  const [broken, setBroken] = useState(false);
+  const logoAvailable = hasChainLogo(id);
+  const [brokenForId, setBrokenForId] = useState<string | null>(null);
   const fallbackLabel = chainFallbackLabel(label || id).slice(0, 3).toUpperCase();
 
-  if (broken) {
+  if (brokenForId !== null && brokenForId !== id) {
+    setBrokenForId(null);
+  }
+
+  const broken = brokenForId === id;
+
+  if (!logoAvailable || broken) {
     return (
       <span
         className={`${className} chain-logo-fallback`}
@@ -46,7 +52,7 @@ export function ChainLogo({
       aria-hidden={decorative ? true : undefined}
       width={size}
       height={size}
-      onError={() => setBroken(true)}
+      onError={() => setBrokenForId(id)}
     />
   );
 }

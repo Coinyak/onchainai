@@ -66,7 +66,15 @@ export function ToolCard({
   const { isAuthenticated, isAdmin } = useAuth();
   const [showLogin, setShowLogin] = useState(false);
   const [starred, setStarred] = useState(initiallyStarred);
-  const [status, setStatus] = useState(tool.status);
+  const [adminStatus, setAdminStatus] = useState<string | null>(null);
+  const [syncedToolStatus, setSyncedToolStatus] = useState(tool.status);
+
+  if (tool.status !== syncedToolStatus) {
+    setSyncedToolStatus(tool.status);
+    setAdminStatus(null);
+  }
+
+  const status = adminStatus ?? tool.status;
 
   const href = `/tools/${tool.slug}`;
   const chains = chainTagsForTool(tool.chains);
@@ -203,7 +211,7 @@ export function ToolCard({
           <AdminToolCardActions
             slug={tool.slug}
             status={status}
-            onStatusChange={setStatus}
+            onStatusChange={setAdminStatus}
           />
         )}
       </div>

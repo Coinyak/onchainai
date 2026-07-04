@@ -171,7 +171,7 @@ function syntheticChainMeta(raw: string): ChainMeta | undefined {
   return {
     id,
     label: chainFallbackLabel(raw),
-    logo: chainLogoPath(id),
+    logo: hasChainLogo(id) ? chainLogoPath(id) : "",
     aliases: [raw],
     pinned: false,
   };

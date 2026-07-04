@@ -36,6 +36,7 @@ export default function OnboardingProfilePage() {
             <button
               type="submit"
               formAction={skipAction}
+              formNoValidate
               className="text-body-sm underline bg-transparent border-0 p-0 cursor-pointer"
             >
               Skip for now
