@@ -37,7 +37,7 @@ Also once after clone (macOS): `./scripts/install-disk-autoclean.sh` schedules a
 - Security/auth/RLS/secrets: `docs/SECURITY.md`
 - Architecture/schema/crawler/MCP: `docs/MVP_DESIGN.md`
 - Disk/build cleanup: `docs/DISK_MAINTENANCE.md`
-- x402/referrals/trust signals: `docs/X402_REFERRAL_SPEC.md`
+- x402/referrals/trust signals: `docs/X402_REFERRAL_SPEC.md`; open listing/수익화: `docs/X402_OPEN_LISTING_SPEC.md`
 - Public launch, plugin bundle (`plugin/onchainai/`), user connect surface: `docs/LAUNCH_READINESS_SPEC.md`, `docs/CONNECT.md`
 - Operator/admin behavior: `docs/OPERATOR_GUIDE.md`
 - Verified/official status requests: run `node scripts/verify-tool-official.mjs <slug> --apply` (rules: `docs/OPERATOR_GUIDE.md` §4) — never hand-set `tools.status`
