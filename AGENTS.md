@@ -33,7 +33,7 @@ Also once after clone (macOS): `./scripts/install-disk-autoclean.sh` schedules a
 - MCP observability (Vercel/Railway): `docs/MCP_AGENT_WORKFLOW.md`
 - Multi-agent coordination (5 roles): `docs/MULTI_AGENT_COORDINATION.md`
 - UI/design/layout: `DESIGN.md`, `docs/UI_UX_DESIGN.md`, `.agents/skills/onchainai-ui-workflow/SKILL.md`
-- Build/deploy (API + Next.js): `docs/BUILD_DEPLOY_RULES.md`
+- Build/deploy (API + Next.js): `docs/BUILD_DEPLOY_RULES.md`; auto-deploy rules: `docs/superpowers/specs/2026-07-05-split-deploy-automation-spec.md`
 - Security/auth/RLS/secrets: `docs/SECURITY.md`
 - Architecture/schema/crawler/MCP: `docs/MVP_DESIGN.md`
 - Disk/build cleanup: `docs/DISK_MAINTENANCE.md`

@@ -94,4 +94,36 @@ fi
 
 pass "production callback overrides local .env"
 
+# Non-main deploy refusal (split-deploy spec)
+branch_tmp="$(mktemp -d)"
+trap 'rm -rf "$tmpdir" "$branch_tmp"' EXIT
+mkdir -p "$branch_tmp/repo/scripts"
+cp "$DEPLOY_SOURCE" "$branch_tmp/repo/scripts/deploy-railway.sh"
+chmod +x "$branch_tmp/repo/scripts/deploy-railway.sh"
+cp "$tmpdir/repo/.env" "$branch_tmp/repo/.env"
+mkdir -p "$branch_tmp/bin"
+cp "$tmpdir/bin/railway" "$branch_tmp/bin/railway"
+chmod +x "$branch_tmp/bin/railway"
+(
+  cd "$branch_tmp/repo"
+  git init -q
+  git config user.email "test@example.com"
+  git config user.name "Test"
+  git checkout -q -b grok/feature-branch
+  echo x > README.md
+  git add README.md
+  git commit -q -m "init"
+)
+branch_out="$branch_tmp/deploy.out"
+set +e
+(
+  cd "$branch_tmp/repo"
+  PATH="$branch_tmp/bin:$PATH" ./scripts/deploy-railway.sh
+) >"$branch_out" 2>&1
+branch_status=$?
+set -e
+[[ "$branch_status" -ne 0 ]] || fail "non-main deploy should be refused"
+assert_contains "Refusing production deploy" "$branch_out"
+pass "non-main deploy refused without --force-non-main"
+
 echo "DEPLOY RAILWAY ENV TESTS PASS"

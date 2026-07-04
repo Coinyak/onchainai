@@ -70,12 +70,16 @@ cargo test --features ssr
 
 ## 3. Production deploy
 
-| Surface | Platform | Build |
-|---------|----------|--------|
-| API + MCP | Railway | `Dockerfile.api` → `cargo build --release --features ssr` |
-| Web UI | Vercel | `frontend/` → `npm run build` |
+**Canonical spec:** `docs/superpowers/specs/2026-07-05-split-deploy-automation-spec.md`
+
+| Surface | Platform | Trigger | Build |
+|---------|----------|---------|--------|
+| Web UI | Vercel | **Every push** → Preview; **`main` push** → Production | `frontend/` → `npm run build` |
+| API + MCP | Railway | **`main` push** only, when `railway.json` watchPatterns match | `Dockerfile.api` → `cargo build --release --features ssr` |
 
 Vercel sets `API_PROXY_TARGET` to the Railway URL so `/api` and `/mcp` rewrite correctly.
+
+**Do not** run `./scripts/deploy-railway.sh` from feature branches (script refuses unless `--force-non-main`). Merge to `main` instead. One-time GitHub hookup: `./scripts/configure-railway-git-deploy.sh`. Env-only sync: `./scripts/deploy-railway.sh --vars-only`.
 
 ---
 
