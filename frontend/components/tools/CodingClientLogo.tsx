@@ -49,6 +49,7 @@ export function CodingClientLogo({
       aria-hidden={decorative ? true : undefined}
       width={size}
       height={size}
+      style={{ width: size, height: size }}
       onError={() => setBroken(true)}
     />
   );

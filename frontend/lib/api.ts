@@ -655,6 +655,19 @@ export async function deleteBlueprint(id: string): Promise<void> {
   });
 }
 
+export interface BlueprintAgentExport {
+  title: string;
+  markdown: string;
+  slugs: string[];
+  filename: string;
+}
+
+export async function getBlueprintAgentExport(id: string): Promise<BlueprintAgentExport> {
+  return apiFetch<BlueprintAgentExport>(
+    `/api/v2/blueprints/${encodeURIComponent(id)}/agent-export`,
+  );
+}
+
 // --- Agent Sync ---
 
 export async function getAgentLinkStatus(): Promise<AgentLinkStatus> {

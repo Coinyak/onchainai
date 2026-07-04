@@ -44,6 +44,10 @@ smoke_body_has "$connect_body" 'data-testid="connect-page"' || smoke_fail "GET /
 blueprints_body="$(check_get "/blueprints")"
 smoke_body_has "$blueprints_body" 'data-testid="blueprint-list"' || smoke_fail "GET /blueprints missing blueprint-list test id"
 
+blueprint_draft_body="$(check_get "/blueprints/draft")"
+smoke_body_has "$blueprint_draft_body" 'data-testid="blueprint-canvas"' || smoke_fail "GET /blueprints/draft missing blueprint-canvas test id"
+smoke_body_has "$blueprint_draft_body" 'data-testid="blueprint-share-dock"' || smoke_fail "GET /blueprints/draft missing blueprint-share-dock test id"
+
 check_get "/compare" >/dev/null
 check_get "/dashboard" >/dev/null
 check_get "/toolkit" >/dev/null

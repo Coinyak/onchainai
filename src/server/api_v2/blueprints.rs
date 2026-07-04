@@ -10,6 +10,9 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use uuid::Uuid;
 
+use std::collections::{HashMap, HashSet, VecDeque};
+
+use crate::config::SITE_ORIGIN;
 use crate::AppState;
 
 use super::auth::require_user_from;
@@ -23,6 +26,15 @@ const MAX_NOTE_TEXT: usize = 2000;
 const MAX_TITLE_LEN: usize = 200;
 const MAX_CHAIN_ID_LEN: usize = 64;
 const MAX_TOOL_NODE_CHAINS: usize = 8;
+const AGENT_EXPORT_FILENAME: &str = "blueprint-agent.md";
+
+const AGENT_EXPORT_TASK_TEMPLATE: &str = r#"## Your task
+
+1. Read the attached blueprint image and this prompt together.
+2. For each slug in ## Tools, call OnchainAI MCP `get_install_guide` (platform: cursor).
+3. Summarize install risk; do not install critical-risk tools.
+4. Follow ## Flow when proposing order; if I edited this section, prefer my wording.
+5. Ask before changing my toolkit or installing anything."#;
 
 fn db_internal(action: &str, err: impl std::fmt::Display) -> ApiError {
     tracing::error!("blueprint {action} failed: {err}");
@@ -40,6 +52,10 @@ pub fn router(state: AppState) -> Router {
             get(get_blueprint)
                 .put(update_blueprint)
                 .delete(delete_blueprint),
+        )
+        .route(
+            "/api/v2/blueprints/{id}/agent-export",
+            get(agent_export_blueprint),
         )
         .with_state(state)
 }
@@ -88,6 +104,24 @@ struct UpdateBlueprintBody {
     title: Option<String>,
     nodes: Option<Value>,
     edges: Option<Value>,
+}
+
+#[derive(Debug, Serialize)]
+struct AgentExportResponse {
+    title: String,
+    markdown: String,
+    slugs: Vec<String>,
+    filename: String,
+}
+
+#[derive(Debug, Clone)]
+struct ExportNode {
+    id: String,
+    kind: String,
+    slug: Option<String>,
+    chain_id: Option<String>,
+    text: Option<String>,
+    chains: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -511,6 +545,327 @@ async fn update_blueprint(
     Ok(Json(row.into_view()))
 }
 
+fn parse_export_nodes(nodes: &Value) -> Vec<ExportNode> {
+    let Some(arr) = nodes.as_array() else {
+        return Vec::new();
+    };
+
+    arr.iter()
+        .filter_map(|item| {
+            let id = item.get("id")?.as_str()?.trim().to_string();
+            if id.is_empty() {
+                return None;
+            }
+            let kind = item.get("kind")?.as_str()?.to_string();
+            let slug = item
+                .get("slug")
+                .and_then(|v| v.as_str())
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(str::to_string);
+            let chain_id = item
+                .get("chainId")
+                .and_then(|v| v.as_str())
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(str::to_string);
+            let text = item
+                .get("text")
+                .and_then(|v| v.as_str())
+                .map(str::to_string);
+            let chains = item
+                .get("chains")
+                .and_then(|v| v.as_array())
+                .map(|values| {
+                    values
+                        .iter()
+                        .filter_map(|chain| chain.as_str().map(str::trim))
+                        .filter(|chain| !chain.is_empty())
+                        .map(str::to_string)
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_default();
+
+            Some(ExportNode {
+                id,
+                kind,
+                slug,
+                chain_id,
+                text,
+                chains,
+            })
+        })
+        .collect()
+}
+
+fn collect_tool_slugs(nodes: &Value) -> Vec<String> {
+    let mut slugs = Vec::new();
+    let mut seen = HashSet::new();
+    for node in parse_export_nodes(nodes) {
+        if node.kind == "tool" {
+            if let Some(slug) = node.slug {
+                if seen.insert(slug.clone()) {
+                    slugs.push(slug);
+                }
+            }
+        }
+    }
+    slugs
+}
+
+fn node_flow_label(node: &ExportNode) -> String {
+    match node.kind.as_str() {
+        "tool" => node.slug.clone().unwrap_or_else(|| node.id.clone()),
+        "note" => {
+            let text = node.text.as_deref().unwrap_or("").trim();
+            if text.is_empty() {
+                "note".into()
+            } else if text.chars().count() > 48 {
+                let truncated: String = text.chars().take(48).collect();
+                format!("note: {truncated}…")
+            } else {
+                format!("note: {text}")
+            }
+        }
+        "chain" => format!(
+            "chain: {}",
+            node.chain_id.as_deref().unwrap_or("unknown")
+        ),
+        _ => node.id.clone(),
+    }
+}
+
+fn build_flow_section(nodes: &[ExportNode], edges: &Value) -> String {
+    let node_map: HashMap<&str, &ExportNode> =
+        nodes.iter().map(|node| (node.id.as_str(), node)).collect();
+    let edge_arr = edges.as_array().cloned().unwrap_or_default();
+
+    let mut adj: HashMap<String, Vec<String>> = HashMap::new();
+    let mut in_degree: HashMap<String, usize> = HashMap::new();
+    let mut edge_pairs: Vec<(String, String)> = Vec::new();
+
+    for node in nodes {
+        in_degree.entry(node.id.clone()).or_insert(0);
+    }
+
+    for edge in edge_arr {
+        let from_id = edge
+            .get("fromId")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .trim();
+        let to_id = edge
+            .get("toId")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .trim();
+        if from_id.is_empty() || to_id.is_empty() {
+            continue;
+        }
+        if !node_map.contains_key(from_id) || !node_map.contains_key(to_id) {
+            continue;
+        }
+
+        adj.entry(from_id.to_string())
+            .or_default()
+            .push(to_id.to_string());
+        *in_degree.entry(to_id.to_string()).or_insert(0) += 1;
+        in_degree.entry(from_id.to_string()).or_insert(0);
+        edge_pairs.push((from_id.to_string(), to_id.to_string()));
+    }
+
+    if edge_pairs.is_empty() {
+        return "(no flow edges defined)".into();
+    }
+
+    let mut queue: VecDeque<String> = in_degree
+        .iter()
+        .filter(|(_, degree)| **degree == 0)
+        .map(|(id, _)| id.clone())
+        .collect();
+    let mut queue_vec = queue.make_contiguous().to_vec();
+    queue_vec.sort();
+    queue = queue_vec.into();
+
+    let mut sorted = Vec::new();
+    while let Some(id) = queue.pop_front() {
+        sorted.push(id.clone());
+        if let Some(neighbors) = adj.get(&id) {
+            let mut next_ids = neighbors.clone();
+            next_ids.sort();
+            for next in next_ids {
+                let degree = in_degree.get_mut(&next).expect("edge target in graph");
+                *degree -= 1;
+                if *degree == 0 {
+                    queue.push_back(next);
+                }
+            }
+        }
+    }
+
+    let nodes_in_edges: HashSet<String> = edge_pairs
+        .iter()
+        .flat_map(|(from, to)| [from.clone(), to.clone()])
+        .collect();
+
+    if sorted.len() < nodes_in_edges.len() {
+        return edge_pairs
+            .iter()
+            .map(|(from, to)| {
+                let from_label = node_map
+                    .get(from.as_str())
+                    .map(|node| node_flow_label(*node))
+                    .unwrap_or_else(|| from.clone());
+                let to_label = node_map
+                    .get(to.as_str())
+                    .map(|node| node_flow_label(*node))
+                    .unwrap_or_else(|| to.clone());
+                format!("- {from_label} → {to_label}")
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+    }
+
+    let sorted_set: HashSet<&str> = sorted.iter().map(String::as_str).collect();
+    let mut labels: Vec<String> = sorted
+        .iter()
+        .filter_map(|id| node_map.get(id.as_str()).map(|node| node_flow_label(*node)))
+        .collect();
+
+    let mut orphans: Vec<String> = nodes
+        .iter()
+        .filter(|node| !sorted_set.contains(node.id.as_str()) && !nodes_in_edges.contains(&node.id))
+        .map(|node| node_flow_label(node))
+        .collect();
+    orphans.sort();
+    labels.extend(orphans);
+
+    if labels.is_empty() {
+        "(no flow edges defined)".into()
+    } else if labels.len() == 1 {
+        format!("- {}", labels[0])
+    } else {
+        format!("- {}", labels.join(" → "))
+    }
+}
+
+fn build_agent_export_markdown(
+    title: &str,
+    nodes: &Value,
+    edges: &Value,
+    tool_names: &HashMap<String, String>,
+) -> String {
+    let export_nodes = parse_export_nodes(nodes);
+    let mut markdown = format!("# {title}\n\n");
+    markdown.push_str(
+        "Read the attached blueprint image together with this prompt. \
+For each tool below, call OnchainAI MCP `get_install_guide` (platform: cursor) \
+before installing.\n\n",
+    );
+
+    markdown.push_str("## Tools\n\n");
+    let tool_nodes: Vec<&ExportNode> = export_nodes
+        .iter()
+        .filter(|node| node.kind == "tool")
+        .collect();
+    if tool_nodes.is_empty() {
+        markdown.push_str("(none)\n\n");
+    } else {
+        for node in tool_nodes {
+            let slug = node.slug.as_deref().unwrap_or("unknown");
+            let display_name = tool_names
+                .get(slug)
+                .map(String::as_str)
+                .unwrap_or(slug);
+            let chains = if node.chains.is_empty() {
+                "none specified".to_string()
+            } else {
+                node.chains.join(", ")
+            };
+            markdown.push_str(&format!("### {display_name}\n"));
+            markdown.push_str(&format!("- Slug: `{slug}`\n"));
+            markdown.push_str(&format!("- Chains: {chains}\n"));
+            markdown.push_str(&format!("- Page: {SITE_ORIGIN}/tools/{slug}\n"));
+            markdown.push_str(&format!(
+                "- MCP: `get_install_guide({{ slug: \"{slug}\", platform: \"cursor\" }})`\n\n"
+            ));
+        }
+    }
+
+    markdown.push_str("## Notes\n\n");
+    let note_texts: Vec<String> = export_nodes
+        .iter()
+        .filter(|node| node.kind == "note")
+        .filter_map(|node| node.text.as_deref())
+        .map(str::trim)
+        .filter(|text| !text.is_empty())
+        .map(str::to_string)
+        .collect();
+    if note_texts.is_empty() {
+        markdown.push_str("(none)\n\n");
+    } else {
+        for text in note_texts {
+            markdown.push_str(&format!("- {text}\n"));
+        }
+        markdown.push('\n');
+    }
+
+    markdown.push_str("## Flow\n\n");
+    markdown.push_str(&build_flow_section(&export_nodes, edges));
+    markdown.push_str("\n\n");
+    markdown.push_str(AGENT_EXPORT_TASK_TEMPLATE);
+    markdown
+}
+
+async fn fetch_approved_tool_names(
+    state: &AppState,
+    slugs: &[String],
+) -> Result<HashMap<String, String>, ApiError> {
+    if slugs.is_empty() {
+        return Ok(HashMap::new());
+    }
+
+    #[derive(sqlx::FromRow)]
+    struct ToolNameRow {
+        slug: String,
+        name: String,
+    }
+
+    let rows = sqlx::query_as::<_, ToolNameRow>(
+        r#"
+        SELECT slug, name
+        FROM tools
+        WHERE slug = ANY($1)
+          AND approval_status = 'approved'
+        "#,
+    )
+    .bind(slugs)
+    .fetch_all(&state.pool)
+    .await
+    .map_err(|e| db_internal("tool lookup", e))?;
+
+    Ok(rows.into_iter().map(|row| (row.slug, row.name)).collect())
+}
+
+async fn agent_export_blueprint(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<Uuid>,
+) -> Result<Json<AgentExportResponse>, ApiError> {
+    let user = require_user_from(&state, &headers).await?;
+    let row = fetch_owned_blueprint(&state, id, user.id).await?;
+    let slugs = collect_tool_slugs(&row.nodes);
+    let tool_names = fetch_approved_tool_names(&state, &slugs).await?;
+    let markdown = build_agent_export_markdown(&row.title, &row.nodes, &row.edges, &tool_names);
+
+    Ok(Json(AgentExportResponse {
+        title: row.title,
+        markdown,
+        slugs,
+        filename: AGENT_EXPORT_FILENAME.into(),
+    }))
+}
+
 async fn delete_blueprint(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -641,5 +996,67 @@ mod tests {
             }
         ]);
         assert!(validate_edges(&edges, &[]).is_err());
+    }
+
+    #[test]
+    fn build_agent_export_markdown_includes_tools_notes_flow_and_task() {
+        let nodes = json!([
+            {"id": "t1", "kind": "tool", "slug": "uniswap", "chains": ["base"], "x": 0, "y": 0},
+            {"id": "n1", "kind": "note", "text": "Start here", "x": 40, "y": 40}
+        ]);
+        let edges = json!([
+            {
+                "id": "e1",
+                "fromId": "t1",
+                "toId": "n1",
+                "style": "arrow",
+                "color": "#E76F00"
+            }
+        ]);
+        let mut tool_names = HashMap::new();
+        tool_names.insert("uniswap".into(), "Uniswap".into());
+
+        let markdown = build_agent_export_markdown("My Stack", &nodes, &edges, &tool_names);
+
+        assert!(markdown.starts_with("# My Stack\n"));
+        assert!(markdown.contains("get_install_guide"));
+        assert!(markdown.contains("### Uniswap"));
+        assert!(markdown.contains("- Slug: `uniswap`"));
+        assert!(markdown.contains("- Chains: base"));
+        assert!(markdown.contains(&format!("{SITE_ORIGIN}/tools/uniswap")));
+        assert!(markdown.contains("## Notes"));
+        assert!(markdown.contains("- Start here"));
+        assert!(markdown.contains("## Flow"));
+        assert!(markdown.contains("uniswap → note: Start here"));
+        assert!(markdown.contains("## Your task"));
+        assert!(markdown.contains("do not install critical-risk tools"));
+    }
+
+    #[test]
+    fn build_flow_section_lists_edges_when_cycle_detected() {
+        let nodes = parse_export_nodes(&json!([
+            {"id": "a", "kind": "tool", "slug": "alpha", "x": 0, "y": 0},
+            {"id": "b", "kind": "tool", "slug": "beta", "x": 40, "y": 40}
+        ]));
+        let edges = json!([
+            {"id": "e1", "fromId": "a", "toId": "b", "style": "solid", "color": "#1A1A1A"},
+            {"id": "e2", "fromId": "b", "toId": "a", "style": "solid", "color": "#1A1A1A"}
+        ]);
+
+        let flow = build_flow_section(&nodes, &edges);
+
+        assert!(flow.contains("alpha → beta"));
+        assert!(flow.contains("beta → alpha"));
+    }
+
+    #[test]
+    fn collect_tool_slugs_deduplicates_in_order() {
+        let nodes = json!([
+            {"id": "t1", "kind": "tool", "slug": "foo", "x": 0, "y": 0},
+            {"id": "t2", "kind": "tool", "slug": "bar", "x": 10, "y": 10},
+            {"id": "t3", "kind": "tool", "slug": "foo", "x": 20, "y": 20}
+        ]);
+
+        assert_eq!(collect_tool_slugs(&nodes), vec!["foo", "bar"]);
     }
 }
