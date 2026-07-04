@@ -694,10 +694,11 @@ fn build_flow_section(nodes: &[ExportNode], edges: &Value) -> String {
             let mut next_ids = neighbors.clone();
             next_ids.sort();
             for next in next_ids {
-                let degree = in_degree.get_mut(&next).expect("edge target in graph");
-                *degree -= 1;
-                if *degree == 0 {
-                    queue.push_back(next);
+                if let Some(degree) = in_degree.get_mut(&next) {
+                    *degree -= 1;
+                    if *degree == 0 {
+                        queue.push_back(next);
+                    }
                 }
             }
         }

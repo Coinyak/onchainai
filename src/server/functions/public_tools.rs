@@ -215,14 +215,27 @@ pub struct ToolFilters {
 }
 
 #[cfg(feature = "ssr")]
-fn append_scalar_intersection<'qb>(
+fn append_scalar_union<'qb>(
     query: &mut sqlx::QueryBuilder<'qb, sqlx::Postgres>,
     column: &str,
     values: &'qb [String],
 ) {
-    for value in values {
-        query.push(" AND ").push(column).push(" = ").push_bind(value);
+    if values.is_empty() {
+        return;
     }
+    query.push(" AND ");
+    if values.len() == 1 {
+        query.push(column).push(" = ").push_bind(&values[0]);
+        return;
+    }
+    query.push("(");
+    for (index, value) in values.iter().enumerate() {
+        if index > 0 {
+            query.push(" OR ");
+        }
+        query.push(column).push(" = ").push_bind(value);
+    }
+    query.push(")");
 }
 
 /// x402 catalog slice: matches dashboard snapshot semantics (not only `type`/`pricing` = x402).
@@ -234,18 +247,32 @@ fn append_x402_catalog_predicate(query: &mut sqlx::QueryBuilder<'_, sqlx::Postgr
 }
 
 #[cfg(feature = "ssr")]
-fn append_scalar_intersection_except<'qb>(
+fn append_scalar_union_except<'qb>(
     query: &mut sqlx::QueryBuilder<'qb, sqlx::Postgres>,
     column: &str,
     values: &'qb [String],
     skip: &str,
 ) {
-    for value in values {
-        if value == skip {
-            continue;
-        }
-        query.push(" AND ").push(column).push(" = ").push_bind(value);
+    let kept: Vec<&'qb String> = values
+        .iter()
+        .filter(|value| value.as_str() != skip)
+        .collect();
+    if kept.is_empty() {
+        return;
     }
+    query.push(" AND ");
+    if kept.len() == 1 {
+        query.push(column).push(" = ").push_bind(kept[0]);
+        return;
+    }
+    query.push("(");
+    for (index, value) in kept.iter().enumerate() {
+        if index > 0 {
+            query.push(" OR ");
+        }
+        query.push(column).push(" = ").push_bind(*value);
+    }
+    query.push(")");
 }
 
 #[cfg(feature = "ssr")]
@@ -262,13 +289,13 @@ pub(crate) fn append_tool_filters<'qb>(
     query: &mut sqlx::QueryBuilder<'qb, sqlx::Postgres>,
     filters: &'qb ToolFilters,
 ) {
-    append_scalar_intersection(query, "function", &filters.function);
-    append_scalar_intersection(query, "asset_class", &filters.asset_class);
-    append_scalar_intersection(query, "actor", &filters.actor);
-    append_scalar_intersection_except(query, "type", &filters.tool_type, "x402");
-    append_scalar_intersection(query, "status", &filters.status);
-    append_scalar_intersection_except(query, "pricing", &filters.pricing, "x402");
-    append_scalar_intersection(query, "install_risk_level", &filters.install_risk);
+    append_scalar_union(query, "function", &filters.function);
+    append_scalar_union(query, "asset_class", &filters.asset_class);
+    append_scalar_union(query, "actor", &filters.actor);
+    append_scalar_union_except(query, "type", &filters.tool_type, "x402");
+    append_scalar_union(query, "status", &filters.status);
+    append_scalar_union_except(query, "pricing", &filters.pricing, "x402");
+    append_scalar_union(query, "install_risk_level", &filters.install_risk);
     if filters_include_x402(filters) {
         append_x402_catalog_predicate(query);
     }
