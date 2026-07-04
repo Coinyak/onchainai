@@ -43,42 +43,52 @@ export const CHAIN_CATALOG: ChainMeta[] = [
   { id: "dogecoin", label: "Dogecoin", logo: "/chains/dogecoin.svg", aliases: ["doge", "dogecoin-mainnet"], pinned: false },
   { id: "aurora", label: "Aurora", logo: "/chains/aurora.svg", aliases: ["aurora-mainnet"], pinned: false },
   { id: "okx", label: "OKX Chain", logo: "/chains/okx.svg", aliases: ["okc", "okex-chain"], pinned: false },
+  { id: "monad", label: "Monad", logo: "/chains/monad.svg", aliases: ["mon", "monad-mainnet"], pinned: false },
+  { id: "mantle", label: "Mantle", logo: "/chains/mantle.svg", aliases: ["mnt", "mantle-mainnet"], pinned: false },
+  { id: "cronos", label: "Cronos", logo: "/chains/cronos.svg", aliases: ["cro", "crypto-com-chain", "cronos-mainnet"], pinned: false },
+  { id: "movement", label: "Movement", logo: "/chains/movement.svg", aliases: ["move", "movement-mainnet", "movement-labs"], pinned: false },
+  { id: "ink", label: "Ink", logo: "/chains/ink.svg", aliases: ["ink-mainnet", "inkchain"], pinned: false },
+  { id: "flare", label: "Flare", logo: "/chains/flare.svg", aliases: ["flr", "flare-networks", "flare-mainnet"], pinned: false },
+  { id: "rootstock", label: "Rootstock", logo: "/chains/rootstock.svg", aliases: ["rsk", "rbtc"], pinned: false },
+  { id: "megaeth", label: "MegaETH", logo: "/chains/megaeth.svg", aliases: ["mega-eth"], pinned: false },
+  { id: "stacks", label: "Stacks", logo: "/chains/stacks.svg", aliases: ["stx", "blockstack"], pinned: false },
+  { id: "polkadot", label: "Polkadot", logo: "/chains/polkadot.svg", aliases: ["dot", "polkadot-relay"], pinned: false },
+  { id: "kava", label: "Kava", logo: "/chains/kava.svg", aliases: ["kava-mainnet"], pinned: false },
+  { id: "ton", label: "TON", logo: "/chains/ton.svg", aliases: ["the-open-network", "ton-mainnet"], pinned: false },
+  { id: "taiko", label: "Taiko", logo: "/chains/taiko.svg", aliases: ["taiko-mainnet"], pinned: false },
+  { id: "immutable", label: "Immutable", logo: "/chains/immutable.svg", aliases: ["imx", "immutablex", "immutable-x", "immutable-zkevm"], pinned: false },
+  { id: "zora", label: "Zora", logo: "/chains/zora.svg", aliases: ["zora-mainnet"], pinned: false },
+  { id: "stellar", label: "Stellar", logo: "/chains/stellar.svg", aliases: ["xlm", "stellar-mainnet"], pinned: false },
+  { id: "algorand", label: "Algorand", logo: "/chains/algorand.svg", aliases: ["algo", "algorand-mainnet"], pinned: false },
+  { id: "filecoin", label: "Filecoin", logo: "/chains/filecoin.svg", aliases: ["fil", "filecoin-mainnet"], pinned: false },
+  { id: "ronin", label: "Ronin", logo: "/chains/ronin.svg", aliases: ["ron", "ronin-mainnet"], pinned: false },
+  { id: "worldchain", label: "World Chain", logo: "/chains/worldchain.svg", aliases: ["world-chain", "worldcoin", "wld"], pinned: false },
+  { id: "hedera", label: "Hedera", logo: "/chains/hedera.svg", aliases: ["hbar", "hedera-hashgraph"], pinned: false },
+  { id: "xrpl", label: "XRPL", logo: "/chains/xrpl.svg", aliases: ["xrp", "ripple", "xrpl-mainnet"], pinned: false },
+  { id: "thorchain", label: "THORChain", logo: "/chains/thorchain.svg", aliases: ["rune", "thorchain-mainnet"], pinned: false },
+  { id: "katana", label: "Katana", logo: "/chains/katana.svg", aliases: ["katana-mainnet"], pinned: false },
+  { id: "dydx", label: "dYdX", logo: "/chains/dydx.svg", aliases: ["dydx-chain", "dydx-mainnet"], pinned: false },
+  { id: "fraxtal", label: "Fraxtal", logo: "/chains/fraxtal.svg", aliases: ["frax", "fraxtal-mainnet"], pinned: false },
+  { id: "tezos", label: "Tezos", logo: "/chains/tezos.svg", aliases: ["xtz", "tezos-mainnet"], pinned: false },
+  { id: "mezo", label: "Mezo", logo: "/chains/mezo.svg", aliases: ["mezo-mainnet"], pinned: false },
+  { id: "bittensor", label: "Bittensor", logo: "/chains/bittensor.svg", aliases: ["tao", "bittensor-mainnet"], pinned: false },
+  { id: "pulsechain", label: "PulseChain", logo: "/chains/pulsechain.svg", aliases: ["pls", "pulsechain-mainnet"], pinned: false },
+  { id: "provenance", label: "Provenance", logo: "/chains/provenance.svg", aliases: ["hash", "hash-2", "provenance-mainnet"], pinned: false },
+  { id: "fluent", label: "Fluent", logo: "/chains/fluent.svg", aliases: ["fluent-network", "fluent-mainnet"], pinned: false },
+  { id: "hydration", label: "Hydration", logo: "/chains/hydration.svg", aliases: ["hydradx", "hydration-mainnet"], pinned: false },
+  { id: "mixin", label: "Mixin", logo: "/chains/mixin.svg", aliases: ["xin", "mixin-mainnet"], pinned: false },
+  { id: "vaulta", label: "Vaulta", logo: "/chains/vaulta.svg", aliases: ["eos", "eosio", "vaulta-mainnet"], pinned: false },
+  { id: "ethereal", label: "Ethereal", logo: "/chains/ethereal.svg", aliases: ["ethereal-mainnet"], pinned: false },
+  { id: "stable", label: "Stable", logo: "/chains/stable.svg", aliases: ["stable-2", "stable-mainnet"], pinned: false },
+  { id: "xpr", label: "XPR Network", logo: "/chains/xpr.svg", aliases: ["proton", "xpr-network", "xpr-mainnet"], pinned: false },
 ];
 
 export const STRIP_PRIMARY_VISIBLE = 20;
 
 /** Chain IDs with a committed `/chains/<id>.svg` tile (no text-fallback tiles in strip). */
-export const CHAIN_LOGO_IDS = new Set<string>([
-  "aptos",
-  "arbitrum",
-  "avalanche",
-  "base",
-  "bera",
-  "bitcoin",
-  "bob",
-  "bsc",
-  "cardano",
-  "celo",
-  "cosmos",
-  "ethereum",
-  "fantom",
-  "gnosis",
-  "hyperliquid",
-  "linea",
-  "near",
-  "optimism",
-  "plasma",
-  "polygon",
-  "sei",
-  "solana",
-  "soneium",
-  "sonic",
-  "starknet",
-  "sui",
-  "tron",
-  "unichain",
-  "zksync",
-]);
+export const CHAIN_LOGO_IDS = new Set<string>(
+  CHAIN_CATALOG.map((entry) => entry.id),
+);
 
 export function hasChainLogo(id: string): boolean {
   return CHAIN_LOGO_IDS.has(id.trim().toLowerCase());
@@ -144,11 +154,10 @@ export function chainTagsForTool(chains: string[]): ChainMeta[] {
   const seen = new Set<string>();
   const result: ChainMeta[] = [];
   for (const raw of chains) {
-    const meta = resolveChain(raw);
-    if (meta && !seen.has(meta.id)) {
-      seen.add(meta.id);
-      result.push(meta);
-    }
+    const meta = resolveChain(raw) ?? syntheticChainMeta(raw);
+    if (!meta || seen.has(meta.id)) continue;
+    seen.add(meta.id);
+    result.push(meta);
   }
   return result;
 }
@@ -162,7 +171,7 @@ function syntheticChainMeta(raw: string): ChainMeta | undefined {
   return {
     id,
     label: chainFallbackLabel(raw),
-    logo: chainLogoPath(id),
+    logo: hasChainLogo(id) ? chainLogoPath(id) : "",
     aliases: [raw],
     pinned: false,
   };

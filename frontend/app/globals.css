@@ -754,6 +754,41 @@
   padding: 20px;
   background: var(--color-neutral-bg);
   min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.connect-client-card .tool-install-stack,
+.connect-client-card .tool-install,
+.connect-universal .tool-install-stack,
+.connect-universal .tool-install,
+.connect-guide-blocks,
+.connect-plugin-section .tool-install-stack {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.connect-client-card .install-cmd,
+.connect-universal .install-cmd,
+.connect-plugin-section .install-cmd {
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.site-top-nav-inner-actions {
+  justify-content: flex-end;
+}
+
+/* Collapsed filter sidebar: controls only (brand lives in TopNav). */
+@media (max-width: 767px) {
+  .tools-sidebar-collapsed,
+  .tools-sidebar:not([data-sidebar-storage-loaded]) {
+    height: auto;
+    min-height: 52px;
+  }
 }
 
 .connect-client-card-header {
@@ -792,4 +827,69 @@
 .chain-overflow-item:focus-visible {
   outline: 2px solid rgba(231, 111, 0, 0.35);
   outline-offset: 2px;
+}
+
+/* Login modal (Phase A — fixed overlay, scroll lock via LoginModal.tsx) */
+.login-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 130;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.login-modal-backdrop {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  background: rgba(0, 0, 0, 0.4);
+  cursor: pointer;
+}
+
+.login-modal-panel {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 420px;
+  background: var(--color-neutral-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 24px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.12);
+}
+
+.login-modal-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-secondary);
+  cursor: pointer;
+}
+
+.login-modal-close:hover {
+  background: var(--color-neutral-hover);
+  color: var(--color-primary);
+}
+
+.site-top-nav-repo svg {
+  display: block;
+}
+
+/* P2 UI audit — ToolListingActions layout (G4) */
+.listing-actions-row {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
 }

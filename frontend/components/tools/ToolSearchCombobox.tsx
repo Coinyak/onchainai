@@ -26,7 +26,7 @@ export interface ToolSearchComboboxProps {
   onSubmitSearch?: (query: string) => void;
   /** Called when the user picks a typeahead result. */
   onSelectTool?: (tool: Tool) => void;
-  /** Debounced query changes — use for URL sync in toolbar mode. */
+  /** Hero only: debounced live URL sync while typing. Toolbar uses blur/Enter commit. */
   onDebouncedQueryChange?: (query: string) => void;
   functionFilter?: string;
   chainFilter?: string;
@@ -57,6 +57,7 @@ function TypeaheadList({
   query,
   onHover,
   onSelect,
+  onOptionPointerDown,
 }: {
   listboxId: string;
   results: Tool[];
@@ -65,6 +66,7 @@ function TypeaheadList({
   query: string;
   onHover: (index: number) => void;
   onSelect: (tool: Tool) => void;
+  onOptionPointerDown?: () => void;
 }) {
   if (!query.trim()) return null;
 
@@ -94,7 +96,10 @@ function TypeaheadList({
           className={`search-typeahead-option${index === activeIndex ? " search-typeahead-option-active" : ""}`}
           data-testid={`search-typeahead-option-${tool.slug}`}
           onMouseEnter={() => onHover(index)}
-          onMouseDown={(event) => event.preventDefault()}
+          onMouseDown={(event) => {
+            event.preventDefault();
+            onOptionPointerDown?.();
+          }}
           onClick={() => onSelect(tool)}
         >
           <ToolLogo
@@ -134,8 +139,10 @@ export function ToolSearchCombobox({
   const inputRef = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState(defaultValue);
   const [mobileExpanded, setMobileExpanded] = useState(false);
-  const syncingFromProps = useRef(false);
   const lastUrlQuery = useRef(defaultValue.trim());
+  const optionPickRef = useRef(false);
+  const dirtySinceFocus = useRef(false);
+  const queryAtFocus = useRef(defaultValue);
 
   const typeaheadOptions: UseToolSearchTypeaheadOptions = {
     query,
@@ -151,18 +158,27 @@ export function ToolSearchCombobox({
     const next = (defaultValue ?? "").trim();
     if (next === lastUrlQuery.current) return;
     lastUrlQuery.current = next;
-    syncingFromProps.current = true;
     setQuery(defaultValue ?? "");
-    syncingFromProps.current = false;
   }, [defaultValue]);
 
   useEffect(() => {
-    if (syncingFromProps.current || !onDebouncedQueryChange) return;
-    const trimmed = typeahead.debouncedQuery;
-    if (trimmed === lastUrlQuery.current) return;
-    lastUrlQuery.current = trimmed;
-    onDebouncedQueryChange(trimmed);
-  }, [onDebouncedQueryChange, typeahead.debouncedQuery]);
+    if (variant !== "hero" || !onDebouncedQueryChange) return;
+    const timer = window.setTimeout(() => {
+      const trimmed = query.trim();
+      if (trimmed === lastUrlQuery.current) return;
+      lastUrlQuery.current = trimmed;
+      onDebouncedQueryChange(trimmed);
+    }, TOOL_SEARCH_DEBOUNCE_MS);
+    return () => window.clearTimeout(timer);
+  }, [onDebouncedQueryChange, query, variant]);
+
+  useEffect(() => {
+    if (!mobileExpanded) return;
+    const frame = requestAnimationFrame(() => {
+      inputRef.current?.focus({ preventScroll: true });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [mobileExpanded]);
 
   useEffect(() => {
     if (!mobileExpanded) return;
@@ -175,7 +191,9 @@ export function ToolSearchCombobox({
 
   const defaultPlaceholder =
     variant === "hero"
-      ? "Search: asset tracking, trading, DeFi, chain name..."
+      ? isMobile
+        ? "Search tools, chains, DeFi…"
+        : "Search: asset tracking, trading, DeFi, chain name..."
       : "Search tools...";
 
   const inputClass =
@@ -197,24 +215,47 @@ export function ToolSearchCombobox({
     [onSelectTool, router, typeahead],
   );
 
+  const commitQueryToUrl = useCallback(
+    (raw: string) => {
+      const trimmed = raw.trim();
+      if (trimmed === lastUrlQuery.current) return;
+      lastUrlQuery.current = trimmed;
+      if (onDebouncedQueryChange) {
+        onDebouncedQueryChange(trimmed);
+        return;
+      }
+      if (onSubmitSearch) {
+        onSubmitSearch(trimmed);
+        return;
+      }
+      if (!trimmed) {
+        router.replace(pathname, { scroll: false });
+        return;
+      }
+      router.push(`${pathname}?q=${encodeURIComponent(trimmed)}`, { scroll: false });
+    },
+    [onDebouncedQueryChange, onSubmitSearch, pathname, router],
+  );
+
   const submitSearch = useCallback(
     (raw: string) => {
       const trimmed = raw.trim();
       if (!trimmed) return;
       typeahead.closeDropdown();
       setMobileExpanded(false);
-      lastUrlQuery.current = trimmed;
       if (onSubmitSearch) {
+        lastUrlQuery.current = trimmed;
         onSubmitSearch(trimmed);
         return;
       }
-      router.push(`${pathname}?q=${encodeURIComponent(trimmed)}`, { scroll: false });
+      commitQueryToUrl(trimmed);
     },
-    [onSubmitSearch, pathname, router, typeahead],
+    [commitQueryToUrl, onSubmitSearch, typeahead],
   );
 
   const handleInputChange = (value: string) => {
     setQuery(value);
+    dirtySinceFocus.current = value !== queryAtFocus.current;
     if (value.trim()) {
       typeahead.openDropdown();
     } else {
@@ -228,7 +269,10 @@ export function ToolSearchCombobox({
 
     if (event.key === "Enter") {
       event.preventDefault();
-      const selected = typeahead.selectActive();
+      const dropdownVisible =
+        typeahead.isOpen && query.trim().length > 0 && typeahead.results.length > 0;
+      const selected =
+        dropdownVisible && typeahead.activeIndex >= 0 ? typeahead.selectActive() : undefined;
       if (selected) {
         navigateToTool(selected);
         return;
@@ -238,13 +282,25 @@ export function ToolSearchCombobox({
   };
 
   const handleFocus = () => {
+    queryAtFocus.current = query;
+    dirtySinceFocus.current = false;
     if (isMobile) setMobileExpanded(true);
     if (query.trim() && typeahead.results.length > 0) typeahead.openDropdown();
   };
 
   const handleBlur = () => {
     if (isMobile && mobileExpanded) return;
-    window.setTimeout(() => typeahead.closeDropdown(), 150);
+    window.setTimeout(() => {
+      if (optionPickRef.current) {
+        optionPickRef.current = false;
+        return;
+      }
+      typeahead.closeDropdown();
+      if (variant === "toolbar" && dirtySinceFocus.current) {
+        commitQueryToUrl(query);
+      }
+      dirtySinceFocus.current = false;
+    }, 150);
   };
 
   const closeMobileOverlay = () => {
@@ -256,7 +312,7 @@ export function ToolSearchCombobox({
   const showDropdown =
     typeahead.isOpen &&
     query.trim().length > 0 &&
-    (typeahead.isLoading || typeahead.results.length > 0 || typeahead.debouncedQuery.length > 0);
+    (typeahead.isLoading || typeahead.results.length > 0);
 
   const inputElement = (
     <input
@@ -309,6 +365,9 @@ export function ToolSearchCombobox({
               query={query}
               onHover={typeahead.setActiveIndex}
               onSelect={navigateToTool}
+              onOptionPointerDown={() => {
+                optionPickRef.current = true;
+              }}
             />
           )}
         </div>
@@ -328,6 +387,9 @@ export function ToolSearchCombobox({
           query={query}
           onHover={typeahead.setActiveIndex}
           onSelect={navigateToTool}
+          onOptionPointerDown={() => {
+            optionPickRef.current = true;
+          }}
         />
       )}
     </div>

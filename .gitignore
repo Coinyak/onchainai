@@ -55,8 +55,7 @@ undefined/
 .superpowers/
 __pycache__/
 
-# Supabase
+# Supabase / Vercel
 supabase/.branches
 supabase/.temp
 .vercel
-.env*

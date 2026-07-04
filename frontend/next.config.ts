@@ -1,7 +1,10 @@
 import type { NextConfig } from "next";
 
+const DEFAULT_RAILWAY_API = "https://onchainai-production.up.railway.app";
+
 const API_PROXY_TARGET =
-  process.env.API_PROXY_TARGET ?? "http://localhost:3000";
+  process.env.API_PROXY_TARGET ??
+  (process.env.VERCEL ? DEFAULT_RAILWAY_API : "http://localhost:3000");
 
 const SECURITY_HEADERS = [
   { key: "X-Frame-Options", value: "DENY" },
@@ -18,7 +21,7 @@ const nextConfig: NextConfig = {
     NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL ?? "",
     NEXT_PUBLIC_GITHUB_REPO:
       process.env.NEXT_PUBLIC_GITHUB_REPO ??
-      "https://github.com/onchain-ai/onchainai",
+      "https://github.com/Coinyak/onchainai",
   },
   async headers() {
     return [

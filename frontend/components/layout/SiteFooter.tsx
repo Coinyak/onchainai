@@ -12,7 +12,6 @@ export function SiteFooter() {
   });
 
   const links = settingsQuery.data?.footer_links ?? [];
-  if (!links.length) return null;
 
   return (
     <footer className="site-footer border-t border-border mt-auto px-gutter md:px-6 py-6">
@@ -20,6 +19,20 @@ export function SiteFooter() {
         className="flex flex-wrap gap-x-6 gap-y-2 text-body-sm"
         aria-label="Footer"
       >
+        <Link
+          href="/llms.txt"
+          className="text-secondary hover:text-primary no-underline"
+          data-testid="footer-llms-txt"
+        >
+          llms.txt
+        </Link>
+        <Link
+          href="/connect"
+          className="text-secondary hover:text-primary no-underline"
+          data-testid="footer-connect"
+        >
+          Connect MCP
+        </Link>
         {links.map((link) => (
           <Link
             key={`${link.label}-${link.url}`}

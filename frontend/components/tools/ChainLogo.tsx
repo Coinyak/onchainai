@@ -19,10 +19,17 @@ export function ChainLogo({
   className = "chain-logo",
   decorative = false,
 }: ChainLogoProps) {
-  const [broken, setBroken] = useState(!hasChainLogo(id));
+  const logoAvailable = hasChainLogo(id);
+  const [brokenForId, setBrokenForId] = useState<string | null>(null);
   const fallbackLabel = chainFallbackLabel(label || id).slice(0, 3).toUpperCase();
 
-  if (broken) {
+  if (brokenForId !== null && brokenForId !== id) {
+    setBrokenForId(null);
+  }
+
+  const broken = brokenForId === id;
+
+  if (!logoAvailable || broken) {
     return (
       <span
         className={`${className} chain-logo-fallback`}
@@ -45,7 +52,7 @@ export function ChainLogo({
       aria-hidden={decorative ? true : undefined}
       width={size}
       height={size}
-      onError={() => setBroken(true)}
+      onError={() => setBrokenForId(id)}
     />
   );
 }

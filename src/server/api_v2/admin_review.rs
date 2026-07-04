@@ -1,12 +1,13 @@
 //! Admin tool review endpoints.
 
 use axum::{
-    extract::{Query, State},
+    extract::{Path, Query, State},
     http::HeaderMap,
     routing::{get, post, put},
     Json, Router,
 };
 use serde::Deserialize;
+use uuid::Uuid;
 
 use crate::models::Tool;
 use crate::server::functions::{
@@ -34,6 +35,10 @@ pub fn router(state: AppState) -> Router {
             get(get_referral_dashboard_stats),
         )
         .route("/api/v2/admin/tool-referral", put(update_tool_referral))
+        .route(
+            "/api/v2/admin/tools/{id}/x402-verify",
+            post(trigger_x402_verify),
+        )
         .with_state(state)
 }
 
@@ -340,8 +345,9 @@ async fn update_tool_referral(
             payment_verified = $7,
             x402_endpoint_verified = $8,
             price_verified = $9,
+            x402_endpoint = $10,
             updated_at = now()
-        WHERE slug = $10
+        WHERE slug = $11
         RETURNING *
         "#,
     )
@@ -354,6 +360,7 @@ async fn update_tool_referral(
     .bind(payload.payment_verified)
     .bind(payload.x402_endpoint_verified)
     .bind(payload.price_verified)
+    .bind(normalize_optional_text(payload.x402_endpoint))
     .bind(payload.slug.trim())
     .fetch_optional(&state.pool)
     .await
@@ -361,4 +368,29 @@ async fn update_tool_referral(
     .ok_or_else(|| ApiError::NotFound(format!("tool not found: {}", payload.slug)))?;
 
     Ok(Json(redact_tool_for_admin(tool)))
+}
+
+async fn trigger_x402_verify(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<Uuid>,
+) -> Result<Json<crate::server::x402_verify::X402VerifyStatus>, ApiError> {
+    let admin = require_admin_from(&state, &headers).await?;
+    crate::server::rate_limit::check_user_rate_limit(
+        admin.id,
+        crate::server::rate_limit::UserRateLimitAction::AdminX402Verify,
+    )
+    .map_err(|_| {
+        ApiError::TooManyRequests("x402 verify rate limit exceeded; try again later".into())
+    })?;
+
+    let client = crate::server::x402_verify::probe_client();
+    let status = crate::server::x402_verify::verify_tool_by_id(&state.pool, &client, id)
+        .await
+        .map_err(|e| ApiError::Internal(format!("x402 verify failed: {e}")))?
+        .ok_or_else(|| {
+            ApiError::NotFound(format!("tool not found or missing x402_endpoint: {id}"))
+        })?;
+
+    Ok(Json(status))
 }

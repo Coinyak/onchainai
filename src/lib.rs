@@ -502,9 +502,11 @@ pub async fn run_server() -> anyhow::Result<()> {
     tracing::info!("migrations applied");
 
     let crawler_pool = pool.clone();
+    let x402_pool = pool.clone();
     let skip_crawler = std::env::var("SKIP_CRAWLER").is_ok();
     if skip_crawler {
         tracing::info!("crawler scheduler skipped (SKIP_CRAWLER set)");
+        tracing::info!("x402 verify scheduler skipped (SKIP_CRAWLER set)");
     } else {
         tokio::spawn(async move {
             if let Err(e) = crawler::start_scheduler(crawler_pool).await {
@@ -512,6 +514,13 @@ pub async fn run_server() -> anyhow::Result<()> {
             }
         });
         tracing::info!("crawler scheduler spawned in background (tokio::spawn)");
+
+        tokio::spawn(async move {
+            if let Err(e) = server::x402_verify::start_scheduler(x402_pool).await {
+                tracing::error!("x402 verify scheduler exited with error: {e}");
+            }
+        });
+        tracing::info!("x402 verify scheduler spawned in background (tokio::spawn)");
     }
 
     let port = cfg.port;

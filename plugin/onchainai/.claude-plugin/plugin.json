@@ -7,5 +7,7 @@
     "url": "https://www.onchain-ai.xyz"
   },
   "homepage": "https://www.onchain-ai.xyz",
+  "repository": "https://github.com/Coinyak/onchainai",
+  "license": "MIT",
   "keywords": ["crypto", "web3", "mcp", "x402", "onchain", "agent-tools"]
 }

@@ -1,11 +1,28 @@
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
 
+/** Browser fetch base — same-origin on Vercel preview when env points at production. */
+export function clientApiBase(): string {
+  if (typeof window === "undefined") return API_URL;
+  if (!API_URL) return "";
+  try {
+    const resolved = new URL(API_URL, window.location.origin);
+    if (resolved.origin !== window.location.origin) return "";
+  } catch {
+    return API_URL;
+  }
+  return API_URL;
+}
+
+function requestBase(): string {
+  return typeof window === "undefined" ? API_URL : clientApiBase();
+}
+
 export async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
   const headers: Record<string, string> = {};
   if (options?.body && !(options.body instanceof FormData)) {
     headers["Content-Type"] = "application/json";
   }
-  const res = await fetch(`${API_URL}${path}`, {
+  const res = await fetch(`${requestBase()}${path}`, {
     ...options,
     credentials: "include",
     headers: { ...headers, ...(options?.headers as Record<string, string>) },

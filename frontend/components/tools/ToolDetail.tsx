@@ -12,7 +12,7 @@ import { DetailAboutSidebar } from "@/components/tools/DetailAboutSidebar";
 import { DetailChainsSection } from "@/components/tools/DetailChainsSection";
 import { compareHref, singleFilterHref } from "@/lib/browser-query";
 import { toolHasInstallPath } from "@/lib/install-guide";
-import { timeAgo, statusBadgeLabel } from "@/lib/format";
+import { timeAgo, statusBadgeLabel, formatGithubStars } from "@/lib/format";
 
 interface ToolDetailProps {
   tool: Tool;
@@ -47,9 +47,8 @@ function DetailMainContent({
 }) {
   const links = [
     tool.repo_url && {
-      label: "GitHub",
+      label: tool.stars ? formatGithubStars(tool.stars) : "GitHub",
       url: tool.repo_url,
-      extra: tool.stars ? `${tool.stars} GitHub stars` : undefined,
     },
     tool.homepage && { label: "Homepage", url: tool.homepage },
     tool.npm_package && {
@@ -200,7 +199,7 @@ export function ToolDetail({
                 <>
                   <span className="tool-detail-stat" title="GitHub stars">
                     <Star size={14} aria-hidden />
-                    {tool.stars} GitHub stars
+                    {formatGithubStars(tool.stars)}
                   </span>
                   <span className="tool-meta-sep" aria-hidden>
                     ·

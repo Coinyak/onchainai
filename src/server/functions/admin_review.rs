@@ -460,6 +460,7 @@ pub struct UpdateToolReferralPayload {
     pub payment_verified: bool,
     pub x402_endpoint_verified: bool,
     pub price_verified: bool,
+    pub x402_endpoint: Option<String>,
 }
 
 pub(crate) fn validate_tool_referral_payload(
@@ -492,6 +493,12 @@ pub(crate) fn validate_tool_referral_payload(
     if let Some(code) = payload.x402_builder_code.as_deref() {
         if code.trim().len() > 100 {
             return Err("x402 builder code must be 100 characters or fewer");
+        }
+    }
+    if let Some(endpoint) = payload.x402_endpoint.as_deref() {
+        let trimmed = endpoint.trim();
+        if !trimmed.is_empty() && crate::server::x402_verify::validate_probe_url(trimmed).is_err() {
+            return Err("x402 endpoint must be a valid https probe URL");
         }
     }
     Ok(())

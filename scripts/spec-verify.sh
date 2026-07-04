@@ -129,7 +129,7 @@ curl_loc_has F1-app "앱이 www redirect_uri 전송(307 Location)" "$PROD_URL/au
 manual F1-gh "GitHub OAuth 앱에 www 콜백 등록 + 실제 로그인 왕복 확인"
 header_redirect H1 "apex→www 301" "$APEX_URL/"
 manual F2 "지갑(SIWX)+Safari 세션 유지 수동 확인"
-absent C3 "About 카피·개인핸들 정리" 'MVP does not include self-service|hoyeon4315-cpu' src/app.rs
+absent C3 "About 카피·개인핸들 정리" 'MVP does not include self-service|Coinyak' src/app.rs
 
 echo "[3] 트랙2 발견 커버리지"
 absent B1 "SourceCrawler dead-code 해킹 제거" '_SourceCrawlerSealed' src/crawler/sources/mod.rs
@@ -145,16 +145,18 @@ manual A4-params2 "MCP tools/list POST로 search_tools inputSchema 확인"
 absent A4-rank "MCP 검색 정렬이 stars 고정 아님" 'ORDER BY stars DESC LIMIT 50' src/server/mcp.rs
 
 echo "[5] 트랙4 채택 동선"
-present D4 "에이전트 연결 CTA(npx 명령 노출)" 'mcp-remote|HighlightedCommand' src/components/promo_cards.rs src/pages/home.rs src/app.rs
-exists J1 "OnchainAI Skill 파일" skills/onchainai-crypto-tools/SKILL.md
-present J1-rule "Skill 안전규칙(critical/x402)" 'critical|x402' skills/onchainai-crypto-tools/SKILL.md
-exists J2 "Plugin manifest" .claude-plugin/plugin.json
-exists J2-mcp ".mcp.json 번들" .mcp.json
-present J2-mcp2 ".mcp.json에 OnchainAI 엔드포인트" 'onchain-ai\.xyz/mcp' .mcp.json
+present D4 "에이전트 연결 CTA(npx 명령 노출)" 'mcp-remote|HighlightedCommand|connect-onchainai-mcp-card' src/components/promo_cards.rs src/pages/home.rs src/app.rs frontend/components/tools/PromoCards.tsx frontend/components/tools/ConnectOnchainAiMcpCard.tsx frontend/components/connect/ConnectPageContent.tsx
+exists J1 "OnchainAI Skill 파일" plugin/onchainai/skills/onchainai-crypto-tools/SKILL.md
+present J1-rule "Skill 안전규칙(critical/x402)" 'critical|x402' plugin/onchainai/skills/onchainai-crypto-tools/SKILL.md
+exists J2 "Plugin manifest" plugin/onchainai/.claude-plugin/plugin.json
+exists J2-mcp "플러그인 .mcp.json 번들" plugin/onchainai/.mcp.json
+present J2-mcp2 "플러그인 .mcp.json에 OnchainAI 엔드포인트" 'onchain-ai\.xyz/mcp' plugin/onchainai/.mcp.json
+present J2-market "마켓플레이스 source가 플러그인 디렉터리" 'plugin/onchainai' .claude-plugin/marketplace.json
+absent J2-devmcp "플러그인 번들에 dev MCP(vercel/railway) 미포함" 'vercel|railway' plugin/onchainai/.mcp.json
 
 echo "[6] 트랙5 신뢰 카드"
 absent D7-icon "북마크 ☆ 글리프 제거(SVG화)" '☆' src/components/tool_card.rs
-present D7-trust "카드가 install_risk 시각화" 'install_risk' src/components/tool_card.rs
+present D7-trust "카드가 install_risk 시각화" 'install_risk' src/components/tool_card.rs frontend/components/tools/ToolCard.tsx
 
 echo "[7] Next (구현 시)"
 present C4-tradfi "TradFi asset_class 분기" 'tradfi' src/crawler/normalizer.rs

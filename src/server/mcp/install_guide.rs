@@ -97,9 +97,7 @@ pub(crate) fn referral_metadata_for_tool(
 ) -> Option<ReferralMetadata> {
     tool.referral_enabled.then(|| ReferralMetadata {
         enabled: tool.referral_enabled,
-        bps: tool
-            .referral_bps
-            .or_else(|| defaults.and_then(|d| d.bps)),
+        bps: tool.referral_bps.or_else(|| defaults.and_then(|d| d.bps)),
         payout_address: tool
             .referral_payout_address
             .clone()
@@ -296,6 +294,9 @@ mod tests {
             payment_verified: false,
             x402_endpoint_verified: false,
             price_verified: false,
+            x402_endpoint: None,
+            x402_last_checked_at: None,
+            x402_check_failures: 0,
             stars: 0,
             last_commit_at: None,
             source: "manual".into(),

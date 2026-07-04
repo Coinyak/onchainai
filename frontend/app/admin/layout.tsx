@@ -1,4 +1,4 @@
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { checkAdminAccessServer } from "@/lib/server-api";
 import AdminLayoutClient from "./AdminLayoutClient";
@@ -14,7 +14,11 @@ export default async function AdminLayout({ children }: { children: React.ReactN
 
   const isAdmin = await checkAdminAccessServer(cookieHeader);
   if (!isAdmin) {
-    redirect("/");
+    const headerStore = await headers();
+    const returnPath = headerStore.get("x-pathname") ?? "/admin";
+    redirect(
+      `/login?return_to=${encodeURIComponent(returnPath)}&auth=admin_required`,
+    );
   }
 
   return <AdminLayoutClient>{children}</AdminLayoutClient>;

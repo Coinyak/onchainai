@@ -1,36 +1,48 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# OnchainAI Frontend
 
-## Getting Started
+Next.js (App Router) frontend for [OnchainAI](https://www.onchain-ai.xyz),
+deployed on Vercel. All data comes from the Rust API (Railway) — this app has no
+database access of its own.
 
-First, run the development server:
+## Dev
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm ci
+API_PROXY_TARGET=http://localhost:3000 npm run dev -- --port 3001
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Run the Rust API first (`cargo run --features ssr` from the repo root, port 3000).
+`next.config.ts` rewrites `/api/*`, `/auth/*`, `/onboarding/*`, and `/mcp` to
+`API_PROXY_TARGET`, so the browser only ever talks to this app's origin.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+> Repo rule: while iterating on UI/auth/routing use `../scripts/dev-watch.sh`,
+> and finish with `../scripts/ui-change-gate.sh` — see the root `AGENTS.md`.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Environment
 
-## Learn More
+| Var | Purpose | Default |
+|---|---|---|
+| `API_PROXY_TARGET` | Rust API origin the rewrites proxy to | `http://localhost:3000` |
+| `NEXT_PUBLIC_API_URL` | Optional absolute API URL for client fetches | `""` (same-origin) |
+| `NEXT_PUBLIC_GITHUB_REPO` | GitHub link in the top nav | repo URL |
 
-To learn more about Next.js, take a look at the following resources:
+## Styles
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+`npm run build` runs a `prebuild` step that copies `../style/output.css` into
+`styles/site-output.css` — the shared design-token stylesheet is built at the
+repo root, not here.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Structure
 
-## Deploy on Vercel
+- `app/` — routes: home, `/tools`, `/tools/[slug]`, `/connect` (MCP hub),
+  `/categories`, `/compare`, `/blueprints`, `/dashboard`, `/toolkit`, `/submit`,
+  `/login`, `/onboarding`, and the `/admin` dashboard
+- `components/` — UI components (tool cards, install guide panel, connect hub)
+- `lib/` — API client, MCP connect constants/deeplinks, formatting
+- `hooks/` — shared React hooks
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Deploy
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Vercel project with `API_PROXY_TARGET` (and optional `NEXT_PUBLIC_*`) set in the
+environment. See `../docs/BUILD_DEPLOY_RULES.md` for the smoke gates that must
+pass after deploys.

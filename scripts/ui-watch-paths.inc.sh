@@ -5,6 +5,7 @@
 ui_watch_paths=(
   frontend/app
   frontend/app/about/page.tsx
+  frontend/app/admin/AdminLayoutClient.tsx
   frontend/app/admin/categories/page.tsx
   frontend/app/admin/comments/page.tsx
   frontend/app/admin/content/page.tsx
@@ -15,15 +16,23 @@ ui_watch_paths=(
   frontend/app/admin/settings/page.tsx
   frontend/app/admin/tools/page.tsx
   frontend/app/admin/users/page.tsx
+  frontend/app/blueprints/[id]/page.tsx
+  frontend/app/blueprints/page.tsx
   frontend/app/categories/[id]/page.tsx
   frontend/app/compare/page.tsx
+  frontend/app/connect/page.tsx
   frontend/app/dashboard/page.tsx
+  frontend/app/error.tsx
+  frontend/app/global-error.tsx
   frontend/app/globals.css
   frontend/app/layout.tsx
   frontend/app/login/page.tsx
+  frontend/app/not-found.tsx
   frontend/app/onboarding/profile/page.tsx
   frontend/app/page.tsx
   frontend/app/providers.tsx
+  frontend/app/robots.ts
+  frontend/app/sitemap.ts
   frontend/app/submit/page.tsx
   frontend/app/toolkit/page.tsx
   frontend/app/tools/[slug]/page.tsx
@@ -35,9 +44,17 @@ ui_watch_paths=(
   frontend/components/admin/AdminShell.tsx
   frontend/components/auth/LoginForm.tsx
   frontend/components/auth/LoginModal.tsx
+  frontend/components/blueprint/BlueprintEditor.tsx
+  frontend/components/blueprint/BlueprintNodeView.tsx
+  frontend/components/blueprint/BlueprintPalette.tsx
   frontend/components/comments/CommentForm.tsx
   frontend/components/comments/CommentItem.tsx
   frontend/components/comments/CommentsSection.tsx
+  frontend/components/compare/CompareAddToolTypeahead.tsx
+  frontend/components/compare/CompareInstallSections.tsx
+  frontend/components/compare/CompareMatrix.tsx
+  frontend/components/connect/ConnectGuideBlocks.tsx
+  frontend/components/connect/ConnectPageContent.tsx
   frontend/components/layout/CategoryList.tsx
   frontend/components/layout/ChainList.tsx
   frontend/components/layout/FilterChip.tsx
@@ -53,18 +70,28 @@ ui_watch_paths=(
   frontend/components/tools/ClaimStatusTimeline.tsx
   frontend/components/tools/CommentSection.tsx
   frontend/components/tools/ConnectOnchainAiMcpCard.tsx
+  frontend/components/tools/DetailAboutSidebar.tsx
+  frontend/components/tools/DetailChainsSection.tsx
+  frontend/components/tools/DetailFilterChip.tsx
   frontend/components/tools/FeaturedCarousel.tsx
   frontend/components/tools/HighlightedCommand.tsx
   frontend/components/tools/InstallGuidePanel.tsx
   frontend/components/tools/InstallSection.tsx
   frontend/components/tools/OfficialLinksList.tsx
+  frontend/components/tools/PreviewActionBar.tsx
+  frontend/components/tools/PreviewCommentsPreview.tsx
   frontend/components/tools/PreviewPanel.tsx
+  frontend/components/tools/PreviewPanelContent.tsx
+  frontend/components/tools/PluginSkillPromoCard.tsx
   frontend/components/tools/PromoCards.tsx
+  frontend/components/tools/RelatedToolsSection.tsx
   frontend/components/tools/SearchBar.tsx
   frontend/components/tools/ToolCard.tsx
   frontend/components/tools/ToolDetail.tsx
+  frontend/components/tools/ToolDetailPageClient.tsx
   frontend/components/tools/ToolListingActions.tsx
   frontend/components/tools/ToolLogo.tsx
+  frontend/components/tools/ToolSearchCombobox.tsx
   frontend/components/tools/ToolsBrowser.tsx
   frontend/components/tools/TrustFacts.tsx
   frontend/components/ui/Badge.tsx
@@ -75,14 +102,23 @@ ui_watch_paths=(
   frontend/lib
   frontend/lib/api.ts
   frontend/lib/auth.tsx
+  frontend/lib/blueprint-storage.ts
+  frontend/lib/blueprint-utils.ts
   frontend/lib/browser-query.ts
   frontend/lib/chains.ts
+  frontend/lib/compare.ts
   frontend/lib/format.ts
   frontend/lib/install-guide.ts
+  frontend/lib/json-ld.ts
+  frontend/lib/mcp-connect-clients.ts
+  frontend/lib/mcp-connect.ts
+  frontend/lib/mcp-deeplinks.ts
+  frontend/lib/server-api.ts
+  frontend/lib/site.ts
   frontend/lib/tokenizeCommand.ts
   frontend/next.config.ts
   frontend/postcss.config.mjs
   frontend/tailwind.config.ts
 )
 
-ui_path_re='^(frontend/app/.*\.(ts|tsx|css|mjs)|frontend/app/about/page\.tsx|frontend/app/admin/categories/page\.tsx|frontend/app/admin/comments/page\.tsx|frontend/app/admin/content/page\.tsx|frontend/app/admin/crawler/page\.tsx|frontend/app/admin/featured/page\.tsx|frontend/app/admin/layout\.tsx|frontend/app/admin/page\.tsx|frontend/app/admin/settings/page\.tsx|frontend/app/admin/tools/page\.tsx|frontend/app/admin/users/page\.tsx|frontend/app/categories/[id]/page\.tsx|frontend/app/compare/page\.tsx|frontend/app/dashboard/page\.tsx|frontend/app/globals\.css|frontend/app/layout\.tsx|frontend/app/login/page\.tsx|frontend/app/onboarding/profile/page\.tsx|frontend/app/page\.tsx|frontend/app/providers\.tsx|frontend/app/submit/page\.tsx|frontend/app/toolkit/page\.tsx|frontend/app/tools/[slug]/page\.tsx|frontend/app/tools/page\.tsx|frontend/components/.*\.(ts|tsx|css|mjs)|frontend/components/admin/AdminContext\.tsx|frontend/components/admin/AdminReviewDecisionPanel\.tsx|frontend/components/admin/AdminReviewTimeline\.tsx|frontend/components/admin/AdminShell\.tsx|frontend/components/auth/LoginForm\.tsx|frontend/components/auth/LoginModal\.tsx|frontend/components/comments/CommentForm\.tsx|frontend/components/comments/CommentItem\.tsx|frontend/components/comments/CommentsSection\.tsx|frontend/components/layout/CategoryList\.tsx|frontend/components/layout/ChainList\.tsx|frontend/components/layout/FilterChip\.tsx|frontend/components/layout/Sidebar\.tsx|frontend/components/layout/SidebarBrand\.tsx|frontend/components/layout/SiteFooter\.tsx|frontend/components/layout/SiteShell\.tsx|frontend/components/layout/TopNav\.tsx|frontend/components/tools/AddMcpAction\.tsx|frontend/components/tools/BottomSheet\.tsx|frontend/components/tools/CategoryGrid\.tsx|frontend/components/tools/ChainLogo\.tsx|frontend/components/tools/ChainStrip\.tsx|frontend/components/tools/ClaimStatusTimeline\.tsx|frontend/components/tools/CommentSection\.tsx|frontend/components/tools/ConnectOnchainAiMcpCard\.tsx|frontend/components/tools/FeaturedCarousel\.tsx|frontend/components/tools/HighlightedCommand\.tsx|frontend/components/tools/InstallGuidePanel\.tsx|frontend/components/tools/InstallSection\.tsx|frontend/components/tools/OfficialLinksList\.tsx|frontend/components/tools/PreviewPanel\.tsx|frontend/components/tools/PromoCards\.tsx|frontend/components/tools/SearchBar\.tsx|frontend/components/tools/ToolCard\.tsx|frontend/components/tools/ToolDetail\.tsx|frontend/components/tools/ToolFinder\.tsx|frontend/components/tools/ToolListingActions\.tsx|frontend/components/tools/ToolLogo\.tsx|frontend/components/tools/ToolsBrowser\.tsx|frontend/components/tools/TrustFacts\.tsx|frontend/components/ui/Badge\.tsx|frontend/components/ui/CopyButton\.tsx|frontend/components/ui/EmptyState\.tsx|frontend/components/ui/ErrorState\.tsx|frontend/components/ui/Skeleton\.tsx|frontend/lib/.*\.(ts|tsx|css|mjs)|frontend/lib/api\.ts|frontend/lib/auth\.tsx|frontend/lib/browser-query\.ts|frontend/lib/chains\.ts|frontend/lib/format\.ts|frontend/lib/install-guide\.ts|frontend/lib/tokenizeCommand\.ts|frontend/next\.config\.ts|frontend/postcss\.config\.mjs|frontend/tailwind\.config\.ts)$'
+ui_path_re='^(frontend/app/.*\.(ts|tsx|css|mjs)|frontend/app/about/page\.tsx|frontend/app/admin/AdminLayoutClient\.tsx|frontend/app/admin/categories/page\.tsx|frontend/app/admin/comments/page\.tsx|frontend/app/admin/content/page\.tsx|frontend/app/admin/crawler/page\.tsx|frontend/app/admin/featured/page\.tsx|frontend/app/admin/layout\.tsx|frontend/app/admin/page\.tsx|frontend/app/admin/settings/page\.tsx|frontend/app/admin/tools/page\.tsx|frontend/app/admin/users/page\.tsx|frontend/app/blueprints/[id]/page\.tsx|frontend/app/blueprints/page\.tsx|frontend/app/categories/[id]/page\.tsx|frontend/app/compare/page\.tsx|frontend/app/connect/page\.tsx|frontend/app/dashboard/page\.tsx|frontend/app/error\.tsx|frontend/app/global-error\.tsx|frontend/app/globals\.css|frontend/app/layout\.tsx|frontend/app/login/page\.tsx|frontend/app/not-found\.tsx|frontend/app/onboarding/profile/page\.tsx|frontend/app/page\.tsx|frontend/app/providers\.tsx|frontend/app/robots\.ts|frontend/app/sitemap\.ts|frontend/app/submit/page\.tsx|frontend/app/toolkit/page\.tsx|frontend/app/tools/[slug]/page\.tsx|frontend/app/tools/page\.tsx|frontend/components/.*\.(ts|tsx|css|mjs)|frontend/components/admin/AdminContext\.tsx|frontend/components/admin/AdminReviewDecisionPanel\.tsx|frontend/components/admin/AdminReviewTimeline\.tsx|frontend/components/admin/AdminShell\.tsx|frontend/components/auth/LoginForm\.tsx|frontend/components/auth/LoginModal\.tsx|frontend/components/blueprint/BlueprintEditor\.tsx|frontend/components/blueprint/BlueprintNodeView\.tsx|frontend/components/blueprint/BlueprintPalette\.tsx|frontend/components/comments/CommentForm\.tsx|frontend/components/comments/CommentItem\.tsx|frontend/components/comments/CommentsSection\.tsx|frontend/components/compare/CompareAddToolTypeahead\.tsx|frontend/components/compare/CompareInstallSections\.tsx|frontend/components/compare/CompareMatrix\.tsx|frontend/components/connect/ConnectGuideBlocks\.tsx|frontend/components/connect/ConnectPageContent\.tsx|frontend/components/layout/CategoryList\.tsx|frontend/components/layout/ChainList\.tsx|frontend/components/layout/FilterChip\.tsx|frontend/components/layout/Sidebar\.tsx|frontend/components/layout/SidebarBrand\.tsx|frontend/components/layout/SiteFooter\.tsx|frontend/components/layout/SiteShell\.tsx|frontend/components/layout/TopNav\.tsx|frontend/components/tools/AddMcpAction\.tsx|frontend/components/tools/BottomSheet\.tsx|frontend/components/tools/ChainLogo\.tsx|frontend/components/tools/ChainStrip\.tsx|frontend/components/tools/ClaimStatusTimeline\.tsx|frontend/components/tools/CommentSection\.tsx|frontend/components/tools/ConnectOnchainAiMcpCard\.tsx|frontend/components/tools/DetailAboutSidebar\.tsx|frontend/components/tools/DetailChainsSection\.tsx|frontend/components/tools/DetailFilterChip\.tsx|frontend/components/tools/FeaturedCarousel\.tsx|frontend/components/tools/HighlightedCommand\.tsx|frontend/components/tools/InstallGuidePanel\.tsx|frontend/components/tools/InstallSection\.tsx|frontend/components/tools/OfficialLinksList\.tsx|frontend/components/tools/PreviewActionBar\.tsx|frontend/components/tools/PreviewCommentsPreview\.tsx|frontend/components/tools/PreviewPanel\.tsx|frontend/components/tools/PreviewPanelContent\.tsx|frontend/components/tools/PromoCards\.tsx|frontend/components/tools/RelatedToolsSection\.tsx|frontend/components/tools/SearchBar\.tsx|frontend/components/tools/ToolCard\.tsx|frontend/components/tools/ToolDetail\.tsx|frontend/components/tools/ToolDetailPageClient\.tsx|frontend/components/tools/ToolListingActions\.tsx|frontend/components/tools/ToolLogo\.tsx|frontend/components/tools/ToolSearchCombobox\.tsx|frontend/components/tools/ToolsBrowser\.tsx|frontend/components/tools/TrustFacts\.tsx|frontend/components/ui/Badge\.tsx|frontend/components/ui/CopyButton\.tsx|frontend/components/ui/EmptyState\.tsx|frontend/components/ui/ErrorState\.tsx|frontend/components/ui/Skeleton\.tsx|frontend/lib/.*\.(ts|tsx|css|mjs)|frontend/lib/api\.ts|frontend/lib/auth\.tsx|frontend/lib/blueprint-storage\.ts|frontend/lib/blueprint-utils\.ts|frontend/lib/browser-query\.ts|frontend/lib/chains\.ts|frontend/lib/compare\.ts|frontend/lib/format\.ts|frontend/lib/install-guide\.ts|frontend/lib/json-ld\.ts|frontend/lib/mcp-connect-clients\.ts|frontend/lib/mcp-connect\.ts|frontend/lib/mcp-deeplinks\.ts|frontend/lib/server-api\.ts|frontend/lib/site\.ts|frontend/lib/tokenizeCommand\.ts|frontend/next\.config\.ts|frontend/postcss\.config\.mjs|frontend/tailwind\.config\.ts)$'

@@ -22,7 +22,7 @@ interface PreviewActionBarProps {
 }
 
 function bookmarkLabel(starred: boolean): string {
-  return starred ? "Saved" : "Save";
+  return starred ? "Remove from Toolkit" : "Save to Toolkit";
 }
 
 export function PreviewActionBar({

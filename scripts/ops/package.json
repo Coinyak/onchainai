@@ -1,0 +1,8 @@
+{
+  "name": "onchainai-ops",
+  "private": true,
+  "description": "Dependencies for operator/agent maintenance scripts (verify-tool-official).",
+  "dependencies": {
+    "pg": "^8.13.1"
+  }
+}

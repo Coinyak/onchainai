@@ -1,6 +1,6 @@
 {
-  "harness_round": 11,
-  "goal": "official chain logos from brand sites (optimism.io Token.svg)",
+  "harness_round": 12,
+  "goal": "official chain logos + DeFiLlama icons for extension chains (icons.llama.fi / icons.llamao.fi)",
   "raw_logos_dir": "raw-logos",
   "forbidden": [
     "font-size=\"12\"",
@@ -205,6 +205,321 @@
       "kind": "wrap",
       "source": "cardano_official.svg",
       "markers": ["path", "fill"]
+    },
+    {
+      "id": "blast",
+      "label": "Blast",
+      "kind": "wrap",
+      "source": "blast_official.svg",
+      "markers": ["#FCFC03", "path"]
+    },
+    {
+      "id": "scroll",
+      "label": "Scroll",
+      "kind": "wrap",
+      "source": "scroll_official.svg",
+      "markers": ["#101010", "path"]
+    },
+    {
+      "id": "moonbeam",
+      "label": "Moonbeam",
+      "kind": "wrap",
+      "source": "moonbeam_official.svg",
+      "markers": ["#958FDC", "path"]
+    },
+    {
+      "id": "litecoin",
+      "label": "Litecoin",
+      "kind": "wrap",
+      "source": "litecoin_official.svg",
+      "markers": ["#345d9d", "path"]
+    },
+    {
+      "id": "dogecoin",
+      "label": "Dogecoin",
+      "kind": "wrap",
+      "source": "dogecoin_official.svg",
+      "markers": ["#988430", "circle"]
+    },
+    {
+      "id": "aurora",
+      "label": "Aurora",
+      "kind": "wrap",
+      "source": "aurora_official.svg",
+      "markers": ["linearGradient", "path"]
+    },
+    {
+      "id": "okx",
+      "label": "OKX Chain",
+      "kind": "wrap",
+      "source": "xlayer_official.svg",
+      "markers": ["fill=\"black\"", "path"]
+    },
+    {
+      "id": "monad",
+      "label": "Monad",
+      "kind": "wrap_raster",
+      "source": "monad_llama.png",
+      "markers": ["data:image/png;base64,"]
+    },
+    {
+      "id": "mantle",
+      "label": "Mantle",
+      "kind": "wrap_raster",
+      "source": "mantle_llama.png",
+      "markers": ["data:image/png;base64,"]
+    },
+    {
+      "id": "cronos",
+      "label": "Cronos",
+      "kind": "wrap_raster",
+      "source": "cronos_llama.png",
+      "markers": ["data:image/png;base64,"]
+    },
+    {
+      "id": "movement",
+      "label": "Movement",
+      "kind": "wrap_raster",
+      "source": "movement_llama.png",
+      "markers": ["data:image/png;base64,"]
+    },
+    {
+      "id": "ink",
+      "label": "Ink",
+      "kind": "wrap_raster",
+      "source": "ink_llama.png",
+      "markers": ["data:image/png;base64,"]
+    },
+    {
+      "id": "flare",
+      "label": "Flare",
+      "kind": "wrap_raster",
+      "source": "flare_llama.png",
+      "markers": ["data:image/png;base64,"]
+    },
+    {
+      "id": "rootstock",
+      "label": "Rootstock",
+      "kind": "wrap_raster",
+      "source": "rootstock_llama.png",
+      "markers": ["data:image/png;base64,"]
+    },
+    {
+      "id": "megaeth",
+      "label": "MegaETH",
+      "kind": "wrap_raster",
+      "source": "megaeth_llama.png",
+      "markers": ["data:image/png;base64,"]
+    },
+    {
+      "id": "stacks",
+      "label": "Stacks",
+      "kind": "wrap_raster",
+      "source": "stacks_llama.png",
+      "markers": ["data:image/png;base64,"]
+    },
+    {
+      "id": "polkadot",
+      "label": "Polkadot",
+      "kind": "wrap_raster",
+      "source": "polkadot_llama.png",
+      "markers": ["data:image/png;base64,"]
+    },
+    {
+      "id": "kava",
+      "label": "Kava",
+      "kind": "wrap_raster",
+      "source": "kava_llama.png",
+      "markers": ["data:image/png;base64,"]
+    },
+    {
+      "id": "ton",
+      "label": "TON",
+      "kind": "wrap_raster",
+      "source": "ton_llama.png",
+      "markers": ["data:image/png;base64,"]
+    },
+    {
+      "id": "taiko",
+      "label": "Taiko",
+      "kind": "wrap_raster",
+      "source": "taiko_llama.png",
+      "markers": ["data:image/png;base64,"]
+    },
+    {
+      "id": "immutable",
+      "label": "Immutable",
+      "kind": "wrap_raster",
+      "source": "immutable_llama.png",
+      "markers": ["data:image/png;base64,"]
+    },
+    {
+      "id": "zora",
+      "label": "Zora",
+      "kind": "wrap_raster",
+      "source": "zora_llama.png",
+      "markers": ["data:image/png;base64,"]
+    },
+    {
+      "id": "stellar",
+      "label": "Stellar",
+      "kind": "wrap_raster",
+      "source": "stellar_llama.png",
+      "markers": ["data:image/png;base64,"]
+    },
+    {
+      "id": "algorand",
+      "label": "Algorand",
+      "kind": "wrap_raster",
+      "source": "algorand_llama.png",
+      "markers": ["data:image/png;base64,"]
+    },
+    {
+      "id": "filecoin",
+      "label": "Filecoin",
+      "kind": "wrap_raster",
+      "source": "filecoin_llama.png",
+      "markers": ["data:image/png;base64,"]
+    },
+    {
+      "id": "ronin",
+      "label": "Ronin",
+      "kind": "wrap_raster",
+      "source": "ronin_llama.png",
+      "markers": ["data:image/png;base64,"]
+    },
+    {
+      "id": "worldchain",
+      "label": "World Chain",
+      "kind": "wrap_raster",
+      "source": "worldchain_llama.png",
+      "markers": ["data:image/png;base64,"]
+    },
+    {
+      "id": "hedera",
+      "label": "Hedera",
+      "kind": "wrap_raster",
+      "source": "hedera_llama.png",
+      "markers": ["data:image/png;base64,"]
+    },
+    {
+      "id": "xrpl",
+      "label": "XRPL",
+      "kind": "wrap_raster",
+      "source": "xrpl_llama.png",
+      "markers": ["data:image/png;base64,"]
+    },
+    {
+      "id": "thorchain",
+      "label": "THORChain",
+      "kind": "wrap_raster",
+      "source": "thorchain_llama.png",
+      "markers": ["data:image/png;base64,"]
+    },
+    {
+      "id": "katana",
+      "label": "Katana",
+      "kind": "wrap_raster",
+      "source": "katana_llama.png",
+      "markers": ["data:image/png;base64,"]
+    },
+    {
+      "id": "dydx",
+      "label": "dYdX",
+      "kind": "wrap_raster",
+      "source": "dydx_llama.png",
+      "markers": ["data:image/png;base64,"]
+    },
+    {
+      "id": "fraxtal",
+      "label": "Fraxtal",
+      "kind": "wrap_raster",
+      "source": "fraxtal_llama.png",
+      "markers": ["data:image/png;base64,"]
+    },
+    {
+      "id": "tezos",
+      "label": "Tezos",
+      "kind": "wrap_raster",
+      "source": "tezos_llama.png",
+      "markers": ["data:image/png;base64,"]
+    },
+    {
+      "id": "mezo",
+      "label": "Mezo",
+      "kind": "wrap_raster",
+      "source": "mezo_llama.png",
+      "markers": ["data:image/png;base64,"]
+    },
+    {
+      "id": "bittensor",
+      "label": "Bittensor",
+      "kind": "wrap_raster",
+      "source": "bittensor_llama.png",
+      "markers": ["data:image/png;base64,"]
+    },
+    {
+      "id": "pulsechain",
+      "label": "PulseChain",
+      "kind": "wrap_raster",
+      "source": "pulsechain_llama.png",
+      "markers": ["data:image/png;base64,"]
+    },
+    {
+      "id": "provenance",
+      "label": "Provenance",
+      "kind": "wrap_raster",
+      "source": "provenance_llama.png",
+      "markers": ["data:image/png;base64,"]
+    },
+    {
+      "id": "fluent",
+      "label": "Fluent",
+      "kind": "wrap_raster",
+      "source": "fluent_llama.png",
+      "markers": ["data:image/png;base64,"]
+    },
+    {
+      "id": "hydration",
+      "label": "Hydration",
+      "kind": "wrap_raster",
+      "source": "hydration_llama.png",
+      "markers": ["data:image/png;base64,"]
+    },
+    {
+      "id": "mixin",
+      "label": "Mixin",
+      "kind": "wrap_raster",
+      "source": "mixin_llama.png",
+      "markers": ["data:image/png;base64,"]
+    },
+    {
+      "id": "vaulta",
+      "label": "Vaulta",
+      "kind": "wrap_raster",
+      "source": "vaulta_llama.png",
+      "markers": ["data:image/png;base64,"]
+    },
+    {
+      "id": "ethereal",
+      "label": "Ethereal",
+      "kind": "wrap_raster",
+      "source": "ethereal_llama.png",
+      "markers": ["data:image/png;base64,"]
+    },
+    {
+      "id": "stable",
+      "label": "Stable",
+      "kind": "wrap_raster",
+      "source": "stable_llama.png",
+      "markers": ["data:image/png;base64,"]
+    },
+    {
+      "id": "xpr",
+      "label": "XPR Network",
+      "kind": "wrap_raster",
+      "source": "xpr_llama.png",
+      "markers": ["data:image/png;base64,"]
     }
   ]
 }

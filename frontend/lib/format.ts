@@ -46,3 +46,7 @@ export function displayInstallCommand(tool: {
 }): string {
   return tool.safe_copy_command?.trim() || tool.install_command?.trim() || "";
 }
+
+export function formatGithubStars(count: number): string {
+  return `GitHub · ${count.toLocaleString("en-US")} stars`;
+}

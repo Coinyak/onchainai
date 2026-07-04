@@ -200,6 +200,349 @@ pub const CHAIN_CATALOG: &[ChainMeta] = &[
         aliases: &["cosmos-hub", "atom", "cosmos-mainnet"],
         pinned: false,
     },
+    ChainMeta {
+        id: "celo",
+        label: "Celo",
+        logo: "/chains/celo.svg",
+        aliases: &["celo-mainnet"],
+        pinned: false,
+    },
+    ChainMeta {
+        id: "fantom",
+        label: "Fantom",
+        logo: "/chains/fantom.svg",
+        aliases: &["ftm", "fantom-mainnet"],
+        pinned: false,
+    },
+    ChainMeta {
+        id: "blast",
+        label: "Blast",
+        logo: "/chains/blast.svg",
+        aliases: &["blast-mainnet"],
+        pinned: false,
+    },
+    ChainMeta {
+        id: "scroll",
+        label: "Scroll",
+        logo: "/chains/scroll.svg",
+        aliases: &["scroll-mainnet"],
+        pinned: false,
+    },
+    ChainMeta {
+        id: "gnosis",
+        label: "Gnosis",
+        logo: "/chains/gnosis.svg",
+        aliases: &["gno", "xdai"],
+        pinned: false,
+    },
+    ChainMeta {
+        id: "cardano",
+        label: "Cardano",
+        logo: "/chains/cardano.svg",
+        aliases: &["ada", "cardano-mainnet"],
+        pinned: false,
+    },
+    ChainMeta {
+        id: "moonbeam",
+        label: "Moonbeam",
+        logo: "/chains/moonbeam.svg",
+        aliases: &["glmr", "moonbeam-mainnet"],
+        pinned: false,
+    },
+    ChainMeta {
+        id: "litecoin",
+        label: "Litecoin",
+        logo: "/chains/litecoin.svg",
+        aliases: &["ltc", "litecoin-mainnet"],
+        pinned: false,
+    },
+    ChainMeta {
+        id: "dogecoin",
+        label: "Dogecoin",
+        logo: "/chains/dogecoin.svg",
+        aliases: &["doge", "dogecoin-mainnet"],
+        pinned: false,
+    },
+    ChainMeta {
+        id: "aurora",
+        label: "Aurora",
+        logo: "/chains/aurora.svg",
+        aliases: &["aurora-mainnet"],
+        pinned: false,
+    },
+    ChainMeta {
+        id: "okx",
+        label: "OKX Chain",
+        logo: "/chains/okx.svg",
+        aliases: &["okc", "okex-chain"],
+        pinned: false,
+    },
+    ChainMeta {
+        id: "monad",
+        label: "Monad",
+        logo: "/chains/monad.svg",
+        aliases: &["mon", "monad-mainnet"],
+        pinned: false,
+    },
+    ChainMeta {
+        id: "mantle",
+        label: "Mantle",
+        logo: "/chains/mantle.svg",
+        aliases: &["mnt", "mantle-mainnet"],
+        pinned: false,
+    },
+    ChainMeta {
+        id: "cronos",
+        label: "Cronos",
+        logo: "/chains/cronos.svg",
+        aliases: &["cro", "crypto-com-chain", "cronos-mainnet"],
+        pinned: false,
+    },
+    ChainMeta {
+        id: "movement",
+        label: "Movement",
+        logo: "/chains/movement.svg",
+        aliases: &["move", "movement-mainnet", "movement-labs"],
+        pinned: false,
+    },
+    ChainMeta {
+        id: "ink",
+        label: "Ink",
+        logo: "/chains/ink.svg",
+        aliases: &["ink-mainnet", "inkchain"],
+        pinned: false,
+    },
+    ChainMeta {
+        id: "flare",
+        label: "Flare",
+        logo: "/chains/flare.svg",
+        aliases: &["flr", "flare-networks", "flare-mainnet"],
+        pinned: false,
+    },
+    ChainMeta {
+        id: "rootstock",
+        label: "Rootstock",
+        logo: "/chains/rootstock.svg",
+        aliases: &["rsk", "rbtc"],
+        pinned: false,
+    },
+    ChainMeta {
+        id: "megaeth",
+        label: "MegaETH",
+        logo: "/chains/megaeth.svg",
+        aliases: &["mega-eth"],
+        pinned: false,
+    },
+    ChainMeta {
+        id: "stacks",
+        label: "Stacks",
+        logo: "/chains/stacks.svg",
+        aliases: &["stx", "blockstack"],
+        pinned: false,
+    },
+    ChainMeta {
+        id: "polkadot",
+        label: "Polkadot",
+        logo: "/chains/polkadot.svg",
+        aliases: &["dot", "polkadot-relay"],
+        pinned: false,
+    },
+    ChainMeta {
+        id: "kava",
+        label: "Kava",
+        logo: "/chains/kava.svg",
+        aliases: &["kava-mainnet"],
+        pinned: false,
+    },
+    ChainMeta {
+        id: "ton",
+        label: "TON",
+        logo: "/chains/ton.svg",
+        aliases: &["the-open-network", "ton-mainnet"],
+        pinned: false,
+    },
+    ChainMeta {
+        id: "taiko",
+        label: "Taiko",
+        logo: "/chains/taiko.svg",
+        aliases: &["taiko-mainnet"],
+        pinned: false,
+    },
+    ChainMeta {
+        id: "immutable",
+        label: "Immutable",
+        logo: "/chains/immutable.svg",
+        aliases: &["imx", "immutablex", "immutable-x", "immutable-zkevm"],
+        pinned: false,
+    },
+    ChainMeta {
+        id: "zora",
+        label: "Zora",
+        logo: "/chains/zora.svg",
+        aliases: &["zora-mainnet"],
+        pinned: false,
+    },
+    ChainMeta {
+        id: "stellar",
+        label: "Stellar",
+        logo: "/chains/stellar.svg",
+        aliases: &["xlm", "stellar-mainnet"],
+        pinned: false,
+    },
+    ChainMeta {
+        id: "algorand",
+        label: "Algorand",
+        logo: "/chains/algorand.svg",
+        aliases: &["algo", "algorand-mainnet"],
+        pinned: false,
+    },
+    ChainMeta {
+        id: "filecoin",
+        label: "Filecoin",
+        logo: "/chains/filecoin.svg",
+        aliases: &["fil", "filecoin-mainnet"],
+        pinned: false,
+    },
+    ChainMeta {
+        id: "ronin",
+        label: "Ronin",
+        logo: "/chains/ronin.svg",
+        aliases: &["ron", "ronin-mainnet"],
+        pinned: false,
+    },
+    ChainMeta {
+        id: "worldchain",
+        label: "World Chain",
+        logo: "/chains/worldchain.svg",
+        aliases: &["world-chain", "worldcoin", "wld"],
+        pinned: false,
+    },
+    ChainMeta {
+        id: "hedera",
+        label: "Hedera",
+        logo: "/chains/hedera.svg",
+        aliases: &["hbar", "hedera-hashgraph"],
+        pinned: false,
+    },
+    ChainMeta {
+        id: "xrpl",
+        label: "XRPL",
+        logo: "/chains/xrpl.svg",
+        aliases: &["xrp", "ripple", "xrpl-mainnet"],
+        pinned: false,
+    },
+    ChainMeta {
+        id: "thorchain",
+        label: "THORChain",
+        logo: "/chains/thorchain.svg",
+        aliases: &["rune", "thorchain-mainnet"],
+        pinned: false,
+    },
+    ChainMeta {
+        id: "katana",
+        label: "Katana",
+        logo: "/chains/katana.svg",
+        aliases: &["katana-mainnet"],
+        pinned: false,
+    },
+    ChainMeta {
+        id: "dydx",
+        label: "dYdX",
+        logo: "/chains/dydx.svg",
+        aliases: &["dydx-chain", "dydx-mainnet"],
+        pinned: false,
+    },
+    ChainMeta {
+        id: "fraxtal",
+        label: "Fraxtal",
+        logo: "/chains/fraxtal.svg",
+        aliases: &["frax", "fraxtal-mainnet"],
+        pinned: false,
+    },
+    ChainMeta {
+        id: "tezos",
+        label: "Tezos",
+        logo: "/chains/tezos.svg",
+        aliases: &["xtz", "tezos-mainnet"],
+        pinned: false,
+    },
+    ChainMeta {
+        id: "mezo",
+        label: "Mezo",
+        logo: "/chains/mezo.svg",
+        aliases: &["mezo-mainnet"],
+        pinned: false,
+    },
+    ChainMeta {
+        id: "bittensor",
+        label: "Bittensor",
+        logo: "/chains/bittensor.svg",
+        aliases: &["tao", "bittensor-mainnet"],
+        pinned: false,
+    },
+    ChainMeta {
+        id: "pulsechain",
+        label: "PulseChain",
+        logo: "/chains/pulsechain.svg",
+        aliases: &["pls", "pulsechain-mainnet"],
+        pinned: false,
+    },
+    ChainMeta {
+        id: "provenance",
+        label: "Provenance",
+        logo: "/chains/provenance.svg",
+        aliases: &["hash", "hash-2", "provenance-mainnet"],
+        pinned: false,
+    },
+    ChainMeta {
+        id: "fluent",
+        label: "Fluent",
+        logo: "/chains/fluent.svg",
+        aliases: &["fluent-network", "fluent-mainnet"],
+        pinned: false,
+    },
+    ChainMeta {
+        id: "hydration",
+        label: "Hydration",
+        logo: "/chains/hydration.svg",
+        aliases: &["hydradx", "hydration-mainnet"],
+        pinned: false,
+    },
+    ChainMeta {
+        id: "mixin",
+        label: "Mixin",
+        logo: "/chains/mixin.svg",
+        aliases: &["xin", "mixin-mainnet"],
+        pinned: false,
+    },
+    ChainMeta {
+        id: "vaulta",
+        label: "Vaulta",
+        logo: "/chains/vaulta.svg",
+        aliases: &["eos", "eosio", "vaulta-mainnet"],
+        pinned: false,
+    },
+    ChainMeta {
+        id: "ethereal",
+        label: "Ethereal",
+        logo: "/chains/ethereal.svg",
+        aliases: &["ethereal-mainnet"],
+        pinned: false,
+    },
+    ChainMeta {
+        id: "stable",
+        label: "Stable",
+        logo: "/chains/stable.svg",
+        aliases: &["stable-2", "stable-mainnet"],
+        pinned: false,
+    },
+    ChainMeta {
+        id: "xpr",
+        label: "XPR Network",
+        logo: "/chains/xpr.svg",
+        aliases: &["proton", "xpr-network", "xpr-mainnet"],
+        pinned: false,
+    },
 ];
 
 /// Primary-row chain tiles (excluding the All tile).
@@ -269,18 +612,31 @@ pub fn chain_logo_path(id: &str) -> String {
 }
 
 /// Resolve a raw DB chain string to a catalog entry, if any.
+///
+/// A known catalog id/alias always wins over the generic noise heuristic —
+/// e.g. Flare's "flare-networks" alias contains the substring "networks",
+/// which `is_chain_noise` otherwise treats as a generic multi-chain value.
+/// The noise check only applies once the catalog search has already missed,
+/// where it's redundant for classification (both paths return `None`) but
+/// kept here as a documented short-circuit rather than relied on for it.
 pub fn resolve_chain(db_value: &str) -> Option<&'static ChainMeta> {
     let normalized = normalize_chain_key(db_value);
-    if normalized.is_empty() || is_chain_noise(&normalized) {
+    if normalized.is_empty() {
         return None;
     }
-    CHAIN_CATALOG.iter().find(|entry| {
+    if let Some(entry) = CHAIN_CATALOG.iter().find(|entry| {
         entry.id == normalized
             || entry
                 .aliases
                 .iter()
                 .any(|alias| normalize_chain_key(alias) == normalized)
-    })
+    }) {
+        return Some(entry);
+    }
+    if is_chain_noise(&normalized) {
+        return None;
+    }
+    None
 }
 
 /// Lookup by canonical catalog id.
@@ -611,7 +967,23 @@ mod tests {
             );
             assert!(is_chain_noise(noise), "noise value not flagged: {noise}");
         }
-        for unknown in ["fantom", "litecoin", "xrp", "celo", "gnosis"] {
+        for known in ["fantom", "litecoin", "celo", "gnosis", "blast", "okx"] {
+            assert!(
+                resolve_chain(known).is_some(),
+                "catalog chain should resolve: {known}"
+            );
+        }
+        for known_xrpl in ["xrp", "ripple", "xrpl"] {
+            assert!(
+                resolve_chain(known_xrpl).is_some(),
+                "XRPL catalog alias should resolve: {known_xrpl}"
+            );
+        }
+        assert!(
+            resolve_chain("flare-networks").is_some(),
+            "flare-networks alias should resolve despite containing 'networks'"
+        );
+        for unknown in ["anubis", "robinhood"] {
             assert!(
                 resolve_chain(unknown).is_none(),
                 "unknown chain should not resolve: {unknown}"
@@ -673,7 +1045,7 @@ mod tests {
     #[test]
     fn strip_primary_visible_leaves_overflow_for_expand_control() {
         assert_eq!(STRIP_PRIMARY_VISIBLE, 20);
-        assert_eq!(CHAIN_CATALOG.len(), 25);
+        assert_eq!(CHAIN_CATALOG.len(), 74);
 
         let counts: Vec<(String, i64)> = CHAIN_CATALOG
             .iter()
@@ -766,7 +1138,7 @@ mod tests {
         }
         println!("catalog_logos={catalog_hits} text_pills={pill_hits}");
 
-        for noise in ["multi-chain", "63+ networks", "fantom"] {
+        for noise in ["multi-chain", "63+ networks", "ecosystem"] {
             assert!(
                 resolve_chain(noise).is_none(),
                 "noise value must not resolve: {noise}"

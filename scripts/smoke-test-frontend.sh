@@ -30,7 +30,8 @@ login_body="$(check_get "/login")"
 smoke_body_has "$login_body" 'Continue with GitHub' || smoke_fail "GET /login missing GitHub sign-in option"
 smoke_body_has "$login_body" 'data-testid="github-sign-in"' || smoke_fail "GET /login missing github-sign-in test id"
 smoke_body_has "$login_body" 'rel="external"' || smoke_fail "GET /login missing rel=external on GitHub sign-in link"
-smoke_body_has "$login_body" 'data-testid="wallet-sign-in-link"' || smoke_fail "GET /login missing wallet sign-in link"
+smoke_body_has "$login_body" 'data-testid="wallet-sign-in"' || smoke_fail "GET /login missing wallet sign-in button"
+smoke_body_has "$login_body" 'id="login-title"' || smoke_fail "GET /login missing login-title heading"
 
 tools_body="$(check_get "/tools")"
 smoke_body_has "$tools_body" 'tool-card' || smoke_fail "GET /tools missing tool-card markup"
@@ -49,7 +50,7 @@ check_get "/toolkit" >/dev/null
 
 toolkit_body="$(check_get "/toolkit")"
 smoke_body_has "$toolkit_body" 'data-testid="toolkit-sign-in"' || smoke_fail "GET /toolkit missing Sign in control"
-smoke_body_has "$toolkit_body" 'Continue with GitHub' || smoke_fail "GET /toolkit missing anonymous sign-in form"
+smoke_body_has "$toolkit_body" 'href="/login"' || smoke_fail "GET /toolkit missing /login sign-in link"
 
 for chain_svg in bitcoin bob polygon; do
   svg_code="$(curl -sS -o /dev/null -w "%{http_code}" "${BASE}/chains/${chain_svg}.svg")" \

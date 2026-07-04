@@ -211,16 +211,16 @@ mod tests {
     #[test]
     fn parse_admin_github_logins_trims_and_lowercases() {
         assert_eq!(
-            parse_admin_github_logins(" Hoyeon4315-cpu , alice_dev,,"),
-            vec!["hoyeon4315-cpu".to_string(), "alice_dev".to_string()]
+            parse_admin_github_logins(" Coinyak , alice_dev,,"),
+            vec!["coinyak".to_string(), "alice_dev".to_string()]
         );
     }
 
     #[test]
     fn is_admin_github_login_matches_configured_operator() {
         let mut cfg = base_config();
-        cfg.admin_github_logins = parse_admin_github_logins("hoyeon4315-cpu");
-        assert!(cfg.is_admin_github_login("Hoyeon4315-cpu"));
+        cfg.admin_github_logins = parse_admin_github_logins("Coinyak");
+        assert!(cfg.is_admin_github_login("Coinyak"));
         assert!(!cfg.is_admin_github_login("random-user"));
     }
 

@@ -1,18 +1,24 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 import Image from "next/image";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth";
 import { LoginModal } from "@/components/auth/LoginModal";
+import { GitHubMarkIcon } from "@/components/icons/GitHubMarkIcon";
 import { monogramFromName } from "@/lib/format";
+import { signOut } from "@/lib/sign-out";
 
 const GITHUB_REPO =
-  process.env.NEXT_PUBLIC_GITHUB_REPO || "https://github.com/onchain-ai/onchainai";
+  process.env.NEXT_PUBLIC_GITHUB_REPO || "https://github.com/Coinyak/onchainai";
 
 function ProfileMenu() {
   const { user } = useAuth();
+  const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
   if (!user) return null;
 
   const nickname = user.nickname || "User";
@@ -90,16 +96,19 @@ function ProfileMenu() {
                 Admin
               </Link>
             )}
-            <form action={`${process.env.NEXT_PUBLIC_API_URL || ""}/auth/logout`} method="post" className="site-profile-dropdown-signout">
-              <button
-                type="submit"
-                role="menuitem"
-                className="site-profile-dropdown-item site-profile-dropdown-item-signout"
-                data-testid="profile-menu-sign-out"
-              >
-                Sign out
-              </button>
-            </form>
+            <button
+              type="button"
+              role="menuitem"
+              className="site-profile-dropdown-item site-profile-dropdown-item-signout w-full text-left"
+              data-testid="profile-menu-sign-out"
+              disabled={signingOut}
+              onClick={() => {
+                setSigningOut(true);
+                void signOut(queryClient);
+              }}
+            >
+              {signingOut ? "Signing out..." : "Sign out"}
+            </button>
           </div>
         </>
       )}
@@ -108,8 +117,10 @@ function ProfileMenu() {
 }
 
 export function TopNav() {
+  const pathname = usePathname();
   const { isAuthenticated, isLoading } = useAuth();
   const [showLogin, setShowLogin] = useState(false);
+  const hideSignInOnLoginPage = pathname === "/login";
 
   return (
     <>
@@ -135,14 +146,16 @@ export function TopNav() {
               target="_blank"
               rel="noopener noreferrer"
               className="site-top-nav-repo"
+              aria-label="OnchainAI on GitHub"
+              title="OnchainAI on GitHub"
             >
-              GitHub
+              <GitHubMarkIcon />
             </a>
             {!isLoading && isAuthenticated ? (
               <div className="site-top-nav-auth" data-testid="auth-signed-in">
                 <ProfileMenu />
               </div>
-            ) : (
+            ) : hideSignInOnLoginPage ? null : (
               <div className="site-top-nav-auth" data-testid="auth-sign-in">
                 <button
                   type="button"

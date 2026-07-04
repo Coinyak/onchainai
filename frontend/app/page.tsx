@@ -43,8 +43,21 @@ function HomeHero() {
         <h1 className="text-h1 md:text-[36px] font-bold tracking-tight leading-tight mb-3">
           {heroTitle}
         </h1>
-        <p className="text-secondary text-body-md md:text-mobile-body leading-relaxed mb-6 max-w-[720px]">
+        <p className="text-secondary text-body-md md:text-mobile-body leading-relaxed mb-4 max-w-[720px]">
           {heroSubtitle}
+        </p>
+        <p
+          className="text-body-sm text-secondary mb-6 max-w-[720px]"
+          data-testid="hero-agent-links"
+        >
+          <Link href="/connect" className="text-primary underline-offset-2 hover:underline">
+            Connect MCP
+          </Link>
+          {" · "}
+          <Link href="/llms.txt" className="text-primary underline-offset-2 hover:underline">
+            llms.txt
+          </Link>
+          {" for agents and editors"}
         </p>
         <SearchBar />
       </section>
