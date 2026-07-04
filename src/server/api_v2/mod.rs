@@ -15,6 +15,7 @@ pub mod submissions;
 pub mod taxonomy_featured;
 pub mod user;
 pub mod workbench;
+pub mod x402_listing;
 
 use axum::Router;
 
@@ -33,6 +34,7 @@ pub fn router(state: AppState) -> Router {
         .merge(crawler_admin::router(state.clone()))
         .merge(site_settings::router(state.clone()))
         .merge(submissions::router(state.clone()))
+        .merge(x402_listing::router(state.clone()))
         .merge(workbench::router(state.clone()))
         .merge(reports_claims::router(state))
 }
