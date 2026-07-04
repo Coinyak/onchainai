@@ -23,6 +23,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential pkg-config libssl-dev curl perl && rm -rf /var/lib/apt/lists/*
 COPY --from=planner /app/recipe.json recipe.json
 RUN cargo chef cook --release --features ssr --recipe-path recipe.json
+# Cache-bust: force this layer and everything after to rebuild, bypassing any
+# stale remote/registry BuildKit cache (diagnostic for a migration-29 mismatch
+# between deployed containers and the actual migrations/ directory content).
+ARG CACHE_BUST=20260705_0530
 COPY Cargo.toml Cargo.lock* ./
 COPY src/ ./src/
 COPY migrations/ ./migrations/
