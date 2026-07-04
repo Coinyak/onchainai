@@ -13,7 +13,7 @@ Prereqs: Rust ≥ 1.85 (CI uses 1.90), Node ≥ 20, a Postgres database
 (Supabase or local).
 
 ```bash
-git clone https://github.com/hoyeon4315-cpu/onchainai
+git clone https://github.com/Coinyak/onchainai
 cd onchainai
 cp .env.example .env            # fill in DB URL, keys — see comments in the file
 ./scripts/install-agent-hooks.sh  # once: git pre-commit hooks (UI staleness guard)

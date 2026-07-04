@@ -13,7 +13,6 @@ pub enum ApiError {
     Unauthorized(String),
     Forbidden(String),
     BadRequest(String),
-    TooManyRequests(String),
     Internal(String),
 }
 
@@ -35,7 +34,6 @@ impl ApiError {
             Self::Unauthorized(_) => (StatusCode::UNAUTHORIZED, "unauthorized"),
             Self::Forbidden(_) => (StatusCode::FORBIDDEN, "forbidden"),
             Self::BadRequest(_) => (StatusCode::BAD_REQUEST, "bad_request"),
-            Self::TooManyRequests(_) => (StatusCode::TOO_MANY_REQUESTS, "too_many_requests"),
             Self::Internal(_) => (StatusCode::INTERNAL_SERVER_ERROR, "internal"),
         }
     }
@@ -46,7 +44,6 @@ impl ApiError {
             | Self::Unauthorized(m)
             | Self::Forbidden(m)
             | Self::BadRequest(m)
-            | Self::TooManyRequests(m)
             | Self::Internal(m) => m.clone(),
         }
     }

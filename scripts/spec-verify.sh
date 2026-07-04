@@ -129,7 +129,7 @@ curl_loc_has F1-app "앱이 www redirect_uri 전송(307 Location)" "$PROD_URL/au
 manual F1-gh "GitHub OAuth 앱에 www 콜백 등록 + 실제 로그인 왕복 확인"
 header_redirect H1 "apex→www 301" "$APEX_URL/"
 manual F2 "지갑(SIWX)+Safari 세션 유지 수동 확인"
-absent C3 "About 카피·개인핸들 정리" 'MVP does not include self-service|hoyeon4315-cpu' src/app.rs
+absent C3 "About 카피·개인핸들 정리" 'MVP does not include self-service|Coinyak' src/app.rs
 
 echo "[3] 트랙2 발견 커버리지"
 absent B1 "SourceCrawler dead-code 해킹 제거" '_SourceCrawlerSealed' src/crawler/sources/mod.rs

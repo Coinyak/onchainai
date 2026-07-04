@@ -67,7 +67,7 @@ Full per-client walkthroughs (Codex, Windsurf, Gemini CLI, …): [docs/CONNECT.m
 One command wires up the MCP server, a `/find-tool` command, and a crypto-tools skill:
 
 ```
-/plugin marketplace add hoyeon4315-cpu/onchainai
+/plugin marketplace add Coinyak/onchainai
 /plugin install onchainai@onchainai
 ```
 
@@ -128,7 +128,7 @@ Details: [docs/X402_REFERRAL_SPEC.md](docs/X402_REFERRAL_SPEC.md).
 ## Run it yourself
 
 ```bash
-git clone https://github.com/hoyeon4315-cpu/onchainai
+git clone https://github.com/Coinyak/onchainai
 cd onchainai
 cp .env.example .env        # fill in Supabase URL/keys, GitHub OAuth, JWT secret
 

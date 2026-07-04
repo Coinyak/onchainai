@@ -373,26 +373,9 @@ RETURNING slug, (xmax = 0) AS inserted;
 
 const FORCE_APPROVE = env.FORCE_APPROVE === "1";
 
-/** Verified TLS by default; set PG_INSECURE_SSL=1 only on trusted dev networks. */
-function pgSslOption(databaseUrl) {
-  const mode = (env.PGSSLMODE || "").toLowerCase();
-  const wantsSsl =
-    mode === "require" ||
-    mode === "verify-ca" ||
-    mode === "verify-full" ||
-    /supabase\.(co|com)/i.test(databaseUrl) ||
-    databaseUrl.includes("sslmode=require");
-  if (!wantsSsl) return undefined;
-  if (env.PG_INSECURE_SSL === "1") {
-    return { rejectUnauthorized: false };
-  }
-  return true;
-}
-
-const ssl = pgSslOption(DATABASE_URL);
 const client = new pg.Client({
   connectionString: DATABASE_URL,
-  ...(ssl !== undefined ? { ssl } : {}),
+  ssl: { rejectUnauthorized: false },
 });
 
 await client.connect();

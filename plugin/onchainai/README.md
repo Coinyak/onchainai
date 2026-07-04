@@ -7,7 +7,7 @@ without leaving your agent.
 ## Install
 
 ```
-/plugin marketplace add hoyeon4315-cpu/onchainai
+/plugin marketplace add Coinyak/onchainai
 /plugin install onchainai@onchainai
 ```
 

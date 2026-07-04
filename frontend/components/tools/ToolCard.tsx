@@ -12,10 +12,11 @@ import { Badge } from "@/components/ui/Badge";
 import { HighlightedCommand } from "@/components/tools/HighlightedCommand";
 import { ChainLogo } from "@/components/tools/ChainLogo";
 import { AddMcpAction } from "@/components/tools/AddMcpAction";
+import { AdminToolCardActions } from "@/components/tools/AdminToolCardActions";
 import { LoginModal } from "@/components/auth/LoginModal";
 import { chainTagsForTool } from "@/lib/chains";
 import { compareHref, stripPreviewParams } from "@/lib/browser-query";
-import { timeAgo, statusBadgeLabel, displayInstallCommand } from "@/lib/format";
+import { timeAgo, statusBadgeLabel, displayInstallCommand, formatGithubStars } from "@/lib/format";
 
 const CHAINS_VISIBLE_DESKTOP = 5;
 const CHAINS_VISIBLE_MOBILE = 3;
@@ -62,9 +63,10 @@ export function ToolCard({
   commentCount = 0,
   initiallyStarred = false,
 }: ToolCardProps) {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, isAdmin } = useAuth();
   const [showLogin, setShowLogin] = useState(false);
   const [starred, setStarred] = useState(initiallyStarred);
+  const [status, setStatus] = useState(tool.status);
 
   const href = `/tools/${tool.slug}`;
   const chains = chainTagsForTool(tool.chains);
@@ -120,7 +122,7 @@ export function ToolCard({
             <div className="tool-card-header">
               <h3 className="tool-name">{tool.name}</h3>
               <div className="tool-badges">
-                <Badge variant={statusVariant(tool.status)}>{statusBadgeLabel(tool.status)}</Badge>
+                <Badge variant={statusVariant(status)}>{statusBadgeLabel(status)}</Badge>
                 <Badge variant={tool.type === "x402" ? "x402" : "neutral"}>
                   {tool.type.toUpperCase()}
                 </Badge>
@@ -144,7 +146,7 @@ export function ToolCard({
               <span className="tool-meta-sep">·</span>
               <span className="tool-stars" title="GitHub stars">
                 <Star size={14} strokeWidth={1.75} aria-hidden />
-                {tool.stars} GitHub stars
+                {formatGithubStars(tool.stars)}
               </span>
               <span className="tool-meta-sep">·</span>
               <span className="tool-comments">comments {commentCount}</span>
@@ -197,6 +199,13 @@ export function ToolCard({
         >
           <ArrowLeftRight className="card-action-icon" size={16} strokeWidth={1.75} aria-hidden />
         </Link>
+        {isAdmin && (
+          <AdminToolCardActions
+            slug={tool.slug}
+            status={status}
+            onStatusChange={setStatus}
+          />
+        )}
       </div>
     </article>
   );

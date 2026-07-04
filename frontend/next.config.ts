@@ -21,7 +21,7 @@ const nextConfig: NextConfig = {
     NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL ?? "",
     NEXT_PUBLIC_GITHUB_REPO:
       process.env.NEXT_PUBLIC_GITHUB_REPO ??
-      "https://github.com/hoyeon4315-cpu/onchainai",
+      "https://github.com/Coinyak/onchainai",
   },
   async headers() {
     return [

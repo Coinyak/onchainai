@@ -26,7 +26,8 @@ export function SearchBar({ defaultValue = "", searchPath = "/" }: SearchBarProp
     [router, searchPath],
   );
 
-  const handleDebouncedQueryChange = useCallback(
+  /** Hero search: live URL sync while typing (debounced inside ToolSearchCombobox). */
+  const handleCommitQuery = useCallback(
     (query: string) => {
       const trimmed = query.trim();
       if (!trimmed) {
@@ -45,7 +46,7 @@ export function SearchBar({ defaultValue = "", searchPath = "/" }: SearchBarProp
       variant="hero"
       defaultValue={defaultValue}
       onSubmitSearch={handleSubmitSearch}
-      onDebouncedQueryChange={handleDebouncedQueryChange}
+      onDebouncedQueryChange={handleCommitQuery}
       data-testid="home-search-bar"
     />
   );

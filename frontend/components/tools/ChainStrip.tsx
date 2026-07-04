@@ -40,51 +40,58 @@ export function ChainStrip({ base, queryBase, activeChain, chainCounts }: ChainS
 
   return (
     <div className="chain-strip" role="group" aria-label="Filter by chain">
-      <div className="chain-strip-scroll" tabIndex={0}>
-        <Link
-          href={allHref}
-          scroll={false}
-          className={allActive ? "chain-tile chain-tile-all active" : "chain-tile chain-tile-all"}
-          aria-label="All chains"
-          title="All chains"
-          aria-current={allActive ? "page" : undefined}
-        >
-          All
-        </Link>
+      <div className="chain-strip-viewport">
+        <div className="chain-strip-scroll" tabIndex={0}>
+          <Link
+            href={allHref}
+            scroll={false}
+            className={allActive ? "chain-tile chain-tile-all active" : "chain-tile chain-tile-all"}
+            aria-label="All chains"
+            title="All chains"
+            aria-current={allActive ? "page" : undefined}
+          >
+            All
+          </Link>
 
-        {tileChains.map((entry) => {
-          const href = toggleMulti(basePath, queryBase, "chain", entry.id, chainActive);
-          const isActive = chainFilterActive(entry, chainActive);
-          return (
-            <Link
-              key={entry.id}
-              href={href}
-              scroll={false}
-              className={isActive ? "chain-tile chain-tile-logo active" : "chain-tile chain-tile-logo"}
-              aria-label={entry.label}
-              title={entry.label}
-              aria-current={isActive ? "page" : undefined}
-            >
-              <ChainLogo id={entry.id} label={entry.label} size={36} />
-            </Link>
-          );
-        })}
+          {tileChains.map((entry) => {
+            const href = toggleMulti(basePath, queryBase, "chain", entry.id, chainActive);
+            const isActive = chainFilterActive(entry, chainActive);
+            return (
+              <Link
+                key={entry.id}
+                href={href}
+                scroll={false}
+                className={isActive ? "chain-tile chain-tile-logo active" : "chain-tile chain-tile-logo"}
+                aria-label={entry.label}
+                title={entry.label}
+                aria-current={isActive ? "page" : undefined}
+              >
+                <ChainLogo id={entry.id} label={entry.label} size={36} />
+              </Link>
+            );
+          })}
+        </div>
 
         {overflowCount > 0 && (
-          <button
-            type="button"
-            className={expanded ? "chain-tile chain-tile-more active" : "chain-tile chain-tile-more"}
-            aria-label={expanded ? "Hide extra chains" : `Show ${overflowCount} more chains`}
-            title={expanded ? "Hide extra chains" : `Show ${overflowCount} more chains`}
-            aria-expanded={expanded}
-            onClick={(e) => {
-              e.stopPropagation();
-              setExpanded((v) => !v);
-            }}
-          >
-            {expanded ? "Less" : `+${overflowCount}`}
-          </button>
+          <div className="chain-strip-more-anchor">
+            <button
+              type="button"
+              className={expanded ? "chain-tile chain-tile-more active" : "chain-tile chain-tile-more"}
+              data-testid="chain-strip-more"
+              aria-label={expanded ? "Hide extra chains" : `Show ${overflowCount} more chains`}
+              title={expanded ? "Hide extra chains" : `Show ${overflowCount} more chains`}
+              aria-expanded={expanded}
+              onClick={(e) => {
+                e.stopPropagation();
+                setExpanded((v) => !v);
+              }}
+            >
+              {expanded ? "Less" : `+${overflowCount}`}
+            </button>
+          </div>
         )}
+
+        <div className="chain-strip-fade" aria-hidden="true" />
       </div>
 
       {expanded && overflowCount > 0 && (

@@ -82,6 +82,7 @@ ui_watch_paths=(
   frontend/components/tools/PreviewCommentsPreview.tsx
   frontend/components/tools/PreviewPanel.tsx
   frontend/components/tools/PreviewPanelContent.tsx
+  frontend/components/tools/PluginSkillPromoCard.tsx
   frontend/components/tools/PromoCards.tsx
   frontend/components/tools/RelatedToolsSection.tsx
   frontend/components/tools/SearchBar.tsx

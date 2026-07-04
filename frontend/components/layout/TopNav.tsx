@@ -1,19 +1,24 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth";
 import { LoginModal } from "@/components/auth/LoginModal";
 import { GitHubMarkIcon } from "@/components/icons/GitHubMarkIcon";
 import { monogramFromName } from "@/lib/format";
+import { signOut } from "@/lib/sign-out";
 
 const GITHUB_REPO =
-  process.env.NEXT_PUBLIC_GITHUB_REPO || "https://github.com/hoyeon4315-cpu/onchainai";
+  process.env.NEXT_PUBLIC_GITHUB_REPO || "https://github.com/Coinyak/onchainai";
 
 function ProfileMenu() {
   const { user } = useAuth();
+  const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
   if (!user) return null;
 
   const nickname = user.nickname || "User";
@@ -91,16 +96,19 @@ function ProfileMenu() {
                 Admin
               </Link>
             )}
-            <form action={`${process.env.NEXT_PUBLIC_API_URL || ""}/auth/logout`} method="post" className="site-profile-dropdown-signout">
-              <button
-                type="submit"
-                role="menuitem"
-                className="site-profile-dropdown-item site-profile-dropdown-item-signout"
-                data-testid="profile-menu-sign-out"
-              >
-                Sign out
-              </button>
-            </form>
+            <button
+              type="button"
+              role="menuitem"
+              className="site-profile-dropdown-item site-profile-dropdown-item-signout w-full text-left"
+              data-testid="profile-menu-sign-out"
+              disabled={signingOut}
+              onClick={() => {
+                setSigningOut(true);
+                void signOut(queryClient);
+              }}
+            >
+              {signingOut ? "Signing out..." : "Sign out"}
+            </button>
           </div>
         </>
       )}
@@ -118,7 +126,17 @@ export function TopNav() {
     <>
       <LoginModal open={showLogin} onClose={() => setShowLogin(false)} />
       <header className="site-top-nav">
-        <div className="site-top-nav-inner site-top-nav-inner-actions">
+        <div className="site-top-nav-inner">
+          <Link href="/" className="site-top-nav-logo" aria-label="OnchainAI home">
+            <Image
+              className="site-top-nav-mark"
+              src="/brand/onchainai-logo.png"
+              alt=""
+              width={34}
+              height={34}
+            />
+            <span>OnchainAI</span>
+          </Link>
           <nav className="site-top-nav-actions" aria-label="Site actions">
             <Link href="/submit" className="site-top-nav-btn site-top-nav-btn-primary">
               Submit

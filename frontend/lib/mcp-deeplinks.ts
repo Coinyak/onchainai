@@ -9,6 +9,11 @@ export const ONCHAINAI_MCP_UNIVERSAL_CMD = `npx add-mcp ${ONCHAINAI_MCP_HTTP_URL
 /** Production /mcp responds 405 Allow: POST — streamable HTTP transport (2026-07-03 curl). */
 export const ONCHAINAI_CLAUDE_CODE_CMD = `claude mcp add --transport http ${ONCHAINAI_MCP_SERVER_NAME} ${ONCHAINAI_MCP_HTTP_URL}`;
 
+export const ONCHAINAI_PLUGIN_MARKETPLACE_CMD =
+  "/plugin marketplace add Coinyak/onchainai";
+
+export const ONCHAINAI_PLUGIN_INSTALL_CMD = "/plugin install onchainai@onchainai";
+
 /** Cursor one-click install deeplink (Phase 9.2). */
 export function cursorMcpDeeplink(
   serverName: string,

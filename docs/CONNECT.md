@@ -24,7 +24,7 @@ Restart Claude Code and check with `/mcp`.
 **Better: install the plugin** — MCP server + `/find-tool` command + crypto-tools skill in one step:
 
 ```
-/plugin marketplace add hoyeon4315-cpu/onchainai
+/plugin marketplace add Coinyak/onchainai
 /plugin install onchainai@onchainai
 ```
 

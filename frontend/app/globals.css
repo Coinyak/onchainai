@@ -782,6 +782,15 @@
   justify-content: flex-end;
 }
 
+/* Collapsed filter sidebar: controls only (brand lives in TopNav). */
+@media (max-width: 767px) {
+  .tools-sidebar-collapsed,
+  .tools-sidebar:not([data-sidebar-storage-loaded]) {
+    height: auto;
+    min-height: 52px;
+  }
+}
+
 .connect-client-card-header {
   display: flex;
   align-items: center;
@@ -874,3 +883,19 @@
   color: var(--color-primary);
 }
 
+.site-top-nav-repo svg {
+  display: block;
+}
+
+/* P2 UI audit — ToolListingActions layout (G4) */
+.listing-actions-row {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+/* P2 UI audit — card action keyboard focus (M5) */
+.card-action-btn:focus-visible {
+  outline: 2px solid rgba(231, 111, 0, 0.35);
+  outline-offset: 2px;
+}

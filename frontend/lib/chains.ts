@@ -154,11 +154,10 @@ export function chainTagsForTool(chains: string[]): ChainMeta[] {
   const seen = new Set<string>();
   const result: ChainMeta[] = [];
   for (const raw of chains) {
-    const meta = resolveChain(raw);
-    if (meta && !seen.has(meta.id)) {
-      seen.add(meta.id);
-      result.push(meta);
-    }
+    const meta = resolveChain(raw) ?? syntheticChainMeta(raw);
+    if (!meta || seen.has(meta.id)) continue;
+    seen.add(meta.id);
+    result.push(meta);
   }
   return result;
 }

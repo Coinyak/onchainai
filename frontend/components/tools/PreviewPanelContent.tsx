@@ -11,7 +11,7 @@ import { InstallGuidePanel } from "@/components/tools/InstallGuidePanel";
 import { TrustFacts } from "@/components/tools/TrustFacts";
 import { PreviewCommentsPreview } from "@/components/tools/PreviewCommentsPreview";
 import { chainTagsForTool } from "@/lib/chains";
-import { timeAgo, statusBadgeLabel } from "@/lib/format";
+import { timeAgo, statusBadgeLabel, formatGithubStars } from "@/lib/format";
 import { toolHasInstallPath } from "@/lib/install-guide";
 
 const PREVIEW_CHAINS_MAX = 8;
@@ -82,7 +82,7 @@ export function PreviewPanelContent({
           </div>
           <p className="preview-stars">
             <Star size={14} aria-hidden />
-            {tool.stars} GitHub stars
+            {formatGithubStars(tool.stars)}
           </p>
         </div>
         <Link href={closeHref} scroll={false} className="preview-close" aria-label="Close preview">
@@ -91,8 +91,6 @@ export function PreviewPanelContent({
       </header>
 
       <div className="preview-quick-facts">
-        <QuickFact label="Type" value={tool.type.toUpperCase()} />
-        <QuickFact label="Status" value={statusBadgeLabel(tool.status)} />
         <QuickFact label="License" value={license} />
         <QuickFact label="Updated" value={updated} />
         <QuickFact label="Install risk" value={formatRisk(tool.install_risk_level)} />

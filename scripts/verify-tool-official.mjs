@@ -133,22 +133,6 @@ const SERVICE_KEY = env.SUPABASE_SERVICE_KEY || "";
 const DATABASE_URL = env.DATABASE_URL || "";
 const GITHUB_TOKEN = env.GITHUB_API_TOKEN || "";
 
-/** Verified TLS by default; set PG_INSECURE_SSL=1 only on trusted dev networks. */
-function pgSslOption(databaseUrl) {
-  const mode = (env.PGSSLMODE || "").toLowerCase();
-  const wantsSsl =
-    mode === "require" ||
-    mode === "verify-ca" ||
-    mode === "verify-full" ||
-    /supabase\.(co|com)/i.test(databaseUrl) ||
-    databaseUrl.includes("sslmode=require");
-  if (!wantsSsl) return undefined;
-  if (env.PG_INSECURE_SSL === "1") {
-    return { rejectUnauthorized: false };
-  }
-  return true;
-}
-
 const args = process.argv.slice(2);
 const APPLY = args.includes("--apply");
 const SCAN = args.includes("--scan");
@@ -236,10 +220,11 @@ async function makePgBackend() {
     );
   }
   if (!DATABASE_URL) throw new Error("DATABASE_URL missing for direct-postgres fallback");
-  const ssl = pgSslOption(DATABASE_URL);
   const client = new pg.Client({
     connectionString: DATABASE_URL,
-    ...(ssl !== undefined ? { ssl } : {}),
+    // Supabase pooler/direct hosts present managed certs; skip CA verification
+    // like the repo's other operational tooling does.
+    ssl: { rejectUnauthorized: false },
     statement_timeout: 20000,
   });
   await client.connect();

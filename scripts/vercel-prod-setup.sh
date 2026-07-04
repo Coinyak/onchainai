@@ -42,8 +42,9 @@ if [[ "${1:-}" != "--domain-only" ]]; then
   echo "Setting NEXT_PUBLIC_API_URL=${API_URL}..."
   printf '%s' "${API_URL}" | npx vercel env add NEXT_PUBLIC_API_URL production --scope "${TEAM_SLUG}" --force 2>/dev/null || \
     printf '%s' "${API_URL}" | npx vercel env add NEXT_PUBLIC_API_URL production --force || true
-  printf '%s' "${API_URL}" | npx vercel env add NEXT_PUBLIC_API_URL preview --scope "${TEAM_SLUG}" --force 2>/dev/null || \
-    printf '%s' "${API_URL}" | npx vercel env add NEXT_PUBLIC_API_URL preview --force || true
+  echo "Removing NEXT_PUBLIC_API_URL from preview (same-origin rewrites; avoids CORS/session breaks)..."
+  npx vercel env rm NEXT_PUBLIC_API_URL preview --scope "${TEAM_SLUG}" --yes 2>/dev/null || \
+    npx vercel env rm NEXT_PUBLIC_API_URL preview --yes 2>/dev/null || true
 
   echo "Setting API_PROXY_TARGET=${API_PROXY} (auth/onboarding/mcp rewrites)..."
   printf '%s' "${API_PROXY}" | npx vercel env add API_PROXY_TARGET production --scope "${TEAM_SLUG}" --force 2>/dev/null || \

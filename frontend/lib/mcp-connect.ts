@@ -323,7 +323,7 @@ export const CONNECT_PAGE_CLIENTS: ConnectPageClient[] = [
   },
   {
     id: "chatgpt",
-    label: "ChatGPT",
+    label: "ChatGPT (connector)",
     icon: "bot",
     blocks: [
       {
