@@ -55,6 +55,7 @@ const FIRST_PARTY_ORGS = {
   openai: "OpenAI",
   "google-gemini": "Google Gemini",
   coinbase: "Coinbase",
+  circlefin: "Circle",
   base: "Base",
   "base-org": "Base",
   "solana-labs": "Solana Labs",
