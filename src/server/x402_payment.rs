@@ -298,6 +298,73 @@ pub fn facilitator_client() -> Client {
         .expect("facilitator reqwest client")
 }
 
+fn base64url_encode(bytes: &[u8]) -> String {
+    base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(bytes)
+}
+
+/// CDP Secret API Key → short-lived Bearer JWT (EdDSA).
+/// Spec: https://docs.cdp.coinbase.com/get-started/docs/cdp-api-keys
+fn generate_cdp_bearer_token(
+    key_id: &str,
+    key_secret_b64: &str,
+    request_path: &str,
+) -> Result<String, String> {
+    use ed25519_dalek::{Signer, SigningKey};
+
+    let decoded = base64::engine::general_purpose::STANDARD
+        .decode(key_secret_b64.trim())
+        .map_err(|e| format!("invalid cdp key secret base64: {e}"))?;
+    if decoded.len() != 64 {
+        return Err(format!(
+            "invalid cdp key secret length {} (expected 64-byte Ed25519 key)",
+            decoded.len()
+        ));
+    }
+    let seed: [u8; 32] = decoded[0..32]
+        .try_into()
+        .map_err(|_| "invalid cdp key seed".to_string())?;
+    let signing_key = SigningKey::from_bytes(&seed);
+
+    let now = chrono::Utc::now().timestamp();
+    let nonce = uuid::Uuid::new_v4().simple().to_string();
+    let uri = format!("POST api.cdp.coinbase.com{request_path}");
+
+    let header = json!({
+        "alg": "EdDSA",
+        "typ": "JWT",
+        "kid": key_id,
+        "nonce": nonce,
+    });
+    let claims = json!({
+        "sub": key_id,
+        "iss": "cdp",
+        "aud": ["cdp_service"],
+        "nbf": now,
+        "exp": now + 120,
+        "uri": uri,
+    });
+
+    let header_b64 = base64url_encode(&serde_json::to_vec(&header).map_err(|e| e.to_string())?);
+    let claims_b64 = base64url_encode(&serde_json::to_vec(&claims).map_err(|e| e.to_string())?);
+    let message = format!("{header_b64}.{claims_b64}");
+    let signature = signing_key.sign(message.as_bytes());
+    Ok(format!(
+        "{message}.{}",
+        base64url_encode(&signature.to_bytes())
+    ))
+}
+
+fn cdp_facilitator_request_path(facilitator_url: &str, endpoint: &str) -> Result<String, String> {
+    let parsed = url::Url::parse(facilitator_url.trim_end_matches('/'))
+        .map_err(|e| format!("invalid facilitator url: {e}"))?;
+    let base_path = parsed.path().trim_end_matches('/');
+    Ok(format!(
+        "{}/{}",
+        base_path,
+        endpoint.trim_start_matches('/')
+    ))
+}
+
 async fn facilitator_post(
     client: &Client,
     config: &X402PaymentConfig,
@@ -310,8 +377,12 @@ async fn facilitator_post(
         path.trim_start_matches('/')
     );
     let mut req = client.post(&url).json(&body);
-    if let (Some(name), Some(private)) = (&config.cdp_api_key_name, &config.cdp_api_key_private) {
-        req = req.basic_auth(name, Some(private));
+    if let (Some(key_id), Some(key_secret)) =
+        (&config.cdp_api_key_name, &config.cdp_api_key_private)
+    {
+        let request_path = cdp_facilitator_request_path(&config.facilitator_url, path)?;
+        let bearer = generate_cdp_bearer_token(key_id, key_secret, &request_path)?;
+        req = req.bearer_auth(bearer);
     }
     let resp = req
         .send()
@@ -507,5 +578,49 @@ mod tests {
         assert!(is_configured_pay_to(
             "0x0000000000000000000000000000000000000001"
         ));
+    }
+
+    #[test]
+    fn cdp_jwt_has_three_segments() {
+        // 64-byte Ed25519 test secret (seed + pubkey); not a production key.
+        let secret = base64::engine::general_purpose::STANDARD.encode([7u8; 64]);
+        let token = generate_cdp_bearer_token(
+            "21ea0112-daba-4e25-a1af-5888d69051ba",
+            &secret,
+            "/platform/v2/x402/verify",
+        )
+        .expect("jwt");
+        assert_eq!(token.split('.').count(), 3);
+    }
+
+    /// Live CDP auth smoke: expects 200/4xx about missing payload, not 401.
+    #[tokio::test]
+    #[ignore = "requires CDP_API_KEY_* in environment"]
+    async fn cdp_facilitator_auth_smoke() {
+        let key_id = std::env::var("CDP_API_KEY_NAME").expect("CDP_API_KEY_NAME");
+        let key_secret = std::env::var("CDP_API_KEY_PRIVATE_KEY").expect("CDP_API_KEY_PRIVATE_KEY");
+        let path =
+            cdp_facilitator_request_path("https://api.cdp.coinbase.com/platform/v2/x402", "verify")
+                .expect("path");
+        let bearer = generate_cdp_bearer_token(&key_id, &key_secret, &path).expect("jwt");
+        let client = facilitator_client();
+        let resp = client
+            .post("https://api.cdp.coinbase.com/platform/v2/x402/verify")
+            .bearer_auth(bearer)
+            .json(&json!({}))
+            .send()
+            .await
+            .expect("request");
+        let status = resp.status();
+        let body = resp.text().await.unwrap_or_default();
+        assert!(status.as_u16() != 401, "CDP auth failed (401): {body}");
+    }
+
+    #[test]
+    fn cdp_facilitator_path_joins_base_and_endpoint() {
+        let path =
+            cdp_facilitator_request_path("https://api.cdp.coinbase.com/platform/v2/x402", "verify")
+                .expect("path");
+        assert_eq!(path, "/platform/v2/x402/verify");
     }
 }
