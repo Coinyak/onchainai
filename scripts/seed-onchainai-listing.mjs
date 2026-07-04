@@ -27,7 +27,7 @@ INSERT INTO tools (
   chains, status, official_team, source, approval_status, rejection_reason,
   crypto_relevance_score, crypto_relevance_reasons, relevance_status,
   install_risk_level, install_risk_reasons, requires_secret,
-  license, pricing, x402_price, stars,
+  license, pricing, x402_price, stars, logo_url,
   referral_enabled, x402_builder_code,
   created_at, updated_at
 ) VALUES (
@@ -36,7 +36,7 @@ INSERT INTO tools (
   $8, 'community', 'OnchainAI', 'self', 'approved', NULL,
   100, $9, 'accepted',
   'low', $10, false,
-  'MIT', 'x402', $11, 0,
+  'MIT', 'x402', $11, 0, $12,
   false, 'bc_ljttbnhv',
   now(), now()
 )
@@ -60,6 +60,7 @@ ON CONFLICT (slug) DO UPDATE SET
   pricing = 'x402',
   x402_price = EXCLUDED.x402_price,
   x402_builder_code = EXCLUDED.x402_builder_code,
+  logo_url = EXCLUDED.logo_url,
   updated_at = now()
 RETURNING slug, (xmax = 0) AS inserted;
 `;
@@ -96,6 +97,7 @@ async function main() {
     install_risk_reasons: ["official HTTP MCP — no local install required"],
     x402_price:
       "Discovery free; check_endpoint_health $0.001/call (Agent Trust, OnchainAI payee)",
+    logo_url: "/brand/onchainai-logo.png",
   };
 
   if (!apply) {
@@ -141,6 +143,7 @@ async function main() {
     tool.crypto_relevance_reasons,
     tool.install_risk_reasons,
     tool.x402_price,
+    tool.logo_url,
   ]);
   await client.end();
   console.log(
