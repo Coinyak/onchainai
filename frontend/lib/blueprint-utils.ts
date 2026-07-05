@@ -24,6 +24,8 @@ export const BLUEPRINT_NODE_NOTE_HEIGHT = 88;
 export const BLUEPRINT_NODE_CHAIN_SIZE = 48;
 export const BLUEPRINT_NODE_CHAIN_WRAP_HEIGHT = 66;
 
+export type BlueprintPortSide = "top" | "right" | "bottom" | "left";
+
 export function snapToGrid(value: number, grid = BLUEPRINT_GRID): number {
   return Math.round(value / grid) * grid;
 }
@@ -78,22 +80,53 @@ export function getNodeBounds(node: BlueprintNode): {
 
 export function getNodeAnchor(
   node: BlueprintNode,
-  side: "out" | "in",
+  side: BlueprintPortSide,
 ): { x: number; y: number } {
   const bounds = getNodeBounds(node);
+  const centerX = bounds.x + bounds.w / 2;
   const centerY = bounds.y + bounds.h / 2;
-  if (side === "out") {
-    return { x: bounds.x + bounds.w, y: centerY };
+  switch (side) {
+    case "top":
+      return { x: centerX, y: bounds.y };
+    case "right":
+      return { x: bounds.x + bounds.w, y: centerY };
+    case "bottom":
+      return { x: centerX, y: bounds.y + bounds.h };
+    case "left":
+      return { x: bounds.x, y: centerY };
   }
-  return { x: bounds.x, y: centerY };
+}
+
+export function pickEdgePortSides(
+  from: BlueprintNode,
+  to: BlueprintNode,
+): { from: BlueprintPortSide; to: BlueprintPortSide } {
+  const fromBounds = getNodeBounds(from);
+  const toBounds = getNodeBounds(to);
+  const fromCx = fromBounds.x + fromBounds.w / 2;
+  const fromCy = fromBounds.y + fromBounds.h / 2;
+  const toCx = toBounds.x + toBounds.w / 2;
+  const toCy = toBounds.y + toBounds.h / 2;
+  const dx = toCx - fromCx;
+  const dy = toCy - fromCy;
+
+  if (Math.abs(dx) >= Math.abs(dy)) {
+    return dx >= 0
+      ? { from: "right", to: "left" }
+      : { from: "left", to: "right" };
+  }
+  return dy >= 0
+    ? { from: "bottom", to: "top" }
+    : { from: "top", to: "bottom" };
 }
 
 export function buildEdgePath(
   from: BlueprintNode,
   to: BlueprintNode,
 ): { x1: number; y1: number; x2: number; y2: number } {
-  const start = getNodeAnchor(from, "out");
-  const end = getNodeAnchor(to, "in");
+  const { from: fromSide, to: toSide } = pickEdgePortSides(from, to);
+  const start = getNodeAnchor(from, fromSide);
+  const end = getNodeAnchor(to, toSide);
   return { x1: start.x, y1: start.y, x2: end.x, y2: end.y };
 }
 

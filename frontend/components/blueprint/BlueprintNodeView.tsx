@@ -8,7 +8,19 @@ import { BlueprintToolChainMemo } from "@/components/blueprint/BlueprintToolChai
 import { ToolLogo } from "@/components/tools/ToolLogo";
 import { ChainLogo } from "@/components/tools/ChainLogo";
 import { typeBadgeLabel } from "@/lib/format";
-import { toolChainsForNode } from "@/lib/blueprint-utils";
+import { toolChainsForNode, type BlueprintPortSide } from "@/lib/blueprint-utils";
+
+const NODE_PORTS: {
+  side: BlueprintPortSide;
+  className: string;
+  testId: string;
+  label: string;
+}[] = [
+  { side: "top", className: "blueprint-node-port-top", testId: "blueprint-node-port-top", label: "Connect from top" },
+  { side: "right", className: "blueprint-node-port-right", testId: "blueprint-node-port-right", label: "Connect from right" },
+  { side: "bottom", className: "blueprint-node-port-bottom", testId: "blueprint-node-port-bottom", label: "Connect from bottom" },
+  { side: "left", className: "blueprint-node-port-left", testId: "blueprint-node-port-left", label: "Connect from left" },
+];
 
 interface BlueprintNodeViewProps {
   node: BlueprintNode;
@@ -30,7 +42,7 @@ interface BlueprintNodeViewProps {
   onToggleChains?: (id: string) => void;
   onPortPointerDown?: (
     nodeId: string,
-    side: "out" | "in",
+    side: BlueprintPortSide,
     event: React.PointerEvent<HTMLButtonElement>,
   ) => void;
 }
@@ -143,21 +155,23 @@ export function BlueprintNodeView({
       onFocus={() => onSelect(node.id)}
       tabIndex={-1}
     >
-      {showPorts && (
-        <button
-          type="button"
-          className="blueprint-node-port blueprint-node-port-in"
-          data-testid="blueprint-node-port-in"
-          data-port="in"
-          data-node-id={node.id}
-          aria-label="Connect to this node"
-          onPointerDown={(e) => {
-            e.stopPropagation();
-            onPortPointerDown?.(node.id, "in", e);
-          }}
-          onClick={(e) => e.stopPropagation()}
-        />
-      )}
+      {showPorts &&
+        NODE_PORTS.map((port) => (
+          <button
+            key={port.side}
+            type="button"
+            className={`blueprint-node-port ${port.className}`}
+            data-testid={port.testId}
+            data-port={port.side}
+            data-node-id={node.id}
+            aria-label={port.label}
+            onPointerDown={(e) => {
+              e.stopPropagation();
+              onPortPointerDown?.(node.id, port.side, e);
+            }}
+            onClick={(e) => e.stopPropagation()}
+          />
+        ))}
 
       <div
         ref={setNodeRef}
@@ -241,22 +255,6 @@ export function BlueprintNodeView({
           />
         )}
       </div>
-
-      {showPorts && (
-        <button
-          type="button"
-          className="blueprint-node-port blueprint-node-port-out"
-          data-testid="blueprint-node-port-out"
-          data-port="out"
-          data-node-id={node.id}
-          aria-label="Connect from this node"
-          onPointerDown={(e) => {
-            e.stopPropagation();
-            onPortPointerDown?.(node.id, "out", e);
-          }}
-          onClick={(e) => e.stopPropagation()}
-        />
-      )}
 
       <BlueprintNodeRail
         ref={chainsButtonRef}

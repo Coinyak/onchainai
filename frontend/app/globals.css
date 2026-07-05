@@ -776,14 +776,28 @@
   cursor: crosshair;
 }
 
-.blueprint-node-port-in {
-  left: 0;
+.blueprint-node-port-top {
+  top: 0;
+  left: 50%;
   transform: translate(-50%, -50%);
 }
 
-.blueprint-node-port-out {
+.blueprint-node-port-right {
   right: 0;
+  left: auto;
   transform: translate(50%, -50%);
+}
+
+.blueprint-node-port-bottom {
+  top: auto;
+  bottom: 0;
+  left: 50%;
+  transform: translate(-50%, 50%);
+}
+
+.blueprint-node-port-left {
+  left: 0;
+  transform: translate(-50%, -50%);
 }
 
 .blueprint-node-ghost {

@@ -295,6 +295,21 @@ def main() -> None:
                     if not any(m in body for m in markers):
                         raise SystemExit(f"{slug} svg missing brand markers in {src}")
                 text = wrap_file(label, src)
+                if markers and not any(m in text for m in markers):
+                    if out.exists():
+                        preserve_public_tile(
+                            out,
+                            slug,
+                            markers,
+                            forbidden,
+                            require_vector=require_vector,
+                        )
+                        preserved.append(slug)
+                        written.append(slug)
+                        continue
+                    raise SystemExit(
+                        f"{slug} wrapped tile missing brand markers {markers!r}"
+                    )
                 validate_forbidden(text, slug, forbidden)
                 finalize_tile(text, slug)
                 if write_if_changed(out, text):

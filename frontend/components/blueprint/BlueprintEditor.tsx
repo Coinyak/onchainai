@@ -50,6 +50,7 @@ import {
   BLUEPRINT_NODE_CHAIN_SIZE,
   clampCoord,
   getNodeAnchor,
+  type BlueprintPortSide,
   initialToolNodeChains,
   newEdgeId,
   newNodeId,
@@ -185,7 +186,7 @@ function BlueprintEditorWorkspace({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   const [linkingFromId, setLinkingFromId] = useState<string | null>(null);
-  const [linkingFromSide, setLinkingFromSide] = useState<"in" | "out" | null>(null);
+  const [linkingFromSide, setLinkingFromSide] = useState<BlueprintPortSide | null>(null);
   const [linkPointer, setLinkPointer] = useState<{ x: number; y: number } | null>(
     null,
   );
@@ -613,30 +614,17 @@ function BlueprintEditorWorkspace({
       const portEl = target?.closest("[data-port]");
       const nodeEl = target?.closest("[data-testid='blueprint-node']");
 
-      const connectOutToIn = (fromId: string, toId: string) => {
-        if (fromId !== toId) addEdgeBetween(fromId, toId);
-      };
-
       if (portEl) {
         const nodeId = portEl.getAttribute("data-node-id");
-        const port = portEl.getAttribute("data-port");
         if (!nodeId || nodeId === linkingFromId) {
           cancelLinking();
           return;
         }
-        if (linkingFromSide === "out" && port === "in") {
-          connectOutToIn(linkingFromId, nodeId);
-        } else if (linkingFromSide === "in" && port === "out") {
-          connectOutToIn(nodeId, linkingFromId);
-        }
+        addEdgeBetween(linkingFromId, nodeId);
       } else if (nodeEl) {
         const nodeId = nodeEl.getAttribute("data-node-id");
         if (nodeId && nodeId !== linkingFromId) {
-          if (linkingFromSide === "out") {
-            connectOutToIn(linkingFromId, nodeId);
-          } else {
-            connectOutToIn(nodeId, linkingFromId);
-          }
+          addEdgeBetween(linkingFromId, nodeId);
         }
       }
       cancelLinking();
@@ -647,7 +635,7 @@ function BlueprintEditorWorkspace({
   const handlePortPointerDown = useCallback(
     (
       nodeId: string,
-      side: "out" | "in",
+      side: BlueprintPortSide,
       e: React.PointerEvent<HTMLButtonElement>,
     ) => {
       if (readOnly) return;
@@ -989,10 +977,10 @@ function BlueprintEditorWorkspace({
                   setChainsPopoverOpenId(null);
                 }}
               />
-              {linkingFromId && linkPointer && (() => {
+              {linkingFromId && linkingFromSide && linkPointer && (() => {
                 const fromNode = nodes.find((n) => n.id === linkingFromId);
                 if (!fromNode) return null;
-                const start = getNodeAnchor(fromNode, "out");
+                const start = getNodeAnchor(fromNode, linkingFromSide);
                 return (
                   <svg
                     className="blueprint-rubber-band-layer"
