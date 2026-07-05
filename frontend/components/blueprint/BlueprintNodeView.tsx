@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import { useDraggable } from "@dnd-kit/core";
 import type { BlueprintNode, PublicTool } from "@/lib/api";
 import { BlueprintNodeRail } from "@/components/blueprint/BlueprintNodeRail";
+import { BlueprintNodeStepField } from "@/components/blueprint/BlueprintNodeStepField";
 import { BlueprintToolChainMemo } from "@/components/blueprint/BlueprintToolChainMemo";
 import { ToolLogo } from "@/components/tools/ToolLogo";
 import { ChainLogo } from "@/components/tools/ChainLogo";
@@ -11,10 +12,8 @@ import { typeBadgeLabel } from "@/lib/format";
 import {
   BLUEPRINT_NODE_TOOL_TYPE_MIN_H,
   clampNodeHeight,
-  BLUEPRINT_NODE_MAX_STEP,
   clampNodeWidth,
   getNodeBounds,
-  parseBlueprintStepInput,
   toolChainsForNode,
   type BlueprintPortSide,
 } from "@/lib/blueprint-utils";
@@ -237,19 +236,15 @@ export function BlueprintNodeView({
           />
         ))}
 
-      {!readOnly && selected && onStepChange ? (
-        <input
-          type="number"
+      {!readOnly && (selected || hovered) && onStepChange ? (
+        <BlueprintNodeStepField
           className="blueprint-node-step blueprint-node-step-input"
-          min={1}
-          max={BLUEPRINT_NODE_MAX_STEP}
-          value={node.step ?? ""}
-          placeholder="#"
+          value={node.step}
           aria-label="Order number"
           data-testid="blueprint-node-step-input"
           onClick={(e) => e.stopPropagation()}
           onPointerDown={(e) => e.stopPropagation()}
-          onChange={(e) => onStepChange(node.id, parseBlueprintStepInput(e.target.value))}
+          onChange={(step) => onStepChange(node.id, step)}
         />
       ) : node.step != null ? (
         <span className="blueprint-node-step" aria-label={`Step ${node.step}`}>

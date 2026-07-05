@@ -2,7 +2,7 @@
 
 import { forwardRef } from "react";
 import { ExternalLink, Hash, Link2, X } from "lucide-react";
-import { BLUEPRINT_NODE_MAX_STEP, parseBlueprintStepInput } from "@/lib/blueprint-utils";
+import { BlueprintNodeStepField } from "@/components/blueprint/BlueprintNodeStepField";
 
 interface BlueprintNodeRailProps {
   nodeKind: "tool" | "chain" | "note";
@@ -80,17 +80,13 @@ export const BlueprintNodeRail = forwardRef<HTMLButtonElement, BlueprintNodeRail
             title="Order number (duplicates allowed)"
           >
             <Hash size={14} aria-hidden="true" />
-            <input
-              type="number"
+            <BlueprintNodeStepField
               className="blueprint-node-rail-step-input"
-              min={1}
-              max={BLUEPRINT_NODE_MAX_STEP}
-              value={stepValue ?? ""}
-              placeholder="#"
+              value={stepValue}
               aria-label="Order number"
               onClick={(e) => e.stopPropagation()}
               onPointerDown={(e) => e.stopPropagation()}
-              onChange={(e) => onStepChange(parseBlueprintStepInput(e.target.value))}
+              onChange={onStepChange}
             />
           </label>
         )}

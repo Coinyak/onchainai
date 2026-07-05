@@ -18,7 +18,7 @@ export const BLUEPRINT_EDGE_COLORS = [
 ] as const;
 
 export const BLUEPRINT_NODE_TOOL_WIDTH = 260;
-export const BLUEPRINT_NODE_TOOL_HEIGHT = 112;
+export const BLUEPRINT_NODE_TOOL_HEIGHT = 88;
 export const BLUEPRINT_NODE_NOTE_WIDTH = 260;
 export const BLUEPRINT_NODE_NOTE_HEIGHT = 88;
 export const BLUEPRINT_NODE_CHAIN_SIZE = 48;
@@ -166,9 +166,7 @@ export function toolChainsForNode(toolChains: string[]): ChainMeta[] {
   return chainTagsForTool(toolChains);
 }
 
-export function initialToolNodeChains(toolChains: string[]): string[] {
-  const available = toolChainsForNode(toolChains);
-  if (available.length === 1) return [available[0].id];
+export function initialToolNodeChains(_toolChains: string[]): string[] {
   return [];
 }
 
