@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# spec-verify.sh — acceptance harness for docs/PRODUCT_ENHANCEMENT_SPEC.md.
+# spec-verify.sh — acceptance harness for docs/VERIFICATION.md + canonical policy specs
+# (docs/X402_OPEN_LISTING_SPEC.md, docs/superpowers/specs/2026-07-04-free-tier-guardian-spec.md).
 #
 # Read-only. Runs the automatable acceptance checks from docs/VERIFICATION.md and
 # prints PASS / FAIL / MANUAL / SKIP per spec item. Many items are SUPPOSED to be
@@ -161,7 +162,9 @@ present D7-trust "카드가 install_risk 시각화" 'install_risk' src/component
 echo "[7] Free Tier Guardian (OD-FTG 2026-07-04)"
 exists FTG-C "FTG 정책 스펙" docs/superpowers/specs/2026-07-04-free-tier-guardian-spec.md
 present FTG-C2 "영구 무료 선언" '영구 무료' docs/superpowers/specs/2026-07-04-free-tier-guardian-spec.md
-absent FTG-D "K2 compare 유료 문구 제거" '호출당 x402 마이크로페이먼트|export_toolkit`·`compare_tools`·대량' docs/PRODUCT_ENHANCEMENT_SPEC.md
+exists FTG-D-doc "x402 정본 스펙" docs/X402_OPEN_LISTING_SPEC.md
+absent FTG-D "compare 유료 문구 absent (x402 정본)" '호출당 x402 마이크로페이먼트|export_toolkit`·`compare_tools`·대량' docs/X402_OPEN_LISTING_SPEC.md
+absent FTG-D2 "compare 유료 문구 absent (FTG 정책)" '호출당 x402 마이크로페이먼트|export_toolkit`·`compare_tools`·대량' docs/superpowers/specs/2026-07-04-free-tier-guardian-spec.md
 absent FTG-A "MCP discovery 402 게이트 없음" 'paymentRequired|require_x402_payment|x402_gate' src/server/mcp.rs
 present FTG-E "README 무료 MCP 선언" 'free.*read-only|read-only.*free' README.md
 curl_has FTG-B "compare API 비인증 200" "$PROD_URL/api/v2/tools/compare?slugs=aave,uniswap" '\[|\{'

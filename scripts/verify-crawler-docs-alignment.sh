@@ -43,8 +43,23 @@ for src in "${CODE_SOURCES[@]}"; do
 done
 
 # --- No stale "4개 발견" / "4 crawler" without historical note ---
-stale_hits=$(grep -nE '4개 발견|4 crawler' \
-  docs/OPERATOR_GUIDE.md docs/MVP_DESIGN.md docs/SEED_DATA.md docs/X402_ROADMAP.md 2>/dev/null || true)
+CRAWLER_DOC_TARGETS=(
+  docs/OPERATOR_GUIDE.md
+  docs/MVP_DESIGN.md
+  docs/SEED_DATA.md
+  docs/X402_OPEN_LISTING_SPEC.md
+)
+stale_hits=""
+for doc in "${CRAWLER_DOC_TARGETS[@]}"; do
+  if [[ ! -f "$doc" ]]; then
+    fail_check "expected crawler alignment doc missing: $doc"
+    continue
+  fi
+  hit=$(grep -nE '4개 발견|4 crawler' "$doc" || true)
+  if [[ -n "$hit" ]]; then
+    stale_hits+="${doc}:\n${hit}\n"
+  fi
+done
 if [[ -n "$stale_hits" ]]; then
   fail_check "stale crawler count wording found:\n$stale_hits"
 else

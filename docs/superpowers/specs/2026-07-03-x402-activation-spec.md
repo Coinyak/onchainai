@@ -1,6 +1,6 @@
 # x402 레퍼럴 Attribution 활성화 스펙
 
-> Related: [[../../X402_REFERRAL_SPEC]] | [[2026-07-03-production-auth-connect-layout-audit-spec]] | [[../../PRODUCT_ENHANCEMENT_SPEC]] | [[../../SECURITY]] | [[../../OPERATOR_GUIDE]] | [[../../MULTI_AGENT_COORDINATION]] | [[../../../AGENTS.md]]
+> Related: [[../../X402_REFERRAL_SPEC]] | [[2026-07-03-production-auth-connect-layout-audit-spec]] | [[../../X402_OPEN_LISTING_SPEC]] | [[../../SECURITY]] | [[../../OPERATOR_GUIDE]] | [[../../MULTI_AGENT_COORDINATION]] | [[../../../AGENTS.md]]
 >
 > Date: 2026-07-03  
 > Status: Final spec — **blocked on owner input packet (§4)**  
@@ -42,7 +42,7 @@ OnchainAI의 x402는 이미 **카탈로그 메타데이터**와 **MCP attributio
 ## 2. 비목표
 
 - Facilitator/프록시 게이트웨이, 커스터디, USDC 전송, `referrer`/`split` 등 **문서화되지 않은** 결제 요청 필드
-- K2(OnchainAI MCP 자체 402 과금 — **핵심 발견·`compare_tools` 영구 제외**, [Free Tier Guardian](2026-07-04-free-tier-guardian-spec.md)), K3(스폰서 x402) — `PRODUCT_ENHANCEMENT_SPEC` §K deferred
+- K2(OnchainAI MCP 자체 402 과금 — **핵심 발견·`compare_tools` 영구 제외**, [Free Tier Guardian](2026-07-04-free-tier-guardian-spec.md)), K3(스폰서 x402) — `X402_OPEN_LISTING_SPEC` §K deferred
 - `payment_verified` 등을 `PUBLIC_TOOL_WHERE` / RLS visibility gate에 추가
 - Leptos admin 복원
 - 자동 CI/리뷰 봇 트리거
@@ -393,7 +393,7 @@ curl -s -X POST 'https://www.onchain-ai.xyz/mcp' \
 |------|------|
 | `docs/X402_REFERRAL_SPEC.md` | 도메인 원칙·데이터 모델 — **본 스펙이 활성화 실행 계획** |
 | `2026-07-03-production-auth-connect-layout-audit-spec` | X0 Admin 로그인 선행 |
-| `PRODUCT_ENHANCEMENT_SPEC` §K | K2/K3 deferred; K1 attribution 본 스펙 |
+| `X402_OPEN_LISTING_SPEC` §K | K2/K3 deferred; K1 attribution 본 스펙 |
 | `OPERATOR_GUIDE.md` | Leptos settings 설명 — X1 후 Next.js와 동기화 필요 |
 
 ---
