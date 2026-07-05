@@ -303,17 +303,65 @@ pub(crate) fn append_tool_filters<'qb>(
 }
 
 #[cfg(feature = "ssr")]
+async fn count_list_fts_matches(
+    pool: &sqlx::PgPool,
+    search: &str,
+    filters: &ToolFilters,
+    match_mode: crate::server::tool_search::ToolSearchMatch,
+) -> Result<i64, FnError> {
+    let mut q = sqlx::QueryBuilder::new(COUNT_APPROVED_TOOLS_SQL);
+    push_list_query_filter(&mut q, Some(search), match_mode);
+    append_tool_filters(&mut q, filters);
+    let count = q
+        .build_query_as::<(i64,)>()
+        .fetch_one(pool)
+        .await
+        .map_err(|e| FnError::new(format!("search count failed: {e}")))?;
+    Ok(count.0)
+}
+
+#[cfg(feature = "ssr")]
+async fn resolve_list_search_match(
+    pool: &sqlx::PgPool,
+    search: &str,
+    filters: &ToolFilters,
+) -> Result<crate::server::tool_search::ToolSearchMatch, FnError> {
+    use crate::server::tool_search::{should_try_or_fallback, ToolSearchMatch};
+
+    let and_count =
+        count_list_fts_matches(pool, search, filters, ToolSearchMatch::And).await?;
+    if and_count == 0 && should_try_or_fallback(search) {
+        match count_list_fts_matches(pool, search, filters, ToolSearchMatch::Or).await {
+            Ok(_) => Ok(ToolSearchMatch::Or),
+            Err(_) => Ok(ToolSearchMatch::And),
+        }
+    } else {
+        Ok(ToolSearchMatch::And)
+    }
+}
+
+#[cfg(feature = "ssr")]
 fn push_list_query_filter<'qb>(
     query: &mut sqlx::QueryBuilder<'qb, sqlx::Postgres>,
     search: Option<&'qb str>,
+    match_mode: crate::server::tool_search::ToolSearchMatch,
 ) {
-    if let Some(text) = search.filter(|q| !q.trim().is_empty()) {
-        query.push(
-            " AND to_tsvector('english', coalesce(name, '') || ' ' || coalesce(description, '')) \
-             @@ plainto_tsquery('english', ",
-        );
-        query.push_bind(text);
-        query.push(")");
+    let Some(text) = search.filter(|q| !q.trim().is_empty()) else {
+        return;
+    };
+    use crate::server::tool_search::{ToolSearchMatch, TOOL_SEARCH_VECTOR};
+    query.push(" AND ").push(TOOL_SEARCH_VECTOR).push(" @@ ");
+    match match_mode {
+        ToolSearchMatch::And => {
+            query.push("plainto_tsquery('english', ");
+            query.push_bind(text);
+            query.push(")");
+        }
+        ToolSearchMatch::Or => {
+            query.push("to_tsquery('english', replace(plainto_tsquery('english', ");
+            query.push_bind(text);
+            query.push(")::text, ' & ', ' | '))");
+        }
     }
 }
 
@@ -387,10 +435,18 @@ pub(crate) async fn fetch_list_tools(
     filters: &ToolFilters,
     query: Option<&str>,
 ) -> Result<Vec<Tool>, FnError> {
+    use crate::server::tool_search::ToolSearchMatch;
+
     let offset = offset.max(0);
     let limit = clamp_list_tools_limit(limit);
+    let search_text = query.filter(|q| !q.trim().is_empty());
+    let match_mode = if let Some(text) = search_text {
+        resolve_list_search_match(pool, text, filters).await?
+    } else {
+        ToolSearchMatch::And
+    };
     let mut q = sqlx::QueryBuilder::new(LIST_APPROVED_TOOLS_SQL);
-    push_list_query_filter(&mut q, query);
+    push_list_query_filter(&mut q, query, match_mode);
     append_tool_filters(&mut q, filters);
     push_list_order_offset_limit(&mut q, sort, offset, limit);
 
@@ -520,10 +576,10 @@ pub struct PublicDashboardSnapshot {
     pub chain_counts: Vec<DashboardBucket>,
     pub trust_counts: Vec<DashboardBucket>,
     pub pricing_counts: Vec<DashboardBucket>,
-    pub new_tools: Vec<Tool>,
-    pub popular_tools: Vec<Tool>,
-    pub x402_tools: Vec<Tool>,
-    pub high_trust_tools: Vec<Tool>,
+    pub new_tools: Vec<crate::models::tool::PublicToolSummary>,
+    pub popular_tools: Vec<crate::models::tool::PublicToolSummary>,
+    pub x402_tools: Vec<crate::models::tool::PublicToolSummary>,
+    pub high_trust_tools: Vec<crate::models::tool::PublicToolSummary>,
     pub as_of: chrono::DateTime<chrono::Utc>,
 }
 
@@ -764,6 +820,8 @@ pub(crate) async fn fetch_public_dashboard_snapshot(
         fetch_list_tools(pool, "hot", 0, limit, &high_trust_filters, None),
     );
 
+    use crate::models::tool::tools_to_public_summaries;
+
     Ok(PublicDashboardSnapshot {
         metrics: metrics?,
         type_counts: type_counts?,
@@ -774,10 +832,10 @@ pub(crate) async fn fetch_public_dashboard_snapshot(
             .collect(),
         trust_counts: trust_counts?,
         pricing_counts: pricing_counts?,
-        new_tools: new_tools?,
-        popular_tools: popular_tools?,
-        x402_tools: x402_tools?,
-        high_trust_tools: high_trust_tools?,
+        new_tools: tools_to_public_summaries(new_tools?),
+        popular_tools: tools_to_public_summaries(popular_tools?),
+        x402_tools: tools_to_public_summaries(x402_tools?),
+        high_trust_tools: tools_to_public_summaries(high_trust_tools?),
         as_of: chrono::Utc::now(),
     })
 }

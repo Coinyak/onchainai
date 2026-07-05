@@ -151,6 +151,7 @@ export function primaryInstallCommand(tool: Tool): string | null {
   if (safe) return safe;
   const install = tool.install_command?.trim();
   if (install) return install;
+  if (tool.type === "skill") return null;
   if (tool.mcp_endpoint) {
     return genericMcpRemoteCommand(tool.mcp_endpoint);
   }
@@ -289,7 +290,12 @@ function toolHttpEndpoint(tool: Tool): string | null {
   return endpoint;
 }
 
+function isMcpCatalogTool(tool: Tool): boolean {
+  return tool.type === "mcp" || tool.type === "x402" || Boolean(tool.mcp_endpoint);
+}
+
 function toolStdioConfig(tool: Tool, slug: string, riskLevel: string): string | null {
+  if (!isMcpCatalogTool(tool)) return null;
   const command = primaryInstallCommand(tool);
   if (!command || blocksStructuredConfig(riskLevel)) return null;
   const parts = command.trim().split(/\s+/);
@@ -548,6 +554,87 @@ export function buildPublicInstallGuide(
       docs_links: [],
       x402_notice: null,
       referral_disclosure: null,
+    };
+  }
+
+  const command = primaryInstallCommand(tool);
+  if (tool.type === "skill" && !isMcpCatalogTool(tool)) {
+    const steps = command
+      ? [
+          "Install the skill using the command below (e.g. clawhub or your agent skills runtime).",
+          "Do not paste this into MCP server settings — skills are not MCP configs.",
+          "Open the docs link for usage after install.",
+        ]
+      : [
+          "No install command is listed for this tool.",
+          "Use the repository or docs links below for setup.",
+        ];
+    return {
+      slug,
+      tool_name: tool.name,
+      platform: client,
+      risk_level: tool.install_risk_level,
+      risk_reasons: tool.install_risk_reasons,
+      warning: installWarningText(tool.install_risk_level),
+      blocked: false,
+      copy_gate: copyGateForRisk(tool.install_risk_level),
+      command,
+      config_json: null,
+      copy_text: command,
+      copy_label: "Copy command",
+      steps,
+      connect_blocks: command
+        ? [
+            {
+              steps: ["Run the install command, then open the docs for usage."],
+              copyText: command,
+              copyLabel: "Copy command",
+              showShellPrefix: true,
+            },
+          ]
+        : [],
+      ...toolGuideMeta(tool),
+    };
+  }
+
+  if (
+    (tool.type === "cli" || tool.type === "sdk" || tool.type === "api") &&
+    !isMcpCatalogTool(tool)
+  ) {
+    const steps = command
+      ? [
+          "Run the install command in your terminal or package manager.",
+          "Open the repository or docs link for setup and API keys.",
+        ]
+      : [
+          "No install command is listed for this tool.",
+          "Use the repository or docs links below for setup.",
+        ];
+    return {
+      slug,
+      tool_name: tool.name,
+      platform: client,
+      risk_level: tool.install_risk_level,
+      risk_reasons: tool.install_risk_reasons,
+      warning: installWarningText(tool.install_risk_level),
+      blocked: false,
+      copy_gate: copyGateForRisk(tool.install_risk_level),
+      command,
+      config_json: null,
+      copy_text: command,
+      copy_label: "Copy command",
+      steps,
+      connect_blocks: command
+        ? [
+            {
+              steps: ["Copy and run the install command below."],
+              copyText: command,
+              copyLabel: "Copy command",
+              showShellPrefix: true,
+            },
+          ]
+        : [],
+      ...toolGuideMeta(tool),
     };
   }
 

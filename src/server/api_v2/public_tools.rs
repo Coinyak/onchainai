@@ -1,7 +1,9 @@
 //! Public catalog and toolkit endpoints.
 
 use crate::filter_query::build_tool_filters;
-use crate::models::tool::sanitize_tools_for_public_response;
+use crate::models::tool::{
+    sanitize_tools_for_public_response, tools_to_public_summaries, PublicTool, PublicToolSummary,
+};
 use crate::models::{Category, Tool};
 use crate::server::functions::{
     browser_visible_limit_for_page, build_toolkit_payload, clamp_browser_page_param,
@@ -13,8 +15,9 @@ use crate::server::functions::{
     ToolComparisonView, ToolListRequest, ToolkitToolView, UpdateToolkitItemPayload,
 };
 use crate::server::queries::{
-    APPROVED_TOOLS_BY_SLUGS_SQL, BOOKMARKED_SLUGS_SQL, RECENT_APPROVED_TOOLS_SQL,
-    SEARCH_APPROVED_TOOLS_SQL, TOOL_COMMENT_COUNT_BY_SLUG_SQL, USER_TOOLKIT_SQL,
+    APPROVED_TOOLS_BY_SLUGS_SQL, BOOKMARKED_SLUGS_SQL, MCP_SEARCH_TOOLS_COUNT_OR_SQL,
+    MCP_SEARCH_TOOLS_COUNT_SQL, RECENT_APPROVED_TOOLS_SQL,
+    TOOL_COMMENT_COUNT_BY_SLUG_SQL, USER_TOOLKIT_SQL,
 };
 use crate::server::review_persistence::list_public_official_links;
 use crate::trust_verification::verify_tool_trust;
@@ -110,14 +113,14 @@ fn default_dashboard_limit() -> i64 {
 async fn get_recent_tools(
     State(state): State<AppState>,
     Query(q): Query<LimitQuery>,
-) -> Result<Json<Vec<Tool>>, ApiError> {
+) -> Result<Json<Vec<PublicToolSummary>>, ApiError> {
     let limit = q.limit.clamp(1, 100);
     let tools = sqlx::query_as::<_, Tool>(RECENT_APPROVED_TOOLS_SQL)
         .bind(limit)
         .fetch_all(&state.pool)
         .await
         .map_err(|e| ApiError::Internal(format!("failed to load tools: {e}")))?;
-    Ok(Json(sanitize_tools_for_public_response(tools)))
+    Ok(Json(tools_to_public_summaries(tools)))
 }
 
 async fn get_categories(
@@ -132,11 +135,30 @@ async fn get_categories(
 async fn search_tools(
     State(state): State<AppState>,
     Query(q): Query<SearchQuery>,
-) -> Result<Json<Vec<Tool>>, ApiError> {
+) -> Result<Json<Vec<PublicToolSummary>>, ApiError> {
     validate_search_tools_input(&q.query, &q.function, &q.chain)
         .map_err(ApiError::from_server_fn)?;
 
-    let tools = sqlx::query_as::<_, Tool>(SEARCH_APPROVED_TOOLS_SQL)
+    use crate::server::queries::{SEARCH_APPROVED_TOOLS_OR_SQL, SEARCH_APPROVED_TOOLS_SQL};
+    use crate::server::tool_search::{resolve_search_match, ToolSearchMatch};
+
+    let match_mode = resolve_search_match(
+        &state.pool,
+        MCP_SEARCH_TOOLS_COUNT_SQL,
+        MCP_SEARCH_TOOLS_COUNT_OR_SQL,
+        &q.query,
+        q.function.as_deref(),
+        q.chain.as_deref(),
+    )
+    .await
+    .map_err(|e| ApiError::Internal(format!("search count failed: {e}")))?;
+
+    let search_sql = match match_mode {
+        ToolSearchMatch::And => SEARCH_APPROVED_TOOLS_SQL,
+        ToolSearchMatch::Or => SEARCH_APPROVED_TOOLS_OR_SQL,
+    };
+
+    let tools = sqlx::query_as::<_, Tool>(search_sql)
         .bind(&q.query)
         .bind(q.function.as_deref())
         .bind(q.chain.as_deref())
@@ -144,18 +166,18 @@ async fn search_tools(
         .await
         .map_err(|e| ApiError::Internal(format!("search failed: {e}")))?;
 
-    Ok(Json(sanitize_tools_for_public_response(tools)))
+    Ok(Json(tools_to_public_summaries(tools)))
 }
 
 async fn get_tool_by_slug(
     State(state): State<AppState>,
     Path(slug): Path<String>,
-) -> Result<Json<Tool>, ApiError> {
+) -> Result<Json<PublicTool>, ApiError> {
     fetch_tool_by_slug(&state.pool, &slug)
         .await
         .map_err(ApiError::from_server_fn)?
         .ok_or_else(|| ApiError::NotFound(format!("tool not found: {slug}")))
-        .map(Json)
+        .map(|tool| Json(PublicTool::from(tool)))
 }
 
 async fn count_tools(
