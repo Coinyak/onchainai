@@ -92,7 +92,7 @@ export function BlueprintToolChainMemo({
   useEffect(() => {
     if (!chainsPopoverOpen || readOnly) return;
 
-    const handlePointerDown = (event: PointerEvent) => {
+    const handleClickOutside = (event: MouseEvent) => {
       const target = event.target as Node;
       if (popoverRef.current?.contains(target)) return;
       if (anchorRef.current?.contains(target)) return;
@@ -103,10 +103,10 @@ export function BlueprintToolChainMemo({
       if (event.key === "Escape") onClose?.();
     };
 
-    document.addEventListener("pointerdown", handlePointerDown, true);
+    document.addEventListener("click", handleClickOutside);
     document.addEventListener("keydown", handleKeyDown);
     return () => {
-      document.removeEventListener("pointerdown", handlePointerDown, true);
+      document.removeEventListener("click", handleClickOutside);
       document.removeEventListener("keydown", handleKeyDown);
     };
   }, [anchorRef, chainsPopoverOpen, onClose, readOnly]);
@@ -164,8 +164,7 @@ export function BlueprintToolChainMemo({
                   aria-label={`${active ? "Remove" : "Add"} ${chain.label}`}
                   aria-pressed={active}
                   title={chain.label}
-                  onMouseDown={(e) => e.stopPropagation()}
-                  onClick={(e) => {
+                  onPointerDown={(e) => {
                     e.stopPropagation();
                     toggleChain(chain.id);
                   }}
