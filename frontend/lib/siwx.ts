@@ -16,6 +16,8 @@ export class SiwxError extends Error {
   }
 }
 
+const AUTH_FETCH_TIMEOUT_MS = 30_000;
+
 function provider(): Eip1193Provider {
   if (typeof window === "undefined" || !window.ethereum) {
     throw new SiwxError(
@@ -26,16 +28,39 @@ function provider(): Eip1193Provider {
 }
 
 async function postJson<T>(url: string, body: unknown): Promise<T> {
-  const res = await fetch(url, {
-    method: "POST",
-    credentials: "include",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) {
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), AUTH_FETCH_TIMEOUT_MS);
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+    if (!res.ok) {
+      const payload = (await res.json().catch(() => null)) as {
+        error?: { message?: string };
+      } | null;
+      const message =
+        payload?.error?.message ||
+        (res.status === 401
+          ? "Signature verification failed. Try signing again."
+          : "Wallet sign-in failed. Try again.");
+      throw new SiwxError(message);
+    }
+    return res.json() as Promise<T>;
+  } catch (err) {
+    if (err instanceof SiwxError) throw err;
+    if (err instanceof DOMException && err.name === "AbortError") {
+      throw new SiwxError(
+        "Wallet sign-in timed out. Check your connection and try again.",
+      );
+    }
     throw new SiwxError("Wallet sign-in failed. Try again.");
+  } finally {
+    window.clearTimeout(timeout);
   }
-  return res.json() as Promise<T>;
 }
 
 /**

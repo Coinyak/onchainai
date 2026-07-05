@@ -1,8 +1,10 @@
 "use client";
 
 import { useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { clientApiBase, githubSignInHref, githubSwitchHref, googleSignInHref, isVercelPreviewHost, productionLoginHref } from "@/lib/auth-origin";
 import { useAuth } from "@/lib/auth";
+import { getAuthProviders } from "@/lib/api";
 import { GitHubMarkIcon } from "@/components/icons/GitHubMarkIcon";
 import { GoogleMarkIcon } from "@/components/icons/GoogleMarkIcon";
 import { connectWalletSiwx, SiwxError } from "@/lib/siwx";
@@ -23,7 +25,12 @@ export function LoginForm({
   authError = null,
   signedOut = false,
 }: LoginFormProps) {
-  const { refetch } = useAuth();
+  const queryClient = useQueryClient();
+  const { data: providers } = useQuery({
+    queryKey: ["auth-providers"],
+    queryFn: getAuthProviders,
+    staleTime: 5 * 60 * 1000,
+  });
   const [email, setEmail] = useState("");
   const [emailMsg, setEmailMsg] = useState<string | null>(null);
   const [emailBusy, setEmailBusy] = useState(false);
@@ -73,9 +80,9 @@ export function LoginForm({
     setWalletMsg(null);
     try {
       const { redirect } = await connectWalletSiwx(apiBase);
-      await refetch();
       const returnTo = consumeReturnTo();
-      window.location.href = returnTo || redirect;
+      queryClient.removeQueries({ queryKey: ["me"] });
+      window.location.assign(returnTo || redirect);
     } catch (err) {
       const message =
         err instanceof SiwxError
@@ -152,15 +159,24 @@ export function LoginForm({
         </form>
         , then return here and continue with GitHub.
       </div>
-      <a
-        href={googleHref}
-        rel="external"
-        data-testid="google-sign-in"
-        className="mt-3 flex items-center justify-center gap-2 w-full min-h-touch px-4 py-2.5 rounded-md border border-border-strong bg-neutral-bg text-body-md font-medium hover:bg-neutral-hover no-underline text-primary"
-      >
-        <GoogleMarkIcon size={18} className="shrink-0" />
-        Continue with Google
-      </a>
+      {providers?.google ? (
+        <a
+          href={googleHref}
+          rel="external"
+          data-testid="google-sign-in"
+          className="mt-3 flex items-center justify-center gap-2 w-full min-h-touch px-4 py-2.5 rounded-md border border-border-strong bg-neutral-bg text-body-md font-medium hover:bg-neutral-hover no-underline text-primary"
+        >
+          <GoogleMarkIcon size={18} className="shrink-0" />
+          Continue with Google
+        </a>
+      ) : (
+        <p
+          className="mt-3 rounded-md border border-border bg-neutral-hover px-4 py-3 text-body-sm text-secondary"
+          data-testid="google-sign-in-unavailable"
+        >
+          Google sign-in is not configured on this deployment yet. Use GitHub, wallet, or email.
+        </p>
+      )}
       <form className="mt-3 flex gap-2" onSubmit={sendMagicLink}>
         <input
           type="email"

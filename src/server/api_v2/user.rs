@@ -7,6 +7,7 @@ use axum::{
     routing::get,
     Json, Router,
 };
+use serde::Serialize;
 use serde_json::json;
 
 use crate::auth::session::{
@@ -17,11 +18,29 @@ use crate::AppState;
 use super::auth::{optional_user_from, require_admin_from};
 use super::error::ApiError;
 
+#[derive(Debug, Serialize)]
+struct AuthProviders {
+    github: bool,
+    google: bool,
+    wallet: bool,
+    email: bool,
+}
+
 pub fn router(state: AppState) -> Router {
     Router::new()
         .route("/api/v2/me", get(get_me))
+        .route("/api/v2/auth/providers", get(get_auth_providers))
         .route("/api/v2/admin/check", get(check_admin))
         .with_state(state)
+}
+
+async fn get_auth_providers(State(state): State<AppState>) -> Json<AuthProviders> {
+    Json(AuthProviders {
+        github: true,
+        google: state.config.google_oauth_enabled(),
+        wallet: true,
+        email: true,
+    })
 }
 
 async fn get_me(State(state): State<AppState>, headers: HeaderMap) -> Result<Response, ApiError> {

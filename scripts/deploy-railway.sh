@@ -130,6 +130,15 @@ sync_vars() {
   if [[ -n "${GITHUB_REDIRECT_URI:-}" ]]; then
     vars+=("GITHUB_REDIRECT_URI=${GITHUB_REDIRECT_URI}")
   fi
+  if [[ -n "${GOOGLE_CLIENT_ID:-}" ]]; then
+    vars+=("GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}")
+  fi
+  if [[ -n "${GOOGLE_CLIENT_SECRET:-}" ]]; then
+    vars+=("GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}")
+  fi
+  if [[ -n "${GOOGLE_REDIRECT_URI:-}" ]]; then
+    vars+=("GOOGLE_REDIRECT_URI=${GOOGLE_REDIRECT_URI}")
+  fi
   if [[ -n "${X402_FACILITATOR_URL:-}" ]]; then
     vars+=("X402_FACILITATOR_URL=${X402_FACILITATOR_URL}")
   fi

@@ -1,9 +1,9 @@
 //! Axum auth routes — direct GitHub OAuth, email magic links, and logout.
 
 use crate::auth::session::{
-    clear_session_hint_cookie, cookie_secure_for_domain, cookie_value, ensure_github_profile,
-    issue_access_token, local_dev_host, post_auth_redirect_path, set_session_hint_cookie,
-    ACCESS_TOKEN_COOKIE, GITHUB_STATE_COOKIE,
+    auth_http_client, clear_session_hint_cookie, cookie_secure_for_domain, cookie_value,
+    ensure_github_profile, issue_access_token, local_dev_host, post_auth_redirect_path,
+    set_session_hint_cookie, ACCESS_TOKEN_COOKIE, GITHUB_STATE_COOKIE,
 };
 use crate::config::Config;
 use crate::AppState;
@@ -110,10 +110,7 @@ async fn exchange_github_code(
     config: &Config,
     code: &str,
 ) -> Result<GithubTokenResponse, StatusCode> {
-    let client = reqwest::Client::builder()
-        .user_agent("OnchainAI/0.1")
-        .build()
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let client = auth_http_client().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let redirect_uri = callback_url(config);
     let response = client
@@ -140,10 +137,7 @@ async fn exchange_github_code(
 }
 
 async fn fetch_github_user(access_token: &str) -> Result<GithubUser, StatusCode> {
-    let client = reqwest::Client::builder()
-        .user_agent("OnchainAI/0.1")
-        .build()
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let client = auth_http_client().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let response = client
         .get("https://api.github.com/user")
