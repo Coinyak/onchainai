@@ -1,11 +1,11 @@
 # Free Tier Guardian — 영구 무료 티어 정책 스펙
 
-> Related: [[../../PRODUCT_ENHANCEMENT_SPEC]] §K | [[../../X402_REFERRAL_SPEC]] | [[2026-07-03-x402-activation-spec]] | [[../../UI_UX_IMPROVEMENT_SPEC]] Phase 2·5 | [[../../../AGENTS.md]] | [[../../../README.md]]
+> Related: [[../../X402_OPEN_LISTING_SPEC]] | [[../../X402_REFERRAL_SPEC]] | [[2026-07-03-x402-activation-spec]] | [[../../UI_UX_IMPROVEMENT_SPEC]] Phase 2·5 | [[../../../AGENTS.md]] | [[../../../README.md]]
 >
 > Date: 2026-07-04  
 > Status: **Final — 창업자 결정(OD-FTG)**  
 > Scope: OnchainAI **자체 서비스**에서 영구 무료로 유지할 표면을 문서화하고, 웹·MCP·SEO `/x402` 허브·`compare_tools`에 대한 **회귀 방지 가드레일**을 정의한다.  
-> Evidence: `README.md`, `src/server/mcp.rs`, `src/server/api_v2/public_tools.rs`, `frontend/app/compare/`, `PRODUCT_ENHANCEMENT_SPEC` §K2 초안 대조
+> Evidence: `README.md`, `src/server/mcp.rs`, `src/server/api_v2/public_tools.rs`, `frontend/app/compare/`, `X402_OPEN_LISTING_SPEC` 정본 대조
 
 **본 문서는 구현 코드를 포함하지 않는다.** 정책·수용 기준·검증·금지 사항만 정의한다.
 
@@ -95,7 +95,7 @@ OnchainAI의 wedge는 **크립토 특화 × 큐레이션 × 신뢰/설치안전*
 
 ## 3. 명시적 유료·보류 후보 (§2 침범 금지)
 
-> `PRODUCT_ENHANCEMENT_SPEC` §K **보류** 유지. 아래는 **미래 실험 후보**이며 §2와 **겹치면 안 된다**.
+> `X402_OPEN_LISTING_SPEC` §K **보류** 유지. 아래는 **미래 실험 후보**이며 §2와 **겹치면 안 된다**.
 
 | 후보 | 설명 | §2와의 경계 |
 |------|------|-------------|
@@ -152,7 +152,7 @@ OnchainAI의 wedge는 **크립토 특화 × 큐레이션 × 신뢰/설치안전*
 - [ ] MCP `compare_tools` 구현 시 `tools/list`에 **항상** 포함(Bearer 불필요).
 - [ ] MCP·REST·웹 비교 행 **동일 slug set**에 대해 pricing/x402/install_risk 필드 일치(스냅샷 테스트).
 - [ ] `scripts/smoke-test.sh`에 compare 공개 경로 검사 추가.
-- [ ] `PRODUCT_ENHANCEMENT_SPEC` §K2에서 `compare_tools` 유료 문구 **삭제·본 스펙 링크**.
+- [x] `X402_OPEN_LISTING_SPEC` 정본에 `compare_tools` 유료 문구 없음 — 본 스펙이 정책 출처.
 
 ---
 
@@ -191,14 +191,14 @@ OnchainAI의 wedge는 **크립토 특화 × 큐레이션 × 신뢰/설치안전*
 | FTG-A | MCP 유료 키워드 부재 | `src/server/mcp.rs`에 `402`/`paymentRequired`/`x402_gate` 없음 |
 | FTG-B | compare API 공개 | `curl -s -o /dev/null -w '%{http_code}' '$PROD_URL/api/v2/tools/compare?slugs=aave,uniswap'` → `200` |
 | FTG-C | 정책 문서 존재 | `docs/superpowers/specs/2026-07-04-free-tier-guardian-spec.md`에 `영구 무료` |
-| FTG-D | K2 compare 유료 문구 제거 | `PRODUCT_ENHANCEMENT_SPEC.md` §K2에 `compare_tools`+`마이크로페이먼트` 동시 absent |
+| FTG-D | compare 유료 문구 제거 | `scripts/spec-verify.sh` `ftg_compare_free`: `compare_tools`/`/compare` 라인에 과금 키워드(`유료|paid|402|…`)가 있으나 `무료|폐기|채택하지` 등 부정·폐기 표기가 없으면 FAIL |
 | FTG-E | README 무료 선언 | `README.md`에 `free`+`read-only` |
 
 ### 7.3 문서 동기화
 
 - `README.md` — MCP tools 표에 `compare_tools`(구현 후) 추가, **free** 명시.
 - `docs/INDEX.md` — 본 스펙 링크.
-- `docs/PRODUCT_ENHANCEMENT_SPEC.md` §K2 — compare 유료 문구 제거·FTG 링크.
+- `docs/X402_OPEN_LISTING_SPEC.md` — compare 유료 문구 없음·FTG 링크.
 - `docs/superpowers/specs/2026-07-03-x402-activation-spec.md` §2 비목표 — K2 compare 과금 **영구 비목표** 명시.
 - `plugin/onchainai/skills/` — compare·x402 발견은 OnchainAI 무료 MCP로 안내.
 
@@ -227,7 +227,7 @@ OnchainAI의 wedge는 **크립토 특화 × 큐레이션 × 신뢰/설치안전*
 ## 10. 완료 정의 (Definition of Done)
 
 - [ ] 본 스펙 `docs/INDEX.md` 등재.
-- [ ] `PRODUCT_ENHANCEMENT_SPEC` §K2·A2와 정합(compare 영구 무료).
+- [x] `X402_OPEN_LISTING_SPEC`·§2와 정합(compare 영구 무료).
 - [ ] `scripts/spec-verify.sh`에 FTG-A~E 추가(또는 `scripts/smoke-test.sh` 확장).
 - [ ] MCP `compare_tools` 착수 시 §5 계약·테스트 먼저.
 - [ ] `/x402` 허브 착수 시 §4 SSR·SEO 게이트 먼저.

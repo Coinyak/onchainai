@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# spec-verify.sh — acceptance harness for docs/PRODUCT_ENHANCEMENT_SPEC.md.
+# spec-verify.sh — acceptance harness for docs/VERIFICATION.md + canonical policy specs
+# (docs/X402_OPEN_LISTING_SPEC.md, docs/superpowers/specs/2026-07-04-free-tier-guardian-spec.md).
 #
 # Read-only. Runs the automatable acceptance checks from docs/VERIFICATION.md and
 # prints PASS / FAIL / MANUAL / SKIP per spec item. Many items are SUPPOSED to be
@@ -67,6 +68,39 @@ absent() { local id="$1" d="$2" pat="$3"; shift 3; want "$id" || return
 exists() { local id="$1" d="$2" path="$3"; want "$id" || return
   [ -e "$path" ] && ok "$id" "$d" || no "$id" "$d ($path 없음)"; }
 manual() { local id="$1" d="$2"; want "$id" || return; man "$id" "$d"; }
+
+# ftg_compare_free ID "desc" FILE...
+# FAIL when a compare-surface line pairs payment terms with compare_tools//compare
+# without an explicit free/deprecated/negation marker on the same line.
+ftg_compare_free() {
+  local id="$1" d="$2"
+  shift 2
+  want "$id" || return
+
+  local compare_pat='compare_tools|/compare|tools/compare'
+  local pay_pat='유료|과금|paid|payment|micropay|micro[ -]?pay|마이크로페이|마이크로페이먼트|호출당[[:space:]]*(x)?402|per[[:space:]]+call'
+  local safe_pat='무료|free|금지|폐기|채택하지|비목표|없음|영구|초안|갭|gap|위험|불일치|거부|제외|exclude|미구현|not paid|no charge|402 아님|아님|비인증|Evidence|정본|대조'
+
+  local any_file=0 bad=""
+  for f in "$@"; do
+    [ -e "$f" ] || { no "$id" "$d ($f 없음)"; return; }
+    any_file=1
+    while IFS= read -r line; do
+      printf '%s' "$line" | grep -Eq -- "$compare_pat" || continue
+      printf '%s' "$line" | grep -Eq -- "$pay_pat" || continue
+      printf '%s' "$line" | grep -Eq -- "$safe_pat" && continue
+      bad+="${f}: ${line}"$'\n'
+    done < <(grep -E -- "$compare_pat" "$f" 2>/dev/null || true)
+  done
+
+  [ $any_file -eq 0 ] && { no "$id" "$d (파일 없음)"; return; }
+  if [ -z "$bad" ]; then
+    ok "$id" "$d"
+  else
+    no "$id" "$d"
+    printf '%s' "$bad" | sed 's/^/        /'
+  fi
+}
 
 # curl_has ID "desc" URL PATTERN  (-L follow; SKIP on no network)
 curl_has() { local id="$1" d="$2" url="$3" pat="$4"; want "$id" || return
@@ -161,7 +195,10 @@ present D7-trust "카드가 install_risk 시각화" 'install_risk' src/component
 echo "[7] Free Tier Guardian (OD-FTG 2026-07-04)"
 exists FTG-C "FTG 정책 스펙" docs/superpowers/specs/2026-07-04-free-tier-guardian-spec.md
 present FTG-C2 "영구 무료 선언" '영구 무료' docs/superpowers/specs/2026-07-04-free-tier-guardian-spec.md
-absent FTG-D "K2 compare 유료 문구 제거" '호출당 x402 마이크로페이먼트|export_toolkit`·`compare_tools`·대량' docs/PRODUCT_ENHANCEMENT_SPEC.md
+exists FTG-D-doc "x402 정본 스펙" docs/X402_OPEN_LISTING_SPEC.md
+ftg_compare_free FTG-D "compare paid wording absent (policy docs)" \
+  docs/X402_OPEN_LISTING_SPEC.md \
+  docs/superpowers/specs/2026-07-04-free-tier-guardian-spec.md
 absent FTG-A "MCP discovery 402 게이트 없음" 'paymentRequired|require_x402_payment|x402_gate' src/server/mcp.rs
 present FTG-E "README 무료 MCP 선언" 'free.*read-only|read-only.*free' README.md
 curl_has FTG-B "compare API 비인증 200" "$PROD_URL/api/v2/tools/compare?slugs=aave,uniswap" '\[|\{'

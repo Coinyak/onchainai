@@ -26,6 +26,12 @@ Run the Rust API first (`cargo run --features ssr` from the repo root, port 3000
 | `NEXT_PUBLIC_API_URL` | Optional absolute API URL for client fetches | `""` (same-origin) |
 | `NEXT_PUBLIC_GITHUB_REPO` | GitHub link in the top nav | repo URL |
 
+## Dependencies
+
+`package.json` pins `postcss` to `^8.5.10` via `overrides` to patch the moderate
+stringify XSS advisory in older transitive `postcss` (GHSA). Keep this override
+when upgrading Next/Tailwind until the dependency tree ships `>=8.5.10` by default.
+
 ## Styles
 
 `npm run build` runs a `prebuild` step that copies `../style/output.css` into

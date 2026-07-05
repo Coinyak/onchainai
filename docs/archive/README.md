@@ -3,7 +3,7 @@
 여기 문서·스크립트는 **역사 기록**이다. 현행 규칙이 아니며, 에이전트는 이 디렉터리를 작업 근거로 삼지 않는다.
 
 - 현행 규칙/라우팅: `AGENTS.md` → `docs/INDEX.md`
-- 살아있는 로드맵: `docs/LAUNCH_READINESS_SPEC.md`, `docs/PRODUCT_ENHANCEMENT_SPEC.md` (+ `scripts/spec-verify.sh`)
+- 살아있는 로드맵: `docs/LAUNCH_READINESS_SPEC.md`, `docs/X402_OPEN_LISTING_SPEC.md` (+ `scripts/spec-verify.sh`)
 
 | 파일 | 정체 |
 |---|---|
