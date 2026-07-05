@@ -66,15 +66,19 @@
 Phase B/C/D가 `f81c78e`·`ae8e9aa`로 랜딩되어 **G1·D2·H1·H2·C1·C3·L2·D3–D5는 코드 완료**다.
 Grok의 일은 ① 그 커밋들의 **회귀 검증**, ② 잔여 이슈 구현이다.
 
-| 순서 | Slice | ID | 우선순위 |
-|------|-------|----|---------|
-| **0** | **B/C/D 랜딩 회귀 검증(코드 수정 없음)**: `npm run lint && npm run build` → `ui-change-gate.sh` → 375/1280 스크린샷으로 §4의 ✅ 항목 수용 기준 실측 — G1 칩 pill·D2 preview install 노출·H1/H2 브랜드(워드마크 **최소 1회** 노출 확인 — TopNav 제거로 0회가 되면 결함으로 보고)·C1 Codex 1차 탭·C3 More 탭·L2 overflow. 실패 항목은 결함 슬라이스로 승격해 수정 | 검증 | **P0** |
-| 1 | G2 featured overlay 로직 — **유일한 P0 코드 잔여** | G2 | **P0** |
-| 2 | J2 EmptyState filterLines (+J1 카피) | J1·J2 | P1 |
-| 3 | H3 Submit CTA 단일화 | H3 | P1 |
-| 4 | I 검색·타입어헤드 | I1–I3 | P1 |
-| 5 | K1 배지 구분 | K1 | P1 |
-| 6 | L1 체인 `+N` + L4 admin redirect | L1·L4 | P1 |
+> **2026-07-05 상태 확인**: 슬라이스 1–6이 모두 코드에 반영됨(아래 실측 근거). 파일 경로는 스펙
+> 작성 당시(`style/output.css`) 이후 `styles/site-output.css` + `components/ui/Badge.tsx`로 이동. 잔여 =
+> 슬라이스 0(랜딩 회귀 스크린샷 실측)뿐.
+
+| 순서 | Slice | ID | 우선순위 | 상태 (2026-07-05) |
+|------|-------|----|---------|---------|
+| **0** | **B/C/D 랜딩 회귀 검증(코드 수정 없음)**: `npm run lint && npm run build` → `ui-change-gate.sh` → 375/1280 스크린샷으로 §4의 ✅ 항목 수용 기준 실측 — G1 칩 pill·D2 preview install 노출·H1/H2 브랜드(워드마크 **최소 1회** 노출 확인 — TopNav 제거로 0회가 되면 결함으로 보고)·C1 Codex 1차 탭·C3 More 탭·L2 overflow. 실패 항목은 결함 슬라이스로 승격해 수정 | 검증 | **P0** | 🔲 스크린샷 실측 잔여 (lint 0 error) |
+| 1 | G2 featured overlay 로직 — **유일한 P0 코드 잔여** | G2 | **P0** | ✅ `FeaturedCarousel.tsx:134-137` (null→tool_name, 빈/공백→미렌더 `--no-text`) |
+| 2 | J2 EmptyState filterLines (+J1 카피) | J1·J2 | P1 | ✅ `EmptyState.tsx` `filterLines` + `ToolsBrowser.tsx:289` `emptyFilterLines` |
+| 3 | H3 Submit CTA 단일화 | H3 | P1 | ✅ `empty-state-submit-btn` tertiary (`site-output.css:2040`) |
+| 4 | I 검색·타입어헤드 | I1–I3 | P1 | ✅ `ToolSearchCombobox.tsx` (hero-only URL sync, Enter 계약 290-295, mobile focus 182) |
+| 5 | K1 배지 구분 | K1 | P1 | ✅ `badge-verified` green tint `#EDF7ED/#1E7B34` (`site-output.css:726`) |
+| 6 | L1 체인 `+N` + L4 admin redirect | L1·L4 | P1 | ✅ `PreviewPanelContent.tsx:56-57` extraChains + `app/admin/layout.tsx:16-20` server redirect |
 | 7 | (시간 남으면) `/connect` 그리드 ChatGPT 카드 라벨 "(connector)", G3–G4, J3–J5, K2–K5, M4–M5 | — | P2 |
 
 **범위 밖(하지 말 것)**: A0/A2(🔧 오너), scoped count API, H7, L3 라우트 통합, M1–M3·M6–M7(디자인 토큰 대공사), E1–E3, x402/plugin/Rust 전부.
