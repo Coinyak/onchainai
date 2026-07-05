@@ -1,5 +1,5 @@
 import type { BlueprintEdge, BlueprintNode } from "@/lib/api";
-import { chainTagsForTool, type ChainMeta } from "@/lib/chains";
+import { CHAIN_CATALOG, chainTagsForTool, type ChainMeta } from "@/lib/chains";
 
 export const BLUEPRINT_CANVAS_SIZE = 4000;
 export const BLUEPRINT_GRID = 8;
@@ -166,20 +166,28 @@ export function toolChainsForNode(toolChains: string[]): ChainMeta[] {
   return chainTagsForTool(toolChains);
 }
 
+/** Networks available in the blueprint chain picker (full catalog). */
+export function blueprintChainPickerOptions(): ChainMeta[] {
+  return CHAIN_CATALOG;
+}
+
+/** Resolve stored chain ids to display metadata (independent of tool metadata). */
+export function selectedChainsMeta(chainIds: string[]): ChainMeta[] {
+  return chainTagsForTool(chainIds);
+}
+
 export function initialToolNodeChains(_toolChains: string[]): string[] {
   return [];
 }
 
-export function normalizeToolNodeChains(
-  selected: string[],
-  toolChains: string[],
-): string[] {
-  const available = new Set(toolChainsForNode(toolChains).map((chain) => chain.id));
+const BLUEPRINT_CHAIN_ID_RE = /^[a-z0-9-]+$/;
+
+export function normalizeToolNodeChains(selected: string[]): string[] {
   const seen = new Set<string>();
   const normalized: string[] = [];
   for (const chainId of selected) {
     const id = chainId.trim().toLowerCase();
-    if (!id || !available.has(id) || seen.has(id)) continue;
+    if (!id || !BLUEPRINT_CHAIN_ID_RE.test(id) || seen.has(id)) continue;
     seen.add(id);
     normalized.push(id);
     if (normalized.length >= BLUEPRINT_MAX_TOOL_CHAINS) break;

@@ -4,7 +4,10 @@ import { useCallback, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { ChainLogo } from "@/components/tools/ChainLogo";
 import type { ChainMeta } from "@/lib/chains";
-import { BLUEPRINT_MAX_TOOL_CHAINS } from "@/lib/blueprint-utils";
+import {
+  BLUEPRINT_MAX_TOOL_CHAINS,
+  selectedChainsMeta,
+} from "@/lib/blueprint-utils";
 
 const MAX_VISIBLE_CHAIN_BADGES = 8;
 
@@ -47,7 +50,7 @@ export function BlueprintToolChainMemo({
 
   const selectedSet = new Set(selectedChainIds);
   const hasMemoSelection = selectedChainIds.length > 0;
-  const memoChains = availableChains.filter((chain) => selectedSet.has(chain.id));
+  const memoChains = selectedChainsMeta(selectedChainIds);
   const overflowCount = Math.max(0, memoChains.length - MAX_VISIBLE_CHAIN_BADGES);
   const visibleBadges = overflowCount > 0
     ? memoChains.slice(0, MAX_VISIBLE_CHAIN_BADGES)

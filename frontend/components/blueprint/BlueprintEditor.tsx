@@ -795,16 +795,17 @@ function BlueprintEditorWorkspace({
       updateNodes((prev) =>
         prev.map((n) => {
           if (n.id !== id || n.kind !== "tool") return n;
-          const tool = n.slug ? toolsBySlug[n.slug] : null;
-          const normalized = tool
-            ? normalizeToolNodeChains(chains, tool.chains)
-            : chains;
+          const normalized = normalizeToolNodeChains(chains);
+          if (normalized.length === 0) {
+            const { chains: _removed, ...rest } = n;
+            return rest;
+          }
           return { ...n, chains: normalized };
         }),
       );
       setLiveMessage("Chain selection updated.");
     },
-    [readOnly, toolsBySlug, updateNodes],
+    [readOnly, updateNodes],
   );
 
   const updateNodeSize = useCallback(
@@ -825,7 +826,14 @@ function BlueprintEditorWorkspace({
     (id: string, step: number | undefined) => {
       if (readOnly) return;
       updateNodes((prev) =>
-        prev.map((n) => (n.id === id ? { ...n, step } : n)),
+        prev.map((n) => {
+          if (n.id !== id) return n;
+          if (step == null) {
+            const { step: _removed, ...rest } = n;
+            return rest;
+          }
+          return { ...n, step };
+        }),
       );
       if (step != null) {
         setLiveMessage(`Order set to ${step}.`);
@@ -915,6 +923,12 @@ function BlueprintEditorWorkspace({
     if (e.button !== 0) return;
     if ((e.target as HTMLElement).closest("[data-port]")) return;
     if ((e.target as HTMLElement).closest("[data-testid='blueprint-node']")) return;
+    if (
+      (e.target as HTMLElement).closest(
+        ".blueprint-node-rail, .blueprint-node-tool-chain-popover, .blueprint-node-step-input, .blueprint-node-tool-chains",
+      )
+    )
+      return;
     if (
       (e.target as HTMLElement).closest(
         ".blueprint-edge-hit, .blueprint-edge-endpoint, .blueprint-edge-delete, .blueprint-edge-label",
@@ -1242,7 +1256,6 @@ function BlueprintEditorWorkspace({
                   selected={selectedId === node.id}
                   connectPending={linkingFromId === node.id}
                   readOnly={readOnly}
-                  showRail={selectedId === node.id}
                   chainsPopoverOpen={chainsPopoverOpenId === node.id}
                   onSelect={handleNodeSelect}
                   onRemove={removeNode}

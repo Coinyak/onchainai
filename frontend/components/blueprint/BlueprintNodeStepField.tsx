@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { BLUEPRINT_NODE_MAX_STEP, parseBlueprintStepInput } from "@/lib/blueprint-utils";
+import { parseBlueprintStepInput } from "@/lib/blueprint-utils";
 
 interface BlueprintNodeStepFieldProps {
   value?: number;
@@ -29,10 +29,10 @@ export function BlueprintNodeStepField({
 
   return (
     <input
-      type="number"
+      type="text"
+      inputMode="numeric"
       className={className}
-      min={1}
-      max={BLUEPRINT_NODE_MAX_STEP}
+      maxLength={2}
       value={displayValue}
       placeholder={placeholder}
       onClick={onClick}

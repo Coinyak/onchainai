@@ -11,10 +11,10 @@ import { ChainLogo } from "@/components/tools/ChainLogo";
 import { typeBadgeLabel } from "@/lib/format";
 import {
   BLUEPRINT_NODE_TOOL_TYPE_MIN_H,
+  blueprintChainPickerOptions,
   clampNodeHeight,
   clampNodeWidth,
   getNodeBounds,
-  toolChainsForNode,
   type BlueprintPortSide,
 } from "@/lib/blueprint-utils";
 
@@ -95,10 +95,11 @@ export function BlueprintNodeView({
   const [hovered, setHovered] = useState(false);
   const [internalChainsOpen, setInternalChainsOpen] = useState(false);
 
-  const railVisible = showRail ?? (selected || hovered);
+  const railVisible = selected || hovered || showRail === true;
   const chainsOpen = chainsPopoverOpen ?? internalChainsOpen;
   const availableChains =
-    node.kind === "tool" && tool && !toolMissing ? toolChainsForNode(tool.chains) : [];
+    node.kind === "tool" && tool && !toolMissing ? blueprintChainPickerOptions() : [];
+  const selectedChainIds = node.chains ?? [];
 
   const isSizable = node.kind === "tool" || node.kind === "note";
   const bounds = getNodeBounds(node);
@@ -109,7 +110,10 @@ export function BlueprintNodeView({
   const showTypeTag = bounds.h >= BLUEPRINT_NODE_TOOL_TYPE_MIN_H;
   const canResize = isSizable && !readOnly && (selected || railVisible);
   const showChainsOutside =
-    node.kind === "tool" && tool && !toolMissing && availableChains.length > 0;
+    node.kind === "tool" &&
+    tool &&
+    !toolMissing &&
+    (availableChains.length > 0 || selectedChainIds.length > 0);
 
   const handleResizePointerDown = (e: React.PointerEvent<HTMLSpanElement>) => {
     if (readOnly) return;
