@@ -69,7 +69,7 @@ import { BlueprintEdgesLayer } from "@/components/blueprint/BlueprintEdgesLayer"
 import { BlueprintPalette } from "@/components/blueprint/BlueprintPalette";
 import { BlueprintNodeView } from "@/components/blueprint/BlueprintNodeView";
 import { BlueprintShareDock } from "@/components/blueprint/BlueprintShareDock";
-import { blueprintCanvasFingerprint } from "@/lib/blueprint-share-storage";
+
 import { ToolLogo } from "@/components/tools/ToolLogo";
 import { Badge } from "@/components/ui/Badge";
 
@@ -288,11 +288,6 @@ function BlueprintEditorWorkspace({
   const selectedEdge = useMemo(
     () => edges.find((edge) => edge.id === selectedEdgeId) ?? null,
     [edges, selectedEdgeId],
-  );
-
-  const canvasFingerprint = useMemo(
-    () => blueprintCanvasFingerprint(title, nodes, edges),
-    [edges, nodes, title],
   );
 
   const sensors = useSensors(
@@ -1314,7 +1309,6 @@ function BlueprintEditorWorkspace({
         edges={edges}
         toolsBySlug={toolsBySlug}
         readOnlyLayout={readOnlyLayout}
-        canvasFingerprint={canvasFingerprint}
       />
 
       <div className="sr-only" aria-live="polite">

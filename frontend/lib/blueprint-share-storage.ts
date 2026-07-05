@@ -12,23 +12,44 @@ function shareDraftKey(blueprintId: string): string {
   return `${SHARE_DRAFT_KEY_PREFIX}${blueprintId}`;
 }
 
-function stableStringify(value: unknown): string {
-  return JSON.stringify(sortKeys(value));
+/** FNV-1a 32-bit hash — short, deterministic fingerprint over canonical content. */
+function fnv1aHex(input: string): string {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < input.length; i++) {
+    hash ^= input.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return `fp:${(hash >>> 0).toString(16).padStart(8, "0")}`;
 }
 
-function sortKeys(value: unknown): unknown {
-  if (Array.isArray(value)) {
-    return value.map(sortKeys);
-  }
-  if (value && typeof value === "object") {
-    const obj = value as Record<string, unknown>;
-    const sorted: Record<string, unknown> = {};
-    for (const key of Object.keys(obj).sort()) {
-      sorted[key] = sortKeys(obj[key]);
-    }
-    return sorted;
-  }
-  return value;
+function canonicalizeBlueprint(
+  title: string,
+  nodes: BlueprintNode[],
+  edges: BlueprintEdge[],
+): string {
+  const sortedNodes = [...nodes].sort((a, b) => a.id.localeCompare(b.id));
+  const nodeLines = sortedNodes.map((node) => {
+    const parts = [node.id, node.kind];
+    const slug = node.slug?.trim();
+    if (slug) parts.push(`slug:${slug}`);
+    const chainId = node.chainId?.trim();
+    if (chainId) parts.push(`chainId:${chainId}`);
+    if (node.text !== undefined) parts.push(`text:${node.text}`);
+    if (node.chains?.length) parts.push(`chains:${[...node.chains].sort().join(",")}`);
+    if (node.step != null) parts.push(`step:${node.step}`);
+    return parts.join("|");
+  });
+
+  const sortedEdges = [...edges].sort((a, b) => a.id.localeCompare(b.id));
+  const edgeLines = sortedEdges.map((edge) => {
+    const parts = [edge.id, edge.fromId, edge.toId, edge.style, edge.color];
+    if (edge.dashed) parts.push("dashed");
+    const label = edge.label?.trim();
+    if (label) parts.push(`label:${label}`);
+    return parts.join("|");
+  });
+
+  return [title.trim(), nodeLines.join("\n"), edgeLines.join("\n")].join("\x1f");
 }
 
 /** Stable fingerprint of blueprint content for share-prompt draft invalidation. */
@@ -37,35 +58,7 @@ export function blueprintCanvasFingerprint(
   nodes: BlueprintNode[],
   edges: BlueprintEdge[],
 ): string {
-  const payload = {
-    title: title.trim(),
-    nodes: nodes.map((node) => {
-      const normalized: Record<string, unknown> = {
-        id: node.id,
-        kind: node.kind,
-      };
-      if (node.slug?.trim()) normalized.slug = node.slug.trim();
-      if (node.chainId?.trim()) normalized.chainId = node.chainId.trim();
-      if (node.text !== undefined) normalized.text = node.text;
-      if (node.chains?.length) normalized.chains = [...node.chains].sort();
-      if (node.step != null) normalized.step = node.step;
-      return normalized;
-    }),
-    edges: edges.map((edge) => {
-      const normalized: Record<string, unknown> = {
-        id: edge.id,
-        fromId: edge.fromId,
-        toId: edge.toId,
-        style: edge.style,
-        color: edge.color,
-      };
-      if (edge.dashed) normalized.dashed = true;
-      const label = edge.label?.trim();
-      if (label) normalized.label = label;
-      return normalized;
-    }),
-  };
-  return stableStringify(payload);
+  return fnv1aHex(canonicalizeBlueprint(title, nodes, edges));
 }
 
 export function loadSharePromptDraft(blueprintId: string): SharePromptDraft | null {

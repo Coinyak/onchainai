@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useId, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { Share2, X } from "lucide-react";
 import type { BlueprintEdge, BlueprintNode, PublicTool } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -9,7 +9,11 @@ import {
   captureBlueprintContent,
   captureBlueprintViewport,
 } from "@/lib/blueprint-export";
-import { loadSharePromptDraft, saveSharePromptDraft } from "@/lib/blueprint-share-storage";
+import {
+  blueprintCanvasFingerprint,
+  loadSharePromptDraft,
+  saveSharePromptDraft,
+} from "@/lib/blueprint-share-storage";
 
 type ShareTab = "prompt" | "image";
 type CaptureTarget = "viewport" | "full" | null;
@@ -22,7 +26,6 @@ export interface BlueprintShareDockProps {
   edges: BlueprintEdge[];
   toolsBySlug: Record<string, PublicTool | null>;
   readOnlyLayout: boolean;
-  canvasFingerprint: string;
 }
 
 export function BlueprintShareDock({
@@ -33,7 +36,6 @@ export function BlueprintShareDock({
   edges,
   toolsBySlug,
   readOnlyLayout,
-  canvasFingerprint,
 }: BlueprintShareDockProps) {
   const { isAuthenticated } = useAuth();
   const panelId = useId();
@@ -48,6 +50,11 @@ export function BlueprintShareDock({
   const [capturing, setCapturing] = useState<CaptureTarget>(null);
   const [copyState, setCopyState] = useState<"idle" | "copied" | "error">("idle");
   const [copyLiveMessage, setCopyLiveMessage] = useState("");
+
+  const canvasFingerprint = useMemo(() => {
+    if (!open) return "";
+    return blueprintCanvasFingerprint(title, nodes, edges);
+  }, [open, title, nodes, edges]);
 
   const visible = isDraft || isAuthenticated;
   const hasNodes = nodes.length > 0;
@@ -110,14 +117,16 @@ export function BlueprintShareDock({
   ]);
 
   const handleToggleOpen = useCallback(() => {
-    setOpen((prev) => {
-      const next = !prev;
-      if (next) {
-        ensurePromptOnOpen();
-      }
-      return next;
-    });
-  }, [ensurePromptOnOpen]);
+    setOpen((prev) => !prev);
+  }, []);
+
+  const wasOpenRef = useRef(false);
+  useEffect(() => {
+    if (open && !wasOpenRef.current) {
+      ensurePromptOnOpen();
+    }
+    wasOpenRef.current = open;
+  }, [open, ensurePromptOnOpen]);
 
   useEffect(() => {
     if (!open) return;
@@ -151,7 +160,10 @@ export function BlueprintShareDock({
     if (!promptText.trim()) return;
     try {
       await navigator.clipboard.writeText(promptText);
-      saveSharePromptDraft(blueprintId, canvasFingerprint, promptText);
+      const draftFingerprint = baselineFingerprint || canvasFingerprint;
+      if (draftFingerprint) {
+        saveSharePromptDraft(blueprintId, draftFingerprint, promptText);
+      }
       setCopyState("copied");
       setCopyLiveMessage("Prompt copied. Attach PNG from Image tab.");
       window.setTimeout(() => {
@@ -162,7 +174,7 @@ export function BlueprintShareDock({
       setCopyState("error");
       window.setTimeout(() => setCopyState("idle"), 2000);
     }
-  }, [blueprintId, canvasFingerprint, promptText]);
+  }, [baselineFingerprint, blueprintId, canvasFingerprint, promptText]);
 
   const handleDownloadMd = useCallback(() => {
     if (!promptText.trim()) return;

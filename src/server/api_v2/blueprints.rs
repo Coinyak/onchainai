@@ -921,7 +921,7 @@ fn build_order_section(nodes: &[ExportNode]) -> String {
     if stepped.is_empty() {
         return String::new();
     }
-    stepped.sort_by_key(|(_, step)| *step);
+    stepped.sort_by(|(a, step_a), (b, step_b)| step_a.cmp(step_b).then_with(|| a.id.cmp(&b.id)));
     stepped
         .into_iter()
         .map(|(node, step)| format!("- {step}. {} ({})", node_flow_label(node), node.kind))
@@ -951,7 +951,7 @@ before installing.\n\n",
         .collect();
     tool_nodes.sort_by(|(idx_a, a), (idx_b, b)| {
         match (a.step, b.step) {
-            (Some(step_a), Some(step_b)) => step_a.cmp(&step_b),
+            (Some(step_a), Some(step_b)) => step_a.cmp(&step_b).then(idx_a.cmp(idx_b)),
             (Some(_), None) => std::cmp::Ordering::Less,
             (None, Some(_)) => std::cmp::Ordering::Greater,
             (None, None) => idx_a.cmp(idx_b),
@@ -1268,6 +1268,18 @@ mod tests {
             order,
             "- 1. note: check (note)\n- 2. beta (tool)\n- 3. alpha (tool)"
         );
+    }
+
+    #[test]
+    fn build_order_section_tiebreaks_duplicate_steps_by_node_id() {
+        let nodes = parse_export_nodes(&json!([
+            {"id": "t2", "kind": "tool", "slug": "beta", "x": 0, "y": 0, "step": 1},
+            {"id": "t1", "kind": "tool", "slug": "alpha", "x": 0, "y": 0, "step": 1}
+        ]));
+
+        let order = build_order_section(&nodes);
+
+        assert_eq!(order, "- 1. alpha (tool)\n- 1. beta (tool)");
     }
 
     #[test]
