@@ -1,6 +1,6 @@
 # MCP Agent Workflow
 
-> Related: [[AGENT_HARNESS]] | [[MULTI_AGENT_COORDINATION]] | [[BUILD_DEPLOY_RULES]] | [[../AGENTS.md]]
+> Related: [AGENT_HARNESS](AGENT_HARNESS.md) | [MULTI_AGENT_COORDINATION](MULTI_AGENT_COORDINATION.md) | [BUILD_DEPLOY_RULES](BUILD_DEPLOY_RULES.md) | [AGENTS](../AGENTS.md)
 
 Executable gates (`./scripts/*`) are **proof**. MCP (Vercel, Railway, GitHub, onchainai) is **observability** — read logs and status first; never substitute MCP for gate scripts.
 
@@ -73,7 +73,7 @@ Vercel rewrites `/api`, `/auth`, `/onboarding`, `/mcp` to Railway. Classify fail
 |-------------|---------------|-----------------|
 | UI-only | Vercel deploy/logs after local `npm run build` | `ui-change-gate.sh` full tier |
 | API-only | Railway runtime logs on failure | `cargo test`, clippy, fmt |
-| Full-stack | Vercel + Railway as needed | matrix in [[MULTI_AGENT_COORDINATION]] |
+| Full-stack | Vercel + Railway as needed | matrix in [MULTI_AGENT_COORDINATION](MULTI_AGENT_COORDINATION.md) |
 | Deploy | Both surfaces post-deploy | `deploy-railway.sh` + `post-deploy-verify.sh` |
 
 ## Anti-patterns

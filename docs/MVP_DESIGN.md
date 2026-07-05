@@ -1,6 +1,6 @@
 # OnchainAI MVP 설계 (Rust)
 
-> 관련 문서: [[INDEX]] | [[UI_UX_DESIGN]] | [[SECURITY]] | [[../DESIGN]] | [[../AGENTS.md]]
+> 관련 문서: [INDEX](INDEX.md) | [UI_UX_DESIGN](UI_UX_DESIGN.md) | [SECURITY](SECURITY.md) | [DESIGN](../DESIGN.md) | [AGENTS](../AGENTS.md)
 >
 > 작성: 2026-06-25. 경쟁자 정찰 + 사용자 기획 대화 기반.
 > 2026-06-25 업데이트: TypeScript/Next.js → Rust 전체 스택 변경.

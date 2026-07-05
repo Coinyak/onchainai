@@ -3,7 +3,7 @@
 > 작성일: 2026-06-28 · 대상: 기능/MCP/플러그인 확장, UI 유저 친화화, 시스템 견고화·불순물 제거·코드 최적화
 > 범위: 현재 코드베이스(`src/` 29.4k LOC, 서버펑션 59개, 크롤러 소스 4종, MCP 툴 5종, 마이그레이션 22개) 진단 → 우선순위 기반 개선 스펙.
 
-이 문서는 "무엇을 왜 어떻게"를 한 번에 본다. 각 항목은 **근거(파일:라인)** → **목표** → **작업** → **수용 기준** 순서로 적었다. **우선순위의 단일 출처는 바로 아래 "북극성 & 실행 우선순위"** 다(섹션 A~K는 상세 정의, §3은 의존성 순서). 검증 장치는 [docs/VERIFICATION.md](docs/VERIFICATION.md) + `scripts/spec-verify.sh`.
+이 문서는 "무엇을 왜 어떻게"를 한 번에 본다. 각 항목은 **근거(파일:라인)** → **목표** → **작업** → **수용 기준** 순서로 적었다. **우선순위의 단일 출처는 바로 아래 "북극성 & 실행 우선순위"** 다(섹션 A~K는 상세 정의, §3은 의존성 순서). 검증 장치는 [docs/VERIFICATION.md](VERIFICATION.md) + `scripts/spec-verify.sh`.
 
 > 2026-06-29 재정렬: 23개 P1을 **Top 5 트랙**으로 압축, 중복 통합, 수익화(K) 보류.
 
@@ -179,7 +179,7 @@ A4 Tier2 임베딩 · 관측성·헬스(A3+H3+E5 통합) · B2 잔여 소스 · 
 - 우선순위: ① 공식 MCP Registry ② Smithery(skills 포함) ③ awesome-*crypto* GitHub 리스트 ④ Glama/mcp.so ⑤ crates.io/PyPI/Docker Hub.
 - 수용 기준: 소스별 픽스처 기반 파싱 테스트 + dedup 충돌 테스트.
 - **근본 원인 확인(2026-06-28)**: 크롤러는 실제로 돌지만([lib.rs:349](src/lib.rs)) 소스가 4개(cryptoskill/npm/web3mcp/github-topics)뿐이라 **공식 Registry·Smithery·awesome-mcp 리스트가 사각지대**. awesome-mcp `finance--crypto.md` 한 곳에만 크립토 MCP **388개** 존재. 이게 "수동으로 찾게 되는" 직접 원인.
-- 상세 설계·큐레이션 시드 후보(Base MCP·Coinbase AgentKit 등 ~50개)·AI 발견 파이프라인: **[docs/TOOL_DISCOVERY.md](docs/TOOL_DISCOVERY.md)** 참조.
+- 상세 설계·큐레이션 시드 후보(Base MCP·Coinbase AgentKit 등 ~50개)·AI 발견 파이프라인: **[docs/TOOL_DISCOVERY.md](TOOL_DISCOVERY.md)** 참조.
 - 출처: [공식 MCP Registry](https://github.com/modelcontextprotocol/registry) · [Smithery CLI](https://github.com/smithery-ai/cli) · [Glama](https://glama.ai/mcp/servers) · [awesome-mcp finance/crypto](https://github.com/TensorBlock/awesome-mcp-servers/blob/main/docs/finance--crypto.md) · [The Grid dev tooling](https://thegrid.id/discovery/productType/developer-tooling) · [Alchemy dapps](https://www.alchemy.com/dapps/top/developer-tools) · [awesome-web3](https://github.com/ahmet/awesome-web3)
 
 **B3. 크롤 견고성 (P2)**
@@ -242,7 +242,7 @@ A4 Tier2 임베딩 · 관측성·헬스(A3+H3+E5 통합) · B2 잔여 소스 · 
 - 수용 기준: 키보드만으로 검색→상세 이동, 모바일에선 비노출/대체.
 
 **D6. 한국어 i18n (P2, 타깃 사용자 적합)**
-- 운영자·1차 사용자층이 한국어([OPERATOR_GUIDE.md](docs/OPERATOR_GUIDE.md)도 한국어). UI 문자열을 i18n 키로 추출하고 ko/en 토글. SSR이라 `Accept-Language`/쿠키 기반 초기 언어 선택 가능.
+- 운영자·1차 사용자층이 한국어([OPERATOR_GUIDE.md](OPERATOR_GUIDE.md)도 한국어). UI 문자열을 i18n 키로 추출하고 ko/en 토글. SSR이라 `Accept-Language`/쿠키 기반 초기 언어 선택 가능.
 - 수용 기준: 핵심 페이지(홈/목록/상세/로그인) ko/en 전환, 하드코딩 문자열 0.
 
 **D7. UI 폴리시 디테일 — 코드 실측 발견 (P1, 저비용)**
@@ -376,12 +376,12 @@ A4 Tier2 임베딩 · 관측성·헬스(A3+H3+E5 통합) · B2 잔여 소스 · 
 - 수용 기준: 컬렉션 → 플러그인/스킬 번들 생성기, `type=skill|plugin` 필터.
 
 **관계**: J1/J2는 D4(온보딩 "에이전트 연결")·A5(등재)의 *구현 수단*이자 상위 배포 전략. MCP 단독 배포보다 채택률↑.
-상세 구현 스펙(SKILL.md 초안·plugin.json·.mcp.json·슬래시 커맨드): **[docs/SKILL_PLUGIN_SPEC.md](docs/SKILL_PLUGIN_SPEC.md)**.
+상세 구현 스펙(SKILL.md 초안·plugin.json·.mcp.json·슬래시 커맨드): **[docs/SKILL_PLUGIN_SPEC.md](SKILL_PLUGIN_SPEC.md)**.
 
 ### K. x402 수익화 방안 (Monetization) — ⏸ 보류 (트래픽 확보 후)
 
 > ~~⏸ 우선순위 보류(2026-06-29)~~ → ✅ **보류 해제(2026-07-04, 오너 결정)**: 오픈 리스팅·수익화 착수 확정. 실행 스펙은 [X402_OPEN_LISTING_SPEC](X402_OPEN_LISTING_SPEC.md) — M2=K3(유료 노출·검증), M3=K2(프리미엄 MCP), 등록 약관 referral=K1 확장. 아래 K0~K4 설계는 유효(정본 라벨).
-> ⚠️ **하드룰 준수** (AGENTS.md / [X402_REFERRAL_SPEC.md](docs/X402_REFERRAL_SPEC.md)): OnchainAI는 **커스터디·facilitator·게이트웨이·자금이동을 하지 않는다.** 아래는 전부 (a) 어트리뷰션/레퍼럴이거나 (b) OnchainAI **자신의 서비스 대가를 x402로 수취**하는 것 — 제3자 자금을 한시도 보관/중계하지 않음.
+> ⚠️ **하드룰 준수** (AGENTS.md / [X402_REFERRAL_SPEC.md](X402_REFERRAL_SPEC.md)): OnchainAI는 **커스터디·facilitator·게이트웨이·자금이동을 하지 않는다.** 아래는 전부 (a) 어트리뷰션/레퍼럴이거나 (b) OnchainAI **자신의 서비스 대가를 x402로 수취**하는 것 — 제3자 자금을 한시도 보관/중계하지 않음.
 
 **K0. 두 개의 합법 수익 축**
 - **축 A (발견 어트리뷰션)**: 에이전트가 OnchainAI 경유로 유료 x402 툴을 찾아 호출 → builder_code/payout split(협조형) 또는 어트리뷰션 로그(데이터형). 결제 경로에 안 낌.
@@ -389,7 +389,7 @@ A4 Tier2 임베딩 · 관측성·헬스(A3+H3+E5 통합) · B2 잔여 소스 · 
 
 **K1. 발견 어트리뷰션 (축 A — 이미 ~70% 구현)**
 - 인프라 존재: `referral_events`, `x402_builder_code`/`referral_bps`/`referral_payout_address`, [mcp.rs](src/server/mcp.rs)의 install_guide 어트리뷰션 기록·레퍼럴 메타 노출.
-- 핵심 전략: **규모 = 협상력.** 전환/설치가이드 호출을 모아 툴 측과 revenue-share 협상(track1 협조 split, track2 데이터만). 상세는 [X402_REFERRAL_SPEC.md](docs/X402_REFERRAL_SPEC.md).
+- 핵심 전략: **규모 = 협상력.** 전환/설치가이드 호출을 모아 툴 측과 revenue-share 협상(track1 협조 split, track2 데이터만). 상세는 [X402_REFERRAL_SPEC.md](X402_REFERRAL_SPEC.md).
 - 고도화: MCP·Skill·웹 경유 호출의 어트리뷰션을 일관 기록 + 유저 투명 고지.
 
 **K2. x402-게이트 프리미엄 MCP/API (축 B — ⏸ 보류, compare 제외)**
@@ -461,7 +461,7 @@ A4 Tier2 임베딩 · 관측성·헬스(A3+H3+E5 통합) · B2 잔여 소스 · 
 4. **채택 동선 (D4→J1→J2)** — D4(연결 UI)·J1(Skill) 후 J2(Plugin)가 둘을 번들.
 5. 그다음 **Next** 묶음, 마지막 **Later/보류(K)**.
 
-> ✅ 완료: E1(stray 제거) · A1(rmcp 제거). 각 항목 검증은 [VERIFICATION.md](docs/VERIFICATION.md) + `scripts/spec-verify.sh`.
+> ✅ 완료: E1(stray 제거) · A1(rmcp 제거). 각 항목 검증은 [VERIFICATION.md](VERIFICATION.md) + `scripts/spec-verify.sh`.
 
 ---
 
@@ -472,7 +472,7 @@ A4 Tier2 임베딩 · 관측성·헬스(A3+H3+E5 통합) · B2 잔여 소스 · 
 - **UI**: `./scripts/ui-change-gate.sh` 그린, 라이트 테마 WCAG AA 대비, 주요 페이지 axe 위반 0. (다크모드 제외)
 - **위생/구조**: 추적된 stray 0, 미사용 의존성 0(`cargo machete`), 서버 도메인 모듈 800 LOC 초과 0.
 - **인증**: GitHub 로그인 왕복 성공, redirect_uri 오류 0, apex→www 301, 지갑/세션 재현 실패 0.
-- **항목별 수용 기준 → 기계 검증**: [VERIFICATION.md](docs/VERIFICATION.md) 매트릭스 + `scripts/spec-verify.sh` 그린.
+- **항목별 수용 기준 → 기계 검증**: [VERIFICATION.md](VERIFICATION.md) 매트릭스 + `scripts/spec-verify.sh` 그린.
 
 ### 4.2 제품 KPI (북극성 측정 — *현재 계측 없음, H3/분석 필요*)
 - **공개 승인 툴 수** (성장) — 목표: 분기별 우상향.

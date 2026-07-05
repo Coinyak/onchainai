@@ -1,6 +1,6 @@
 # OnchainAI UI/UX 설계
 
-> 관련 문서: [[INDEX]] | [[MVP_DESIGN]] | [[SECURITY]] | [[../DESIGN]] | [[../AGENTS.md]]
+> 관련 문서: [INDEX](INDEX.md) | [MVP_DESIGN](MVP_DESIGN.md) | [SECURITY](SECURITY.md) | [DESIGN](../DESIGN.md) | [AGENTS](../AGENTS.md)
 >
 > 작성: 2026-06-25. 사용자 요구사항 + 디렉토리 사이트 레퍼런스 분석 기반.
 > **갱신: 2026-06-27** — 사이드바 레이아웃, chain strip, featured carousel, 누적 Load more (`limit = page × 50`, `offset = 0`), 정렬 시 `selected` 닫음, 태블릿(<1024px) 사이드바 기본 접힘, Tokio 16MB SSR stack, smoke/verify-bundle 게이트, 공개 relevance quality gate. 미구현·smoke 기대값은 §12.

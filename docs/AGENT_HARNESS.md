@@ -1,6 +1,6 @@
 # Agent Harness
 
-> Related docs: [[../AGENTS.md]] | [[AGENT_READINESS_REPORT]] | [[BUILD_DEPLOY_RULES]] | [[UI_UX_DESIGN]] | [[../DESIGN]]
+> Related docs: [AGENTS](../AGENTS.md) | [AGENT_READINESS_REPORT](AGENT_READINESS_REPORT.md) | [BUILD_DEPLOY_RULES](BUILD_DEPLOY_RULES.md) | [UI_UX_DESIGN](UI_UX_DESIGN.md) | [DESIGN](../DESIGN.md)
 
 This page is the wiki-style operating contract for coding agents. Keep `AGENTS.md` short; put reusable agent procedure here and enforce as much as possible with scripts.
 
@@ -127,9 +127,9 @@ Branch protection and review routing (CODEOWNERS, PR template, `ci-success` merg
 
 When work spans `frontend/`, `src/`, and `migrations/`, spawn up to five subagents with exclusive path ownership. Coordinator merges handoffs and runs the full gate.
 
-- Roster, DAG, verification matrix: [[MULTI_AGENT_COORDINATION]]
-- Handoff packet template: [[handoff-packet-template]]
-- MCP routing (observe logs/deploys; scripts prove deploys): [[MCP_AGENT_WORKFLOW]]
+- Roster, DAG, verification matrix: [MULTI_AGENT_COORDINATION](MULTI_AGENT_COORDINATION.md)
+- Handoff packet template: [handoff-packet-template](handoff-packet-template.md)
+- MCP routing (observe logs/deploys; scripts prove deploys): [MCP_AGENT_WORKFLOW](MCP_AGENT_WORKFLOW.md)
 - Skill entry: `.agents/skills/multi-agent-coordination/SKILL.md`
 
 **MCP vs scripts:** Vercel/Railway/GitHub MCP for read-only investigation. Production deploys stay on `./scripts/deploy-railway.sh` and `./scripts/post-deploy-verify.sh` unless the user explicitly requests a deploy in-session.

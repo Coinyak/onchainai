@@ -1,6 +1,6 @@
 # OnchainAI x402 수익화 — 최종 스펙
 
-> Related: [[X402_ROADMAP]] (living plan, advisory) | [[X402_REFERRAL_SPEC]] | [[X402_OPEN_LISTING_SPEC]] (worktree) | [[PRODUCT_ENHANCEMENT_SPEC]] §K | [[superpowers/specs/2026-07-04-free-tier-guardian-spec]] | [[superpowers/specs/2026-07-03-x402-activation-spec]] | [[../../../AGENTS.md]]
+> Related: [X402_ROADMAP](X402_ROADMAP.md) (living plan, advisory) | [X402_REFERRAL_SPEC](X402_REFERRAL_SPEC.md) | [X402_OPEN_LISTING_SPEC](X402_OPEN_LISTING_SPEC.md) (worktree) | [PRODUCT_ENHANCEMENT_SPEC](PRODUCT_ENHANCEMENT_SPEC.md) §K | [2026-07-04-free-tier-guardian-spec](superpowers/specs/2026-07-04-free-tier-guardian-spec.md) | [2026-07-03-x402-activation-spec](superpowers/specs/2026-07-03-x402-activation-spec.md) | [AGENTS](../AGENTS.md)
 >
 > Date: 2026-07-04  
 > Status: **Final — 창업자 확정 (10-agent 최종 검토)**  

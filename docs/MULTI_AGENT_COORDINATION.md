@@ -1,6 +1,6 @@
 # Multi-Agent Coordination
 
-> Related: [[MCP_AGENT_WORKFLOW]] | [[AGENT_HARNESS]] | [[../AGENTS.md]] | [[handoff-packet-template]]
+> Related: [MCP_AGENT_WORKFLOW](MCP_AGENT_WORKFLOW.md) | [AGENT_HARNESS](AGENT_HARNESS.md) | [AGENTS](../AGENTS.md) | [handoff-packet-template](handoff-packet-template.md)
 
 Five subagents + one **Coordinator** (parent). Coordinator owns DAG, shared configs, merge, and final gate — not feature code.
 
@@ -29,8 +29,8 @@ Five subagents + one **Coordinator** (parent). Coordinator owns DAG, shared conf
 1. **Before spawn** — `git status --short`; assign **exclusive file globs** per agent; shared roots (`Cargo.toml`, `lib.rs`) are Coordinator-only unless handed off.
 2. **One writer per path** — no parallel edits on the same file; integration seams are **serialized** (schema → API contract → frontend types).
 3. **Phase gates** — stop parallel work at sync points: migration landed → `sqlx prepare` → handlers; API contract frozen → frontend wires.
-4. **Handoff packet required** — template: [[handoff-packet-template]].
-5. **MCP routing** — see [[MCP_AGENT_WORKFLOW]]; subagents use read-only MCP unless user approved a mutating action.
+4. **Handoff packet required** — template: [handoff-packet-template](handoff-packet-template.md).
+5. **MCP routing** — see [MCP_AGENT_WORKFLOW](MCP_AGENT_WORKFLOW.md); subagents use read-only MCP unless user approved a mutating action.
 6. **Per-zone verification** — Backend: `cargo test/clippy/fmt`; Frontend: `npm run lint && npm run build`; Data: migrate + `sqlx prepare`; Harness: `agent-harness-check.sh`; Security: auth/admin review on touched paths.
 7. **Coordinator runs full gate** before user handoff when UI or cross-stack scope applies.
 8. **No auto CI/review bots** — `workflow_dispatch` and CodeRabbit/qodo only on explicit user request; `[skip ci]` when push should run nothing.

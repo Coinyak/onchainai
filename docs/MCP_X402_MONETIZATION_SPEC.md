@@ -1,9 +1,9 @@
 # MCP x402 수익화 스펙 (Axis B · 셀프서비스)
 
-> Related: [[X402_REFERRAL_SPEC]] | [[PRODUCT_ENHANCEMENT_SPEC]] §K2 | [[MCP_AGENT_WORKFLOW]] | [[SECURITY]] | [[../../../AGENTS.md]]
+> Related: [X402_REFERRAL_SPEC](X402_REFERRAL_SPEC.md) | [PRODUCT_ENHANCEMENT_SPEC](PRODUCT_ENHANCEMENT_SPEC.md) §K2 | [MCP_AGENT_WORKFLOW](MCP_AGENT_WORKFLOW.md) | [SECURITY](SECURITY.md) | [AGENTS](../AGENTS.md)
 >
 > Date: 2026-07-04  
-> Status: **Superseded** — `compare_tools`/`export_toolkit` 유료안 폐기. 정본: [[X402_MONETIZATION_SPEC]] (Agent Trust만 유료)  
+> Status: **Superseded** — `compare_tools`/`export_toolkit` 유료안 폐기. 정본: [X402_MONETIZATION_SPEC](X402_MONETIZATION_SPEC.md) (Agent Trust만 유료)  
 > Scope: (레거시) Axis B MCP 402 게이트 구현 참고. 신규 과금 SKU 추가 금지.
 
 ---

@@ -3,7 +3,7 @@
 > **Stack:** Rust API/MCP (`src/`, Railway `Dockerfile.api`) + Next.js UI (`frontend/`, Vercel).
 > **Not used:** `cargo-leptos`, Leptos SSR, WASM hydration — removed in favor of split deploy.
 
-AI agents: read [[../AGENTS.md]] first; follow this doc before any local run or deploy.
+AI agents: read [AGENTS](../AGENTS.md) first; follow this doc before any local run or deploy.
 
 ---
 

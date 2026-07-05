@@ -2,7 +2,7 @@
 
 > **이 문서는 자문·체크리스트용이다. 언제든 변동될 수 있으며, AGENTS.md 하드룰이나 구현 강제 규칙이 아니다.**
 >
-> Related: [[X402_MONETIZATION_SPEC]] (수익·제품 **정본**) · [[X402_REFERRAL_SPEC]] · [[superpowers/specs/2026-07-04-free-tier-guardian-spec]] · [[LAUNCH_READINESS_SPEC]] · [[REVENUE_FORECAST]] · [[../../../AGENTS.md]]
+> Related: [X402_MONETIZATION_SPEC](X402_MONETIZATION_SPEC.md) (수익·제품 **정본**) · [X402_REFERRAL_SPEC](X402_REFERRAL_SPEC.md) · [2026-07-04-free-tier-guardian-spec](superpowers/specs/2026-07-04-free-tier-guardian-spec.md) · [LAUNCH_READINESS_SPEC](LAUNCH_READINESS_SPEC.md) · [REVENUE_FORECAST](REVENUE_FORECAST.md) · [AGENTS](../AGENTS.md)
 >
 > Last updated: **2026-07-05** (Bazaar L2 crawler shipped — PR-5)  
 > Owner: 창업자 — 우선순위·가격·일정은 이 문서보다 **최신 창업자 지시**가 이긴다.
