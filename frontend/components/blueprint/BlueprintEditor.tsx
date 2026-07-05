@@ -337,16 +337,34 @@ function BlueprintEditorWorkspace({
     },
   });
 
-  const scheduleSave = useCallback(
+  const saveMutationRef = useRef(saveMutation);
+  saveMutationRef.current = saveMutation;
+
+  const persistDraftNow = useCallback(
+    (nextTitle: string, nextNodes: BlueprintNode[], nextEdges: BlueprintEdge[]) => {
+      if (saveTimerRef.current) {
+        clearTimeout(saveTimerRef.current);
+        saveTimerRef.current = null;
+      }
+      persistDraft(nextTitle, nextNodes, nextEdges);
+    },
+    [persistDraft],
+  );
+
+  const queueSave = useCallback(
     (nextTitle: string, nextNodes: BlueprintNode[], nextEdges: BlueprintEdge[]) => {
       if (readOnly) return;
+      if (isDraft) {
+        persistDraftNow(nextTitle, nextNodes, nextEdges);
+        return;
+      }
       setSaveState("pending");
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
       saveTimerRef.current = setTimeout(() => {
         saveMutation.mutate({ title: nextTitle, nodes: nextNodes, edges: nextEdges });
       }, 2000);
     },
-    [readOnly, saveMutation],
+    [isDraft, persistDraftNow, readOnly, saveMutation],
   );
 
   useEffect(
@@ -354,18 +372,14 @@ function BlueprintEditorWorkspace({
       if (!saveTimerRef.current) return;
       clearTimeout(saveTimerRef.current);
       saveTimerRef.current = null;
-      if (readOnlyLayout) return;
-      if (isDraft) {
-        persistDraft(titleRef.current, nodesRef.current, edgesRef.current);
-        return;
-      }
-      saveMutation.mutate({
+      if (readOnlyLayout || isDraft) return;
+      saveMutationRef.current.mutate({
         title: titleRef.current,
         nodes: nodesRef.current,
         edges: edgesRef.current,
       });
     },
-    [isDraft, persistDraft, readOnlyLayout, saveMutation],
+    [isDraft, readOnlyLayout],
   );
 
   const promoteDraft = useCallback(async () => {
@@ -402,10 +416,7 @@ function BlueprintEditorWorkspace({
   }, [isDraft, isAuthenticated, promoteDraft]);
 
   const updateNodes = useCallback(
-    (
-      updater: (prev: BlueprintNode[]) => BlueprintNode[],
-      options?: { flushDraft?: boolean },
-    ) => {
+    (updater: (prev: BlueprintNode[]) => BlueprintNode[]) => {
       setNodes((prev) => {
         const next = updater(prev);
         const nextEdges = pruneEdgesForNodes(edgesRef.current, next);
@@ -413,38 +424,30 @@ function BlueprintEditorWorkspace({
           setEdges(nextEdges);
           setSelectedEdgeId(null);
         }
-        if (options?.flushDraft && isDraft) {
-          if (saveTimerRef.current) {
-            clearTimeout(saveTimerRef.current);
-            saveTimerRef.current = null;
-          }
-          persistDraft(titleRef.current, next, nextEdges);
-        } else {
-          scheduleSave(title, next, nextEdges);
-        }
+        queueSave(titleRef.current, next, nextEdges);
         return next;
       });
     },
-    [isDraft, persistDraft, scheduleSave, title],
+    [queueSave],
   );
 
   const updateEdges = useCallback(
     (updater: (prev: BlueprintEdge[]) => BlueprintEdge[]) => {
       setEdges((prev) => {
         const next = updater(prev);
-        scheduleSave(title, nodes, next);
+        queueSave(titleRef.current, nodesRef.current, next);
         return next;
       });
     },
-    [nodes, scheduleSave, title],
+    [queueSave],
   );
 
   const updateTitle = useCallback(
     (nextTitle: string) => {
       setTitle(nextTitle);
-      scheduleSave(nextTitle, nodes, edges);
+      queueSave(nextTitle, nodesRef.current, edgesRef.current);
     },
-    [edges, nodes, scheduleSave],
+    [queueSave],
   );
 
   const addToolNode = useCallback(
@@ -803,18 +806,16 @@ function BlueprintEditorWorkspace({
   const updateNodeChains = useCallback(
     (id: string, chains: string[]) => {
       if (readOnly) return;
-      updateNodes(
-        (prev) =>
-          prev.map((n) => {
-            if (n.id !== id || n.kind !== "tool") return n;
-            const normalized = normalizeToolNodeChains(chains);
-            if (normalized.length === 0) {
-              const { chains: _removed, ...rest } = n;
-              return rest;
-            }
-            return { ...n, chains: normalized };
-          }),
-        { flushDraft: true },
+      updateNodes((prev) =>
+        prev.map((n) => {
+          if (n.id !== id || n.kind !== "tool") return n;
+          const normalized = normalizeToolNodeChains(chains);
+          if (normalized.length === 0) {
+            const { chains: _removed, ...rest } = n;
+            return rest;
+          }
+          return { ...n, chains: normalized };
+        }),
       );
       setLiveMessage("Chain selection updated.");
     },
