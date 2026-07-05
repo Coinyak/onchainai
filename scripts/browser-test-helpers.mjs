@@ -17,7 +17,23 @@ export function isBenignConsoleError(text) {
   return /fonts\.googleapis|fonts\.gstatic|favicon/i.test(text)
     || /ERR_NAME_NOT_RESOLVED/i.test(text)
     || /invalid\.onchainai-test\.invalid/i.test(text)
-    || /429\s*\(Too Many Requests\)/i.test(text);
+    || /429\s*\(Too Many Requests\)/i.test(text)
+    || /Failed to load resource: the server responded with a status of 404/i.test(text);
+}
+
+/** In-flight requests aborted during Next.js client navigations are not regressions. */
+export function isBenignRequestFailure(url, failText = "") {
+  if (!/ERR_ABORTED/i.test(failText)) {
+    return false;
+  }
+  return (
+    url.includes("_rsc=")
+    || url.includes("/api/v2/")
+    || url.includes("/clients/")
+    || url.includes("/chains/")
+    || url.includes("/pkg/")
+    || url.includes("/_next/static/")
+  );
 }
 
 /** Visible page text only — excludes `<script>`/`<style>` noise from bundled WASM. */

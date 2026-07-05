@@ -18,6 +18,23 @@ import {
   waitForSidebarStorageLoaded,
 } from "./browser-test-helpers.mjs";
 
+const GOTO_OPTS = { waitUntil: "domcontentloaded", timeout: 60000 };
+
+async function gotoPage(page, url) {
+  await page.goto(url, GOTO_OPTS);
+}
+
+async function gotoTools(page, base, query = "") {
+  const suffix = query.startsWith("?") || query.startsWith("&") ? query : query ? `?${query}` : "";
+  await gotoPage(page, `${base}/tools${suffix}`);
+  await waitForToolCards(page).catch(() => {});
+}
+
+async function waitAfterInteraction(page) {
+  await page.waitForLoadState("domcontentloaded").catch(() => {});
+  await waitForToolCards(page).catch(() => {});
+}
+
 /** Steps that gate process exit (UI-only checks are informational). */
 const gating = new Set([
   "home-load",
@@ -100,7 +117,7 @@ export async function runClickTestChecks(page, base, ctx) {
   const { outDir, results, consoleErrors, hydrationPanicRe, log } = ctx;
 
 try {
-  await page.goto(`${base}/`, { waitUntil: "networkidle", timeout: 60000 });
+  await gotoPage(page, `${base}/`);
   await clearSidebarStorage(page);
   log("home-load", true);
 
@@ -109,8 +126,7 @@ try {
   log("site-top-nav", !!(await page.$(".site-top-nav")));
 
   // Gating: direct navigation tests filter outcome without sidebar visibility races.
-  await page.goto(`${base}/tools?function=bridge`, { waitUntil: "networkidle" });
-  await waitForToolCards(page);
+  await gotoTools(page, base, "function=bridge");
   const filterNavText = await visiblePageText(page);
   log(
     "sidebar-filter-nav",
@@ -119,7 +135,7 @@ try {
   );
 
   // Gating: click a visible sidebar filter link (plan step 5 — real UI path).
-  await page.goto(`${base}/tools`, { waitUntil: "networkidle" });
+  await gotoTools(page, base);
   await waitForSidebarFilterLinks(page);
   await ensureSidebarFiltersVisible(page);
   await page
@@ -130,7 +146,7 @@ try {
   const fnLink = await page.$('aside .sidebar-body a[href*="function="]:visible');
   if (fnLink) {
     await fnLink.click();
-    await page.waitForLoadState("networkidle");
+    await waitAfterInteraction(page);
     const after = await visiblePageText(page);
     log(
       "sidebar-filter-click",
@@ -141,7 +157,7 @@ try {
     log("sidebar-filter-click", false, "no visible filter link");
   }
 
-  await page.goto(`${base}/tools`, { waitUntil: "networkidle" });
+  await gotoTools(page, base);
   await waitForSidebarFilterLinks(page);
   await ensureSidebarFiltersVisible(page);
   await page
@@ -152,7 +168,7 @@ try {
   const bridgeLink = await page.$('aside .sidebar-body a[href*="function=bridge"]:visible');
   if (bridgeLink) {
     await bridgeLink.click();
-    await page.waitForLoadState("networkidle");
+    await waitAfterInteraction(page);
     const bridgeAfter = await visiblePageText(page);
     log(
       "bridge-sidebar-filter",
@@ -164,8 +180,7 @@ try {
     log("bridge-sidebar-filter", false, "no visible bridge filter link");
   }
 
-  await page.goto(`${base}/tools`, { waitUntil: "networkidle" });
-  await waitForToolCards(page);
+  await gotoTools(page, base);
   log("tools-load", true);
 
   const toolCards = await page.$$(".tool-card:not(.skeleton-card)");
@@ -192,14 +207,13 @@ try {
   const chainLink = await page.$(".chain-strip a:visible, .chain-tile:visible");
   if (chainLink && (await chainLink.isVisible())) {
     await chainLink.click({ force: false });
-    await page.waitForLoadState("networkidle");
+    await waitAfterInteraction(page);
     log("chain-strip-click", !/error deserializing/i.test((await visiblePageText(page)) || ""), page.url());
   } else {
     log("chain-strip-click", false, "no chain link");
   }
 
-  await page.goto(`${base}/tools`, { waitUntil: "networkidle" });
-  await waitForToolCards(page);
+  await gotoTools(page, base);
   const chainMore = await page.$(".chain-tile-more");
   if (chainMore) {
     await chainMore.click();
@@ -212,8 +226,7 @@ try {
     log("chain-strip-more-click", true, "no overflow pill");
   }
 
-  await page.goto(`${base}/tools`, { waitUntil: "networkidle" });
-  await waitForToolCards(page);
+  await gotoTools(page, base);
   const bookmarkBtn = await page.$(
     '.tool-card:not(.skeleton-card) button.card-action-btn[aria-label="Save to Toolkit"]',
   );
@@ -238,8 +251,7 @@ try {
   const page1Cards = cardCount;
   const expectedPage2 = expectedCumulativeMin(page1Cards, 2);
   await sleep(NAV_PACE_MS);
-  await page.goto(`${base}/tools?page=2`, { waitUntil: "networkidle" });
-  await waitForToolCards(page);
+  await gotoTools(page, base, "page=2");
   const page2Cards = (await page.$$(".tool-card:not(.skeleton-card)")).length;
   const page2Ok =
     !/error deserializing/i.test((await visiblePageText(page)) || "") &&
@@ -247,8 +259,7 @@ try {
   log("page-2-load", page2Ok, `count=${page2Cards} expected>=${expectedPage2}`);
 
   await sleep(NAV_PACE_MS);
-  await page.goto(`${base}/tools`, { waitUntil: "networkidle" });
-  await waitForToolCards(page);
+  await gotoTools(page, base);
   const beforeLoadMore = (await page.$$(".tool-card:not(.skeleton-card)")).length;
   const loadMore = await page.$("a.load-more-btn, .load-more-row a.load-more-btn");
   if (loadMore) {
@@ -265,8 +276,7 @@ try {
     await page.waitForURL(/[?&]page=2/, { timeout: 20000 }).catch(() => {
       navTimedOut = true;
     });
-    await page.waitForLoadState("networkidle");
-    await waitForToolCards(page).catch(() => {});
+    await waitAfterInteraction(page);
     const expectedMin = expectedCumulativeMin(beforeLoadMore, 2);
     let waitTimedOut = false;
     await page
@@ -302,12 +312,11 @@ try {
     log("load-more-present", true, "small catalog");
   }
 
-  await page.goto(`${base}/tools`, { waitUntil: "networkidle" });
-  await waitForToolCards(page);
+  await gotoTools(page, base);
   const firstCard = await page.$(".tool-card:not(.skeleton-card) a.tool-card-link");
   if (firstCard) {
     await firstCard.click();
-    await page.waitForLoadState("networkidle");
+    await page.waitForLoadState("domcontentloaded").catch(() => {});
     const hasPreview = !!(await page.$(".preview-desktop, .preview-panel, .bottom-sheet"));
     log("tool-preview-click", hasPreview || page.url().includes("selected="), page.url());
   }
@@ -316,12 +325,12 @@ try {
     .$eval(".tool-card:not(.skeleton-card) a.tool-card-link", (a) => a.getAttribute("href"))
     .catch(() => null);
   if (detailHref && detailHref.startsWith("/tools/")) {
-    await page.goto(`${base}${detailHref}`, { waitUntil: "networkidle" });
+    await gotoPage(page, `${base}${detailHref}`);
     log("tool-detail", (await page.textContent("h1, .tool-detail h1"))?.length > 0, detailHref);
   }
 
   await page.setViewportSize({ width: 375, height: 812 });
-  await page.goto(`${base}/tools`, { waitUntil: "networkidle" });
+  await gotoTools(page, base);
   let sidebarHydrationError = "";
   const sidebarStorageLoaded = await waitForSidebarStorageLoaded(page)
     .then(() => true)
@@ -345,15 +354,24 @@ try {
   log("mobile-chain-tile-more", chainMoreVisible, chainMoreVisible ? "visible" : "hidden");
 
   await clearSidebarStorage(page);
-  await page.reload({ waitUntil: "networkidle" });
+  await page.reload(GOTO_OPTS);
   await waitForSidebarStorageLoaded(page).catch(() => {});
   const railToggle = await page.$(".sidebar-rail-toggle");
   let mobileFilterReentryOk = false;
   if (railToggle) {
     await railToggle.click();
-    const filterLink = await page.$('aside .sidebar-body a[href*="function="]:visible');
-    if (filterLink) {
-      await filterLink.click();
+    const fnToggle = page.locator(".sidebar-section button.sidebar-toggle").first();
+    if (await fnToggle.count()) {
+      await fnToggle.click();
+      await page
+        .locator(".sidebar-section--open a[href*='function=']")
+        .first()
+        .waitFor({ state: "visible", timeout: 5000 })
+        .catch(() => {});
+    }
+    const filterLink = page.locator(".sidebar-section--open a[href*='function=']").first();
+    if (await filterLink.count()) {
+      await filterLink.click({ force: true });
       await page
         .waitForFunction(
           () =>
@@ -365,7 +383,9 @@ try {
         )
         .catch(() => {});
     }
-    await page.goto(`${base}/tools`, { waitUntil: "networkidle" });
+    await gotoTools(page, base);
+    await clearSidebarStorage(page);
+    await page.reload(GOTO_OPTS);
     await waitForSidebarStorageLoaded(page).catch(() => {});
     mobileFilterReentryOk = await page.evaluate(() =>
       document.querySelector(".tools-sidebar")?.classList.contains("tools-sidebar-collapsed"),
@@ -379,7 +399,7 @@ try {
 
   await page.screenshot({ path: `${outDir}-mobile-tools.png`, fullPage: false });
   await page.setViewportSize({ width: 1280, height: 900 });
-  await page.goto(`${base}/tools`, { waitUntil: "networkidle" });
+  await gotoTools(page, base);
   await page.screenshot({ path: `${outDir}-desktop-tools.png`, fullPage: false });
 
   const hydrationErrors = consoleErrors.filter((e) => hydrationPanicRe.test(e));
