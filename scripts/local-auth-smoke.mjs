@@ -361,7 +361,6 @@ if (!signInBtn) {
       open: true,
       hasGitHub: !!dialog.querySelector('a[href="/auth/github"]'),
       githubText: dialog.querySelector('a[href="/auth/github"]')?.textContent?.trim() ?? "",
-      hasEmail: !!dialog.querySelector('input[type="email"]'),
       hasWallet: !!dialog.querySelector(
         '[data-testid="wallet-sign-in"], [data-testid="wallet-sign-in-link"]',
       ),

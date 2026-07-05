@@ -12,7 +12,6 @@ function AdminToolsContent() {
   const searchParams = useSearchParams();
   const queue = searchParams.get("queue") ?? "new_candidate";
   const slug = searchParams.get("slug");
-  const forceLookup = searchParams.get("lookup") === "1";
 
   const queueQuery = useQuery({
     queryKey: ["review-queue", queue],
@@ -22,7 +21,7 @@ function AdminToolsContent() {
   const queueLoaded = !queueQuery.isLoading && queueQuery.data !== undefined;
   const queueItem = slug ? queueQuery.data?.find((item) => item.tool.slug === slug) : undefined;
   const shouldLookup = Boolean(
-    slug && (forceLookup || queueQuery.isError || (queueLoaded && !queueItem)),
+    slug && !queueItem && (queueQuery.isError || queueLoaded),
   );
 
   const workbenchQuery = useQuery({

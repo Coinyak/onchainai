@@ -87,17 +87,8 @@ export function LoginForm({
           role="status"
           data-testid="signed-out-notice"
         >
-          You are signed out of OnchainAI. To use a different GitHub account, sign out of GitHub in
-          a{" "}
-          <a
-            href="https://github.com/logout"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-primary underline hover:no-underline"
-          >
-            new tab
-          </a>
-          , then continue with GitHub below.
+          You are signed out of OnchainAI. To use a different GitHub account, sign out of GitHub
+          from your profile menu (github.com → avatar → Sign out), then continue with GitHub below.
         </p>
       )}
       {previewHost && (

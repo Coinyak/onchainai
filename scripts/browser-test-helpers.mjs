@@ -21,19 +21,30 @@ export function isBenignConsoleError(text) {
     || /Failed to load resource: the server responded with a status of 404/i.test(text);
 }
 
+/** Catalog/settings fetches aborted during Next.js in-app navigation (not failed responses). */
+const BENIGN_ABORTED_API =
+  /^\/api\/v2\/(browser-data|categories|featured|settings|me|tools\/[^/?]+)(?:\?|$)/;
+
 /** In-flight requests aborted during Next.js client navigations are not regressions. */
 export function isBenignRequestFailure(url, failText = "") {
   if (!/ERR_ABORTED/i.test(failText)) {
     return false;
   }
-  return (
+  if (
     url.includes("_rsc=")
-    || url.includes("/api/v2/")
     || url.includes("/clients/")
     || url.includes("/chains/")
     || url.includes("/pkg/")
     || url.includes("/_next/static/")
-  );
+  ) {
+    return true;
+  }
+  try {
+    const path = new URL(url).pathname;
+    return BENIGN_ABORTED_API.test(path);
+  } catch {
+    return false;
+  }
 }
 
 /** Visible page text only — excludes `<script>`/`<style>` noise from bundled WASM. */

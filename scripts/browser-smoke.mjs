@@ -146,12 +146,11 @@ if (!hasSignInBeforeClick) {
 const signInModal = await page.evaluate(() => {
   const dialog = document.querySelector('[role="dialog"]');
   if (!dialog) {
-    return { open: false, hasGitHub: false, hasEmail: false, hasWallet: false };
+    return { open: false, hasGitHub: false, hasWallet: false };
   }
   return {
     open: true,
     hasGitHub: !!dialog.querySelector('a[href="/auth/github"]'),
-    hasEmail: !!dialog.querySelector('input[type="email"]'),
     hasWallet: !!dialog.querySelector(
       '[data-testid="wallet-sign-in"], [data-testid="wallet-sign-in-link"]',
     ),

@@ -4,29 +4,30 @@ use crate::discovery::parse_search_intent;
 use sqlx::PgPool;
 
 /// Document vector used for public tool text search (name weighted above description).
+/// Parentheses are required before `@@` in match predicates (`@@` binds tighter than `||`).
 pub const TOOL_SEARCH_VECTOR: &str =
-    "setweight(to_tsvector('english', coalesce(name, '')), 'A') || setweight(to_tsvector('english', coalesce(description, '')), 'B')";
+    "(setweight(to_tsvector('english', coalesce(name, '')), 'A') || setweight(to_tsvector('english', coalesce(description, '')), 'B'))";
 
 /// AND match — every non-stop-word token must appear (Postgres `plainto_tsquery`).
 pub const FTS_AND_MATCH: &str =
-    "setweight(to_tsvector('english', coalesce(name, '')), 'A') || setweight(to_tsvector('english', coalesce(description, '')), 'B') @@ plainto_tsquery('english', $1)";
+    "(setweight(to_tsvector('english', coalesce(name, '')), 'A') || setweight(to_tsvector('english', coalesce(description, '')), 'B')) @@ plainto_tsquery('english', $1)";
 
 /// Prefix match — sanitized tokens with `:*` suffix (used when AND returns zero rows).
 pub const FTS_PREFIX_MATCH: &str =
-    "setweight(to_tsvector('english', coalesce(name, '')), 'A') || setweight(to_tsvector('english', coalesce(description, '')), 'B') @@ to_tsquery('english', $1)";
+    "(setweight(to_tsvector('english', coalesce(name, '')), 'A') || setweight(to_tsvector('english', coalesce(description, '')), 'B')) @@ to_tsquery('english', $1)";
 
 /// OR fallback — any token may match (used only when AND and Prefix return zero rows).
 pub const FTS_OR_MATCH: &str =
-    "setweight(to_tsvector('english', coalesce(name, '')), 'A') || setweight(to_tsvector('english', coalesce(description, '')), 'B') @@ to_tsquery('english', replace(plainto_tsquery('english', $1)::text, ' & ', ' | '))";
+    "(setweight(to_tsvector('english', coalesce(name, '')), 'A') || setweight(to_tsvector('english', coalesce(description, '')), 'B')) @@ to_tsquery('english', replace(plainto_tsquery('english', $1)::text, ' & ', ' | '))";
 
 pub const TS_RANK_AND: &str =
-    "ts_rank_cd(setweight(to_tsvector('english', coalesce(name, '')), 'A') || setweight(to_tsvector('english', coalesce(description, '')), 'B'), plainto_tsquery('english', $1))";
+    "ts_rank_cd((setweight(to_tsvector('english', coalesce(name, '')), 'A') || setweight(to_tsvector('english', coalesce(description, '')), 'B')), plainto_tsquery('english', $1))";
 
 pub const TS_RANK_PREFIX: &str =
-    "ts_rank_cd(setweight(to_tsvector('english', coalesce(name, '')), 'A') || setweight(to_tsvector('english', coalesce(description, '')), 'B'), to_tsquery('english', $1))";
+    "ts_rank_cd((setweight(to_tsvector('english', coalesce(name, '')), 'A') || setweight(to_tsvector('english', coalesce(description, '')), 'B')), to_tsquery('english', $1))";
 
 pub const TS_RANK_OR: &str =
-    "ts_rank_cd(setweight(to_tsvector('english', coalesce(name, '')), 'A') || setweight(to_tsvector('english', coalesce(description, '')), 'B'), to_tsquery('english', replace(plainto_tsquery('english', $1)::text, ' & ', ' | ')))";
+    "ts_rank_cd((setweight(to_tsvector('english', coalesce(name, '')), 'A') || setweight(to_tsvector('english', coalesce(description, '')), 'B')), to_tsquery('english', replace(plainto_tsquery('english', $1)::text, ' & ', ' | ')))";
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ResolvedSearchIntent {
@@ -224,6 +225,12 @@ mod tests {
         assert!(FTS_OR_MATCH.contains("replace"));
         assert!(FTS_PREFIX_MATCH.contains("to_tsquery"));
         assert!(TOOL_SEARCH_VECTOR.contains("setweight"));
+        assert!(TOOL_SEARCH_VECTOR.starts_with('('));
+        assert!(FTS_AND_MATCH.starts_with('('));
+        assert!(
+            FTS_AND_MATCH.find("@@").unwrap() > FTS_AND_MATCH.find("||").unwrap(),
+            "@@ must apply to the full vector, not only the description arm"
+        );
     }
 
     #[test]
