@@ -21,7 +21,16 @@ export const metadata: Metadata = {
 
 export default function ConnectPage() {
   return (
-    <Suspense fallback={null}>
+    <Suspense
+      fallback={
+        <div
+          className="connect-page px-gutter md:px-6 py-8 md:py-10 max-w-[960px]"
+          data-testid="connect-page"
+        >
+          <p className="text-body-md text-secondary">Loading connect…</p>
+        </div>
+      }
+    >
       <ConnectPageContent />
     </Suspense>
   );

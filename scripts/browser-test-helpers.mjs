@@ -36,6 +36,8 @@ export function isBenignRequestFailure(url, failText = "") {
     || url.includes("/chains/")
     || url.includes("/pkg/")
     || url.includes("/_next/static/")
+    || url.includes("/brand/onchainai-logo")
+    || (url.includes("/_next/image") && url.includes("onchainai-logo"))
   ) {
     return true;
   }

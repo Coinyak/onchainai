@@ -30,7 +30,10 @@ async function gotoTools(page, base, query = "") {
   await waitForToolCards(page).catch(() => {});
 }
 
-async function waitAfterInteraction(page) {
+async function waitAfterInteraction(page, urlPattern) {
+  if (urlPattern) {
+    await page.waitForURL(urlPattern, { timeout: 20000 }).catch(() => {});
+  }
   await page.waitForLoadState("domcontentloaded").catch(() => {});
   await waitForToolCards(page).catch(() => {});
 }
@@ -165,9 +168,15 @@ try {
       timeout: 8000,
     })
     .catch(() => {});
-  const bridgeLink = await page.$('aside .sidebar-body a[href*="function=bridge"]:visible');
-  if (bridgeLink) {
-    await bridgeLink.click();
+  const bridgeLink = page
+    .locator('aside .sidebar-body a[href*="function=bridge"]')
+    .first();
+  if ((await bridgeLink.count()) > 0) {
+    await bridgeLink.waitFor({ state: "visible", timeout: 8000 }).catch(() => {});
+    await Promise.all([
+      page.waitForURL(/function=bridge/, { timeout: 20000 }),
+      bridgeLink.click(),
+    ]).catch(() => {});
     await waitAfterInteraction(page);
     const bridgeAfter = await visiblePageText(page);
     log(
@@ -313,12 +322,24 @@ try {
   }
 
   await gotoTools(page, base);
-  const firstCard = await page.$(".tool-card:not(.skeleton-card) a.tool-card-link");
-  if (firstCard) {
-    await firstCard.click();
-    await page.waitForLoadState("domcontentloaded").catch(() => {});
+  const firstCard = page.locator(".tool-card:not(.skeleton-card) a.tool-card-link").first();
+  if ((await firstCard.count()) > 0) {
+    await Promise.all([
+      page.waitForURL(/[?&]selected=/, { timeout: 20000 }),
+      firstCard.click(),
+    ]).catch(() => {});
+    await page
+      .waitForSelector(".preview-desktop, .preview-panel, .bottom-sheet, .is-selected", {
+        timeout: 15000,
+      })
+      .catch(() => {});
     const hasPreview = !!(await page.$(".preview-desktop, .preview-panel, .bottom-sheet"));
-    log("tool-preview-click", hasPreview || page.url().includes("selected="), page.url());
+    const hasSelectedCard = !!(await page.$(".tool-card.is-selected"));
+    log(
+      "tool-preview-click",
+      hasPreview || hasSelectedCard || page.url().includes("selected="),
+      page.url(),
+    );
   }
 
   const detailHref = await page

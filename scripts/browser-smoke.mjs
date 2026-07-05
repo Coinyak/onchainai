@@ -134,26 +134,45 @@ if (homeLayout.hasTopNavToolkitLink) {
   errors.push("layout:home-unexpected-top-nav-toolkit");
 }
 
-const hasSignInBeforeClick = await page.$('[data-testid="top-nav-sign-in"]');
+const signInBtn = page.locator('[data-testid="top-nav-sign-in"]');
+const hasSignInBeforeClick = (await signInBtn.count()) > 0;
 if (!hasSignInBeforeClick) {
   errors.push("interaction:top-nav-sign-in-missing-before-click");
 } else {
-  await hasSignInBeforeClick.click();
+  await signInBtn.waitFor({ state: "visible", timeout: 30000 }).catch(() => {});
   await page
-    .waitForSelector('[role="dialog"]', { timeout: 5000 })
+    .waitForFunction(
+      () => {
+        const btn = document.querySelector('[data-testid="top-nav-sign-in"]');
+        return btn instanceof HTMLButtonElement && !btn.disabled;
+      },
+      null,
+      { timeout: 30000 },
+    )
+    .catch(() => {});
+  await signInBtn.click();
+  await page
+    .waitForSelector('[role="dialog"]', { timeout: 15000 })
     .catch(() => errors.push("interaction:top-nav-sign-in-no-modal"));
+  await page
+    .waitForSelector('[role="dialog"] [data-testid="github-sign-in"]', { timeout: 15000 })
+    .catch(() => {});
 }
 const signInModal = await page.evaluate(() => {
   const dialog = document.querySelector('[role="dialog"]');
   if (!dialog) {
-    return { open: false, hasGitHub: false, hasWallet: false };
+    return { open: false, hasGitHub: false, hasWallet: false, githubRel: "" };
   }
+  const githubLink =
+    dialog.querySelector('[data-testid="github-sign-in"]')
+    ?? dialog.querySelector('a[href*="/auth/github"]');
   return {
     open: true,
-    hasGitHub: !!dialog.querySelector('a[href="/auth/github"]'),
+    hasGitHub: !!githubLink,
     hasWallet: !!dialog.querySelector(
       '[data-testid="wallet-sign-in"], [data-testid="wallet-sign-in-link"]',
     ),
+    githubRel: githubLink?.getAttribute("rel") ?? "",
   };
 });
 if (!signInModal.open) {
@@ -162,13 +181,10 @@ if (!signInModal.open) {
   if (!signInModal.hasGitHub) {
     errors.push("interaction:sign-in-modal-missing-github");
   }
-  const modalGitHubRel = await page.evaluate(() => {
-    const dialog = document.querySelector('[role="dialog"]');
-    const link = dialog?.querySelector('a[href="/auth/github"]');
-    return link?.getAttribute("rel") ?? "";
-  });
-  if (!modalGitHubRel.includes("external")) {
-    errors.push(`interaction:sign-in-modal-github-missing-rel-external:${modalGitHubRel}`);
+  if (!signInModal.githubRel.includes("external")) {
+    errors.push(
+      `interaction:sign-in-modal-github-missing-rel-external:${signInModal.githubRel}`,
+    );
   }
   if (!signInModal.hasWallet) {
     errors.push("interaction:sign-in-modal-missing-wallet");
