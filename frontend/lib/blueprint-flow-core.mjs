@@ -27,7 +27,11 @@ function walkFlowSegment(
   for (;;) {
     visited[cur] = true;
     const edge = flowEdges[cur];
-    line += edge.label ? ` →(${edge.label}) ` : " → ";
+    if (edge.dashed) {
+      line += edge.label ? ` →(${edge.label}, dashed) ` : " -[dashed]→ ";
+    } else {
+      line += edge.label ? ` →(${edge.label}) ` : " → ";
+    }
     line += labelOf(edge.to);
 
     const internal =
@@ -59,7 +63,13 @@ export function buildFlowSection(nodes, edges) {
     if (!from || !to) continue;
     if (!nodeMap.has(from) || !nodeMap.has(to)) continue;
     const label = edge.label?.trim();
-    flowEdges.push({ from, to, label: label ? label : undefined });
+    const dashed = edge.dashed === true;
+    flowEdges.push({
+      from,
+      to,
+      label: label ? label : undefined,
+      dashed,
+    });
   }
 
   if (flowEdges.length === 0) return "(no flow edges defined)";

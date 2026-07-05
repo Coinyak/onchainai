@@ -35,6 +35,23 @@ test("buildFlowSection splits at branch points", () => {
   assert.match(flow, /gateway →\(swap\) chain: bsc/);
 });
 
+test("buildFlowSection annotates dashed edges", () => {
+  const nodes = [
+    { id: "a", kind: "tool", slug: "alpha" },
+    { id: "b", kind: "tool", slug: "beta" },
+    { id: "c", kind: "tool", slug: "gamma" },
+  ];
+  const edges = [
+    { id: "e1", fromId: "a", toId: "b", dashed: true, label: "optional" },
+    { id: "e2", fromId: "b", toId: "c", dashed: true },
+  ];
+
+  const flow = buildFlowSection(nodes, edges);
+
+  assert.match(flow, /alpha →\(optional, dashed\) beta/);
+  assert.match(flow, /beta -\[dashed\]→ gamma/);
+});
+
 test("buildFlowSection tie-breaks equal destination labels by node id", () => {
   const nodes = [
     { id: "hub", kind: "tool", slug: "gateway" },

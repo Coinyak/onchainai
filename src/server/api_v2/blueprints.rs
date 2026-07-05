@@ -36,10 +36,10 @@ const AGENT_EXPORT_FILENAME: &str = "blueprint-agent.md";
 
 const AGENT_EXPORT_TASK_TEMPLATE: &str = r#"## Your task
 
-1. Read the attached blueprint image and this prompt together.
+1. Read the attached blueprint PNG together with this prompt (export PNG separately from the editor Share dock).
 2. For each slug in ## Tools, call OnchainAI MCP `get_install_guide` (platform: cursor).
 3. Summarize install risk; do not install critical-risk tools.
-4. Follow ## Flow when proposing order; if I edited this section, prefer my wording.
+4. When ## Order is present, treat it as the owner's step sequence; otherwise follow ## Flow. If you edited Flow/Order, prefer the user's wording.
 5. Ask before changing my toolkit or installing anything."#;
 
 fn db_internal(action: &str, err: impl std::fmt::Display) -> ApiError {
@@ -128,6 +128,13 @@ struct ExportNode {
     chain_id: Option<String>,
     text: Option<String>,
     chains: Vec<String>,
+    step: Option<i32>,
+}
+
+#[derive(Debug, Clone)]
+struct ToolExportMeta {
+    name: String,
+    install_risk_level: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -651,6 +658,10 @@ fn parse_export_nodes(nodes: &Value) -> Vec<ExportNode> {
                         .collect::<Vec<_>>()
                 })
                 .unwrap_or_default();
+            let step = item
+                .get("step")
+                .and_then(|v| v.as_i64())
+                .map(|v| v as i32);
 
             Some(ExportNode {
                 id,
@@ -659,6 +670,7 @@ fn parse_export_nodes(nodes: &Value) -> Vec<ExportNode> {
                 chain_id,
                 text,
                 chains,
+                step,
             })
         })
         .collect()
@@ -702,6 +714,7 @@ struct FlowEdge {
     from: String,
     to: String,
     label: Option<String>,
+    dashed: bool,
 }
 
 fn flow_label_for(node_map: &HashMap<&str, &ExportNode>, id: &str) -> String {
@@ -727,9 +740,16 @@ fn walk_flow_segment(
     loop {
         visited[cur] = true;
         let edge = &flow_edges[cur];
-        match &edge.label {
-            Some(label) => line.push_str(&format!(" →({label}) ")),
-            None => line.push_str(" → "),
+        if edge.dashed {
+            match &edge.label {
+                Some(label) => line.push_str(&format!(" →({label}, dashed) ")),
+                None => line.push_str(" -[dashed]→ "),
+            }
+        } else {
+            match &edge.label {
+                Some(label) => line.push_str(&format!(" →({label}) ")),
+                None => line.push_str(" → "),
+            }
         }
         line.push_str(&flow_label_for(node_map, &edge.to));
 
@@ -781,10 +801,15 @@ fn build_flow_section(nodes: &[ExportNode], edges: &Value) -> String {
             .map(str::trim)
             .filter(|s| !s.is_empty())
             .map(str::to_string);
+        let dashed = edge
+            .get("dashed")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
         flow_edges.push(FlowEdge {
             from: from.to_string(),
             to: to.to_string(),
             label,
+            dashed,
         });
     }
 
@@ -888,11 +913,27 @@ fn build_flow_section(nodes: &[ExportNode], edges: &Value) -> String {
     }
 }
 
+fn build_order_section(nodes: &[ExportNode]) -> String {
+    let mut stepped: Vec<(&ExportNode, i32)> = nodes
+        .iter()
+        .filter_map(|node| node.step.map(|step| (node, step)))
+        .collect();
+    if stepped.is_empty() {
+        return String::new();
+    }
+    stepped.sort_by_key(|(_, step)| *step);
+    stepped
+        .into_iter()
+        .map(|(node, step)| format!("- {step}. {} ({})", node_flow_label(node), node.kind))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
 fn build_agent_export_markdown(
     title: &str,
     nodes: &Value,
     edges: &Value,
-    tool_names: &HashMap<String, String>,
+    tool_meta: &HashMap<String, ToolExportMeta>,
 ) -> String {
     let export_nodes = parse_export_nodes(nodes);
     let mut markdown = format!("# {title}\n\n");
@@ -903,16 +944,28 @@ before installing.\n\n",
     );
 
     markdown.push_str("## Tools\n\n");
-    let tool_nodes: Vec<&ExportNode> = export_nodes
+    let mut tool_nodes: Vec<(usize, &ExportNode)> = export_nodes
         .iter()
-        .filter(|node| node.kind == "tool")
+        .enumerate()
+        .filter(|(_, node)| node.kind == "tool")
         .collect();
+    tool_nodes.sort_by(|(idx_a, a), (idx_b, b)| {
+        match (a.step, b.step) {
+            (Some(step_a), Some(step_b)) => step_a.cmp(&step_b),
+            (Some(_), None) => std::cmp::Ordering::Less,
+            (None, Some(_)) => std::cmp::Ordering::Greater,
+            (None, None) => idx_a.cmp(idx_b),
+        }
+    });
     if tool_nodes.is_empty() {
         markdown.push_str("(none)\n\n");
     } else {
-        for node in tool_nodes {
+        for (_, node) in tool_nodes {
             let slug = node.slug.as_deref().unwrap_or("unknown");
-            let display_name = tool_names.get(slug).map(String::as_str).unwrap_or(slug);
+            let display_name = tool_meta
+                .get(slug)
+                .map(|meta| meta.name.as_str())
+                .unwrap_or(slug);
             let chains = if node.chains.is_empty() {
                 "none specified".to_string()
             } else {
@@ -921,6 +974,12 @@ before installing.\n\n",
             markdown.push_str(&format!("### {display_name}\n"));
             markdown.push_str(&format!("- Slug: `{slug}`\n"));
             markdown.push_str(&format!("- Chains: {chains}\n"));
+            if let Some(meta) = tool_meta.get(slug) {
+                markdown.push_str(&format!(
+                    "- Install risk: {}\n",
+                    meta.install_risk_level
+                ));
+            }
             markdown.push_str(&format!("- Page: {SITE_ORIGIN}/tools/{slug}\n"));
             markdown.push_str(&format!(
                 "- MCP: `get_install_guide({{ slug: \"{slug}\", platform: \"cursor\" }})`\n\n"
@@ -946,6 +1005,13 @@ before installing.\n\n",
         markdown.push('\n');
     }
 
+    let order_section = build_order_section(&export_nodes);
+    if !order_section.is_empty() {
+        markdown.push_str("## Order\n\n");
+        markdown.push_str(&order_section);
+        markdown.push_str("\n\n");
+    }
+
     markdown.push_str("## Flow\n\n");
     markdown.push_str(&build_flow_section(&export_nodes, edges));
     markdown.push_str("\n\n");
@@ -953,23 +1019,24 @@ before installing.\n\n",
     markdown
 }
 
-async fn fetch_approved_tool_names(
+async fn fetch_tool_export_meta(
     state: &AppState,
     slugs: &[String],
-) -> Result<HashMap<String, String>, ApiError> {
+) -> Result<HashMap<String, ToolExportMeta>, ApiError> {
     if slugs.is_empty() {
         return Ok(HashMap::new());
     }
 
     #[derive(sqlx::FromRow)]
-    struct ToolNameRow {
+    struct ToolExportRow {
         slug: String,
         name: String,
+        install_risk_level: String,
     }
 
-    let rows = sqlx::query_as::<_, ToolNameRow>(
+    let rows = sqlx::query_as::<_, ToolExportRow>(
         r#"
-        SELECT slug, name
+        SELECT slug, name, install_risk_level
         FROM tools
         WHERE slug = ANY($1)
           AND approval_status = 'approved'
@@ -980,7 +1047,18 @@ async fn fetch_approved_tool_names(
     .await
     .map_err(|e| db_internal("tool lookup", e))?;
 
-    Ok(rows.into_iter().map(|row| (row.slug, row.name)).collect())
+    Ok(rows
+        .into_iter()
+        .map(|row| {
+            (
+                row.slug,
+                ToolExportMeta {
+                    name: row.name,
+                    install_risk_level: row.install_risk_level,
+                },
+            )
+        })
+        .collect())
 }
 
 async fn agent_export_blueprint(
@@ -991,8 +1069,8 @@ async fn agent_export_blueprint(
     let user = require_user_from(&state, &headers).await?;
     let row = fetch_owned_blueprint(&state, id, user.id).await?;
     let slugs = collect_tool_slugs(&row.nodes);
-    let tool_names = fetch_approved_tool_names(&state, &slugs).await?;
-    let markdown = build_agent_export_markdown(&row.title, &row.nodes, &row.edges, &tool_names);
+    let tool_meta = fetch_tool_export_meta(&state, &slugs).await?;
+    let markdown = build_agent_export_markdown(&row.title, &row.nodes, &row.edges, &tool_meta);
 
     Ok(Json(AgentExportResponse {
         title: row.title,
@@ -1149,16 +1227,23 @@ mod tests {
                 "color": "#E76F00"
             }
         ]);
-        let mut tool_names = HashMap::new();
-        tool_names.insert("uniswap".into(), "Uniswap".into());
+        let mut tool_meta = HashMap::new();
+        tool_meta.insert(
+            "uniswap".into(),
+            ToolExportMeta {
+                name: "Uniswap".into(),
+                install_risk_level: "low".into(),
+            },
+        );
 
-        let markdown = build_agent_export_markdown("My Stack", &nodes, &edges, &tool_names);
+        let markdown = build_agent_export_markdown("My Stack", &nodes, &edges, &tool_meta);
 
         assert!(markdown.starts_with("# My Stack\n"));
         assert!(markdown.contains("get_install_guide"));
         assert!(markdown.contains("### Uniswap"));
         assert!(markdown.contains("- Slug: `uniswap`"));
         assert!(markdown.contains("- Chains: base"));
+        assert!(markdown.contains("- Install risk: low"));
         assert!(markdown.contains(&format!("{SITE_ORIGIN}/tools/uniswap")));
         assert!(markdown.contains("## Notes"));
         assert!(markdown.contains("- Start here"));
@@ -1166,6 +1251,88 @@ mod tests {
         assert!(markdown.contains("uniswap → note: Start here"));
         assert!(markdown.contains("## Your task"));
         assert!(markdown.contains("do not install critical-risk tools"));
+        assert!(markdown.contains("export PNG separately from the editor Share dock"));
+    }
+
+    #[test]
+    fn build_order_section_lists_stepped_nodes_sorted() {
+        let nodes = parse_export_nodes(&json!([
+            {"id": "t2", "kind": "tool", "slug": "beta", "x": 0, "y": 0, "step": 2},
+            {"id": "n1", "kind": "note", "text": "check", "x": 0, "y": 0, "step": 1},
+            {"id": "t1", "kind": "tool", "slug": "alpha", "x": 0, "y": 0, "step": 3}
+        ]));
+
+        let order = build_order_section(&nodes);
+
+        assert_eq!(
+            order,
+            "- 1. note: check (note)\n- 2. beta (tool)\n- 3. alpha (tool)"
+        );
+    }
+
+    #[test]
+    fn build_order_section_returns_empty_without_steps() {
+        let nodes = parse_export_nodes(&json!([
+            {"id": "t1", "kind": "tool", "slug": "alpha", "x": 0, "y": 0}
+        ]));
+
+        assert!(build_order_section(&nodes).is_empty());
+    }
+
+    #[test]
+    fn build_agent_export_markdown_includes_order_section_after_notes() {
+        let nodes = json!([
+            {"id": "t1", "kind": "tool", "slug": "alpha", "x": 0, "y": 0, "step": 1},
+            {"id": "n1", "kind": "note", "text": "memo", "x": 0, "y": 0}
+        ]);
+        let markdown = build_agent_export_markdown("Stack", &nodes, &json!([]), &HashMap::new());
+
+        let notes_pos = markdown.find("## Notes").unwrap();
+        let order_pos = markdown.find("## Order").unwrap();
+        let flow_pos = markdown.find("## Flow").unwrap();
+        assert!(notes_pos < order_pos);
+        assert!(order_pos < flow_pos);
+        assert!(markdown.contains("- 1. alpha (tool)"));
+        assert!(markdown.contains("treat it as the owner's step sequence"));
+    }
+
+    #[test]
+    fn build_agent_export_markdown_sorts_tools_by_step_then_canvas_order() {
+        let nodes = json!([
+            {"id": "t1", "kind": "tool", "slug": "first", "x": 0, "y": 0},
+            {"id": "t2", "kind": "tool", "slug": "second", "x": 10, "y": 0, "step": 2},
+            {"id": "t3", "kind": "tool", "slug": "third", "x": 20, "y": 0, "step": 1},
+            {"id": "t4", "kind": "tool", "slug": "fourth", "x": 30, "y": 0}
+        ]);
+        let markdown = build_agent_export_markdown("Stack", &nodes, &json!([]), &HashMap::new());
+
+        let third_pos = markdown.find("### third").unwrap();
+        let second_pos = markdown.find("### second").unwrap();
+        let first_pos = markdown.find("### first").unwrap();
+        let fourth_pos = markdown.find("### fourth").unwrap();
+        assert!(third_pos < second_pos);
+        assert!(second_pos < first_pos);
+        assert!(first_pos < fourth_pos);
+    }
+
+    #[test]
+    fn build_flow_section_annotates_dashed_edges() {
+        let nodes = parse_export_nodes(&json!([
+            {"id": "a", "kind": "tool", "slug": "alpha", "x": 0, "y": 0},
+            {"id": "b", "kind": "tool", "slug": "beta", "x": 40, "y": 0},
+            {"id": "c", "kind": "tool", "slug": "gamma", "x": 80, "y": 0}
+        ]));
+        let edges = json!([
+            {"id": "e1", "fromId": "a", "toId": "b", "style": "arrow", "color": "#1A1A1A",
+             "dashed": true, "label": "optional"},
+            {"id": "e2", "fromId": "b", "toId": "c", "style": "arrow", "color": "#1A1A1A",
+             "dashed": true}
+        ]);
+
+        let flow = build_flow_section(&nodes, &edges);
+
+        assert!(flow.contains("alpha →(optional, dashed) beta"));
+        assert!(flow.contains("beta -[dashed]→ gamma"));
     }
 
     #[test]

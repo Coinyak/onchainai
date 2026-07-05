@@ -1136,6 +1136,17 @@
   color: var(--color-secondary);
 }
 
+.blueprint-share-stale {
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid #fecdca;
+  border-radius: var(--radius-sm);
+  background: #fff5f5;
+  font-size: var(--text-body-sm);
+  font-weight: 600;
+  color: #b42318;
+}
+
 .blueprint-share-empty {
   margin: 0;
   font-size: var(--text-body-sm);
