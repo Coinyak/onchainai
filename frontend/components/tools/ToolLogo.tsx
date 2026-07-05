@@ -21,7 +21,8 @@ export function ToolLogo({
 }: ToolLogoProps) {
   const skipGenericGithub = shouldPreferMonogramOverLogo(logoUrl, status);
   const effectiveUrl = skipGenericGithub ? null : logoUrl;
-  const [showImg, setShowImg] = useState(!!effectiveUrl);
+  const [failedUrl, setFailedUrl] = useState<string | null>(null);
+  const showImg = !!effectiveUrl && failedUrl !== effectiveUrl;
   const monogram = logoMonogram?.trim() || monogramFromName(name);
   const isBrandLogo = !!effectiveUrl?.startsWith("/brand/");
 
@@ -38,7 +39,7 @@ export function ToolLogo({
           width={size}
           height={size}
           referrerPolicy="no-referrer"
-          onError={() => setShowImg(false)}
+          onError={() => setFailedUrl(effectiveUrl)}
         />
       )}
     </div>

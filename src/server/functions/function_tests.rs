@@ -1117,6 +1117,7 @@ mod tests {
         )
         .is_ok());
         assert!(validate_featured_card_input("   ", None, None).is_err());
+        assert!(validate_featured_card_input("/brand/card.png", None, None).is_err());
         assert!(validate_featured_card_input(
             "https://cdn.example/card.png",
             Some(&"x".repeat(121)),

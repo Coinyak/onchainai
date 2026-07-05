@@ -21,7 +21,9 @@ function AdminToolsContent() {
 
   const queueLoaded = !queueQuery.isLoading && queueQuery.data !== undefined;
   const queueItem = slug ? queueQuery.data?.find((item) => item.tool.slug === slug) : undefined;
-  const shouldLookup = Boolean(slug && (forceLookup || (queueLoaded && !queueItem)));
+  const shouldLookup = Boolean(
+    slug && (forceLookup || queueQuery.isError || (queueLoaded && !queueItem)),
+  );
 
   const workbenchQuery = useQuery({
     queryKey: ["admin-tool-workbench", slug],

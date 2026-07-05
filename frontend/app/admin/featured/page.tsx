@@ -15,6 +15,7 @@ import {
   type FeaturedCardInput,
   type ToolPickerItem,
 } from "@/lib/api";
+import { isRenderableFeaturedImageUrl } from "@/lib/featured";
 
 interface FeaturedCardFormProps {
   mode: "create" | "edit";
@@ -103,9 +104,15 @@ function FeaturedCardForm({
     };
   }, [toolQuery, selectedTool]);
 
+  const imageUrlInvalid =
+    imageUrl.trim().length > 0 && !isRenderableFeaturedImageUrl(imageUrl);
+
   const saveMut = useMutation({
     mutationFn: async () => {
       if (!selectedTool) throw new Error("Select an approved tool");
+      if (!isRenderableFeaturedImageUrl(imageUrl)) {
+        throw new Error("Image URL must start with http:// or https://");
+      }
       const payload: FeaturedCardInput = {
         tool_id: selectedTool.id,
         image_url: imageUrl.trim(),
@@ -206,11 +213,18 @@ function FeaturedCardForm({
         <span className="text-body-sm text-secondary">Image URL</span>
         <input
           className="mt-1 w-full min-h-touch px-4 rounded-md border border-border font-mono text-code"
+          type="url"
           value={imageUrl}
           onChange={(e) => setImageUrl(e.target.value)}
           placeholder="https://..."
           required
+          aria-invalid={imageUrlInvalid}
         />
+        {imageUrlInvalid && (
+          <p className="mt-1 text-body-sm text-error" role="alert">
+            Use an http:// or https:// URL so the card appears on the home carousel.
+          </p>
+        )}
       </label>
 
       <label className="block">
@@ -279,7 +293,7 @@ function FeaturedCardForm({
         <button
           type="submit"
           className="min-h-touch px-6 rounded-md bg-tertiary text-on-tertiary font-medium hover:bg-[#D96400] disabled:opacity-60"
-          disabled={saveMut.isPending || uploading}
+          disabled={saveMut.isPending || uploading || imageUrlInvalid}
         >
           {saveMut.isPending ? "Saving..." : mode === "create" ? "Create card" : "Save changes"}
         </button>
@@ -411,11 +425,14 @@ function AdminFeaturedContent() {
                   <div className="flex flex-wrap gap-3 mt-2">
                     <Link
                       href={`/admin/featured?edit=${card.id}`}
-                      className="text-tertiary text-body-sm"
+                      className="inline-flex items-center min-h-touch px-3 text-tertiary text-body-sm no-underline hover:underline"
                     >
                       Edit
                     </Link>
-                    <Link href={`/tools/${card.tool_slug}`} className="text-tertiary text-body-sm">
+                    <Link
+                      href={`/tools/${card.tool_slug}`}
+                      className="inline-flex items-center min-h-touch px-3 text-tertiary text-body-sm no-underline hover:underline"
+                    >
                       View tool
                     </Link>
                   </div>

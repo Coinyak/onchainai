@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Star } from "lucide-react";
 import type { PublicTool } from "@/lib/api";
 import { isBookmarked, setBookmark } from "@/lib/api";
@@ -12,32 +12,43 @@ function bookmarkLabel(starred: boolean): string {
   return starred ? "Remove from Toolkit" : "Save to Toolkit";
 }
 
+function bookmarkQueryKey(slug: string) {
+  return ["bookmark", slug] as const;
+}
+
 interface ToolDetailBookmarkProps {
   tool: PublicTool;
 }
 
 export function ToolDetailBookmark({ tool }: ToolDetailBookmarkProps) {
   const { isAuthenticated } = useAuth();
+  const queryClient = useQueryClient();
   const [showLogin, setShowLogin] = useState(false);
-  const [starred, setStarred] = useState(false);
 
-  useEffect(() => {
-    if (!isAuthenticated) return;
-    let cancelled = false;
-    isBookmarked(tool.slug)
-      .then((bookmarked) => {
-        if (!cancelled) setStarred(bookmarked);
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, [isAuthenticated, tool.slug]);
+  const bookmarkQuery = useQuery({
+    queryKey: bookmarkQueryKey(tool.slug),
+    queryFn: () => isBookmarked(tool.slug),
+    enabled: isAuthenticated,
+  });
+
+  const starred = bookmarkQuery.data ?? false;
 
   const bookmarkMut = useMutation({
     mutationFn: (wantStarred: boolean) => setBookmark(tool.slug, wantStarred),
-    onSuccess: (_, wantStarred) => setStarred(wantStarred),
-    onError: () => setShowLogin(true),
+    onMutate: async (wantStarred) => {
+      await queryClient.cancelQueries({ queryKey: bookmarkQueryKey(tool.slug) });
+      const previous = queryClient.getQueryData<boolean>(bookmarkQueryKey(tool.slug));
+      queryClient.setQueryData(bookmarkQueryKey(tool.slug), wantStarred);
+      return { previous };
+    },
+    onError: (_err, _wantStarred, context) => {
+      if (context?.previous !== undefined) {
+        queryClient.setQueryData(bookmarkQueryKey(tool.slug), context.previous);
+      }
+    },
+    onSuccess: (_, wantStarred) => {
+      queryClient.setQueryData(bookmarkQueryKey(tool.slug), wantStarred);
+    },
   });
 
   return (
@@ -49,6 +60,7 @@ export function ToolDetailBookmark({ tool }: ToolDetailBookmarkProps) {
         aria-label={bookmarkLabel(starred)}
         aria-pressed={starred}
         data-testid="tool-detail-bookmark"
+        disabled={bookmarkMut.isPending || (isAuthenticated && bookmarkQuery.isLoading)}
         onClick={() => {
           if (!isAuthenticated) {
             setShowLogin(true);
