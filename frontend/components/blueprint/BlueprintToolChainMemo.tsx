@@ -164,7 +164,11 @@ export function BlueprintToolChainMemo({
                   aria-label={`${active ? "Remove" : "Add"} ${chain.label}`}
                   aria-pressed={active}
                   title={chain.label}
-                  onClick={() => toggleChain(chain.id)}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    toggleChain(chain.id);
+                  }}
                 >
                   <ChainLogo id={chain.id} label={chain.label} size={16} decorative />
                 </button>

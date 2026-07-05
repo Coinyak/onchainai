@@ -734,7 +734,7 @@
 
 .blueprint-node-tool-chain-popover {
   position: fixed;
-  z-index: 5;
+  z-index: 20;
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
@@ -744,6 +744,11 @@
   border-radius: 8px;
   background: var(--color-neutral-bg);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+.blueprint-node-tool-chain-option .chain-logo,
+.blueprint-node-tool-chain-option .chain-logo-fallback {
+  pointer-events: none;
 }
 
 .blueprint-node-tool-chain-option {
