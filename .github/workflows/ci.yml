@@ -54,6 +54,10 @@ jobs:
         run: |
           chmod +x scripts/*.sh scripts/git-hooks/pre-commit .cursor/hooks/*.sh 2>/dev/null || true
 
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
       - name: Agent harness contract
         run: ./scripts/agent-harness-check.sh
 
