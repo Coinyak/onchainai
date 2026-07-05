@@ -42,6 +42,8 @@ pub struct RawTool {
     pub x402_endpoint: Option<String>,
     /// When set, overrides [`assess_relevance`] status (e.g. Bazaar ingest probe).
     pub relevance_status_override: Option<String>,
+    /// Curated vendor label from `vendor-orgs.json` (`team` field); ingest hint only.
+    pub official_team: Option<String>,
 }
 
 impl Default for RawTool {
@@ -65,6 +67,7 @@ impl Default for RawTool {
             x402_price: None,
             x402_endpoint: None,
             relevance_status_override: None,
+            official_team: None,
         }
     }
 }
@@ -427,7 +430,7 @@ pub fn normalize(
         // Crawled tools start as `community`; admin can promote to
         // `verified`/`official`. `self_register` overrides this to `official`.
         status: "community".to_string(),
-        official_team: None,
+        official_team: raw.official_team.clone(),
         trust_score: 0,
         approval_status: initial_approval_status.to_string(),
         submitted_by: None,

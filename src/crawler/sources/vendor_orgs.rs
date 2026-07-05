@@ -19,13 +19,21 @@ use crate::vendor_orgs::vendor_orgs_manifest;
 const GITHUB_API_BASE: &str = "https://api.github.com";
 const SOURCE_NAME: &str = "vendor_orgs";
 const VENDOR_ORGS_REGISTRY_URL: &str = "https://api.github.com/orgs";
-const MIN_STARS: i32 = 3;
-const MAX_REPOS_PER_ORG: usize = 25;
-const RECENCY_DAYS: i64 = 18 * 30;
+const MIN_STARS: i32 = 10;
+const MAX_REPOS_PER_ORG: usize = 15;
+const RECENCY_DAYS: i64 = 12 * 30;
+const MAX_ORG_REPO_PAGES: u32 = 3;
 const MAX_FAILURE_ORGS_IN_MSG: usize = 8;
 
+const AGENT_TOPICS: &[&str] = &[
+    "mcp-server",
+    "crypto-mcp",
+    "web3-mcp",
+    "blockchain-mcp",
+];
+
 /// Result of a vendor-org sweep; may include partial per-org fetch failures.
-pub(crate) struct VendorOrgsCrawlOutcome {
+pub struct VendorOrgsCrawlOutcome {
     pub raws: Vec<RawTool>,
     pub failed_orgs: Vec<String>,
 }
@@ -60,7 +68,50 @@ const GENERIC_REPO_NAMES: &[&str] = &[
     "contracts",
     "cli",
     "core",
+    "tools",
+    "utils",
+    "lib",
+    "app",
+    "web",
+    "bot",
+    "test",
 ];
+
+fn is_chain_topic(topic: &str) -> bool {
+    matches!(
+        topic.to_lowercase().as_str(),
+        "ethereum"
+            | "bitcoin"
+            | "solana"
+            | "base"
+            | "polygon"
+            | "arbitrum"
+            | "optimism"
+            | "avalanche"
+            | "ton"
+            | "tron"
+    )
+}
+
+/// Agent/MCP surface gate — reduces infra-only repo noise in admin queue.
+pub(crate) fn has_agent_surface(repo: &OrgRepo) -> bool {
+    if repo
+        .topics
+        .iter()
+        .any(|t| AGENT_TOPICS.contains(&t.to_lowercase().as_str()))
+    {
+        return true;
+    }
+    let corpus = format!(
+        "{} {}",
+        repo.name,
+        repo.description.as_deref().unwrap_or("")
+    )
+    .to_lowercase();
+    ["mcp", "agent", "skill", "cli"]
+        .iter()
+        .any(|kw| corpus.contains(kw))
+}
 
 /// GitHub org repo list item (`GET /orgs/{org}/repos`).
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
@@ -83,7 +134,7 @@ pub(crate) struct OrgRepo {
 /// Whether a repo name needs `{org}-{repo}` disambiguation before slugging.
 pub(crate) fn should_rename_repo_slug(repo_name: &str) -> bool {
     let lower = repo_name.to_lowercase();
-    repo_name.len() < 5 || GENERIC_REPO_NAMES.contains(&lower.as_str())
+    repo_name.len() <= 5 || GENERIC_REPO_NAMES.contains(&lower.as_str())
 }
 
 /// Effective display/slug seed name for a vendor-org repo.
@@ -107,9 +158,14 @@ pub(crate) fn filter_org_repos(repos: &[OrgRepo], now: DateTime<Utc>) -> Vec<&Or
                 .and_then(|s| parse_datetime(s))
                 .is_some_and(|pushed| pushed >= cutoff)
         })
+        .filter(|repo| has_agent_surface(repo))
         .collect();
 
     qualifying.sort_by(|a, b| {
+        let star_cmp = b.stargazers_count.cmp(&a.stargazers_count);
+        if star_cmp != std::cmp::Ordering::Equal {
+            return star_cmp;
+        }
         let a_pushed = a
             .pushed_at
             .as_ref()
@@ -150,11 +206,17 @@ fn infer_tool_type(name: &str, description: Option<&str>, topics: &[String]) -> 
 }
 
 /// Map a filtered org repo to a [`RawTool`], applying slug-rename policy on `name`.
-pub(crate) fn org_repo_to_raw(org: &str, repo: &OrgRepo) -> RawTool {
+pub(crate) fn org_repo_to_raw(org: &str, team: &str, repo: &OrgRepo) -> RawTool {
     let name = effective_tool_name(org, &repo.name);
     let repo_url = repo.html_url.clone();
     let tool_type = infer_tool_type(&repo.name, repo.description.as_deref(), &repo.topics);
     let last_commit_at = repo.pushed_at.as_ref().and_then(|s| parse_datetime(s));
+    let chains: Vec<String> = repo
+        .topics
+        .iter()
+        .filter(|t| is_chain_topic(t))
+        .map(|t| t.to_lowercase())
+        .collect();
 
     RawTool {
         name,
@@ -162,10 +224,12 @@ pub(crate) fn org_repo_to_raw(org: &str, repo: &OrgRepo) -> RawTool {
         tool_type,
         repo_url: Some(repo_url.clone()),
         homepage: Some(repo_url),
+        chains,
         stars: repo.stargazers_count,
         last_commit_at,
         source: SOURCE_NAME.to_string(),
         source_url: Some(repo.html_url.clone()),
+        official_team: Some(team.to_string()),
         ..Default::default()
     }
 }
@@ -173,6 +237,7 @@ pub(crate) fn org_repo_to_raw(org: &str, repo: &OrgRepo) -> RawTool {
 /// Map org repos to raw tools, excluding URLs already present in `existing_repo_urls`.
 pub(crate) fn map_org_repos_to_raws(
     org: &str,
+    team: &str,
     repos: &[OrgRepo],
     existing_repo_urls: &HashSet<String>,
     now: DateTime<Utc>,
@@ -180,21 +245,24 @@ pub(crate) fn map_org_repos_to_raws(
     filter_org_repos(repos, now)
         .into_iter()
         .filter(|repo| !existing_repo_urls.contains(&repo.html_url))
-        .map(|repo| org_repo_to_raw(org, repo))
+        .map(|repo| org_repo_to_raw(org, team, repo))
         .collect()
 }
 
-async fn fetch_org_repos_at_url(
+async fn fetch_org_repos_page(
     client: &reqwest::Client,
     token: Option<&str>,
     org: &str,
     base_url: &str,
+    page: u32,
 ) -> Result<Vec<OrgRepo>> {
     let url = format!("{base_url}/orgs/{org}/repos");
-    let mut request =
-        client
-            .get(&url)
-            .query(&[("per_page", "100"), ("type", "public"), ("sort", "pushed")]);
+    let mut request = client.get(&url).query(&[
+        ("per_page", "100"),
+        ("type", "public"),
+        ("sort", "pushed"),
+        ("page", &page.to_string()),
+    ]);
     if let Some(t) = token {
         request = request.header(
             reqwest::header::AUTHORIZATION,
@@ -206,7 +274,7 @@ async fn fetch_org_repos_at_url(
     let response = request
         .send()
         .await
-        .with_context(|| format!("GitHub org repos request failed for {org}"))?;
+        .with_context(|| format!("GitHub org repos request failed for {org} page {page}"))?;
 
     let status = response.status();
     if !status.is_success() {
@@ -218,6 +286,24 @@ async fn fetch_org_repos_at_url(
         .json()
         .await
         .context("parsing GitHub org repos JSON")
+}
+
+async fn fetch_org_repos_at_url(
+    client: &reqwest::Client,
+    token: Option<&str>,
+    org: &str,
+    base_url: &str,
+) -> Result<Vec<OrgRepo>> {
+    let mut all = Vec::new();
+    for page in 1..=MAX_ORG_REPO_PAGES {
+        let page_items = fetch_org_repos_page(client, token, org, base_url, page).await?;
+        let count = page_items.len();
+        all.extend(page_items);
+        if count < 100 {
+            break;
+        }
+    }
+    Ok(all)
 }
 
 async fn load_existing_repo_urls(pool: &sqlx::PgPool) -> Result<HashSet<String>> {
@@ -244,7 +330,13 @@ pub(crate) async fn crawl_orgs_at_base(
     for entry in manifest.orgs.iter().filter(|e| e.crawl) {
         match fetch_org_repos_at_url(&client, token, &entry.github, base_url).await {
             Ok(repos) => {
-                let mapped = map_org_repos_to_raws(&entry.github, &repos, existing_repo_urls, now);
+                let mapped = map_org_repos_to_raws(
+                    &entry.github,
+                    &entry.team,
+                    &repos,
+                    existing_repo_urls,
+                    now,
+                );
                 tracing::debug!(
                     org = %entry.github,
                     fetched = repos.len(),
@@ -357,7 +449,11 @@ pub async fn crawl_for_pool(pool: &sqlx::PgPool) -> Result<Vec<RawTool>> {
     let existing_repo_urls = load_existing_repo_urls(pool).await?;
     let outcome = crawl_orgs(&existing_repo_urls, Utc::now()).await?;
     if !outcome.failed_orgs.is_empty() {
-        anyhow::bail!(format_vendor_org_failures(&outcome.failed_orgs));
+        tracing::warn!(
+            failed = outcome.failed_orgs.len(),
+            error = %format_vendor_org_failures(&outcome.failed_orgs),
+            "vendor_orgs partial org failures (returning successful raws)"
+        );
     }
     Ok(outcome.raws)
 }
@@ -468,7 +564,7 @@ mod tests {
                 "archived": false,
                 "stargazers_count": 40,
                 "pushed_at": "2026-05-15T08:00:00Z",
-                "topics": ["api"],
+                "topics": ["api", "mcp-server"],
                 "language": "Solidity"
             }
         ])
@@ -527,9 +623,10 @@ mod tests {
             .with_timezone(&Utc);
         let mut existing = HashSet::new();
         existing.insert("https://github.com/circlefin/gateway-contracts".to_string());
-        let raws = map_org_repos_to_raws("circlefin", &repos, &existing, now);
+        let raws = map_org_repos_to_raws("circlefin", "Circle", &repos, &existing, now);
         assert_eq!(raws.len(), 1);
         assert_eq!(raws[0].name, "circlefin-skills");
+        assert_eq!(raws[0].official_team.as_deref(), Some("Circle"));
     }
 
     #[tokio::test]
@@ -548,7 +645,7 @@ mod tests {
         let now = DateTime::parse_from_rfc3339("2026-07-01T00:00:00Z")
             .unwrap()
             .with_timezone(&Utc);
-        let raws = map_org_repos_to_raws("circlefin", &repos, &HashSet::new(), now);
+        let raws = map_org_repos_to_raws("circlefin", "Circle", &repos, &HashSet::new(), now);
         assert!(raws.iter().any(|r| r.name == "circlefin-skills"));
         assert!(raws.iter().all(|r| r.name != "skills"));
     }
@@ -577,23 +674,46 @@ mod tests {
     }
 
     #[test]
-    fn vendor_orgs_filter_caps_per_org_at_twenty_five() {
+    fn vendor_orgs_filter_caps_per_org_at_max() {
         let now = Utc::now();
         let repos: Vec<OrgRepo> = (0..40)
             .map(|i| OrgRepo {
                 id: i,
-                name: format!("repo-{i}"),
-                full_name: format!("vendor/repo-{i}"),
-                description: None,
-                html_url: format!("https://github.com/vendor/repo-{i}"),
+                name: format!("mcp-repo-{i}"),
+                full_name: format!("vendor/mcp-repo-{i}"),
+                description: Some("agent mcp server".into()),
+                html_url: format!("https://github.com/vendor/mcp-repo-{i}"),
                 fork: false,
                 archived: false,
-                stargazers_count: 10,
+                stargazers_count: 10 + i as i32,
                 pushed_at: Some(format!("2026-06-{:02}T00:00:00Z", (i % 28) + 1)),
-                topics: vec![],
+                topics: vec!["mcp-server".into()],
                 language: None,
             })
             .collect();
         assert_eq!(filter_org_repos(&repos, now).len(), MAX_REPOS_PER_ORG);
+    }
+
+    #[test]
+    fn vendor_orgs_agent_surface_gate_excludes_plain_sdk_repos() {
+        let repo = OrgRepo {
+            id: 1,
+            name: "v4-core".into(),
+            full_name: "uniswap/v4-core".into(),
+            description: Some("EVM contracts".into()),
+            html_url: "https://github.com/uniswap/v4-core".into(),
+            fork: false,
+            archived: false,
+            stargazers_count: 100,
+            pushed_at: Some("2026-06-01T00:00:00Z".into()),
+            topics: vec![],
+            language: Some("Solidity".into()),
+        };
+        assert!(!has_agent_surface(&repo));
+        let mcp_repo = OrgRepo {
+            topics: vec!["mcp-server".into()],
+            ..repo.clone()
+        };
+        assert!(has_agent_surface(&mcp_repo));
     }
 }

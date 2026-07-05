@@ -41,6 +41,7 @@ COPY public/ /app/public/
 ENV PORT=3000
 ENV RUST_LOG=info
 ENV RUST_MIN_STACK=8388608
+# Railway: set SKIP_CRAWLER=0 in service vars to enable cron; Dockerfile default off for local/CI.
 ENV SKIP_CRAWLER=1
 ENV MIGRATIONS_DIR=/app/migrations
 EXPOSE 3000

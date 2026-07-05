@@ -40,6 +40,14 @@
 - 소스별 **수동 크롤 즉시 실행(Trigger)**. (자동 스케줄과 별개) — UI가 UUID를 보내는 버그가 있으면 §5 curl 우회.
 - **GitHub Stars Sync** (`sync_stars`) — 별도 유지보수 작업; Stars Sync Now 버튼.
 
+**발견 소스 구분 (혼동 방지):**
+
+| 소스 | 무엇을 긁나 | 주기 | 심사 |
+|------|-------------|------|------|
+| `github` | GitHub **topic** 검색 (`mcp-server`, `crypto-mcp`, …) | 1h | 사이트 설정 따름 |
+| `vendor_orgs` | `scripts/vendor-orgs.json` **curated org** repo sweep (Circle, Coinbase, …) | 일 03:45 UTC | **항상 pending** |
+| `bazaar` | Coinbase CDP **x402 API** discovery (GitHub 아님) | 6h | **항상 pending** |
+
 ### `/admin/categories` — Category Management
 - 기능 카테고리 **생성 / 수정 / 삭제** (CRUD).
 
