@@ -43,11 +43,16 @@ smoke_body_has "$home_body" 'category-grid' && smoke_fail "GET / unexpected cate
 smoke_body_has "$home_body" '_next/static' || smoke_fail "GET / missing Next.js bundle markers"
 
 login_body="$(check_get "/login")"
-smoke_body_has "$login_body" 'Continue with GitHub' || smoke_fail "GET /login missing GitHub sign-in option"
-smoke_body_has "$login_body" 'data-testid="github-sign-in"' || smoke_fail "GET /login missing github-sign-in test id"
-smoke_body_has "$login_body" 'rel="external"' || smoke_fail "GET /login missing rel=external on GitHub sign-in link"
-smoke_body_has "$login_body" 'data-testid="wallet-sign-in"' || smoke_fail "GET /login missing wallet sign-in button"
-smoke_body_has "$login_body" 'id="login-title"' || smoke_fail "GET /login missing login-title heading"
+# Login is client-rendered; SSR shell shows Loading until hydration.
+if smoke_body_has "$login_body" 'Continue with GitHub'; then
+  smoke_body_has "$login_body" 'data-testid="github-sign-in"' || smoke_fail "GET /login missing github-sign-in test id"
+  smoke_body_has "$login_body" 'rel="external"' || smoke_fail "GET /login missing rel=external on GitHub sign-in link"
+  smoke_body_has "$login_body" 'data-testid="wallet-sign-in"' || smoke_fail "GET /login missing wallet sign-in button"
+  smoke_body_has "$login_body" 'id="login-title"' || smoke_fail "GET /login missing login-title heading"
+else
+  smoke_body_has "$login_body" 'Loading sign-in' || smoke_fail "GET /login missing sign-in shell (SSR or hydrated)"
+fi
+smoke_body_has "$login_body" '_next/static' || smoke_fail "GET /login missing Next.js bundle markers"
 
 tools_body="$(check_get "/tools")"
 smoke_body_has "$tools_body" 'tool-card' || smoke_fail "GET /tools missing tool-card markup"
