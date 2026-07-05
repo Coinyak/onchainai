@@ -82,8 +82,10 @@ function X402SubmitFlow() {
     staleTime: 60_000,
   });
   const registrationEnabled = settingsQuery.data?.allow_x402_registration === true;
-  const registrationDisabled =
+  const submitDisabled =
     settingsQuery.isLoading || settingsQuery.isError || !registrationEnabled;
+  const showRegistrationNotice =
+    !settingsQuery.isLoading && (settingsQuery.isError || !registrationEnabled);
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -144,7 +146,7 @@ function X402SubmitFlow() {
       data-testid="x402-submit-form"
       onSubmit={(e) => {
         e.preventDefault();
-        if (registrationDisabled) return;
+        if (submitDisabled) return;
         setError(null);
         submitMut.mutate();
       }}
@@ -154,13 +156,13 @@ function X402SubmitFlow() {
           Loading x402 registration settings…
         </p>
       )}
-      {!settingsQuery.isLoading && registrationDisabled && (
+      {showRegistrationNotice && (
         <p
           className="text-body-sm text-secondary rounded-md border border-border bg-neutral-hover p-4"
           data-testid="x402-registration-disabled"
         >
           {settingsQuery.isError
-            ? "Could not load x402 registration settings. Publishing is unavailable until settings load."
+            ? "Could not load x402 registration settings. You can still check an endpoint below, but publishing is unavailable until settings load."
             : "x402 self-listing is currently disabled on this deployment. You can still check an endpoint below, but publishing is unavailable until operators enable registration."}
         </p>
       )}
@@ -269,7 +271,7 @@ function X402SubmitFlow() {
         type="submit"
         className="min-h-touch px-6 rounded-md bg-tertiary text-on-tertiary font-medium hover:bg-[#D96400] disabled:opacity-50"
         data-testid="x402-submit-btn"
-        disabled={submitMut.isPending || !termsAccepted || registrationDisabled}
+        disabled={submitMut.isPending || !termsAccepted || submitDisabled}
       >
         {submitMut.isPending ? "Probing and publishing..." : "Probe and publish"}
       </button>

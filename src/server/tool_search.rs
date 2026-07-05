@@ -151,6 +151,25 @@ pub fn resolve_search_intent(
     }
 }
 
+/// Select AND vs Prefix vs OR from precomputed counts (`None` = not tried or query error).
+pub fn select_search_match(
+    query: &str,
+    and_count: i64,
+    prefix_count: Option<i64>,
+    or_count: Option<i64>,
+) -> ToolSearchMatch {
+    if and_count > 0 {
+        return ToolSearchMatch::And;
+    }
+    if prefix_count.is_some_and(|count| count > 0) {
+        return ToolSearchMatch::Prefix;
+    }
+    if should_try_or_fallback(query) && or_count.is_some_and(|count| count > 0) {
+        return ToolSearchMatch::Or;
+    }
+    ToolSearchMatch::And
+}
+
 /// Resolve AND vs Prefix vs OR: try AND first; fall back to Prefix when zero; then OR for multi-token.
 /// Probes downstream count SQL before selecting a mode so invalid `to_tsquery` inputs stay on AND
 /// (empty results) instead of surfacing as 500s.
@@ -172,45 +191,64 @@ pub async fn resolve_search_match(
         chain,
     )
     .await?;
-    if and_count == 0 {
-        if build_prefix_tsquery(query).is_some() {
-            match count_fts_matches(
-                pool,
-                count_sql_prefix,
-                ToolSearchMatch::Prefix,
-                query,
-                category,
-                chain,
-            )
-            .await
-            {
-                Ok(prefix_count) if prefix_count > 0 => return Ok(ToolSearchMatch::Prefix),
-                Ok(_) => {}
-                Err(_) => {}
-            }
-        }
-        if should_try_or_fallback(query) {
-            match count_fts_matches(
-                pool,
-                count_sql_or,
-                ToolSearchMatch::Or,
-                query,
-                category,
-                chain,
-            )
-            .await
-            {
-                Ok(or_count) if or_count > 0 => return Ok(ToolSearchMatch::Or),
-                Ok(_) | Err(_) => {}
-            }
-        }
-    }
-    Ok(ToolSearchMatch::And)
+    let prefix_count = if and_count == 0 && build_prefix_tsquery(query).is_some() {
+        count_fts_matches(
+            pool,
+            count_sql_prefix,
+            ToolSearchMatch::Prefix,
+            query,
+            category,
+            chain,
+        )
+        .await
+        .ok()
+    } else {
+        None
+    };
+    let or_count = if and_count == 0 && should_try_or_fallback(query) {
+        count_fts_matches(
+            pool,
+            count_sql_or,
+            ToolSearchMatch::Or,
+            query,
+            category,
+            chain,
+        )
+        .await
+        .ok()
+    } else {
+        None
+    };
+    Ok(select_search_match(query, and_count, prefix_count, or_count))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn select_search_match_prefers_and_when_count_positive() {
+        assert_eq!(
+            select_search_match("uniswap", 3, Some(0), Some(0)),
+            ToolSearchMatch::And
+        );
+    }
+
+    #[test]
+    fn select_search_match_falls_back_to_prefix_then_or() {
+        assert_eq!(
+            select_search_match("unisw", 0, Some(2), None),
+            ToolSearchMatch::Prefix
+        );
+        assert_eq!(
+            select_search_match("bridge USDC", 0, Some(0), Some(1)),
+            ToolSearchMatch::Or
+        );
+        assert_eq!(
+            select_search_match("bridge", 0, Some(0), Some(1)),
+            ToolSearchMatch::And
+        );
+    }
 
     #[test]
     fn or_fallback_requires_multiple_tokens() {

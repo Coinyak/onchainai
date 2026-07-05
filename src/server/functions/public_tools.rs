@@ -360,26 +360,25 @@ pub(crate) async fn resolve_list_search_match(
     filters: &ToolFilters,
 ) -> Result<crate::server::tool_search::ToolSearchMatch, FnError> {
     use crate::server::tool_search::{
-        build_prefix_tsquery, should_try_or_fallback, ToolSearchMatch,
+        build_prefix_tsquery, select_search_match, should_try_or_fallback, ToolSearchMatch,
     };
 
     let and_count = count_list_fts_matches(pool, search, filters, ToolSearchMatch::And).await?;
-    if and_count == 0 {
-        if build_prefix_tsquery(search).is_some() {
-            match count_list_fts_matches(pool, search, filters, ToolSearchMatch::Prefix).await {
-                Ok(prefix_count) if prefix_count > 0 => return Ok(ToolSearchMatch::Prefix),
-                Ok(_) => {}
-                Err(_) => {}
-            }
-        }
-        if should_try_or_fallback(search) {
-            match count_list_fts_matches(pool, search, filters, ToolSearchMatch::Or).await {
-                Ok(or_count) if or_count > 0 => return Ok(ToolSearchMatch::Or),
-                Ok(_) | Err(_) => {}
-            }
-        }
-    }
-    Ok(ToolSearchMatch::And)
+    let prefix_count = if and_count == 0 && build_prefix_tsquery(search).is_some() {
+        count_list_fts_matches(pool, search, filters, ToolSearchMatch::Prefix)
+            .await
+            .ok()
+    } else {
+        None
+    };
+    let or_count = if and_count == 0 && should_try_or_fallback(search) {
+        count_list_fts_matches(pool, search, filters, ToolSearchMatch::Or)
+            .await
+            .ok()
+    } else {
+        None
+    };
+    Ok(select_search_match(search, and_count, prefix_count, or_count))
 }
 
 #[cfg(feature = "ssr")]

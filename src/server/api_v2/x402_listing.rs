@@ -53,23 +53,15 @@ fn probe_response(outcome: ProbeDetailsOutcome) -> ProbeResponse {
             reason: None,
             http_status: Some(402),
         },
-        ProbeDetailsOutcome::NotPaymentRequired {
-            status,
-            body_snippet,
-        } => {
-            let mut reason =
-                format!("endpoint returned HTTP {status}, expected 402 Payment Required");
-            if let Some(snippet) = body_snippet {
-                reason.push_str(&format!("; body: {snippet}"));
-            }
-            ProbeResponse {
-                live: false,
-                status: "not_payment_required",
-                details: None,
-                reason: Some(reason),
-                http_status: Some(status),
-            }
-        }
+        ProbeDetailsOutcome::NotPaymentRequired { status, .. } => ProbeResponse {
+            live: false,
+            status: "not_payment_required",
+            details: None,
+            reason: Some(format!(
+                "endpoint returned HTTP {status}, expected 402 Payment Required"
+            )),
+            http_status: Some(status),
+        },
         ProbeDetailsOutcome::ParseFailed => ProbeResponse {
             live: false,
             status: "parse_failed",
@@ -592,7 +584,11 @@ mod tests {
         assert!(dead
             .reason
             .as_deref()
-            .is_some_and(|reason| reason.contains("HTTP 404") && reason.contains("not found")));
+            .is_some_and(|reason| reason.contains("HTTP 404")));
+        assert!(!dead
+            .reason
+            .as_deref()
+            .is_some_and(|reason| reason.contains("not found")));
         let blocked = probe_response(ProbeDetailsOutcome::SsrfBlocked("blocked host".into()));
         assert_eq!(probe_history_status(&blocked), "invalid");
         assert_eq!(blocked.http_status, None);
