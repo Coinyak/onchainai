@@ -251,7 +251,10 @@ pub fn build_app(pool: sqlx::PgPool, config: Config) -> axum::Router {
             "/auth/callback",
             axum::routing::get(auth::routes::oauth_callback),
         )
-        .route("/auth/logout", axum::routing::post(auth::routes::logout))
+        .route(
+            "/auth/logout",
+            axum::routing::get(auth::routes::logout_get).post(auth::routes::logout),
+        )
         .route(
             "/onboarding/complete",
             axum::routing::post(auth::onboarding::complete),

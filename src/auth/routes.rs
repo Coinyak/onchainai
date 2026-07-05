@@ -1,5 +1,6 @@
 //! Axum auth routes — direct GitHub OAuth, email magic links, and logout.
 
+use crate::auth::oauth_state::{mint_oauth_state, verify_oauth_state};
 use crate::auth::session::{
     auth_http_client, clear_session_hint_cookie, cookie_secure_for_domain, cookie_value,
     ensure_github_profile, issue_access_token, local_dev_host, post_auth_redirect_path,
@@ -12,8 +13,6 @@ use axum::{
     http::{header, HeaderMap, StatusCode},
     response::{IntoResponse, Redirect, Response},
 };
-use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
-use getrandom::getrandom;
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
@@ -67,16 +66,19 @@ fn clear_cookie(name: &str, secure: bool, same_site: &str) -> String {
     format!("{name}=; Path=/; HttpOnly; SameSite={same_site}; Max-Age=0{secure_flag}")
 }
 
-fn generate_oauth_state() -> String {
-    let mut bytes = [0u8; 32];
-    getrandom(&mut bytes).expect("OS random unavailable");
-    URL_SAFE_NO_PAD.encode(bytes)
+fn github_oauth_state_valid(config: &Config, headers: &HeaderMap, state_param: &str) -> bool {
+    let cookie_header = headers.get(header::COOKIE).and_then(|v| v.to_str().ok());
+    let cookie_state = cookie_header.and_then(|h| cookie_value(h, GITHUB_STATE_COOKIE));
+    if cookie_state == Some(state_param) {
+        return true;
+    }
+    verify_oauth_state(&config.jwt_secret, state_param)
 }
 
 /// `GET /auth/github` — redirect to GitHub OAuth (callback stays on this app).
 pub async fn github_login(State(state): State<AppState>) -> Result<Response, StatusCode> {
     let config = &state.config;
-    let oauth_state = generate_oauth_state();
+    let oauth_state = mint_oauth_state(&config.jwt_secret);
     let redirect_uri = callback_url(config);
     let authorize_url = format!(
         "https://github.com/login/oauth/authorize?client_id={}&redirect_uri={}&scope={}&state={}",
@@ -127,6 +129,13 @@ async fn exchange_github_code(
         .map_err(|_| StatusCode::BAD_GATEWAY)?;
 
     if !response.status().is_success() {
+        let status = response.status();
+        let body = response.text().await.unwrap_or_default();
+        tracing::warn!(
+            status = %status,
+            body_len = body.len(),
+            "GitHub OAuth token exchange failed"
+        );
         return Err(StatusCode::BAD_REQUEST);
     }
 
@@ -180,9 +189,8 @@ pub async fn oauth_callback(
     };
     let config = &state.config;
 
-    let cookie_header = headers_in.get(header::COOKIE).and_then(|v| v.to_str().ok());
-    let cookie_state = cookie_header.and_then(|h| cookie_value(h, GITHUB_STATE_COOKIE));
-    if cookie_state != Some(state_param.as_str()) {
+    if !github_oauth_state_valid(config, &headers_in, &state_param) {
+        tracing::warn!("GitHub OAuth state validation failed (cookie and HMAC mismatch)");
         return Ok(Redirect::to("/login?auth=github_state_mismatch").into_response());
     }
 
@@ -297,14 +305,23 @@ pub async fn github_switch(State(state): State<AppState>) -> Response {
     (headers, Redirect::temporary(github_logout_url())).into_response()
 }
 
-/// `POST /auth/logout` — clear session cookie.
-pub async fn logout(State(state): State<AppState>) -> Response {
+fn logout_response(state: &AppState, redirect_to: &str) -> Response {
     let secure_cookie = cookie_secure_for_domain(&state.config.siwx_domain);
     let mut headers = HeaderMap::new();
     if clear_session_cookies(&mut headers, secure_cookie).is_err() {
         return StatusCode::INTERNAL_SERVER_ERROR.into_response();
     }
-    (headers, Redirect::to("/")).into_response()
+    (headers, Redirect::to(redirect_to)).into_response()
+}
+
+/// `GET /auth/logout` — clear session via navigation (reliable Set-Cookie on full page load).
+pub async fn logout_get(State(state): State<AppState>) -> Response {
+    logout_response(&state, "/login?signed_out=1")
+}
+
+/// `POST /auth/logout` — clear session cookie.
+pub async fn logout(State(state): State<AppState>) -> Response {
+    logout_response(&state, "/login?signed_out=1")
 }
 
 #[cfg(test)]

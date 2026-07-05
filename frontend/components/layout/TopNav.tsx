@@ -4,7 +4,6 @@ import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth";
 import { LoginModal } from "@/components/auth/LoginModal";
 import { GitHubMarkIcon } from "@/components/icons/GitHubMarkIcon";
@@ -16,7 +15,6 @@ const GITHUB_REPO =
 
 function ProfileMenu() {
   const { user } = useAuth();
-  const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
   if (!user) return null;
@@ -114,7 +112,7 @@ function ProfileMenu() {
               disabled={signingOut}
               onClick={() => {
                 setSigningOut(true);
-                void signOut(queryClient);
+                signOut();
               }}
             >
               {signingOut ? "Signing out..." : "Sign out"}
