@@ -113,11 +113,11 @@ def wrap_raster(label: str, src: Path, padding: float = 4.0) -> str:
 def wrap_file(label: str, src: Path, padding: float = 4.0) -> str:
     raw = src.read_text(encoding="utf-8", errors="replace")
     body = read_svg_body(src)
-    _, _, vw, vh = parse_viewbox(raw)
+    xmin, ymin, vw, vh = parse_viewbox(raw)
     inner_w = 48.0 - 2 * padding
     scale = inner_w / max(vw, vh)
-    tx = -vw / 2
-    ty = -vh / 2
+    tx = -(xmin + vw / 2)
+    ty = -(ymin + vh / 2)
     inner = f'<svg viewBox="0 0 {vw} {vh}" width="{vw}" height="{vh}" overflow="visible">{body}</svg>'
     return TILE.format(
         label=label,
@@ -278,6 +278,17 @@ def main() -> None:
             else:
                 src = raw_root / entry["source"]
                 if not src.exists():
+                    if out.exists():
+                        preserve_public_tile(
+                            out,
+                            slug,
+                            markers,
+                            forbidden,
+                            require_vector=require_vector,
+                        )
+                        preserved.append(slug)
+                        written.append(slug)
+                        continue
                     raise SystemExit(f"missing source for {slug}: {src}")
                 if require_vector:
                     body = read_svg_body(src)
@@ -295,6 +306,11 @@ def main() -> None:
             else:
                 src = raw_root / entry["source"]
                 if not src.exists():
+                    if out.exists():
+                        preserve_public_tile(out, slug, markers, forbidden)
+                        preserved.append(slug)
+                        written.append(slug)
+                        continue
                     raise SystemExit(f"missing raster for {slug}: {src}")
                 text = wrap_raster(label, src)
                 if markers and not any(m in text for m in markers):

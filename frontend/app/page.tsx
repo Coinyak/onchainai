@@ -22,7 +22,7 @@ const DEFAULT_SETTINGS = {
   hero_subtitle: null as string | null,
 };
 
-function HomeHero() {
+function HomeHero({ q }: { q: string }) {
   const settingsQuery = useQuery({
     queryKey: ["site-settings"],
     queryFn: getSiteSettings,
@@ -67,38 +67,14 @@ function HomeHero() {
           </Link>
           {" for agents and editors"}
         </p>
-        <SearchBar />
       </section>
       <FeaturedCarousel cards={featured} />
       <section className="mb-6">
         <PromoCards mcpEndpoint={settings.mcp_endpoint} />
       </section>
-    </div>
-  );
-}
-
-/** §11 default: compact 1-line header when `q` is present (Phase 3 search mode). */
-function SearchModeHeader({ q }: { q: string }) {
-  const settingsQuery = useQuery({
-    queryKey: ["site-settings"],
-    queryFn: getSiteSettings,
-    retry: false,
-  });
-  const settings = settingsQuery.data ?? DEFAULT_SETTINGS;
-  const heroTitle = settings.hero_title?.trim() || settings.slogan;
-
-  return (
-    <div
-      className="home-page search-mode px-gutter md:px-6 pt-2 pb-2"
-      data-testid="search-mode-header"
-    >
-      <Link href="/" className="search-mode-back" data-testid="search-mode-back">
-        ← Back to home
-      </Link>
-      <div className="search-mode-header-row">
-        <h1 className="search-mode-title">{heroTitle}</h1>
-        <SearchBar defaultValue={q} searchPath="/" />
-      </div>
+      <section className="home-search-section mb-4" aria-label="Search tools">
+        <SearchBar defaultValue={q} />
+      </section>
     </div>
   );
 }
@@ -106,11 +82,10 @@ function SearchModeHeader({ q }: { q: string }) {
 function HomeContent() {
   const searchParams = useSearchParams();
   const q = searchParams.get("q")?.trim() ?? "";
-  const isSearchMode = q.length > 0;
 
   return (
     <ToolsBrowser base="home" showToolbarSearch={false}>
-      {isSearchMode ? <SearchModeHeader q={q} /> : <HomeHero />}
+      <HomeHero q={q} />
     </ToolsBrowser>
   );
 }

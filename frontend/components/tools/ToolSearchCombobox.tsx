@@ -137,9 +137,11 @@ export function ToolSearchCombobox({
   const router = useRouter();
   const pathname = usePathname();
   const isMobile = useIsMobileViewport();
+  const rootRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState(defaultValue);
   const [mobileExpanded, setMobileExpanded] = useState(false);
+  const [typeaheadDismissed, setTypeaheadDismissed] = useState(false);
   const lastUrlQuery = useRef(defaultValue.trim());
   const optionPickRef = useRef(false);
   const dirtySinceFocus = useRef(false);
@@ -158,6 +160,7 @@ export function ToolSearchCombobox({
   useEffect(() => {
     const next = (defaultValue ?? "").trim();
     if (next === lastUrlQuery.current) return;
+    if (document.activeElement === inputRef.current) return;
     lastUrlQuery.current = next;
     setQuery(defaultValue ?? "");
   }, [defaultValue]);
@@ -166,7 +169,7 @@ export function ToolSearchCombobox({
     if (variant !== "hero" || !onDebouncedQueryChange) return;
     const timer = window.setTimeout(() => {
       const trimmed = query.trim();
-      if (trimmed === lastUrlQuery.current) return;
+      if (!trimmed || trimmed === lastUrlQuery.current) return;
       lastUrlQuery.current = trimmed;
       onDebouncedQueryChange(trimmed);
     }, TOOL_SEARCH_DEBOUNCE_MS);
@@ -189,6 +192,21 @@ export function ToolSearchCombobox({
       document.body.style.overflow = prev;
     };
   }, [mobileExpanded]);
+
+  useEffect(() => {
+    const onPointerDown = (event: PointerEvent) => {
+      const root = rootRef.current;
+      if (!root || root.contains(event.target as Node)) return;
+      setTypeaheadDismissed(true);
+      typeahead.closeDropdown();
+      const input = inputRef.current;
+      if (input && document.activeElement === input) {
+        input.blur();
+      }
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => document.removeEventListener("pointerdown", onPointerDown);
+  }, [typeahead]);
 
   const defaultPlaceholder =
     variant === "hero"
@@ -257,6 +275,7 @@ export function ToolSearchCombobox({
   const handleInputChange = (value: string) => {
     setQuery(value);
     dirtySinceFocus.current = value !== queryAtFocus.current;
+    setTypeaheadDismissed(false);
     if (value.trim()) {
       typeahead.openDropdown();
     } else {
@@ -285,8 +304,11 @@ export function ToolSearchCombobox({
   const handleFocus = () => {
     queryAtFocus.current = query;
     dirtySinceFocus.current = false;
+    setTypeaheadDismissed(false);
     if (isMobile) setMobileExpanded(true);
-    if (query.trim() && typeahead.results.length > 0) typeahead.openDropdown();
+    if (query.trim() && (typeahead.results.length > 0 || typeahead.isLoading)) {
+      typeahead.openDropdown();
+    }
   };
 
   const handleBlur = () => {
@@ -311,6 +333,7 @@ export function ToolSearchCombobox({
   };
 
   const showDropdown =
+    !typeaheadDismissed &&
     typeahead.isOpen &&
     query.trim().length > 0 &&
     (typeahead.isLoading || typeahead.results.length > 0);
@@ -377,7 +400,7 @@ export function ToolSearchCombobox({
   }
 
   return (
-    <div className={`search-typeahead search-typeahead-${variant}`}>
+    <div ref={rootRef} className={`search-typeahead search-typeahead-${variant}`}>
       {inputElement}
       {showDropdown && (
         <TypeaheadList
