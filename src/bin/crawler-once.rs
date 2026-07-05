@@ -22,8 +22,8 @@ async fn main() -> anyhow::Result<()> {
             std::process::exit(1);
         });
 
-    let database_url =
-        std::env::var("DATABASE_URL").map_err(|_| anyhow::anyhow!("DATABASE_URL must be set"))?;
+    let database_url = std::env::var("DATABASE_URL")
+        .map_err(|_| anyhow::anyhow!("DATABASE_URL must be set"))?;
     let pool = config::setup_db(&database_url).await?;
     tracing::info!(source = %source, "crawler-once: starting");
     crawler::trigger_source(&pool, &source).await;

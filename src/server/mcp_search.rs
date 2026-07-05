@@ -1,15 +1,12 @@
 //! MCP search paging and ranking helpers.
 
-use crate::models::tool::{sanitize_tools_for_public_response, PublicToolSummary};
+use crate::models::tool::sanitize_tools_for_public_response;
 use crate::models::Tool;
 use crate::server::queries::{
-    MCP_SEARCH_TOOLS_COUNT_OR_SQL, MCP_SEARCH_TOOLS_COUNT_SQL, MCP_SEARCH_TOOLS_RECENT_OR_SQL,
-    MCP_SEARCH_TOOLS_RECENT_SQL, MCP_SEARCH_TOOLS_RELEVANCE_OR_SQL, MCP_SEARCH_TOOLS_RELEVANCE_SQL,
-    MCP_SEARCH_TOOLS_STARS_OR_SQL, MCP_SEARCH_TOOLS_STARS_SQL, MCP_SEARCH_TOOLS_TRUST_OR_SQL,
-    MCP_SEARCH_TOOLS_TRUST_SQL,
+    MCP_SEARCH_TOOLS_COUNT_SQL, MCP_SEARCH_TOOLS_RECENT_SQL, MCP_SEARCH_TOOLS_RELEVANCE_SQL,
+    MCP_SEARCH_TOOLS_STARS_SQL, MCP_SEARCH_TOOLS_TRUST_SQL,
 };
 use crate::server::tool_categories::is_public_tool_category;
-use crate::server::tool_search::{resolve_search_match, ToolSearchMatch};
 use serde::Serialize;
 use serde_json::Value;
 use sqlx::PgPool;
@@ -50,22 +47,58 @@ impl McpSearchSort {
         }
     }
 
-    fn query_sql(self, match_mode: ToolSearchMatch) -> &'static str {
-        match (self, match_mode) {
-            (Self::Relevance, ToolSearchMatch::And) => MCP_SEARCH_TOOLS_RELEVANCE_SQL,
-            (Self::Relevance, ToolSearchMatch::Or) => MCP_SEARCH_TOOLS_RELEVANCE_OR_SQL,
-            (Self::Trust, ToolSearchMatch::And) => MCP_SEARCH_TOOLS_TRUST_SQL,
-            (Self::Trust, ToolSearchMatch::Or) => MCP_SEARCH_TOOLS_TRUST_OR_SQL,
-            (Self::Stars, ToolSearchMatch::And) => MCP_SEARCH_TOOLS_STARS_SQL,
-            (Self::Stars, ToolSearchMatch::Or) => MCP_SEARCH_TOOLS_STARS_OR_SQL,
-            (Self::Recent, ToolSearchMatch::And) => MCP_SEARCH_TOOLS_RECENT_SQL,
-            (Self::Recent, ToolSearchMatch::Or) => MCP_SEARCH_TOOLS_RECENT_OR_SQL,
+    fn query_sql(self) -> &'static str {
+        match self {
+            Self::Relevance => MCP_SEARCH_TOOLS_RELEVANCE_SQL,
+            Self::Trust => MCP_SEARCH_TOOLS_TRUST_SQL,
+            Self::Stars => MCP_SEARCH_TOOLS_STARS_SQL,
+            Self::Recent => MCP_SEARCH_TOOLS_RECENT_SQL,
         }
     }
 }
 
 /// Slim search hit for MCP agents — enough to compare candidates before detail.
-pub(crate) type McpToolSummary = PublicToolSummary;
+#[derive(Debug, Clone, Serialize)]
+pub(crate) struct McpToolSummary {
+    pub slug: String,
+    pub name: String,
+    pub description: Option<String>,
+    #[serde(rename = "type")]
+    pub tool_type: String,
+    pub function: String,
+    pub chains: Vec<String>,
+    pub trust_score: i32,
+    pub install_risk_level: String,
+    pub status: String,
+    pub stars: i32,
+    pub pricing: String,
+    pub claim_state: String,
+    pub payment_verified: bool,
+    pub x402_endpoint_verified: bool,
+    pub referral_enabled: bool,
+}
+
+impl From<Tool> for McpToolSummary {
+    fn from(tool: Tool) -> Self {
+        Self {
+            slug: tool.slug,
+            name: tool.name,
+            description: tool.description,
+            tool_type: tool.tool_type,
+            function: tool.function,
+            chains: tool.chains,
+            trust_score: tool.trust_score,
+            install_risk_level: tool.install_risk_level,
+            status: tool.status,
+            stars: tool.stars,
+            pricing: tool.pricing,
+            claim_state: tool.claim_state,
+            payment_verified: tool.payment_verified,
+            x402_endpoint_verified: tool.x402_endpoint_verified,
+            referral_enabled: tool.referral_enabled,
+        }
+    }
+}
 
 #[derive(Serialize)]
 pub(crate) struct McpSearchPage {
@@ -161,25 +194,9 @@ pub(crate) async fn mcp_search_tools(
     let limit = limit.clamp(1, 25);
     let fetch_limit = limit + 1;
 
-    let match_mode = resolve_search_match(
-        pool,
-        MCP_SEARCH_TOOLS_COUNT_SQL,
-        MCP_SEARCH_TOOLS_COUNT_OR_SQL,
-        &query,
-        category.as_deref(),
-        chain.as_deref(),
-    )
-    .await
-    .map_err(|e| (-32603, format!("db error: {e}")))?;
-
-    let count_sql = match match_mode {
-        ToolSearchMatch::And => MCP_SEARCH_TOOLS_COUNT_SQL,
-        ToolSearchMatch::Or => MCP_SEARCH_TOOLS_COUNT_OR_SQL,
-    };
-
     let (mut tools, total_count) = tokio::try_join!(
         async {
-            sqlx::query_as::<_, Tool>(sort.query_sql(match_mode))
+            sqlx::query_as::<_, Tool>(sort.query_sql())
                 .bind(&query)
                 .bind(category.as_deref())
                 .bind(chain.as_deref())
@@ -190,7 +207,7 @@ pub(crate) async fn mcp_search_tools(
                 .map_err(|e| (-32603, format!("db error: {e}")))
         },
         async {
-            sqlx::query_scalar::<_, i64>(count_sql)
+            sqlx::query_scalar::<_, i64>(MCP_SEARCH_TOOLS_COUNT_SQL)
                 .bind(&query)
                 .bind(category.as_deref())
                 .bind(chain.as_deref())
@@ -216,7 +233,7 @@ pub(crate) async fn mcp_search_tools(
     let has_more = next_cursor.is_some();
     let summaries = sanitize_tools_for_public_response(tools)
         .into_iter()
-        .map(PublicToolSummary::from)
+        .map(McpToolSummary::from)
         .collect();
 
     Ok(McpSearchPage {
@@ -297,6 +314,7 @@ mod tests {
                 tool_type: "mcp".into(),
                 function: "swap".into(),
                 chains: vec!["ethereum".into()],
+                trust_score: 80,
                 install_risk_level: "low".into(),
                 status: "official".into(),
                 stars: 100,
@@ -305,7 +323,6 @@ mod tests {
                 payment_verified: false,
                 x402_endpoint_verified: false,
                 referral_enabled: false,
-                logo_url: None,
             }],
             next_cursor: Some("10".into()),
             has_more: true,

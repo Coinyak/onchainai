@@ -289,12 +289,7 @@ function toolHttpEndpoint(tool: Tool): string | null {
   return endpoint;
 }
 
-function isMcpCatalogTool(tool: Tool): boolean {
-  return tool.type === "mcp" || tool.type === "x402" || Boolean(tool.mcp_endpoint);
-}
-
 function toolStdioConfig(tool: Tool, slug: string, riskLevel: string): string | null {
-  if (!isMcpCatalogTool(tool)) return null;
   const command = primaryInstallCommand(tool);
   if (!command || blocksStructuredConfig(riskLevel)) return null;
   const parts = command.trim().split(/\s+/);
@@ -549,76 +544,6 @@ export function buildPublicInstallGuide(
         "Public install guidance is withheld until an operator reviews the listing.",
       ],
       connect_blocks: [],
-      ...toolGuideMeta(tool),
-      docs_links: [],
-      x402_notice: null,
-      referral_disclosure: null,
-    };
-  }
-
-  const command = primaryInstallCommand(tool);
-  if (tool.type === "skill") {
-    return {
-      slug,
-      tool_name: tool.name,
-      platform: client,
-      risk_level: tool.install_risk_level,
-      risk_reasons: tool.install_risk_reasons,
-      warning: installWarningText(tool.install_risk_level),
-      blocked: false,
-      copy_gate: copyGateForRisk(tool.install_risk_level),
-      command,
-      config_json: null,
-      copy_text: command,
-      copy_label: "Copy command",
-      steps: [
-        "Install the skill using the command below (e.g. clawhub or your agent skills runtime).",
-        "Do not paste this into MCP server settings — skills are not MCP configs.",
-      ],
-      connect_blocks: [
-        {
-          steps: ["Run the install command, then open the docs for usage."],
-          copyText: command,
-          copyLabel: "Copy command",
-          showShellPrefix: true,
-        },
-      ],
-      ...toolGuideMeta(tool),
-      docs_links: [],
-      x402_notice: null,
-      referral_disclosure: null,
-    };
-  }
-
-  if (
-    (tool.type === "cli" || tool.type === "sdk" || tool.type === "api") &&
-    !isMcpCatalogTool(tool)
-  ) {
-    return {
-      slug,
-      tool_name: tool.name,
-      platform: client,
-      risk_level: tool.install_risk_level,
-      risk_reasons: tool.install_risk_reasons,
-      warning: installWarningText(tool.install_risk_level),
-      blocked: false,
-      copy_gate: copyGateForRisk(tool.install_risk_level),
-      command,
-      config_json: null,
-      copy_text: command,
-      copy_label: "Copy command",
-      steps: [
-        "Run the install command in your terminal or package manager.",
-        "Open the repository or docs link for setup.",
-      ],
-      connect_blocks: [
-        {
-          steps: ["Copy and run the install command below."],
-          copyText: command,
-          copyLabel: "Copy command",
-          showShellPrefix: true,
-        },
-      ],
       ...toolGuideMeta(tool),
       docs_links: [],
       x402_notice: null,
