@@ -217,6 +217,9 @@ fn primary_install_command(tool: &Tool) -> Option<String> {
         .or_else(|| tool.install_command.clone())
         .filter(|value| !value.trim().is_empty())
         .or_else(|| {
+            if tool.tool_type == "skill" {
+                return None;
+            }
             tool.mcp_endpoint
                 .as_deref()
                 .and_then(generic_mcp_remote_command)
@@ -332,6 +335,13 @@ fn is_mcp_catalog_tool(tool: &Tool) -> bool {
     tool.tool_type == "mcp" || tool.tool_type == "x402" || tool.mcp_endpoint.is_some()
 }
 
+fn command_only_steps_without_command() -> Vec<String> {
+    vec![
+        "No install command is listed for this tool.".into(),
+        "Use the repository or docs links below for setup.".into(),
+    ]
+}
+
 fn command_only_guide(
     tool: &Tool,
     slug: &str,
@@ -341,12 +351,11 @@ fn command_only_guide(
     let risk_level = tool.install_risk_level.clone();
     let copy_gate = CopyGate::for_risk(&risk_level);
     let command = primary_install_command(tool);
-    let mut steps = steps;
-    if command.is_none() {
-        steps.push(
-            "No install command is listed — use the docs or repository link below.".into(),
-        );
-    }
+    let steps = if command.is_some() {
+        steps
+    } else {
+        command_only_steps_without_command()
+    };
     PublicInstallGuide {
         slug: slug.to_string(),
         tool_name: tool.name.clone(),
@@ -354,7 +363,7 @@ fn command_only_guide(
         risk_level: risk_level.clone(),
         risk_reasons: tool.install_risk_reasons.clone(),
         warning: install_warning_text(&risk_level).map(str::to_string),
-        blocked: command.is_none(),
+        blocked: false,
         copy_gate,
         command: command.clone(),
         config_json: None,
@@ -377,7 +386,7 @@ pub fn build_public_install_guide(
         return blocked_guide(tool, slug, platform);
     }
 
-    if tool.tool_type == "skill" {
+    if tool.tool_type == "skill" && !is_mcp_catalog_tool(tool) {
         return command_only_guide(
             tool,
             slug,

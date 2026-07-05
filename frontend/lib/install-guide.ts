@@ -151,6 +151,7 @@ export function primaryInstallCommand(tool: Tool): string | null {
   if (safe) return safe;
   const install = tool.install_command?.trim();
   if (install) return install;
+  if (tool.type === "skill") return null;
   if (tool.mcp_endpoint) {
     return genericMcpRemoteCommand(tool.mcp_endpoint);
   }
@@ -557,15 +558,17 @@ export function buildPublicInstallGuide(
   }
 
   const command = primaryInstallCommand(tool);
-  if (tool.type === "skill") {
-    const steps = [
-      "Install the skill using the command below (e.g. clawhub or your agent skills runtime).",
-      "Do not paste this into MCP server settings — skills are not MCP configs.",
-      "Open the docs link for usage after install.",
-    ];
-    if (!command) {
-      steps.push("No install command is listed — use the docs or repository link below.");
-    }
+  if (tool.type === "skill" && !isMcpCatalogTool(tool)) {
+    const steps = command
+      ? [
+          "Install the skill using the command below (e.g. clawhub or your agent skills runtime).",
+          "Do not paste this into MCP server settings — skills are not MCP configs.",
+          "Open the docs link for usage after install.",
+        ]
+      : [
+          "No install command is listed for this tool.",
+          "Use the repository or docs links below for setup.",
+        ];
     return {
       slug,
       tool_name: tool.name,
@@ -573,21 +576,23 @@ export function buildPublicInstallGuide(
       risk_level: tool.install_risk_level,
       risk_reasons: tool.install_risk_reasons,
       warning: installWarningText(tool.install_risk_level),
-      blocked: !command,
+      blocked: false,
       copy_gate: copyGateForRisk(tool.install_risk_level),
       command,
       config_json: null,
       copy_text: command,
       copy_label: "Copy command",
       steps,
-      connect_blocks: [
-        {
-          steps: ["Run the install command, then open the docs for usage."],
-          copyText: command,
-          copyLabel: "Copy command",
-          showShellPrefix: true,
-        },
-      ],
+      connect_blocks: command
+        ? [
+            {
+              steps: ["Run the install command, then open the docs for usage."],
+              copyText: command,
+              copyLabel: "Copy command",
+              showShellPrefix: true,
+            },
+          ]
+        : [],
       ...toolGuideMeta(tool),
     };
   }
@@ -596,13 +601,15 @@ export function buildPublicInstallGuide(
     (tool.type === "cli" || tool.type === "sdk" || tool.type === "api") &&
     !isMcpCatalogTool(tool)
   ) {
-    const steps = [
-      "Run the install command in your terminal or package manager.",
-      "Open the repository or docs link for setup and API keys.",
-    ];
-    if (!command) {
-      steps.push("No install command is listed — use the docs or repository link below.");
-    }
+    const steps = command
+      ? [
+          "Run the install command in your terminal or package manager.",
+          "Open the repository or docs link for setup and API keys.",
+        ]
+      : [
+          "No install command is listed for this tool.",
+          "Use the repository or docs links below for setup.",
+        ];
     return {
       slug,
       tool_name: tool.name,
@@ -610,21 +617,23 @@ export function buildPublicInstallGuide(
       risk_level: tool.install_risk_level,
       risk_reasons: tool.install_risk_reasons,
       warning: installWarningText(tool.install_risk_level),
-      blocked: !command,
+      blocked: false,
       copy_gate: copyGateForRisk(tool.install_risk_level),
       command,
       config_json: null,
       copy_text: command,
       copy_label: "Copy command",
       steps,
-      connect_blocks: [
-        {
-          steps: ["Copy and run the install command below."],
-          copyText: command,
-          copyLabel: "Copy command",
-          showShellPrefix: true,
-        },
-      ],
+      connect_blocks: command
+        ? [
+            {
+              steps: ["Copy and run the install command below."],
+              copyText: command,
+              copyLabel: "Copy command",
+              showShellPrefix: true,
+            },
+          ]
+        : [],
       ...toolGuideMeta(tool),
     };
   }
