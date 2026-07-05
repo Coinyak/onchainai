@@ -102,10 +102,9 @@ export function BlueprintNodeView({
 
   const isSizable = node.kind === "tool" || node.kind === "note";
   const bounds = getNodeBounds(node);
-  const sizeStyle =
-    isSizable && (node.w != null || node.h != null)
-      ? { width: bounds.w, height: bounds.h }
-      : undefined;
+  const sizeStyle = isSizable
+    ? { width: bounds.w, height: bounds.h }
+    : undefined;
   // Collapse optional tool rows as the card shrinks so nothing clips.
   const showTypeTag = bounds.h >= BLUEPRINT_NODE_TOOL_TYPE_MIN_H;
   const showChainsRow = bounds.h >= BLUEPRINT_NODE_TOOL_CHAINS_MIN_H;
@@ -196,9 +195,8 @@ export function BlueprintNodeView({
     }
   };
 
-  // Ports (connection dots) only appear once the card itself is focused, so an
-  // empty canvas stays clean instead of showing dots around every node.
-  const showPorts = !readOnly && (selected || connectPending);
+  // Ports appear on focus or hover so the canvas stays clean but links stay discoverable.
+  const showPorts = !readOnly && (selected || connectPending || hovered);
 
   return (
     <div

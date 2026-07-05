@@ -43,6 +43,11 @@ export function clampNodeHeight(h: number): number {
   return Math.max(BLUEPRINT_NODE_MIN_H, Math.min(BLUEPRINT_NODE_MAX_H, Math.round(h)));
 }
 
+/** Mirrors Rust `chars().take(n)` for edge label normalization. */
+export function truncateBlueprintLabel(label: string, maxChars = 40): string {
+  return [...label].slice(0, maxChars).join("");
+}
+
 export type BlueprintPortSide = "top" | "right" | "bottom" | "left";
 
 /** Which end of an existing edge is being dragged during a reconnect. */

@@ -48,6 +48,7 @@ import {
   BLUEPRINT_MAX_EDGES,
   BLUEPRINT_MAX_NODES,
   BLUEPRINT_NODE_CHAIN_SIZE,
+  BLUEPRINT_NODE_MAX_STEP,
   clampCoord,
   getNodeAnchor,
   getNodeBounds,
@@ -59,6 +60,7 @@ import {
   normalizeToolNodeChains,
   pointerToCanvasCoords,
   pruneEdgesForNodes,
+  truncateBlueprintLabel,
   type BlueprintEdgeStyle,
 } from "@/lib/blueprint-utils";
 import { timeAgo, typeBadgeLabel } from "@/lib/format";
@@ -591,30 +593,30 @@ function BlueprintEditorWorkspace({
   const reconnectEdge = useCallback(
     (edgeId: string, end: BlueprintEndpoint, newNodeId: string) => {
       if (readOnly) return;
-      updateEdges((prev) => {
-        const edge = prev.find((e) => e.id === edgeId);
-        if (!edge) return prev;
-        const fromId = end === "from" ? newNodeId : edge.fromId;
-        const toId = end === "to" ? newNodeId : edge.toId;
-        if (fromId === toId) {
-          setLiveMessage("An edge can't connect a node to itself.");
-          return prev;
-        }
-        const duplicate = prev.some(
-          (e) =>
-            e.id !== edgeId &&
-            ((e.fromId === fromId && e.toId === toId) ||
-              (e.fromId === toId && e.toId === fromId)),
-        );
-        if (duplicate) {
-          setLiveMessage("Those nodes are already linked.");
-          return prev;
-        }
-        return prev.map((e) => (e.id === edgeId ? { ...e, fromId, toId } : e));
-      });
+      const edge = edges.find((e) => e.id === edgeId);
+      if (!edge) return;
+      const fromId = end === "from" ? newNodeId : edge.fromId;
+      const toId = end === "to" ? newNodeId : edge.toId;
+      if (fromId === toId) {
+        setLiveMessage("An edge can't connect a node to itself.");
+        return;
+      }
+      const duplicate = edges.some(
+        (e) =>
+          e.id !== edgeId &&
+          ((e.fromId === fromId && e.toId === toId) ||
+            (e.fromId === toId && e.toId === fromId)),
+      );
+      if (duplicate) {
+        setLiveMessage("Those nodes are already linked.");
+        return;
+      }
+      updateEdges((prev) =>
+        prev.map((e) => (e.id === edgeId ? { ...e, fromId, toId } : e)),
+      );
       setLiveMessage("Link reconnected.");
     },
-    [readOnly, updateEdges],
+    [edges, readOnly, updateEdges],
   );
 
   const cancelLinking = useCallback(() => {
@@ -670,7 +672,7 @@ function BlueprintEditorWorkspace({
   const handleEdgeLabelChange = useCallback(
     (label: string) => {
       if (!selectedEdgeId || readOnly) return;
-      const capped = label.slice(0, 40);
+      const capped = truncateBlueprintLabel(label);
       updateEdges((prev) =>
         prev.map((edge) =>
           edge.id === selectedEdgeId
@@ -822,10 +824,19 @@ function BlueprintEditorWorkspace({
   const toggleStep = useCallback(
     (id: string) => {
       if (readOnly) return;
+      const target = nodes.find((n) => n.id === id);
+      if (!target) return;
+      if (target.step == null) {
+        const maxStep = nodes.reduce((m, n) => Math.max(m, n.step ?? 0), 0);
+        if (maxStep >= BLUEPRINT_NODE_MAX_STEP) {
+          setLiveMessage(`Order badges are limited to ${BLUEPRINT_NODE_MAX_STEP}.`);
+          return;
+        }
+      }
       updateNodes((prev) => {
-        const target = prev.find((n) => n.id === id);
-        if (!target) return prev;
-        if (target.step != null) {
+        const current = prev.find((n) => n.id === id);
+        if (!current) return prev;
+        if (current.step != null) {
           // Drop this badge and renumber the rest so steps stay 1..N contiguous.
           const remaining = prev
             .filter((n) => n.id !== id && n.step != null)
@@ -844,7 +855,7 @@ function BlueprintEditorWorkspace({
       });
       setLiveMessage("Order badge updated.");
     },
-    [readOnly, updateNodes],
+    [nodes, readOnly, updateNodes],
   );
 
   const moveNode = useCallback(
@@ -940,6 +951,7 @@ function BlueprintEditorWorkspace({
     if (reconnect) {
       setReconnect(null);
       setReconnectPointer(null);
+      setLiveMessage("Reconnect cancelled.");
       return;
     }
     const viewport = e.currentTarget;
