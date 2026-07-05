@@ -236,6 +236,14 @@ pub fn build_app(pool: sqlx::PgPool, config: Config) -> axum::Router {
             axum::routing::post(auth::routes::github_switch),
         )
         .route(
+            "/auth/google",
+            axum::routing::get(auth::google::google_login),
+        )
+        .route(
+            "/auth/google/callback",
+            axum::routing::get(auth::google::google_callback),
+        )
+        .route(
             "/auth/email",
             axum::routing::post(auth::email::send_magic_link),
         )
@@ -402,6 +410,9 @@ mod tests {
             github_client_id: String::new(),
             github_client_secret: String::new(),
             github_redirect_uri: None,
+            google_client_id: None,
+            google_client_secret: None,
+            google_redirect_uri: None,
             siwx_domain: "localhost:3000".into(),
             siwx_session_ttl: 86_400,
             jwt_secret: "test-secret-at-least-32-bytes-long-aaaa".into(),

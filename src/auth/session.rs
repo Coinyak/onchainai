@@ -10,6 +10,7 @@ pub const SESSION_HINT_COOKIE: &str = "onchainai_session";
 pub const SESSION_HINT_VALUE: &str = "1";
 pub const PKCE_VERIFIER_COOKIE: &str = "onchainai_pkce_verifier";
 pub const GITHUB_STATE_COOKIE: &str = "onchainai_github_state";
+pub const GOOGLE_STATE_COOKIE: &str = "onchainai_google_state";
 
 /// Set the client-readable session hint alongside the HttpOnly access token.
 pub fn set_session_hint_cookie(max_age_secs: i64, secure: bool) -> String {

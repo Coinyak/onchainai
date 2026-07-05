@@ -46,6 +46,12 @@ pub struct Config {
     pub github_client_secret: String,
     /// Optional GitHub OAuth callback override (must match GitHub app settings).
     pub github_redirect_uri: Option<String>,
+    /// Google OAuth client id (optional — Google sign-in is inert when unset).
+    pub google_client_id: Option<String>,
+    /// Google OAuth client secret (server only).
+    pub google_client_secret: Option<String>,
+    /// Optional Google OAuth callback override (must match Google Cloud console).
+    pub google_redirect_uri: Option<String>,
     /// SIWX domain bound to signed messages.
     pub siwx_domain: String,
     /// SIWX session TTL in seconds.
@@ -88,6 +94,18 @@ impl Config {
             .ok()
             .map(|s| s.trim().to_owned())
             .filter(|s| !s.is_empty());
+        let google_client_id = env::var("GOOGLE_CLIENT_ID")
+            .ok()
+            .map(|s| s.trim().to_owned())
+            .filter(|s| !s.is_empty());
+        let google_client_secret = env::var("GOOGLE_CLIENT_SECRET")
+            .ok()
+            .map(|s| s.trim().to_owned())
+            .filter(|s| !s.is_empty());
+        let google_redirect_uri = env::var("GOOGLE_REDIRECT_URI")
+            .ok()
+            .map(|s| s.trim().to_owned())
+            .filter(|s| !s.is_empty());
         let siwx_domain = required("SIWX_DOMAIN")?;
         let jwt_secret = required("JWT_SECRET")?;
 
@@ -120,6 +138,9 @@ impl Config {
             github_client_id,
             github_client_secret,
             github_redirect_uri,
+            google_client_id,
+            google_client_secret,
+            google_redirect_uri,
             siwx_domain,
             siwx_session_ttl,
             jwt_secret,
@@ -138,6 +159,19 @@ impl Config {
         self.admin_github_logins
             .iter()
             .any(|candidate| candidate == &normalized)
+    }
+
+    /// Whether Google OAuth is fully configured (client id + secret present).
+    /// When false, `/auth/google` short-circuits to a "not configured" redirect
+    /// so the server still boots and the button degrades gracefully.
+    pub fn google_oauth_enabled(&self) -> bool {
+        self.google_client_id
+            .as_deref()
+            .is_some_and(|s| !s.is_empty())
+            && self
+                .google_client_secret
+                .as_deref()
+                .is_some_and(|s| !s.is_empty())
     }
 
     /// Expected JWT `iss` claim for both Supabase-issued and server-minted
@@ -199,6 +233,9 @@ mod tests {
             github_client_id: "gid".into(),
             github_client_secret: "gsecret".into(),
             github_redirect_uri: None,
+            google_client_id: None,
+            google_client_secret: None,
+            google_redirect_uri: None,
             siwx_domain: "localhost".into(),
             siwx_session_ttl: 86_400,
             jwt_secret: "secret".into(),
@@ -229,6 +266,18 @@ mod tests {
         let mut cfg = base_config();
         cfg.admin_github_logins = parse_admin_github_logins("user.name");
         assert!(!cfg.is_admin_github_login("username"));
+    }
+
+    #[test]
+    fn google_oauth_enabled_requires_id_and_secret() {
+        let mut cfg = base_config();
+        assert!(!cfg.google_oauth_enabled());
+        cfg.google_client_id = Some("gid".into());
+        assert!(!cfg.google_oauth_enabled());
+        cfg.google_client_secret = Some("gsecret".into());
+        assert!(cfg.google_oauth_enabled());
+        cfg.google_client_id = Some(String::new());
+        assert!(!cfg.google_oauth_enabled());
     }
 
     #[test]

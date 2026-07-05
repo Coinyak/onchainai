@@ -41,6 +41,22 @@ impl ProfileSetupError {
             Self::Database(_) => "github_profile",
         }
     }
+
+    /// Google variant of [`Self::auth_query_code`] — provider-prefixed codes so
+    /// `/login?auth=…` maps to Google-specific copy instead of GitHub's.
+    pub fn auth_query_code_google(&self) -> &'static str {
+        match self {
+            Self::SupabaseCreate(msg)
+                if msg.contains("already been registered")
+                    || msg.contains("duplicate")
+                    || msg.contains("already exists") =>
+            {
+                "google_profile_exists"
+            }
+            Self::SupabaseCreate(_) => "google_profile_setup",
+            Self::Database(_) => "google_profile",
+        }
+    }
 }
 
 /// Required JWT `aud` claim. Supabase stamps `authenticated` on user tokens;
@@ -435,6 +451,146 @@ async fn create_supabase_user_for_github(
             "app_metadata": {
                 "provider": "github",
                 "providers": ["github"]
+            }
+        }))
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    if !response.status().is_success() {
+        let status = response.status();
+        let body = response.text().await.unwrap_or_default();
+        return Err(format!(
+            "supabase admin create user failed ({status}): {body}"
+        ));
+    }
+
+    let user = response
+        .json::<AdminUserResponse>()
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(user.id)
+}
+
+/// Upsert a Google profile keyed by the OIDC `sub` claim (stable per account).
+///
+/// New profiles are inserted with a NULL nickname so the onboarding gate can
+/// collect a unique one — Google display names collide often and would trip the
+/// `profiles.nickname` UNIQUE constraint if used directly. The friendly display
+/// name is still forwarded to Supabase `user_metadata` for reference.
+pub async fn ensure_google_profile(
+    pool: &PgPool,
+    config: &Config,
+    google_sub: &str,
+    email: Option<&str>,
+    name: Option<&str>,
+    avatar_url: Option<&str>,
+) -> Result<Uuid, ProfileSetupError> {
+    let existing = sqlx::query_scalar::<_, Uuid>(
+        r#"
+        SELECT id FROM profiles
+        WHERE auth_method = 'google' AND google_sub = $1
+        LIMIT 1
+        "#,
+    )
+    .bind(google_sub)
+    .fetch_optional(pool)
+    .await
+    .map_err(ProfileSetupError::Database)?;
+
+    if let Some(id) = existing {
+        sqlx::query(
+            r#"
+            UPDATE profiles
+            SET avatar_url = COALESCE($2, avatar_url),
+                updated_at = now()
+            WHERE id = $1
+            "#,
+        )
+        .bind(id)
+        .bind(avatar_url)
+        .execute(pool)
+        .await
+        .map_err(ProfileSetupError::Database)?;
+        return Ok(id);
+    }
+
+    let display_name = google_display_name(name, email);
+    let id = create_supabase_user_for_google(config, google_sub, email, &display_name, avatar_url)
+        .await
+        .map_err(ProfileSetupError::SupabaseCreate)?;
+
+    sqlx::query(
+        r#"
+        INSERT INTO profiles (id, avatar_url, auth_method, google_sub)
+        VALUES ($1, $2, 'google', $3)
+        "#,
+    )
+    .bind(id)
+    .bind(avatar_url)
+    .bind(google_sub)
+    .execute(pool)
+    .await
+    .map_err(ProfileSetupError::Database)?;
+
+    Ok(id)
+}
+
+/// Best-effort human label for Supabase `user_metadata` (display only, not a
+/// unique key): Google display name, else the email local-part, else "user".
+fn google_display_name(name: Option<&str>, email: Option<&str>) -> String {
+    if let Some(n) = name.map(str::trim).filter(|s| !s.is_empty()) {
+        return n.to_string();
+    }
+    email
+        .and_then(|e| e.split('@').next())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .unwrap_or("user")
+        .to_string()
+}
+
+async fn create_supabase_user_for_google(
+    config: &Config,
+    google_sub: &str,
+    email: Option<&str>,
+    display_name: &str,
+    avatar_url: Option<&str>,
+) -> Result<Uuid, String> {
+    // Synthetic email keyed by the stable Google subject id (mirrors the
+    // github-*/siwx-* convention). Keeping providers siloed by a synthetic
+    // address avoids collisions with email magic-link users who share the same
+    // real Google address; the real email is preserved in user_metadata.
+    let synthetic_email = format!("google-{google_sub}@oauth.onchainai.local");
+    let password = random_password();
+
+    let client = reqwest::Client::builder()
+        .user_agent("OnchainAI/0.1")
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let url = format!("{}/auth/v1/admin/users", config.supabase_url);
+    let response = client
+        .post(url)
+        .header("apikey", &config.supabase_service_key)
+        .header(
+            "Authorization",
+            format!("Bearer {}", config.supabase_service_key),
+        )
+        .json(&serde_json::json!({
+            "email": synthetic_email,
+            "password": password,
+            "email_confirm": true,
+            "user_metadata": {
+                "user_name": display_name,
+                "preferred_username": display_name,
+                "avatar_url": avatar_url,
+                "email": email,
+                "google_sub": google_sub,
+            },
+            "app_metadata": {
+                "provider": "google",
+                "providers": ["google"]
             }
         }))
         .send()

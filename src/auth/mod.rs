@@ -1,9 +1,11 @@
-//! Authentication — GitHub OAuth, email magic links, SIWX, JWT session cookies.
+//! Authentication — GitHub/Google OAuth, email magic links, SIWX, JWT session cookies.
 
 pub mod session;
 
 #[cfg(feature = "ssr")]
 pub mod email;
+#[cfg(feature = "ssr")]
+pub mod google;
 #[cfg(feature = "ssr")]
 pub mod guard;
 #[cfg(feature = "ssr")]

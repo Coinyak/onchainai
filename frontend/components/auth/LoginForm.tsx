@@ -1,9 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { clientApiBase, githubSignInHref, githubSwitchHref, isVercelPreviewHost, productionLoginHref } from "@/lib/auth-origin";
+import { clientApiBase, githubSignInHref, githubSwitchHref, googleSignInHref, isVercelPreviewHost, productionLoginHref } from "@/lib/auth-origin";
 import { useAuth } from "@/lib/auth";
 import { GitHubMarkIcon } from "@/components/icons/GitHubMarkIcon";
+import { GoogleMarkIcon } from "@/components/icons/GoogleMarkIcon";
 import { connectWalletSiwx, SiwxError } from "@/lib/siwx";
 import { consumeReturnTo } from "@/lib/return-to";
 
@@ -32,6 +33,7 @@ export function LoginForm({
   const apiBase = clientApiBase();
   const githubHref = githubSignInHref();
   const githubSwitchAction = githubSwitchHref();
+  const googleHref = googleSignInHref();
   const previewHost =
     typeof window !== "undefined" && isVercelPreviewHost(window.location.hostname);
 
@@ -150,6 +152,15 @@ export function LoginForm({
         </form>
         , then return here and continue with GitHub.
       </div>
+      <a
+        href={googleHref}
+        rel="external"
+        data-testid="google-sign-in"
+        className="mt-3 flex items-center justify-center gap-2 w-full min-h-touch px-4 py-2.5 rounded-md border border-border-strong bg-neutral-bg text-body-md font-medium hover:bg-neutral-hover no-underline text-primary"
+      >
+        <GoogleMarkIcon size={18} className="shrink-0" />
+        Continue with Google
+      </a>
       <form className="mt-3 flex gap-2" onSubmit={sendMagicLink}>
         <input
           type="email"

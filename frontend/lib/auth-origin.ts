@@ -28,6 +28,19 @@ export function githubSwitchHref(): string {
   return `${base}/auth/github/switch`;
 }
 
+/**
+ * Google OAuth callback is registered for www.onchain-ai.xyz only. Preview
+ * hosts must start OAuth on production or the state cookie and callback host
+ * mismatch (same constraint as GitHub above).
+ */
+export function googleSignInHref(): string {
+  if (typeof window !== "undefined" && isVercelPreviewHost(window.location.hostname)) {
+    return `${SITE_ORIGIN}/auth/google`;
+  }
+  const base = clientApiBase();
+  return `${base}/auth/google`;
+}
+
 export function productionLoginHref(): string {
   return `${SITE_ORIGIN}/login`;
 }
