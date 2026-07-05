@@ -2,14 +2,15 @@
 
 use crate::models::tool::PublicToolSummary;
 use crate::models::Tool;
-use crate::server::queries::{
-    MCP_SEARCH_TOOLS_COUNT_OR_SQL, MCP_SEARCH_TOOLS_COUNT_SQL, MCP_SEARCH_TOOLS_RECENT_OR_SQL,
-    MCP_SEARCH_TOOLS_RECENT_SQL, MCP_SEARCH_TOOLS_RELEVANCE_OR_SQL, MCP_SEARCH_TOOLS_RELEVANCE_SQL,
-    MCP_SEARCH_TOOLS_STARS_OR_SQL, MCP_SEARCH_TOOLS_STARS_SQL, MCP_SEARCH_TOOLS_TRUST_OR_SQL,
-    MCP_SEARCH_TOOLS_TRUST_SQL,
+use crate::server::functions::{
+    append_tool_filters, intent_to_tool_filters, push_list_query_filter,
+    resolve_list_search_match,
 };
+use crate::server::queries::{COUNT_APPROVED_TOOLS_SQL, PUBLIC_TOOL_WHERE};
 use crate::server::tool_categories::is_public_tool_category;
-use crate::server::tool_search::{resolve_search_match, ToolSearchMatch};
+use crate::server::tool_search::{
+    resolve_search_intent, ToolSearchMatch, TOOL_SEARCH_VECTOR,
+};
 use serde::Serialize;
 use serde_json::Value;
 use sqlx::PgPool;
@@ -47,19 +48,6 @@ impl McpSearchSort {
             Self::Trust => "trust",
             Self::Stars => "stars",
             Self::Recent => "recent",
-        }
-    }
-
-    fn query_sql(self, match_mode: ToolSearchMatch) -> &'static str {
-        match (self, match_mode) {
-            (Self::Relevance, ToolSearchMatch::And) => MCP_SEARCH_TOOLS_RELEVANCE_SQL,
-            (Self::Relevance, ToolSearchMatch::Or) => MCP_SEARCH_TOOLS_RELEVANCE_OR_SQL,
-            (Self::Trust, ToolSearchMatch::And) => MCP_SEARCH_TOOLS_TRUST_SQL,
-            (Self::Trust, ToolSearchMatch::Or) => MCP_SEARCH_TOOLS_TRUST_OR_SQL,
-            (Self::Stars, ToolSearchMatch::And) => MCP_SEARCH_TOOLS_STARS_SQL,
-            (Self::Stars, ToolSearchMatch::Or) => MCP_SEARCH_TOOLS_STARS_OR_SQL,
-            (Self::Recent, ToolSearchMatch::And) => MCP_SEARCH_TOOLS_RECENT_SQL,
-            (Self::Recent, ToolSearchMatch::Or) => MCP_SEARCH_TOOLS_RECENT_OR_SQL,
         }
     }
 }
@@ -116,20 +104,20 @@ fn validate_query(query: &str) -> Result<String, (i32, String)> {
     Ok(trimmed.to_string())
 }
 
-fn validate_category(category: Option<&str>) -> Result<Option<String>, (i32, String)> {
+fn validate_category(category: Option<&str>) -> Result<(), (i32, String)> {
     let Some(category) = category.map(str::trim).filter(|value| !value.is_empty()) else {
-        return Ok(None);
+        return Ok(());
     };
     if is_public_tool_category(category) {
-        Ok(Some(category.to_string()))
+        Ok(())
     } else {
         Err((-32602, format!("invalid category: {category}")))
     }
 }
 
-fn validate_chain(chain: Option<&str>) -> Result<Option<String>, (i32, String)> {
+fn validate_chain(chain: Option<&str>) -> Result<(), (i32, String)> {
     let Some(chain) = chain.map(str::trim).filter(|value| !value.is_empty()) else {
-        return Ok(None);
+        return Ok(());
     };
     if chain.len() > MAX_FILTER_LEN {
         return Err((
@@ -143,7 +131,52 @@ fn validate_chain(chain: Option<&str>) -> Result<Option<String>, (i32, String)> 
     {
         return Err((-32602, "chain contains unsupported characters".to_string()));
     }
-    Ok(Some(chain.to_ascii_lowercase()))
+    Ok(())
+}
+
+fn push_fts_rank_order<'qb>(
+    query: &mut sqlx::QueryBuilder<'qb, sqlx::Postgres>,
+    search_text: &'qb str,
+    match_mode: ToolSearchMatch,
+) {
+    query.push(" ORDER BY ts_rank_cd(");
+    query.push(TOOL_SEARCH_VECTOR);
+    query.push(", ");
+    match match_mode {
+        ToolSearchMatch::And => {
+            query.push("plainto_tsquery('english', ");
+            query.push_bind(search_text);
+            query.push(")");
+        }
+        ToolSearchMatch::Or => {
+            query.push("to_tsquery('english', replace(plainto_tsquery('english', ");
+            query.push_bind(search_text);
+            query.push(")::text, ' & ', ' | '))");
+        }
+    }
+    query.push(") DESC, stars DESC, updated_at DESC");
+}
+
+fn push_mcp_sort_order<'qb>(
+    query: &mut sqlx::QueryBuilder<'qb, sqlx::Postgres>,
+    sort: McpSearchSort,
+    search_text: Option<&'qb str>,
+    match_mode: ToolSearchMatch,
+) {
+    if let Some(text) = search_text.filter(|value| !value.is_empty()) {
+        if matches!(sort, McpSearchSort::Relevance) {
+            push_fts_rank_order(query, text, match_mode);
+            return;
+        }
+    }
+    match sort {
+        McpSearchSort::Recent => {
+            query.push(" ORDER BY updated_at DESC, stars DESC");
+        }
+        _ => {
+            query.push(" ORDER BY stars DESC, updated_at DESC");
+        }
+    }
 }
 
 pub(crate) async fn mcp_search_tools(
@@ -156,47 +189,63 @@ pub(crate) async fn mcp_search_tools(
     cursor: i64,
 ) -> Result<McpSearchPage, (i32, String)> {
     let query = validate_query(query)?;
-    let category = validate_category(category.as_deref())?;
-    let chain = validate_chain(chain.as_deref())?;
+    let intent = resolve_search_intent(&query, category, chain);
+    validate_category(intent.function.as_deref())?;
+    validate_chain(intent.chain.as_deref())?;
+
+    let filters = intent_to_tool_filters(&intent);
+    let search_text = intent.query.trim();
+    let has_fts = !search_text.is_empty();
+    let match_mode = if has_fts {
+        resolve_list_search_match(pool, search_text, &filters)
+            .await
+            .map_err(|e| (-32603, format!("db error: {e}")))?
+    } else {
+        ToolSearchMatch::And
+    };
+
     let limit = limit.clamp(1, 25);
     let fetch_limit = limit + 1;
 
-    let match_mode = resolve_search_match(
-        pool,
-        MCP_SEARCH_TOOLS_COUNT_SQL,
-        MCP_SEARCH_TOOLS_COUNT_OR_SQL,
-        &query,
-        category.as_deref(),
-        chain.as_deref(),
-    )
-    .await
-    .map_err(|e| (-32603, format!("db error: {e}")))?;
+    let mut count_q = sqlx::QueryBuilder::new(COUNT_APPROVED_TOOLS_SQL);
+    if has_fts {
+        push_list_query_filter(&mut count_q, Some(search_text), match_mode);
+    }
+    append_tool_filters(&mut count_q, &filters);
 
-    let count_sql = match match_mode {
-        ToolSearchMatch::And => MCP_SEARCH_TOOLS_COUNT_SQL,
-        ToolSearchMatch::Or => MCP_SEARCH_TOOLS_COUNT_OR_SQL,
-    };
+    let mut list_q = sqlx::QueryBuilder::new("SELECT * FROM tools WHERE ");
+    list_q.push(PUBLIC_TOOL_WHERE);
+    if has_fts {
+        push_list_query_filter(&mut list_q, Some(search_text), match_mode);
+    }
+    append_tool_filters(&mut list_q, &filters);
+    push_mcp_sort_order(
+        &mut list_q,
+        sort,
+        if has_fts { Some(search_text) } else { None },
+        match_mode,
+    );
+    list_q
+        .push(" LIMIT ")
+        .push_bind(fetch_limit)
+        .push(" OFFSET ")
+        .push_bind(cursor);
 
     let (mut tools, total_count) = tokio::try_join!(
         async {
-            sqlx::query_as::<_, Tool>(sort.query_sql(match_mode))
-                .bind(&query)
-                .bind(category.as_deref())
-                .bind(chain.as_deref())
-                .bind(fetch_limit)
-                .bind(cursor)
+            list_q
+                .build_query_as::<Tool>()
                 .fetch_all(pool)
                 .await
                 .map_err(|e| (-32603, format!("db error: {e}")))
         },
         async {
-            sqlx::query_scalar::<_, i64>(count_sql)
-                .bind(&query)
-                .bind(category.as_deref())
-                .bind(chain.as_deref())
+            count_q
+                .build_query_as::<(i64,)>()
                 .fetch_one(pool)
                 .await
                 .map_err(|e| (-32603, format!("db error: {e}")))
+                .map(|row| row.0)
         }
     )?;
 
@@ -212,7 +261,6 @@ pub(crate) async fn mcp_search_tools(
     } else {
         None
     };
-    // Align with next_cursor: if offset cap blocks another page, do not claim has_more.
     let has_more = next_cursor.is_some();
     let summaries = tools.into_iter().map(PublicToolSummary::from).collect();
 
@@ -263,15 +311,9 @@ mod tests {
         assert_eq!(validate_query(" bridge ").unwrap(), "bridge");
         assert!(validate_query("").is_err());
         assert!(validate_query(&"x".repeat(MAX_SEARCH_QUERY_LEN + 1)).is_err());
-        assert_eq!(
-            validate_category(Some("dev-tool")).unwrap(),
-            Some("dev-tool".to_string())
-        );
+        assert!(validate_category(Some("dev-tool")).is_ok());
         assert!(validate_category(Some("bad category")).is_err());
-        assert_eq!(
-            validate_chain(Some("Base")).unwrap(),
-            Some("base".to_string())
-        );
+        assert!(validate_chain(Some("Base")).is_ok());
         assert!(validate_chain(Some("base/mainnet")).is_err());
     }
 
@@ -303,6 +345,15 @@ mod tests {
                 x402_endpoint_verified: false,
                 referral_enabled: false,
                 logo_url: None,
+                install_command: None,
+                safe_copy_command: None,
+                official_team: None,
+                source: "github".into(),
+                license: None,
+                x402_price: None,
+                logo_monogram: None,
+                last_commit_at: None,
+                updated_at: chrono::Utc::now(),
             }],
             next_cursor: Some("10".into()),
             has_more: true,
@@ -314,7 +365,6 @@ mod tests {
         let tool = &json["tools"][0];
         assert!(tool.get("id").is_none());
         assert!(tool.get("mcp_endpoint").is_none());
-        assert!(tool.get("install_command").is_none());
         assert_eq!(tool["slug"], "uniswap");
         assert_eq!(json["total_count"], 42);
         assert_eq!(json["has_more"], true);

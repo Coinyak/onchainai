@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { Star, X } from "lucide-react";
-import type { Tool } from "@/lib/api";
+import type { PublicTool } from "@/lib/api";
 import { ToolLogo } from "@/components/tools/ToolLogo";
 import { ChainLogo } from "@/components/tools/ChainLogo";
 import { chainTagsForTool } from "@/lib/chains";
@@ -17,7 +17,7 @@ import {
 import { CompareAddToolTypeahead } from "@/components/compare/CompareAddToolTypeahead";
 
 interface CompareMatrixProps {
-  tools: Tool[];
+  tools: PublicTool[];
   onRemove: (slug: string) => void;
   onAdd: (slug: string) => void;
 }
@@ -28,7 +28,7 @@ function MatrixCell({
   diff,
   sharedChains,
 }: {
-  tool: Tool;
+  tool: PublicTool;
   rowKey: CompareRowKey;
   diff: boolean;
   sharedChains: Set<string>;

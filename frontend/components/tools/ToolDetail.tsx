@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { ExternalLink, Star, MessageCircle } from "lucide-react";
-import type { Tool, TrustFact } from "@/lib/api";
+import type { PublicTool, TrustFact } from "@/lib/api";
 import { ToolLogo } from "@/components/tools/ToolLogo";
 import { Badge } from "@/components/ui/Badge";
 import { InstallSection } from "@/components/tools/InstallSection";
@@ -15,7 +15,7 @@ import { toolHasInstallPath } from "@/lib/install-guide";
 import { timeAgo, statusBadgeLabel, formatGithubStars } from "@/lib/format";
 
 interface ToolDetailProps {
-  tool: Tool;
+  tool: PublicTool;
   trustFacts?: TrustFact[];
   compact?: boolean;
   commentCount?: number;
@@ -39,7 +39,7 @@ function DetailMainContent({
   addMode,
   compareReturnHref,
 }: {
-  tool: Tool;
+  tool: PublicTool;
   trustFacts?: TrustFact[];
   compact: boolean;
   addMode: boolean;

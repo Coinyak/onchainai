@@ -497,11 +497,15 @@ pub async fn verify_and_settle(
     })
 }
 
+/// User-facing hint when MCP/HTTP clients lack `PAYMENT-SIGNATURE` for K2 health checks.
+pub const CHECK_ENDPOINT_HEALTH_PAYMENT_HINT: &str = "Payment required (~$0.001 USDC on Base). Standard MCP clients (Claude Code, Cursor) cannot pay via POST /mcp — use free get_tool_detail for x402 flags or GET /api/v2/premium/check-endpoint-health/{slug} with an x402 HTTP client.";
+
 pub async fn require_payment(
     client: &Client,
     config: &X402PaymentConfig,
     headers: &HeaderMap,
     requirements: PaymentRequirementsV2,
+    payment_hint: Option<&str>,
 ) -> Result<PaymentSettlement, Response> {
     if !config.enabled {
         let body = json!({
@@ -511,8 +515,9 @@ pub async fn require_payment(
         return Err((StatusCode::SERVICE_UNAVAILABLE, axum::Json(body)).into_response());
     }
 
+    let hint = payment_hint.unwrap_or("Payment required");
     let Some(signature) = payment_signature_from_headers(headers) else {
-        let payment_required = build_payment_required(requirements, Some("Payment required"));
+        let payment_required = build_payment_required(requirements, Some(hint));
         let body = serde_json::to_value(&payment_required).unwrap_or_else(|_| json!({}));
         return Err(payment_required_response(&payment_required, body)
             .unwrap_or_else(|_| StatusCode::PAYMENT_REQUIRED.into_response()));

@@ -1,7 +1,7 @@
 //! Premium MCP tool implementations (compare_tools, export_toolkit).
 
 use crate::discovery::normalize_compare_slugs;
-use crate::models::tool::sanitize_tool_for_public_response;
+use crate::models::tool::{sanitize_tool_for_public_response, PublicTool};
 use crate::models::Tool;
 use crate::server::functions::{build_toolkit_payload, ToolComparisonView, ToolkitToolView};
 use crate::server::queries::{APPROVED_TOOLS_BY_SLUGS_SQL, PUBLIC_TOOL_WHERE};
@@ -38,7 +38,7 @@ pub async fn mcp_compare_tools(pool: &PgPool, slugs_raw: &str) -> Result<String,
             .map_err(|e| format!("official links failed: {e}"))?;
         let trust = verify_tool_trust(tool, &official_links);
         rows.push(ToolComparisonView {
-            tool: tool.clone(),
+            tool: PublicTool::from(tool.clone()),
             official_links,
             trust_facts: trust.trust_facts,
             viewer_bookmarked: false,
@@ -78,7 +78,7 @@ pub async fn mcp_export_toolkit(
     let items: Vec<ToolkitToolView> = tools
         .into_iter()
         .map(|tool| ToolkitToolView {
-            tool: sanitize_tool_for_public_response(tool),
+            tool: PublicTool::from(sanitize_tool_for_public_response(tool)),
             note: None,
             tags: Vec::new(),
             source: "mcp".into(),

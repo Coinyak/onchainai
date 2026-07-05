@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import { useDraggable } from "@dnd-kit/core";
-import type { BlueprintNode, Tool } from "@/lib/api";
+import type { BlueprintNode, PublicTool } from "@/lib/api";
 import { BlueprintNodeRail } from "@/components/blueprint/BlueprintNodeRail";
 import { BlueprintToolChainMemo } from "@/components/blueprint/BlueprintToolChainMemo";
 import { ToolLogo } from "@/components/tools/ToolLogo";
@@ -12,7 +12,7 @@ import { toolChainsForNode } from "@/lib/blueprint-utils";
 
 interface BlueprintNodeViewProps {
   node: BlueprintNode;
-  tool?: Tool | null;
+  tool?: PublicTool | null;
   toolMissing?: boolean;
   chainLabel?: string;
   selected: boolean;

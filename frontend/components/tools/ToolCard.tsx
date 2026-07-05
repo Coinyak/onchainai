@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useMutation } from "@tanstack/react-query";
 import { ArrowLeftRight, Star } from "lucide-react";
-import type { Tool } from "@/lib/api";
+import type { PublicTool, PublicToolSummary } from "@/lib/api";
 import { isBookmarked, setBookmark } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { ToolLogo } from "@/components/tools/ToolLogo";
@@ -22,7 +22,7 @@ const CHAINS_VISIBLE_DESKTOP = 5;
 const CHAINS_VISIBLE_MOBILE = 3;
 
 interface ToolCardProps {
-  tool: Tool;
+  tool: PublicToolSummary | PublicTool;
   previewHref: string;
   queryBase?: string;
   isSelected?: boolean;

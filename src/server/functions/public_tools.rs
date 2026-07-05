@@ -214,6 +214,45 @@ pub struct ToolFilters {
     pub chain: Vec<String>,
 }
 
+fn merge_optional_filter(values: &mut Vec<String>, value: Option<&str>) {
+    if let Some(value) = value.filter(|part| !part.trim().is_empty()) {
+        if !values.iter().any(|existing| existing == value) {
+            values.push(value.to_string());
+        }
+    }
+}
+
+/// Build axis filters from parsed search intent (single value per axis).
+pub fn intent_to_tool_filters(
+    intent: &crate::server::tool_search::ResolvedSearchIntent,
+) -> ToolFilters {
+    let mut filters = ToolFilters::default();
+    merge_optional_filter(&mut filters.function, intent.function.as_deref());
+    merge_optional_filter(&mut filters.chain, intent.chain.as_deref());
+    merge_optional_filter(&mut filters.tool_type, intent.tool_type.as_deref());
+    merge_optional_filter(
+        &mut filters.install_risk,
+        intent.install_risk.as_deref(),
+    );
+    filters
+}
+
+/// Merge parsed intent into existing browser/API filters without dropping URL params.
+pub fn merge_search_intent_into_filters(
+    base: &ToolFilters,
+    intent: &crate::server::tool_search::ResolvedSearchIntent,
+) -> ToolFilters {
+    let mut merged = base.clone();
+    merge_optional_filter(&mut merged.function, intent.function.as_deref());
+    merge_optional_filter(&mut merged.chain, intent.chain.as_deref());
+    merge_optional_filter(&mut merged.tool_type, intent.tool_type.as_deref());
+    merge_optional_filter(
+        &mut merged.install_risk,
+        intent.install_risk.as_deref(),
+    );
+    merged
+}
+
 #[cfg(feature = "ssr")]
 fn append_scalar_union<'qb>(
     query: &mut sqlx::QueryBuilder<'qb, sqlx::Postgres>,
@@ -303,7 +342,7 @@ pub(crate) fn append_tool_filters<'qb>(
 }
 
 #[cfg(feature = "ssr")]
-async fn count_list_fts_matches(
+pub(crate) async fn count_list_fts_matches(
     pool: &sqlx::PgPool,
     search: &str,
     filters: &ToolFilters,
@@ -321,7 +360,7 @@ async fn count_list_fts_matches(
 }
 
 #[cfg(feature = "ssr")]
-async fn resolve_list_search_match(
+pub(crate) async fn resolve_list_search_match(
     pool: &sqlx::PgPool,
     search: &str,
     filters: &ToolFilters,
@@ -341,7 +380,7 @@ async fn resolve_list_search_match(
 }
 
 #[cfg(feature = "ssr")]
-fn push_list_query_filter<'qb>(
+pub(crate) fn push_list_query_filter<'qb>(
     query: &mut sqlx::QueryBuilder<'qb, sqlx::Postgres>,
     search: Option<&'qb str>,
     match_mode: crate::server::tool_search::ToolSearchMatch,
@@ -391,13 +430,24 @@ fn push_list_order_offset_limit(
     query.push(" LIMIT ").push_bind(limit);
 }
 
-/// Count approved tools with optional multi-axis filters.
+/// Count approved tools with optional multi-axis filters and optional FTS `search_q`.
 #[cfg(feature = "ssr")]
 pub(crate) async fn fetch_count_tools(
     pool: &sqlx::PgPool,
     filters: &ToolFilters,
+    search: Option<&str>,
 ) -> Result<i64, FnError> {
+    use crate::server::tool_search::ToolSearchMatch;
+
+    let search_text = search.filter(|q| !q.trim().is_empty());
+    let match_mode = if let Some(text) = search_text {
+        resolve_list_search_match(pool, text, filters).await?
+    } else {
+        ToolSearchMatch::And
+    };
+
     let mut q = sqlx::QueryBuilder::new(COUNT_APPROVED_TOOLS_SQL);
+    push_list_query_filter(&mut q, search, match_mode);
     append_tool_filters(&mut q, filters);
 
     let count = q
@@ -459,6 +509,61 @@ pub(crate) async fn fetch_list_tools(
     Ok(sanitize_tools_for_public_response(tools))
 }
 
+/// REST/MCP search: apply full intent (FTS + axis filters) with relevance ranking.
+#[cfg(feature = "ssr")]
+pub(crate) async fn fetch_search_by_intent(
+    pool: &sqlx::PgPool,
+    intent: &crate::server::tool_search::ResolvedSearchIntent,
+) -> Result<Vec<Tool>, FnError> {
+    use crate::server::tool_search::{ToolSearchMatch, TOOL_SEARCH_VECTOR};
+
+    let filters = intent_to_tool_filters(intent);
+    validate_tool_filters(&filters)?;
+    let search_text = intent.query.trim();
+    let has_fts = !search_text.is_empty();
+    let match_mode = if has_fts {
+        resolve_list_search_match(pool, search_text, &filters).await?
+    } else {
+        ToolSearchMatch::And
+    };
+
+    let mut q = sqlx::QueryBuilder::new("SELECT * FROM tools WHERE ");
+    q.push(PUBLIC_TOOL_WHERE);
+    if has_fts {
+        push_list_query_filter(&mut q, Some(search_text), match_mode);
+    }
+    append_tool_filters(&mut q, &filters);
+    if has_fts {
+        q.push(" ORDER BY ts_rank_cd(");
+        q.push(TOOL_SEARCH_VECTOR);
+        q.push(", ");
+        match match_mode {
+            ToolSearchMatch::And => {
+                q.push("plainto_tsquery('english', ");
+                q.push_bind(search_text);
+                q.push(")");
+            }
+            ToolSearchMatch::Or => {
+                q.push("to_tsquery('english', replace(plainto_tsquery('english', ");
+                q.push_bind(search_text);
+                q.push(")::text, ' & ', ' | '))");
+            }
+        }
+        q.push(") DESC, stars DESC, created_at DESC");
+    } else {
+        q.push(" ORDER BY stars DESC, created_at DESC");
+    }
+    q.push(" LIMIT 50");
+
+    let tools = q
+        .build_query_as::<Tool>()
+        .fetch_all(pool)
+        .await
+        .map_err(|e| FnError::new(format!("search failed: {e}")))?;
+
+    Ok(sanitize_tools_for_public_response(tools))
+}
+
 /// Tools browser page size (must match `tools_browser::TOOL_PAGE_SIZE`).
 pub const BROWSER_TOOL_PAGE_SIZE: u32 = 50;
 
@@ -483,9 +588,9 @@ pub struct BrowserDataPayload {
     pub categories: Vec<(Category, i64)>,
     pub chains: Vec<(String, i64)>,
     pub total: i64,
-    pub tools: Vec<Tool>,
+    pub tools: Vec<crate::models::tool::PublicToolSummary>,
     pub comment_counts: HashMap<String, i64>,
-    pub preview_tool: Option<Tool>,
+    pub preview_tool: Option<crate::models::tool::PublicTool>,
 }
 
 pub const MAX_DASHBOARD_LIST_LIMIT: i64 = 12;
@@ -620,7 +725,7 @@ pub struct ToolkitExportTool {
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ToolkitToolView {
-    pub tool: Tool,
+    pub tool: crate::models::tool::PublicTool,
     pub note: Option<String>,
     pub tags: Vec<String>,
     pub source: String,
@@ -633,7 +738,7 @@ impl ToolkitToolView {
     pub fn from_tool(tool: Tool) -> Self {
         let now = chrono::Utc::now();
         Self {
-            tool,
+            tool: crate::models::tool::PublicTool::from(tool),
             note: None,
             tags: Vec::new(),
             source: "web".into(),
@@ -676,7 +781,7 @@ fn tool_to_toolkit_export(item: &ToolkitToolView) -> ToolkitExportTool {
 pub struct MyToolkitPayload {
     pub total: i64,
     pub items: Vec<ToolkitToolView>,
-    pub tools: Vec<Tool>,
+    pub tools: Vec<crate::models::tool::PublicToolSummary>,
     pub markdown_export: ToolkitExportPayload,
     pub json_export: ToolkitExportPayload,
 }
@@ -690,7 +795,7 @@ pub struct UpdateToolkitItemPayload {
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ToolComparisonView {
-    pub tool: Tool,
+    pub tool: crate::models::tool::PublicTool,
     pub official_links: Vec<ToolOfficialLink>,
     pub trust_facts: Vec<TrustFact>,
     pub viewer_bookmarked: bool,
@@ -844,7 +949,7 @@ fn sanitize_toolkit_items(items: Vec<ToolkitToolView>) -> Vec<ToolkitToolView> {
     items
         .into_iter()
         .map(|mut item| {
-            let mut tool = sanitize_tool_for_public_response(item.tool);
+            let mut tool = item.tool;
             tool.name = redact_secrets(&tool.name);
             tool.description = tool.description.map(|value| redact_secrets(&value));
             tool.install_command = tool.install_command.map(|value| redact_secrets(&value));
@@ -914,8 +1019,12 @@ fn toolkit_markdown_for_items(items: &[ToolkitToolView]) -> String {
 }
 
 pub fn build_toolkit_payload(items: Vec<ToolkitToolView>) -> Result<MyToolkitPayload, FnError> {
+    use crate::models::tool::PublicToolSummary;
     let items = sanitize_toolkit_items(items);
-    let tools: Vec<Tool> = items.iter().map(|item| item.tool.clone()).collect();
+    let tools: Vec<PublicToolSummary> = items
+        .iter()
+        .map(|item| PublicToolSummary::from(item.tool.clone()))
+        .collect();
     let markdown_body = toolkit_markdown_for_items(&items);
     let export_tools: Vec<ToolkitExportTool> = items.iter().map(tool_to_toolkit_export).collect();
     let json_body = serde_json::to_string_pretty(&export_tools)
@@ -975,7 +1084,7 @@ async fn fetch_user_toolkit(
             .ok()
             .flatten();
         items.push(ToolkitToolView {
-            tool,
+            tool: crate::models::tool::PublicTool::from(tool),
             note,
             tags,
             source,

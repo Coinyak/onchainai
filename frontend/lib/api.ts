@@ -60,6 +60,84 @@ export interface SessionUser {
   auth_method: string;
 }
 
+/** Minimum fields for install/MCP affordances on cards and detail. */
+export interface InstallSurfaceTool {
+  slug: string;
+  type: string;
+  install_command?: string | null;
+  safe_copy_command?: string | null;
+  mcp_endpoint?: string | null;
+}
+
+/** Slim list/card payload from browser, search, and list endpoints. */
+export interface PublicToolSummary {
+  slug: string;
+  name: string;
+  description: string | null;
+  type: string;
+  function: string;
+  chains: string[];
+  install_risk_level: string;
+  status: string;
+  stars: number;
+  pricing: string;
+  claim_state: string;
+  payment_verified: boolean;
+  x402_endpoint_verified: boolean;
+  referral_enabled: boolean;
+  logo_url: string | null;
+  logo_monogram: string | null;
+  install_command: string | null;
+  safe_copy_command: string | null;
+  official_team: string | null;
+  source: string;
+  license: string | null;
+  x402_price: string | null;
+  last_commit_at: string | null;
+  updated_at: string;
+}
+
+/** Public detail payload — operator/moderation fields omitted. */
+export interface PublicTool {
+  slug: string;
+  name: string;
+  description: string | null;
+  function: string;
+  asset_class: string;
+  actor: string;
+  type: string;
+  repo_url: string | null;
+  homepage: string | null;
+  npm_package: string | null;
+  install_command: string | null;
+  safe_copy_command: string | null;
+  mcp_endpoint: string | null;
+  chains: string[];
+  status: string;
+  official_team: string | null;
+  install_risk_level: string;
+  install_risk_reasons: string[];
+  requires_secret: boolean;
+  claim_state: string;
+  license: string | null;
+  pricing: string;
+  x402_price: string | null;
+  referral_enabled: boolean;
+  referral_bps: number | null;
+  referral_model: string | null;
+  payment_verified: boolean;
+  x402_endpoint_verified: boolean;
+  price_verified: boolean;
+  stars: number;
+  last_commit_at: string | null;
+  source: string;
+  source_url: string | null;
+  logo_url: string | null;
+  logo_monogram: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface Tool {
   id: string;
   name: string;
@@ -129,9 +207,9 @@ export interface BrowserDataPayload {
   categories: CategoryRow[];
   chains: [string, number][];
   total: number;
-  tools: Tool[];
+  tools: PublicToolSummary[];
   comment_counts: Record<string, number>;
-  preview_tool: Tool | null;
+  preview_tool: PublicTool | null;
 }
 
 export interface LoadBrowserDataRequest {
@@ -274,15 +352,15 @@ export interface PublicDashboardSnapshot {
   chain_counts: DashboardBucket[];
   trust_counts: DashboardBucket[];
   pricing_counts: DashboardBucket[];
-  new_tools: Tool[];
-  popular_tools: Tool[];
-  x402_tools: Tool[];
-  high_trust_tools: Tool[];
+  new_tools: PublicToolSummary[];
+  popular_tools: PublicToolSummary[];
+  x402_tools: PublicToolSummary[];
+  high_trust_tools: PublicToolSummary[];
   as_of: string;
 }
 
 export interface ToolkitToolView {
-  tool: Tool;
+  tool: PublicTool;
   note: string | null;
   tags: string[];
   source?: string;
@@ -322,7 +400,7 @@ export interface MyToolkitPayload {
 }
 
 export interface ToolComparisonView {
-  tool: Tool;
+  tool: PublicTool;
   official_links: ToolOfficialLink[];
   trust_facts: TrustFact[];
   viewer_bookmarked: boolean;
@@ -463,8 +541,8 @@ export async function getCategories(): Promise<CategoryWithCount[]> {
   return rows.map(normalizeCategory);
 }
 
-export async function getToolBySlug(slug: string): Promise<Tool> {
-  return apiFetch<Tool>(`/api/v2/tools/${encodeURIComponent(slug)}`);
+export async function getToolBySlug(slug: string): Promise<PublicTool> {
+  return apiFetch<PublicTool>(`/api/v2/tools/${encodeURIComponent(slug)}`);
 }
 
 /** N1 related tools — returns [] until API is available. */
@@ -488,12 +566,12 @@ export async function searchTools(params: {
   function?: string;
   chain?: string;
   page_size?: number;
-}): Promise<Tool[]> {
+}): Promise<PublicToolSummary[]> {
   const search = new URLSearchParams({ query: params.query });
   if (params.function) search.set("function", params.function);
   if (params.chain) search.set("chain", params.chain);
   if (params.page_size != null) search.set("page_size", String(params.page_size));
-  const tools = await apiFetch<Tool[]>(`/api/v2/tools/search?${search.toString()}`);
+  const tools = await apiFetch<PublicToolSummary[]>(`/api/v2/tools/search?${search.toString()}`);
   if (params.page_size != null && params.page_size > 0) {
     return tools.slice(0, params.page_size);
   }
@@ -504,8 +582,8 @@ export async function getRecentTools(limit = 10): Promise<Tool[]> {
   return apiFetch<Tool[]>(`/api/v2/tools/recent?limit=${limit}`);
 }
 
-export async function listTools(req: ToolListRequest): Promise<Tool[]> {
-  return apiFetch<Tool[]>("/api/v2/tools/list", {
+export async function listTools(req: ToolListRequest): Promise<PublicToolSummary[]> {
+  return apiFetch<PublicToolSummary[]>("/api/v2/tools/list", {
     method: "POST",
     body: JSON.stringify(req),
   });

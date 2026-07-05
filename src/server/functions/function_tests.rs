@@ -5,6 +5,34 @@ mod tests {
     use super::*;
 
     #[test]
+    fn merge_search_intent_into_filters_adds_type_and_chain_without_dropping_url_filters() {
+        use crate::server::tool_search::resolve_search_intent;
+
+        let base = ToolFilters {
+            status: vec!["verified".into()],
+            ..Default::default()
+        };
+        let intent = resolve_search_intent("mcp base", None, None);
+        let merged = merge_search_intent_into_filters(&base, &intent);
+
+        assert_eq!(merged.status, vec!["verified"]);
+        assert_eq!(merged.tool_type, vec!["mcp"]);
+        assert_eq!(merged.chain, vec!["base"]);
+        assert!(intent.query.is_empty());
+    }
+
+    #[test]
+    fn intent_to_tool_filters_maps_type_only_query() {
+        use crate::server::tool_search::resolve_search_intent;
+
+        let intent = resolve_search_intent("mcp", None, None);
+        let filters = intent_to_tool_filters(&intent);
+        assert_eq!(filters.tool_type, vec!["mcp"]);
+        assert!(filters.function.is_empty());
+        assert!(filters.chain.is_empty());
+    }
+
+    #[test]
     fn tool_list_request_serializes_filters_field() {
         let req = ToolListRequest {
             sort: "hot".into(),
@@ -239,8 +267,8 @@ mod tests {
             build_toolkit_payload(vec![ToolkitToolView::from_tool(tool)]).expect("toolkit payload");
 
         assert_eq!(payload.total, 1);
-        assert_eq!(payload.tools[0].referral_payout_address, None);
-        assert_eq!(payload.tools[0].x402_pay_to_address, None);
+        assert_eq!(payload.tools[0].slug, "bridge-mcp");
+        assert!(!payload.json_export.body.contains("referral_payout_address"));
         assert!(payload.markdown_export.body.contains("Bridge MCP"));
         assert!(payload.markdown_export.body.contains("npx bridge-mcp"));
         assert!(!payload.markdown_export.body.contains("0xoperatorpayout"));
@@ -262,7 +290,7 @@ mod tests {
         tool.relevance_status = "accepted".into();
         tool.install_command = Some("npx bridge-mcp".into());
         let item = ToolkitToolView {
-            tool,
+            tool: crate::models::tool::PublicTool::from(tool),
             note: Some("Use for Base bridge research".into()),
             tags: vec!["base".into(), "research".into()],
             source: "web".into(),

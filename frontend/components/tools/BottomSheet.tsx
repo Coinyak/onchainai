@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import type { Tool } from "@/lib/api";
+import type { PublicTool } from "@/lib/api";
 import { ToolDetail } from "@/components/tools/ToolDetail";
 import { PreviewPanelContent } from "@/components/tools/PreviewPanelContent";
 import { PreviewActionBar } from "@/components/tools/PreviewActionBar";
@@ -13,7 +13,7 @@ const DRAG_COLLAPSE_THRESHOLD = 48;
 const DRAG_CLOSE_THRESHOLD = 96;
 
 interface BottomSheetProps {
-  tool: Tool;
+  tool: PublicTool;
   closeHref: string;
   fullPageHref: string;
   commentCount?: number;

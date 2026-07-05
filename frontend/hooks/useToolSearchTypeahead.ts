@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { searchTools, type Tool } from "@/lib/api";
+import { searchTools, type PublicToolSummary } from "@/lib/api";
 
 /** Shared constants for hero search, toolbar search, and future ⌘K palette (N2). */
 export const TOOL_SEARCH_DEBOUNCE_MS = 200;
@@ -22,7 +22,7 @@ export interface UseToolSearchTypeaheadOptions {
 export interface UseToolSearchTypeaheadResult {
   listboxId: string;
   debouncedQuery: string;
-  results: Tool[];
+  results: PublicToolSummary[];
   isLoading: boolean;
   isOpen: boolean;
   setIsOpen: (open: boolean) => void;
@@ -31,7 +31,7 @@ export interface UseToolSearchTypeaheadResult {
   activeDescendantId: string | undefined;
   openDropdown: () => void;
   closeDropdown: () => void;
-  selectActive: () => Tool | undefined;
+  selectActive: () => PublicToolSummary | undefined;
   handleKeyDown: (event: React.KeyboardEvent<HTMLInputElement>) => void;
 }
 
@@ -99,7 +99,7 @@ export function useToolSearchTypeahead({
     setActiveIndex(-1);
   }, []);
 
-  const selectActive = useCallback((): Tool | undefined => {
+  const selectActive = useCallback((): PublicToolSummary | undefined => {
     if (!isOpen || resolvedActiveIndex < 0 || resolvedActiveIndex >= results.length) {
       return undefined;
     }

@@ -1,11 +1,11 @@
 import Link from "next/link";
 import { Star } from "lucide-react";
-import type { Tool } from "@/lib/api";
+import type { PublicTool } from "@/lib/api";
 import { singleFilterHref } from "@/lib/browser-query";
 import { timeAgo } from "@/lib/format";
 
 interface DetailAboutSidebarProps {
-  tool: Tool;
+  tool: PublicTool;
 }
 
 function riskBadgeClass(level: string): string {

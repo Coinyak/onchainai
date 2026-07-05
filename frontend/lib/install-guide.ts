@@ -1,4 +1,4 @@
-import type { Tool } from "@/lib/api";
+import type { InstallSurfaceTool, PublicTool } from "@/lib/api";
 import { ADD_MCP_INTENT, stripAddModeParams } from "@/lib/browser-query";
 
 
@@ -146,7 +146,7 @@ function genericMcpRemoteCommand(endpoint: string): string | null {
   return `npx mcp-remote '${trimmed}'`;
 }
 
-export function primaryInstallCommand(tool: Tool): string | null {
+export function primaryInstallCommand(tool: InstallSurfaceTool): string | null {
   const safe = tool.safe_copy_command?.trim();
   if (safe) return safe;
   const install = tool.install_command?.trim();
@@ -158,11 +158,11 @@ export function primaryInstallCommand(tool: Tool): string | null {
   return null;
 }
 
-export function toolHasInstallPath(tool: Tool): boolean {
+export function toolHasInstallPath(tool: InstallSurfaceTool): boolean {
   return primaryInstallCommand(tool) !== null;
 }
 
-export function addMcpActionLabel(tool: Tool): string | null {
+export function addMcpActionLabel(tool: InstallSurfaceTool): string | null {
   if (!toolHasInstallPath(tool)) return null;
   if (tool.type === "mcp" || tool.mcp_endpoint) return "Add MCP";
   return "Use with agent";
@@ -189,7 +189,7 @@ function npmPackageUrl(packageName?: string | null): string | null {
 }
 
 export function toolGuideMeta(
-  tool: Tool,
+  tool: PublicTool,
 ): Pick<PublicInstallGuide, "docs_links" | "x402_notice" | "referral_disclosure"> {
   return {
     docs_links: docsLinksForTool(tool),
@@ -198,7 +198,7 @@ export function toolGuideMeta(
   };
 }
 
-function docsLinksForTool(tool: Tool): GuideLink[] {
+function docsLinksForTool(tool: PublicTool): GuideLink[] {
   const links: GuideLink[] = [];
   if (tool.repo_url?.trim()) {
     links.push({ label: "Repository", url: tool.repo_url.trim() });
@@ -217,13 +217,13 @@ function docsLinksForTool(tool: Tool): GuideLink[] {
   return links;
 }
 
-function x402NoticeForTool(tool: Tool): string | null {
+function x402NoticeForTool(tool: PublicTool): string | null {
   if (tool.pricing !== "x402" && !tool.x402_price && !tool.referral_enabled) return null;
   const price = tool.x402_price?.trim() || "the provider's x402 price";
   return `Calls may request x402 payment (${price}). OnchainAI discloses payment metadata only and does not connect wallets or process payments.`;
 }
 
-function referralDisclosureForTool(tool: Tool): string | null {
+function referralDisclosureForTool(tool: PublicTool): string | null {
   if (!tool.referral_enabled) return null;
   const bps = tool.referral_bps != null ? `${tool.referral_bps} bps` : "an operator-configured share";
   const model = tool.referral_model?.trim() || "attribution";
@@ -282,7 +282,7 @@ function stdioMcpJsonConfig(
   );
 }
 
-function toolHttpEndpoint(tool: Tool): string | null {
+function toolHttpEndpoint(tool: PublicTool): string | null {
   const endpoint = tool.mcp_endpoint?.trim();
   if (!endpoint?.startsWith("http://") && !endpoint?.startsWith("https://")) {
     return null;
@@ -290,11 +290,11 @@ function toolHttpEndpoint(tool: Tool): string | null {
   return endpoint;
 }
 
-function isMcpCatalogTool(tool: Tool): boolean {
+function isMcpCatalogTool(tool: PublicTool): boolean {
   return tool.type === "mcp" || tool.type === "x402" || Boolean(tool.mcp_endpoint);
 }
 
-function toolStdioConfig(tool: Tool, slug: string, riskLevel: string): string | null {
+function toolStdioConfig(tool: PublicTool, slug: string, riskLevel: string): string | null {
   if (!isMcpCatalogTool(tool)) return null;
   const command = primaryInstallCommand(tool);
   if (!command || blocksStructuredConfig(riskLevel)) return null;
@@ -304,7 +304,7 @@ function toolStdioConfig(tool: Tool, slug: string, riskLevel: string): string | 
 }
 
 function buildToolClientBlocks(
-  tool: Tool,
+  tool: PublicTool,
   slug: string,
   client: ToolInstallClient,
 ): ConnectGuideBlock[] {
@@ -527,7 +527,7 @@ function buildToolClientBlocks(
 }
 
 export function buildPublicInstallGuide(
-  tool: Tool,
+  tool: PublicTool,
   slug: string,
   client: ToolInstallClient,
 ): PublicInstallGuide {

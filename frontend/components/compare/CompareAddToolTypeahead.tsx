@@ -3,7 +3,7 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Plus } from "lucide-react";
-import { searchTools, type Tool } from "@/lib/api";
+import { searchTools, type PublicToolSummary } from "@/lib/api";
 import { ToolLogo } from "@/components/tools/ToolLogo";
 import { typeBadgeLabel } from "@/lib/format";
 
@@ -57,7 +57,7 @@ export function CompareAddToolTypeahead({
     return () => document.removeEventListener("mousedown", onPointerDown);
   }, []);
 
-  function choose(tool: Tool) {
+  function choose(tool: PublicToolSummary) {
     onSelect(tool.slug);
     setQuery("");
     setDebouncedQuery("");

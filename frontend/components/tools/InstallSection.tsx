@@ -1,11 +1,11 @@
 "use client";
 
 import { InstallGuidePanel } from "@/components/tools/InstallGuidePanel";
-import type { Tool } from "@/lib/api";
+import type { PublicTool } from "@/lib/api";
 import { toolHasInstallPath } from "@/lib/install-guide";
 
 interface InstallSectionProps {
-  tool: Tool;
+  tool: PublicTool;
   compact?: boolean;
 }
 

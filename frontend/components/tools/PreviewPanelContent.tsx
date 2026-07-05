@@ -3,7 +3,7 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Star } from "lucide-react";
-import type { Tool } from "@/lib/api";
+import type { PublicTool } from "@/lib/api";
 import { ToolLogo } from "@/components/tools/ToolLogo";
 import { Badge } from "@/components/ui/Badge";
 import { ChainLogo } from "@/components/tools/ChainLogo";
@@ -17,7 +17,7 @@ import { toolHasInstallPath } from "@/lib/install-guide";
 const PREVIEW_CHAINS_MAX = 8;
 
 interface PreviewPanelContentProps {
-  tool: Tool;
+  tool: PublicTool;
   closeHref: string;
   fullPageHref: string;
   commentCount: number;

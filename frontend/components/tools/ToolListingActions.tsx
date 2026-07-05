@@ -3,13 +3,13 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useMutation } from "@tanstack/react-query";
-import type { Tool } from "@/lib/api";
+import type { PublicTool } from "@/lib/api";
 import { reportTool } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { LoginModal } from "@/components/auth/LoginModal";
 
 interface ToolListingActionsProps {
-  tool: Tool;
+  tool: PublicTool;
 }
 
 export function ToolListingActions({ tool }: ToolListingActionsProps) {

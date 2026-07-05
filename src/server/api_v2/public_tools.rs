@@ -9,14 +9,14 @@ use crate::server::functions::{
     browser_visible_limit_for_page, build_toolkit_payload, clamp_browser_page_param,
     clamp_dashboard_list_limit, fetch_categories, fetch_chain_counts, fetch_count_tools,
     fetch_filtered_category_counts, fetch_list_tools, fetch_public_dashboard_snapshot,
+    fetch_search_by_intent, merge_search_intent_into_filters,
     fetch_tool_by_slug, fetch_tool_comment_counts, resolve_bookmark_tool_id,
     validate_search_tools_input, validate_tool_filters, validate_tool_list_request,
     BrowserDataPayload, LoadBrowserDataRequest, MyToolkitPayload, PublicDashboardSnapshot,
     ToolComparisonView, ToolListRequest, ToolkitToolView, UpdateToolkitItemPayload,
 };
 use crate::server::queries::{
-    APPROVED_TOOLS_BY_SLUGS_SQL, BOOKMARKED_SLUGS_SQL, MCP_SEARCH_TOOLS_COUNT_OR_SQL,
-    MCP_SEARCH_TOOLS_COUNT_SQL, RECENT_APPROVED_TOOLS_SQL,
+    APPROVED_TOOLS_BY_SLUGS_SQL, BOOKMARKED_SLUGS_SQL, RECENT_APPROVED_TOOLS_SQL,
     TOOL_COMMENT_COUNT_BY_SLUG_SQL, USER_TOOLKIT_SQL,
 };
 use crate::server::review_persistence::list_public_official_links;
@@ -139,32 +139,12 @@ async fn search_tools(
     validate_search_tools_input(&q.query, &q.function, &q.chain)
         .map_err(ApiError::from_server_fn)?;
 
-    use crate::server::queries::{SEARCH_APPROVED_TOOLS_OR_SQL, SEARCH_APPROVED_TOOLS_SQL};
-    use crate::server::tool_search::{resolve_search_match, ToolSearchMatch};
+    use crate::server::tool_search::resolve_search_intent;
 
-    let match_mode = resolve_search_match(
-        &state.pool,
-        MCP_SEARCH_TOOLS_COUNT_SQL,
-        MCP_SEARCH_TOOLS_COUNT_OR_SQL,
-        &q.query,
-        q.function.as_deref(),
-        q.chain.as_deref(),
-    )
-    .await
-    .map_err(|e| ApiError::Internal(format!("search count failed: {e}")))?;
-
-    let search_sql = match match_mode {
-        ToolSearchMatch::And => SEARCH_APPROVED_TOOLS_SQL,
-        ToolSearchMatch::Or => SEARCH_APPROVED_TOOLS_OR_SQL,
-    };
-
-    let tools = sqlx::query_as::<_, Tool>(search_sql)
-        .bind(&q.query)
-        .bind(q.function.as_deref())
-        .bind(q.chain.as_deref())
-        .fetch_all(&state.pool)
+    let intent = resolve_search_intent(&q.query, q.function.clone(), q.chain.clone());
+    let tools = fetch_search_by_intent(&state.pool, &intent)
         .await
-        .map_err(|e| ApiError::Internal(format!("search failed: {e}")))?;
+        .map_err(ApiError::from_server_fn)?;
 
     Ok(Json(tools_to_public_summaries(tools)))
 }
@@ -195,7 +175,7 @@ async fn count_tools(
         q.chain,
     );
     validate_tool_filters(&filters).map_err(ApiError::from_server_fn)?;
-    fetch_count_tools(&state.pool, &filters)
+    fetch_count_tools(&state.pool, &filters, None)
         .await
         .map_err(ApiError::from_server_fn)
         .map(Json)
@@ -214,9 +194,9 @@ async fn get_chain_counts(
 async fn list_tools(
     State(state): State<AppState>,
     Json(req): Json<ToolListRequest>,
-) -> Result<Json<Vec<Tool>>, ApiError> {
+) -> Result<Json<Vec<PublicToolSummary>>, ApiError> {
     validate_tool_list_request(&req).map_err(ApiError::from_server_fn)?;
-    fetch_list_tools(
+    let tools = fetch_list_tools(
         &state.pool,
         &req.sort,
         req.offset,
@@ -225,8 +205,8 @@ async fn list_tools(
         req.query.as_deref(),
     )
     .await
-    .map_err(ApiError::from_server_fn)
-    .map(Json)
+    .map_err(ApiError::from_server_fn)?;
+    Ok(Json(tools_to_public_summaries(tools)))
 }
 
 async fn load_browser_data(
@@ -235,29 +215,40 @@ async fn load_browser_data(
 ) -> Result<Json<BrowserDataPayload>, ApiError> {
     validate_tool_filters(&req.filters).map_err(ApiError::from_server_fn)?;
 
+    use crate::server::tool_search::resolve_search_intent;
+
+    let search_intent = resolve_search_intent(req.search_q.as_deref().unwrap_or(""), None, None);
+    let merged_filters = merge_search_intent_into_filters(&req.filters, &search_intent);
+    validate_tool_filters(&merged_filters).map_err(ApiError::from_server_fn)?;
+    let fts_query = if search_intent.query.is_empty() {
+        None
+    } else {
+        Some(search_intent.query.as_str())
+    };
+
     let page = clamp_browser_page_param(req.page);
     let list_req = ToolListRequest {
         sort: req.sort.clone(),
         offset: 0,
         limit: browser_visible_limit_for_page(page),
-        filters: req.filters.clone(),
-        query: req.search_q.clone(),
+        filters: merged_filters.clone(),
+        query: fts_query.map(str::to_string),
     };
     validate_tool_list_request(&list_req).map_err(ApiError::from_server_fn)?;
 
     let preview_slug = req.selected.filter(|s| !s.is_empty());
 
     let (categories, chains, total, tools, preview_tool) = futures::join!(
-        fetch_filtered_category_counts(&state.pool, &req.filters),
+        fetch_filtered_category_counts(&state.pool, &merged_filters),
         fetch_chain_counts(&state.pool, 100),
-        fetch_count_tools(&state.pool, &req.filters),
+        fetch_count_tools(&state.pool, &merged_filters, fts_query),
         fetch_list_tools(
             &state.pool,
             &list_req.sort,
             list_req.offset,
             list_req.limit,
             &list_req.filters,
-            list_req.query.as_deref(),
+            fts_query,
         ),
         async {
             match preview_slug.as_deref() {
@@ -282,13 +273,15 @@ async fn load_browser_data(
             .collect()
     };
 
+    use crate::models::tool::PublicTool;
+
     Ok(Json(BrowserDataPayload {
         categories,
         chains,
         total,
-        tools,
+        tools: tools_to_public_summaries(tools),
         comment_counts,
-        preview_tool,
+        preview_tool: preview_tool.map(PublicTool::from),
     }))
 }
 
@@ -397,7 +390,7 @@ async fn compare_tools(
         let trust = verify_tool_trust(tool, &official_links);
         let viewer_bookmarked = bookmarked_slugs.contains(&tool.slug);
         rows.push(ToolComparisonView {
-            tool: tool.clone(),
+            tool: PublicTool::from(tool.clone()),
             official_links,
             trust_facts: trust.trust_facts,
             viewer_bookmarked,
@@ -487,7 +480,7 @@ async fn fetch_user_toolkit(
             .ok()
             .flatten();
         items.push(ToolkitToolView {
-            tool,
+            tool: PublicTool::from(tool),
             note,
             tags,
             source,
