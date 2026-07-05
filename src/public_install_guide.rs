@@ -328,6 +328,39 @@ fn blocked_guide(tool: &Tool, slug: &str, platform: InstallPlatform) -> PublicIn
     }
 }
 
+fn is_mcp_catalog_tool(tool: &Tool) -> bool {
+    tool.tool_type == "mcp" || tool.tool_type == "x402" || tool.mcp_endpoint.is_some()
+}
+
+fn command_only_guide(
+    tool: &Tool,
+    slug: &str,
+    platform: InstallPlatform,
+    steps: Vec<String>,
+) -> PublicInstallGuide {
+    let risk_level = tool.install_risk_level.clone();
+    let copy_gate = CopyGate::for_risk(&risk_level);
+    let command = primary_install_command(tool);
+    PublicInstallGuide {
+        slug: slug.to_string(),
+        tool_name: tool.name.clone(),
+        platform: platform.as_str().to_string(),
+        risk_level: risk_level.clone(),
+        risk_reasons: tool.install_risk_reasons.clone(),
+        warning: install_warning_text(&risk_level).map(str::to_string),
+        blocked: false,
+        copy_gate,
+        command: command.clone(),
+        config_json: None,
+        copy_text: command,
+        copy_label: "Copy command".into(),
+        steps,
+        docs_links: docs_links_for_tool(tool),
+        x402_notice: x402_notice_for_tool(tool),
+        referral_disclosure: referral_disclosure_for_tool(tool),
+    }
+}
+
 /// Build a public install guide for a listed tool and client platform.
 pub fn build_public_install_guide(
     tool: &Tool,
@@ -336,6 +369,31 @@ pub fn build_public_install_guide(
 ) -> PublicInstallGuide {
     if tool.install_risk_level == "critical" {
         return blocked_guide(tool, slug, platform);
+    }
+
+    if tool.tool_type == "skill" {
+        return command_only_guide(
+            tool,
+            slug,
+            platform,
+            vec![
+                "Install the skill using the command below (e.g. clawhub or your agent skills runtime).".into(),
+                "Do not paste this into MCP server settings — skills are not MCP configs.".into(),
+                "Open the docs link for usage after install.".into(),
+            ],
+        );
+    }
+
+    if matches!(tool.tool_type.as_str(), "cli" | "sdk" | "api") && !is_mcp_catalog_tool(tool) {
+        return command_only_guide(
+            tool,
+            slug,
+            platform,
+            vec![
+                "Run the install command in your terminal or package manager.".into(),
+                "Open the repository or docs link for setup and API keys.".into(),
+            ],
+        );
     }
 
     let risk_level = tool.install_risk_level.clone();
@@ -565,6 +623,25 @@ mod tests {
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
         }
+    }
+
+    #[test]
+    fn skill_type_uses_command_not_mcp_config() {
+        let tool = tool_fixture(
+            Some("clawhub install binance-spot-api"),
+            "low",
+            None,
+            None,
+            "skill",
+        );
+        let guide = build_public_install_guide(&tool, "binance-spot-api", InstallPlatform::Claude);
+        assert!(!guide.blocked);
+        assert!(guide.config_json.is_none());
+        assert_eq!(
+            guide.copy_text.as_deref(),
+            Some("clawhub install binance-spot-api")
+        );
+        assert!(!guide.steps.iter().any(|s| s.contains("MCP config JSON")));
     }
 
     #[test]

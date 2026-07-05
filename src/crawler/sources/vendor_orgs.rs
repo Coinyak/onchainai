@@ -25,12 +25,7 @@ const RECENCY_DAYS: i64 = 12 * 30;
 const MAX_ORG_REPO_PAGES: u32 = 3;
 const MAX_FAILURE_ORGS_IN_MSG: usize = 8;
 
-const AGENT_TOPICS: &[&str] = &[
-    "mcp-server",
-    "crypto-mcp",
-    "web3-mcp",
-    "blockchain-mcp",
-];
+const AGENT_TOPICS: &[&str] = &["mcp-server", "crypto-mcp", "web3-mcp", "blockchain-mcp"];
 
 /// Result of a vendor-org sweep; may include partial per-org fetch failures.
 pub struct VendorOrgsCrawlOutcome {
@@ -360,7 +355,7 @@ pub(crate) async fn crawl_orgs_at_base(
 }
 
 /// Crawl all `crawl: true` vendor orgs using the production GitHub API.
-pub async fn crawl_orgs(
+pub(crate) async fn crawl_orgs(
     existing_repo_urls: &HashSet<String>,
     now: DateTime<Utc>,
 ) -> Result<VendorOrgsCrawlOutcome> {

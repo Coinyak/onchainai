@@ -285,7 +285,7 @@ fn search_tools_definition() -> Value {
 fn get_tool_detail_definition() -> Value {
     json!({
         "name": "get_tool_detail",
-        "description": "Get full detail (trust score, install risk, x402 status, chains, repo) for a tool by slug. Use the slug from search_tools results. Call before get_install_guide to verify trust, x402, and install risk.",
+        "description": "Get full detail (install risk, x402 verification flags, chains, repo) for a tool by slug. Use the slug from search_tools results. Call before get_install_guide to verify trust status, x402, and install risk.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -676,11 +676,13 @@ async fn call_search_tools(pool: &PgPool, args: &Value) -> Result<String, (i32, 
 }
 
 async fn call_get_tool_detail(pool: &PgPool, args: &Value) -> Result<String, (i32, String)> {
+    use crate::models::tool::PublicTool;
     let slug = required_str(args, "slug", "slug required")?;
     let tool = mcp_get_tool(pool, slug)
         .await
         .map_err(|msg| (-32000, msg))?;
-    serialize_tool_payload(&tool)
+    let public_tool = PublicTool::from(tool);
+    serialize_tool_payload(&public_tool)
 }
 
 async fn call_list_categories(pool: &PgPool) -> Result<String, (i32, String)> {
