@@ -22,6 +22,33 @@ const VENDOR_ORGS_REGISTRY_URL: &str = "https://api.github.com/orgs";
 const MIN_STARS: i32 = 3;
 const MAX_REPOS_PER_ORG: usize = 25;
 const RECENCY_DAYS: i64 = 18 * 30;
+const MAX_FAILURE_ORGS_IN_MSG: usize = 8;
+
+/// Result of a vendor-org sweep; may include partial per-org fetch failures.
+pub(crate) struct VendorOrgsCrawlOutcome {
+    pub raws: Vec<RawTool>,
+    pub failed_orgs: Vec<String>,
+}
+
+fn format_vendor_org_failures(failed_orgs: &[String]) -> String {
+    let shown: Vec<_> = failed_orgs
+        .iter()
+        .take(MAX_FAILURE_ORGS_IN_MSG)
+        .cloned()
+        .collect();
+    let mut msg = format!(
+        "partial org fetch failures ({}): {}",
+        failed_orgs.len(),
+        shown.join(", ")
+    );
+    if failed_orgs.len() > MAX_FAILURE_ORGS_IN_MSG {
+        msg.push_str(&format!(
+            " (+{} more)",
+            failed_orgs.len() - MAX_FAILURE_ORGS_IN_MSG
+        ));
+    }
+    msg
+}
 
 /// Repo names that collide with common monorepo paths; prepend `{org}-`.
 const GENERIC_REPO_NAMES: &[&str] = &[
@@ -208,10 +235,11 @@ pub(crate) async fn crawl_orgs_at_base(
     base_url: &str,
     existing_repo_urls: &HashSet<String>,
     now: DateTime<Utc>,
-) -> Result<Vec<RawTool>> {
+) -> Result<VendorOrgsCrawlOutcome> {
     let client = github_client(token)?;
     let manifest = vendor_orgs_manifest();
     let mut out = Vec::new();
+    let mut failed_orgs = Vec::new();
 
     for entry in manifest.orgs.iter().filter(|e| e.crawl) {
         match fetch_org_repos_at_url(&client, token, &entry.github, base_url).await {
@@ -227,19 +255,23 @@ pub(crate) async fn crawl_orgs_at_base(
             }
             Err(e) => {
                 tracing::error!(org = %entry.github, error = %e, "vendor org repo fetch failed");
+                failed_orgs.push(entry.github.clone());
             }
         }
         tokio::time::sleep(std::time::Duration::from_millis(10)).await;
     }
 
-    Ok(out)
+    Ok(VendorOrgsCrawlOutcome {
+        raws: out,
+        failed_orgs,
+    })
 }
 
 /// Crawl all `crawl: true` vendor orgs using the production GitHub API.
 pub async fn crawl_orgs(
     existing_repo_urls: &HashSet<String>,
     now: DateTime<Utc>,
-) -> Result<Vec<RawTool>> {
+) -> Result<VendorOrgsCrawlOutcome> {
     let token = std::env::var("GITHUB_API_TOKEN")
         .ok()
         .filter(|s| !s.is_empty());
@@ -265,15 +297,45 @@ pub async fn run_once(pool: &sqlx::PgPool) {
     };
 
     match crawl_orgs(&existing_repo_urls, Utc::now()).await {
-        Ok(raws) => {
-            tracing::info!(source = SOURCE_NAME, count = raws.len(), "crawl completed");
-            crate::crawler::persist_crawl_results_gated(
-                pool,
-                SOURCE_NAME,
-                VENDOR_ORGS_REGISTRY_URL,
-                raws,
-            )
-            .await;
+        Ok(outcome) => {
+            let count = outcome.raws.len() as i32;
+            tracing::info!(
+                source = SOURCE_NAME,
+                count = outcome.raws.len(),
+                failed_orgs = outcome.failed_orgs.len(),
+                "crawl completed"
+            );
+            if !outcome.raws.is_empty() {
+                crate::crawler::persist_crawl_results_gated(
+                    pool,
+                    SOURCE_NAME,
+                    VENDOR_ORGS_REGISTRY_URL,
+                    outcome.raws,
+                )
+                .await;
+            }
+            if !outcome.failed_orgs.is_empty() {
+                let msg = format_vendor_org_failures(&outcome.failed_orgs);
+                crate::crawler::update_source_status(
+                    crate::crawler::UpsertTarget::Pool(pool),
+                    SOURCE_NAME,
+                    VENDOR_ORGS_REGISTRY_URL,
+                    "error",
+                    count,
+                    Some(&msg),
+                )
+                .await;
+            } else if count == 0 {
+                crate::crawler::update_source_status(
+                    crate::crawler::UpsertTarget::Pool(pool),
+                    SOURCE_NAME,
+                    VENDOR_ORGS_REGISTRY_URL,
+                    "success",
+                    0,
+                    None,
+                )
+                .await;
+            }
         }
         Err(e) => {
             tracing::error!(source = SOURCE_NAME, error = %e, "crawl failed");
@@ -293,7 +355,11 @@ pub async fn run_once(pool: &sqlx::PgPool) {
 /// Production crawl with `repo_url` exclusion loaded from the database.
 pub async fn crawl_for_pool(pool: &sqlx::PgPool) -> Result<Vec<RawTool>> {
     let existing_repo_urls = load_existing_repo_urls(pool).await?;
-    crawl_orgs(&existing_repo_urls, Utc::now()).await
+    let outcome = crawl_orgs(&existing_repo_urls, Utc::now()).await?;
+    if !outcome.failed_orgs.is_empty() {
+        anyhow::bail!(format_vendor_org_failures(&outcome.failed_orgs));
+    }
+    Ok(outcome.raws)
 }
 
 pub struct VendorOrgsCrawler;

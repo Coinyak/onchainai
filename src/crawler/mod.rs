@@ -122,7 +122,7 @@ where
                 description = CASE
                     WHEN tools.status IN ('official', 'verified')
                          OR tools.claim_state = 'claimed'
-                    THEN tools.description
+                    THEN COALESCE(NULLIF(tools.description, ''), EXCLUDED.description)
                     ELSE EXCLUDED.description
                 END,
                 function = EXCLUDED.function,
@@ -132,13 +132,13 @@ where
                 repo_url = CASE
                     WHEN tools.status IN ('official', 'verified')
                          OR tools.claim_state = 'claimed'
-                    THEN tools.repo_url
+                    THEN COALESCE(NULLIF(tools.repo_url, ''), EXCLUDED.repo_url)
                     ELSE EXCLUDED.repo_url
                 END,
                 homepage = CASE
                     WHEN tools.status IN ('official', 'verified')
                          OR tools.claim_state = 'claimed'
-                    THEN tools.homepage
+                    THEN COALESCE(NULLIF(tools.homepage, ''), EXCLUDED.homepage)
                     ELSE EXCLUDED.homepage
                 END,
                 npm_package = EXCLUDED.npm_package,

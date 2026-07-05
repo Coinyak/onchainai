@@ -350,7 +350,7 @@ cargo fmt --check 2>&1 | tee {SCRATCH}/fmt.log
 # Manual trigger (until admin UI fixed):
 curl -X POST "$API_URL/api/v2/admin/crawler/trigger" \
   -H "Cookie: $ADMIN_COOKIE" -H "Content-Type: application/json" \
-  -d '{"source":"vendor-orgs"}'   # or "bazaar"
+  -d '{"source":"vendor_orgs"}'   # or "bazaar"
 ```
 
 ---

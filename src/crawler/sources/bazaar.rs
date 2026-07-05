@@ -6,6 +6,7 @@
 //! [`crate::crawler::persist_crawl_results_gated`].
 
 use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use serde::Deserialize;
@@ -21,6 +22,8 @@ const MAX_PAGES: u32 = 3;
 const PAGE_LIMIT: u32 = 100;
 const MIN_UNIQUE_PAYERS: u32 = 5;
 const MAX_HOSTS_PER_RUN: usize = 100;
+/// Match [`crate::server::x402_verify`] scheduled probe concurrency.
+const BAZAAR_PROBE_CONCURRENCY: usize = 4;
 
 /// Mainnet chain IDs accepted for catalog ingest (§4.5).
 const MAINNET_CHAIN_MAP: &[(u32, &str)] = &[
@@ -293,17 +296,35 @@ async fn probe_resource(resource: &BazaarResource) -> ProbeOutcome {
     x402_verify::probe_x402_endpoint(resource.resource.trim()).await
 }
 
-/// Map resources to raw tools with ingest-time probe.
+/// Map resources to raw tools with ingest-time probe (bounded parallelism).
 pub(crate) async fn map_resources_with_probe(resources: &[BazaarResource]) -> Vec<RawTool> {
-    let mut out = Vec::with_capacity(resources.len());
-    for resource in resources {
-        let outcome = probe_resource(resource).await;
-        out.push(resource_to_raw(
-            resource,
-            relevance_status_for_probe(&outcome),
-        ));
+    use tokio::sync::Semaphore;
+
+    let semaphore = Arc::new(Semaphore::new(BAZAAR_PROBE_CONCURRENCY));
+    let mut handles = Vec::with_capacity(resources.len());
+    for (idx, resource) in resources.iter().enumerate() {
+        let resource = resource.clone();
+        let permit = semaphore
+            .clone()
+            .acquire_owned()
+            .await
+            .expect("bazaar probe semaphore");
+        handles.push(tokio::spawn(async move {
+            let _permit = permit;
+            let outcome = probe_resource(&resource).await;
+            (
+                idx,
+                resource_to_raw(&resource, relevance_status_for_probe(&outcome)),
+            )
+        }));
     }
-    out
+
+    let mut indexed = Vec::with_capacity(handles.len());
+    for handle in handles {
+        indexed.push(handle.await.expect("bazaar probe task"));
+    }
+    indexed.sort_by_key(|(idx, _)| *idx);
+    indexed.into_iter().map(|(_, raw)| raw).collect()
 }
 
 async fn fetch_discovery_page(
