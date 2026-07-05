@@ -164,8 +164,8 @@ export function BlueprintToolChainMemo({
                   aria-label={`${active ? "Remove" : "Add"} ${chain.label}`}
                   aria-pressed={active}
                   title={chain.label}
-                  onMouseDown={(e) => {
-                    e.preventDefault();
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onClick={(e) => {
                     e.stopPropagation();
                     toggleChain(chain.id);
                   }}

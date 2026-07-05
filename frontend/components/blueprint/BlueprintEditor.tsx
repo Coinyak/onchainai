@@ -402,7 +402,10 @@ function BlueprintEditorWorkspace({
   }, [isDraft, isAuthenticated, promoteDraft]);
 
   const updateNodes = useCallback(
-    (updater: (prev: BlueprintNode[]) => BlueprintNode[]) => {
+    (
+      updater: (prev: BlueprintNode[]) => BlueprintNode[],
+      options?: { flushDraft?: boolean },
+    ) => {
       setNodes((prev) => {
         const next = updater(prev);
         const nextEdges = pruneEdgesForNodes(edgesRef.current, next);
@@ -410,11 +413,19 @@ function BlueprintEditorWorkspace({
           setEdges(nextEdges);
           setSelectedEdgeId(null);
         }
-        scheduleSave(title, next, nextEdges);
+        if (options?.flushDraft && isDraft) {
+          if (saveTimerRef.current) {
+            clearTimeout(saveTimerRef.current);
+            saveTimerRef.current = null;
+          }
+          persistDraft(titleRef.current, next, nextEdges);
+        } else {
+          scheduleSave(title, next, nextEdges);
+        }
         return next;
       });
     },
-    [scheduleSave, title],
+    [isDraft, persistDraft, scheduleSave, title],
   );
 
   const updateEdges = useCallback(
@@ -792,30 +803,22 @@ function BlueprintEditorWorkspace({
   const updateNodeChains = useCallback(
     (id: string, chains: string[]) => {
       if (readOnly) return;
-      let nextNodes: BlueprintNode[] | null = null;
-      updateNodes((prev) => {
-        const next = prev.map((n) => {
-          if (n.id !== id || n.kind !== "tool") return n;
-          const normalized = normalizeToolNodeChains(chains);
-          if (normalized.length === 0) {
-            const { chains: _removed, ...rest } = n;
-            return rest;
-          }
-          return { ...n, chains: normalized };
-        });
-        nextNodes = next;
-        return next;
-      });
-      if (isDraft && nextNodes) {
-        if (saveTimerRef.current) {
-          clearTimeout(saveTimerRef.current);
-          saveTimerRef.current = null;
-        }
-        persistDraft(titleRef.current, nextNodes, edgesRef.current);
-      }
+      updateNodes(
+        (prev) =>
+          prev.map((n) => {
+            if (n.id !== id || n.kind !== "tool") return n;
+            const normalized = normalizeToolNodeChains(chains);
+            if (normalized.length === 0) {
+              const { chains: _removed, ...rest } = n;
+              return rest;
+            }
+            return { ...n, chains: normalized };
+          }),
+        { flushDraft: true },
+      );
       setLiveMessage("Chain selection updated.");
     },
-    [isDraft, persistDraft, readOnly, updateNodes],
+    [readOnly, updateNodes],
   );
 
   const updateNodeSize = useCallback(
