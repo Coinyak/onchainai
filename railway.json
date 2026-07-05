@@ -5,6 +5,7 @@
     "dockerfilePath": "Dockerfile.api",
     "watchPatterns": [
       "src/**",
+      "scripts/vendor-orgs.json",
       "migrations/**",
       "Dockerfile.api",
       "Cargo.toml",

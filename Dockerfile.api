@@ -14,6 +14,7 @@ RUN cargo install cargo-chef --version "${CARGO_CHEF_VERSION}" --locked
 FROM chef AS planner
 COPY Cargo.toml Cargo.lock* ./
 COPY src/ ./src/
+COPY scripts/vendor-orgs.json ./scripts/vendor-orgs.json
 COPY migrations/ ./migrations/
 RUN cargo chef prepare --recipe-path recipe.json
 
@@ -25,6 +26,7 @@ COPY --from=planner /app/recipe.json recipe.json
 RUN cargo chef cook --release --features ssr --recipe-path recipe.json
 COPY Cargo.toml Cargo.lock* ./
 COPY src/ ./src/
+COPY scripts/vendor-orgs.json ./scripts/vendor-orgs.json
 COPY migrations/ ./migrations/
 RUN cargo build --release --features ssr
 
