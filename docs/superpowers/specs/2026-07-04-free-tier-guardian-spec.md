@@ -191,7 +191,7 @@ OnchainAI의 wedge는 **크립토 특화 × 큐레이션 × 신뢰/설치안전*
 | FTG-A | MCP 유료 키워드 부재 | `src/server/mcp.rs`에 `402`/`paymentRequired`/`x402_gate` 없음 |
 | FTG-B | compare API 공개 | `curl -s -o /dev/null -w '%{http_code}' '$PROD_URL/api/v2/tools/compare?slugs=aave,uniswap'` → `200` |
 | FTG-C | 정책 문서 존재 | `docs/superpowers/specs/2026-07-04-free-tier-guardian-spec.md`에 `영구 무료` |
-| FTG-D | compare 유료 문구 제거 | `X402_OPEN_LISTING_SPEC.md`·FTG 스펙에 `compare_tools`+`마이크로페이먼트` 유료 패턴 absent (`scripts/spec-verify.sh`) |
+| FTG-D | compare 유료 문구 제거 | `scripts/spec-verify.sh` `ftg_compare_free`: `compare_tools`/`/compare` 라인에 과금 키워드(`유료|paid|402|…`)가 있으나 `무료|폐기|채택하지` 등 부정·폐기 표기가 없으면 FAIL |
 | FTG-E | README 무료 선언 | `README.md`에 `free`+`read-only` |
 
 ### 7.3 문서 동기화
