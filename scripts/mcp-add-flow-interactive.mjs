@@ -43,6 +43,9 @@ try {
   const connect = await browser.newPage({ viewport: { width: 1280, height: 900 } });
   await connect.goto(`${base}/connect`, wait);
   await connect.waitForSelector('[data-testid="connect-page"]', { timeout: 15000 });
+  await connect
+    .waitForSelector('[data-testid^="connect-client-"]', { timeout: 20000 })
+    .catch(() => {});
   const clientCards = await connect.locator('[data-testid^="connect-client-"]').count();
   log("A5", `connect-page client cards=${clientCards}`);
   const universalCopy = await connect

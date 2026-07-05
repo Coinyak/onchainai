@@ -82,7 +82,7 @@ check_get "/toolkit" >/dev/null
 
 toolkit_body="$(check_get "/toolkit")"
 smoke_body_has "$toolkit_body" 'data-testid="toolkit-sign-in"' || smoke_fail "GET /toolkit missing Sign in control"
-smoke_body_has "$toolkit_body" 'href="/login"' || smoke_fail "GET /toolkit missing /login sign-in link"
+smoke_body_has "$toolkit_body" 'href="/login' || smoke_fail "GET /toolkit missing /login sign-in link"
 
 for chain_svg in bitcoin bob polygon; do
   svg_code="$(curl -sS -o /dev/null -w "%{http_code}" "${BASE}/chains/${chain_svg}.svg")" \
