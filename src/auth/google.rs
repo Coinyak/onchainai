@@ -8,6 +8,7 @@
 //! configured — `/auth/google` then short-circuits to a "not configured"
 //! redirect so the server still boots without Google credentials.
 
+use crate::auth::oauth_state::{mint_oauth_state, verify_oauth_state};
 use crate::auth::session::{
     auth_http_client, cookie_secure_for_domain, cookie_value, ensure_google_profile,
     issue_access_token, local_dev_host, post_auth_redirect_path, set_session_hint_cookie,
@@ -20,8 +21,6 @@ use axum::{
     http::{header, HeaderMap, StatusCode},
     response::{IntoResponse, Redirect, Response},
 };
-use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
-use getrandom::getrandom;
 use serde::Deserialize;
 
 const AUTHORIZE_URL: &str = "https://accounts.google.com/o/oauth2/v2/auth";
@@ -77,10 +76,13 @@ fn clear_cookie(name: &str, secure: bool, same_site: &str) -> String {
     format!("{name}=; Path=/; HttpOnly; SameSite={same_site}; Max-Age=0{secure_flag}")
 }
 
-fn generate_oauth_state() -> String {
-    let mut bytes = [0u8; 32];
-    getrandom(&mut bytes).expect("OS random unavailable");
-    URL_SAFE_NO_PAD.encode(bytes)
+fn google_oauth_state_valid(config: &Config, headers: &HeaderMap, state_param: &str) -> bool {
+    let cookie_header = headers.get(header::COOKIE).and_then(|v| v.to_str().ok());
+    let cookie_state = cookie_header.and_then(|h| cookie_value(h, GOOGLE_STATE_COOKIE));
+    if cookie_state == Some(state_param) {
+        return true;
+    }
+    verify_oauth_state(&config.jwt_secret, state_param)
 }
 
 /// `GET /auth/google` — redirect to Google OAuth (callback returns to this app).
@@ -90,7 +92,7 @@ pub async fn google_login(State(state): State<AppState>) -> Result<Response, Sta
         return Ok(Redirect::to("/login?auth=google_not_configured").into_response());
     };
 
-    let oauth_state = generate_oauth_state();
+    let oauth_state = mint_oauth_state(&config.jwt_secret);
     let redirect_uri = callback_url(config);
     let authorize_url = format!(
         "{AUTHORIZE_URL}?client_id={}&redirect_uri={}&response_type=code&scope={}&state={}&access_type=online&prompt=select_account",
@@ -197,9 +199,8 @@ pub async fn google_callback(
         return Ok(Redirect::to("/login?auth=google_missing_state").into_response());
     };
 
-    let cookie_header = headers_in.get(header::COOKIE).and_then(|v| v.to_str().ok());
-    let cookie_state = cookie_header.and_then(|h| cookie_value(h, GOOGLE_STATE_COOKIE));
-    if cookie_state != Some(state_param.as_str()) {
+    if !google_oauth_state_valid(config, &headers_in, &state_param) {
+        tracing::warn!("Google OAuth state validation failed (cookie and HMAC mismatch)");
         return Ok(Redirect::to("/login?auth=google_state_mismatch").into_response());
     }
 
