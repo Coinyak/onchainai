@@ -1911,12 +1911,6 @@
   transition: width 200ms ease, padding 200ms ease;
 }
 
-.sidebar-body {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
 .sidebar-section {
   margin-bottom: 4px;
   padding-bottom: 4px;
