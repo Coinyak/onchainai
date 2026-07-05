@@ -7,9 +7,9 @@ pub mod email;
 #[cfg(feature = "ssr")]
 pub mod google;
 #[cfg(feature = "ssr")]
-pub mod oauth_state;
-#[cfg(feature = "ssr")]
 pub mod guard;
+#[cfg(feature = "ssr")]
+pub mod oauth_state;
 #[cfg(feature = "ssr")]
 pub mod onboarding;
 #[cfg(feature = "ssr")]

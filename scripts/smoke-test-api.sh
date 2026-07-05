@@ -57,6 +57,14 @@ search_code="$(curl -sS -o "$search_body" -w "%{http_code}" \
 grep -q '"slug"' "$search_body" || smoke_fail "GET /api/v2/tools/search missing tool payload"
 rm -f "$search_body"
 
+prefix_body="$(mktemp)"
+prefix_code="$(curl -sS -o "$prefix_body" -w "%{http_code}" \
+  "${BASE}/api/v2/tools/search?query=unis&limit=5")" \
+  || smoke_fail "GET /api/v2/tools/search prefix curl failed"
+[[ "$prefix_code" == "200" ]] || smoke_fail "GET /api/v2/tools/search prefix returned ${prefix_code}"
+grep -q '"slug"' "$prefix_body" || smoke_fail "GET /api/v2/tools/search?query=unis returned no matches (SR1)"
+rm -f "$prefix_body"
+
 blueprints_code="$(curl -sS -o /dev/null -w "%{http_code}" "${BASE}/api/v2/blueprints")" \
   || smoke_fail "GET /api/v2/blueprints curl failed"
 [[ "$blueprints_code" == "401" ]] || smoke_fail "GET /api/v2/blueprints expected 401, got ${blueprints_code}"

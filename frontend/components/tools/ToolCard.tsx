@@ -123,6 +123,7 @@ export function ToolCard({
             name={tool.name}
             logoUrl={tool.logo_url}
             logoMonogram={tool.logo_monogram}
+            status={status}
             size={48}
           />
           <div className="tool-card-body">

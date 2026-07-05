@@ -231,6 +231,40 @@ export interface FeaturedCard {
   sort_order: number;
 }
 
+/** Admin featured list row — includes lifecycle fields omitted from public carousel. */
+export interface AdminFeaturedCard extends FeaturedCard {
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ToolPickerItem {
+  id: string;
+  name: string;
+  slug: string;
+}
+
+export interface FeaturedCardInput {
+  tool_id: string;
+  image_url: string;
+  headline?: string | null;
+  subtitle?: string | null;
+  sort_order: number;
+  is_active: boolean;
+}
+
+export interface FeaturedCardRecord {
+  id: string;
+  tool_id: string;
+  image_url: string;
+  headline: string | null;
+  subtitle: string | null;
+  sort_order: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface FooterLink {
   label: string;
   url: string;
@@ -310,6 +344,57 @@ export interface ToolTrustView {
   tool: Tool;
   official_links: ToolOfficialLink[];
   trust_facts: TrustFact[];
+}
+
+export interface TrustVerificationResult {
+  total_score: number;
+  identity_score: number;
+  operational_score: number;
+  install_safety_score: number;
+  claim_strength_score: number;
+  social_presence_score: number;
+  trust_facts: TrustFact[];
+  evidence_gaps: string[];
+  suggested_action: string;
+}
+
+export interface ReviewTimelineEntry {
+  id: string;
+  review_run_id: string;
+  entry_type: string;
+  role: string;
+  agent_label: string | null;
+  recommended_action: string | null;
+  confidence: number | null;
+  rationale: string | null;
+  supporting_evidence_json: unknown;
+  dissent_json: unknown;
+  missing_proofs_json: unknown;
+  created_at: string;
+}
+
+export interface OperatorVerdict {
+  id: string;
+  tool_id: string;
+  review_run_id: string | null;
+  action: string;
+  from_status: string | null;
+  to_status: string | null;
+  from_claim_state: string | null;
+  to_claim_state: string | null;
+  reason_codes: string[];
+  note: string | null;
+  operator_id: string;
+  created_at: string;
+}
+
+export interface AdminToolWorkbenchView {
+  tool: Tool;
+  official_links: ToolOfficialLink[];
+  trust: TrustVerificationResult;
+  timeline: ReviewTimelineEntry[];
+  verdicts: OperatorVerdict[];
+  official_promotion_allowed: boolean;
 }
 
 export interface CommentView {
@@ -570,6 +655,12 @@ export async function getRelatedTools(slug: string, limit = 4): Promise<Tool[]> 
 
 export async function getToolTrustView(slug: string): Promise<ToolTrustView> {
   return apiFetch<ToolTrustView>(`/api/v2/admin/trust/${encodeURIComponent(slug)}`);
+}
+
+export async function getAdminToolWorkbench(slug: string): Promise<AdminToolWorkbenchView> {
+  return apiFetch<AdminToolWorkbenchView>(
+    `/api/v2/admin/workbench/${encodeURIComponent(slug)}`,
+  );
 }
 
 export async function searchTools(params: {
@@ -849,6 +940,7 @@ export interface X402ProbeResponse {
   status: string;
   details: X402ProbeDetails | null;
   reason: string | null;
+  http_status?: number | null;
 }
 
 export interface X402SubmitResponse {
@@ -973,8 +1065,48 @@ export async function deleteCategory(id: string): Promise<void> {
   await apiFetch(`/api/v2/admin/categories/${encodeURIComponent(id)}`, { method: "DELETE" });
 }
 
-export async function listFeaturedCardsAdmin(): Promise<FeaturedCard[]> {
-  return apiFetch<FeaturedCard[]>("/api/v2/admin/featured");
+export async function listFeaturedCardsAdmin(): Promise<AdminFeaturedCard[]> {
+  return apiFetch<AdminFeaturedCard[]>("/api/v2/admin/featured");
+}
+
+export async function createFeaturedCard(payload: FeaturedCardInput): Promise<FeaturedCardRecord> {
+  return apiFetch<FeaturedCardRecord>("/api/v2/admin/featured", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function updateFeaturedCard(
+  id: string,
+  payload: FeaturedCardInput,
+): Promise<FeaturedCardRecord> {
+  return apiFetch<FeaturedCardRecord>(`/api/v2/admin/featured/${encodeURIComponent(id)}`, {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteFeaturedCard(id: string): Promise<void> {
+  await apiFetch(`/api/v2/admin/featured/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  });
+}
+
+export async function uploadFeaturedImage(file: File): Promise<{ url: string }> {
+  const form = new FormData();
+  form.append("file", file);
+  return apiFetch<{ url: string }>("/api/v2/admin/featured/upload", {
+    method: "POST",
+    body: form,
+  });
+}
+
+export async function searchToolsForPicker(
+  query: string,
+  limit = 20,
+): Promise<ToolPickerItem[]> {
+  const search = new URLSearchParams({ query, limit: String(limit) });
+  return apiFetch<ToolPickerItem[]>(`/api/v2/admin/featured/search?${search.toString()}`);
 }
 
 export async function getAdminSiteSettings(): Promise<SiteSettings> {

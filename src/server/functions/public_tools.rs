@@ -230,10 +230,7 @@ pub fn intent_to_tool_filters(
     merge_optional_filter(&mut filters.function, intent.function.as_deref());
     merge_optional_filter(&mut filters.chain, intent.chain.as_deref());
     merge_optional_filter(&mut filters.tool_type, intent.tool_type.as_deref());
-    merge_optional_filter(
-        &mut filters.install_risk,
-        intent.install_risk.as_deref(),
-    );
+    merge_optional_filter(&mut filters.install_risk, intent.install_risk.as_deref());
     filters
 }
 
@@ -246,10 +243,7 @@ pub fn merge_search_intent_into_filters(
     merge_optional_filter(&mut merged.function, intent.function.as_deref());
     merge_optional_filter(&mut merged.chain, intent.chain.as_deref());
     merge_optional_filter(&mut merged.tool_type, intent.tool_type.as_deref());
-    merge_optional_filter(
-        &mut merged.install_risk,
-        intent.install_risk.as_deref(),
-    );
+    merge_optional_filter(&mut merged.install_risk, intent.install_risk.as_deref());
     merged
 }
 
@@ -365,18 +359,27 @@ pub(crate) async fn resolve_list_search_match(
     search: &str,
     filters: &ToolFilters,
 ) -> Result<crate::server::tool_search::ToolSearchMatch, FnError> {
-    use crate::server::tool_search::{should_try_or_fallback, ToolSearchMatch};
+    use crate::server::tool_search::{
+        build_prefix_tsquery, should_try_or_fallback, ToolSearchMatch,
+    };
 
-    let and_count =
-        count_list_fts_matches(pool, search, filters, ToolSearchMatch::And).await?;
-    if and_count == 0 && should_try_or_fallback(search) {
-        match count_list_fts_matches(pool, search, filters, ToolSearchMatch::Or).await {
-            Ok(_) => Ok(ToolSearchMatch::Or),
-            Err(_) => Ok(ToolSearchMatch::And),
+    let and_count = count_list_fts_matches(pool, search, filters, ToolSearchMatch::And).await?;
+    if and_count == 0 {
+        if build_prefix_tsquery(search).is_some() {
+            match count_list_fts_matches(pool, search, filters, ToolSearchMatch::Prefix).await {
+                Ok(prefix_count) if prefix_count > 0 => return Ok(ToolSearchMatch::Prefix),
+                Ok(_) => {}
+                Err(_) => {}
+            }
         }
-    } else {
-        Ok(ToolSearchMatch::And)
+        if should_try_or_fallback(search) {
+            match count_list_fts_matches(pool, search, filters, ToolSearchMatch::Or).await {
+                Ok(or_count) if or_count > 0 => return Ok(ToolSearchMatch::Or),
+                Ok(_) | Err(_) => {}
+            }
+        }
     }
+    Ok(ToolSearchMatch::And)
 }
 
 #[cfg(feature = "ssr")]
@@ -388,17 +391,25 @@ pub(crate) fn push_list_query_filter<'qb>(
     let Some(text) = search.filter(|q| !q.trim().is_empty()) else {
         return;
     };
-    use crate::server::tool_search::{ToolSearchMatch, TOOL_SEARCH_VECTOR};
+    use crate::server::tool_search::{fts_query_bind, ToolSearchMatch, TOOL_SEARCH_VECTOR};
+    let Some(bind_value) = fts_query_bind(match_mode, text) else {
+        return;
+    };
     query.push(" AND ").push(TOOL_SEARCH_VECTOR).push(" @@ ");
     match match_mode {
         ToolSearchMatch::And => {
             query.push("plainto_tsquery('english', ");
-            query.push_bind(text);
+            query.push_bind(bind_value);
+            query.push(")");
+        }
+        ToolSearchMatch::Prefix => {
+            query.push("to_tsquery('english', ");
+            query.push_bind(bind_value);
             query.push(")");
         }
         ToolSearchMatch::Or => {
             query.push("to_tsquery('english', replace(plainto_tsquery('english', ");
-            query.push_bind(text);
+            query.push_bind(bind_value);
             query.push(")::text, ' & ', ' | '))");
         }
     }
@@ -515,7 +526,7 @@ pub(crate) async fn fetch_search_by_intent(
     pool: &sqlx::PgPool,
     intent: &crate::server::tool_search::ResolvedSearchIntent,
 ) -> Result<Vec<Tool>, FnError> {
-    use crate::server::tool_search::{ToolSearchMatch, TOOL_SEARCH_VECTOR};
+    use crate::server::tool_search::{fts_query_bind, ToolSearchMatch, TOOL_SEARCH_VECTOR};
 
     let filters = intent_to_tool_filters(intent);
     validate_tool_filters(&filters)?;
@@ -537,16 +548,23 @@ pub(crate) async fn fetch_search_by_intent(
         q.push(" ORDER BY ts_rank_cd(");
         q.push(TOOL_SEARCH_VECTOR);
         q.push(", ");
-        match match_mode {
-            ToolSearchMatch::And => {
-                q.push("plainto_tsquery('english', ");
-                q.push_bind(search_text);
-                q.push(")");
-            }
-            ToolSearchMatch::Or => {
-                q.push("to_tsquery('english', replace(plainto_tsquery('english', ");
-                q.push_bind(search_text);
-                q.push(")::text, ' & ', ' | '))");
+        if let Some(bind_value) = fts_query_bind(match_mode, search_text) {
+            match match_mode {
+                ToolSearchMatch::And => {
+                    q.push("plainto_tsquery('english', ");
+                    q.push_bind(bind_value);
+                    q.push(")");
+                }
+                ToolSearchMatch::Prefix => {
+                    q.push("to_tsquery('english', ");
+                    q.push_bind(bind_value);
+                    q.push(")");
+                }
+                ToolSearchMatch::Or => {
+                    q.push("to_tsquery('english', replace(plainto_tsquery('english', ");
+                    q.push_bind(bind_value);
+                    q.push(")::text, ' & ', ' | '))");
+                }
             }
         }
         q.push(") DESC, stars DESC, created_at DESC");

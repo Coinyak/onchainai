@@ -301,11 +301,6 @@ pub async fn oauth_callback(
     Ok((headers, Redirect::to(&redirect_to)).into_response())
 }
 
-/// GitHub logout URL — signing out here lets the user pick another account on the next OAuth flow.
-pub(crate) fn github_logout_url() -> &'static str {
-    "https://github.com/logout"
-}
-
 fn append_set_cookie(headers: &mut HeaderMap, cookie: &str) -> Result<(), StatusCode> {
     headers.append(
         header::SET_COOKIE,
@@ -325,14 +320,9 @@ fn clear_session_cookies(headers: &mut HeaderMap, secure_cookie: bool) -> Result
     Ok(())
 }
 
-/// `POST /auth/github/switch` — clear local session and redirect to GitHub logout.
+/// `POST /auth/github/switch` — clear local session; user re-auths via Continue with GitHub.
 pub async fn github_switch(State(state): State<AppState>) -> Response {
-    let secure_cookie = cookie_secure_for_domain(&state.config.siwx_domain);
-    let mut headers = HeaderMap::new();
-    if clear_session_cookies(&mut headers, secure_cookie).is_err() {
-        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-    }
-    (headers, Redirect::temporary(github_logout_url())).into_response()
+    logout_response(&state, "/login?signed_out=1")
 }
 
 fn logout_response(state: &AppState, redirect_to: &str) -> Response {
@@ -356,7 +346,7 @@ pub async fn logout(State(state): State<AppState>) -> Response {
 
 #[cfg(test)]
 mod tests {
-    use super::{callback_url, clear_cookie, github_logout_url, set_cookie};
+    use super::{callback_url, clear_cookie, set_cookie};
     use crate::auth::session::{
         cookie_secure_for_domain, ACCESS_TOKEN_COOKIE, GITHUB_STATE_COOKIE,
     };
@@ -463,11 +453,6 @@ mod tests {
         assert!(cookie.contains("; Secure"));
         assert!(cookie.contains("SameSite=Lax"));
         assert!(cookie.contains("Max-Age=0"));
-    }
-
-    #[test]
-    fn github_switch_redirects_to_github_logout() {
-        assert_eq!(github_logout_url(), "https://github.com/logout");
     }
 
     #[test]

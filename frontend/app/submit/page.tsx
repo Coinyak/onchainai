@@ -10,6 +10,7 @@ import { useAuth } from "@/lib/auth";
 import {
   submitTool,
   listMySubmissions,
+  getSiteSettings,
   probeX402Endpoint,
   submitX402Listing,
   X402_REFERRAL_DISCLOSURE,
@@ -27,6 +28,11 @@ function X402ProbePreview({ probe }: { probe: X402ProbeResponse }) {
         data-testid="x402-probe-failed"
       >
         <p className="text-body-sm font-medium text-error">Endpoint check failed</p>
+        {probe.http_status != null && (
+          <p className="text-body-sm text-secondary mt-1">
+            Received HTTP {probe.http_status}
+          </p>
+        )}
         <p className="text-body-sm text-secondary mt-1">
           {probe.reason || "The endpoint did not return a valid 402 response."}
         </p>
@@ -70,6 +76,15 @@ function X402ProbePreview({ probe }: { probe: X402ProbeResponse }) {
 }
 
 function X402SubmitFlow() {
+  const settingsQuery = useQuery({
+    queryKey: ["site-settings"],
+    queryFn: getSiteSettings,
+    staleTime: 60_000,
+  });
+  const registrationEnabled = settingsQuery.data?.allow_x402_registration === true;
+  const registrationDisabled =
+    settingsQuery.isLoading || settingsQuery.isError || !registrationEnabled;
+
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [endpointUrl, setEndpointUrl] = useState("");
@@ -129,14 +144,48 @@ function X402SubmitFlow() {
       data-testid="x402-submit-form"
       onSubmit={(e) => {
         e.preventDefault();
+        if (registrationDisabled) return;
         setError(null);
         submitMut.mutate();
       }}
     >
+      {settingsQuery.isLoading && (
+        <p className="text-body-sm text-secondary rounded-md border border-border bg-neutral-bg p-4">
+          Loading x402 registration settings…
+        </p>
+      )}
+      {!settingsQuery.isLoading && registrationDisabled && (
+        <p
+          className="text-body-sm text-secondary rounded-md border border-border bg-neutral-hover p-4"
+          data-testid="x402-registration-disabled"
+        >
+          {settingsQuery.isError
+            ? "Could not load x402 registration settings. Publishing is unavailable until settings load."
+            : "x402 self-listing is currently disabled on this deployment. You can still check an endpoint below, but publishing is unavailable until operators enable registration."}
+        </p>
+      )}
       <p className="text-body-sm text-secondary rounded-md border border-border bg-neutral-bg p-4">
-        x402 listings are checked automatically: paste your payment endpoint
-        and we probe it for a valid 402 handshake. A live endpoint publishes
-        instantly — no operator queue.
+        x402 listings are checked automatically: paste your payment endpoint and we probe it for
+        HTTP 402 with parseable payment requirements. A live endpoint publishes instantly when
+        self-listing is enabled. See{" "}
+        <a
+          href="https://github.com/Coinyak/onchainai/blob/main/docs/X402_OPEN_LISTING_SPEC.md"
+          className="text-tertiary underline"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          open listing spec
+        </a>{" "}
+        and{" "}
+        <a
+          href="https://github.com/Coinyak/onchainai/blob/main/docs/X402_MONETIZATION_SPEC.md"
+          className="text-tertiary underline"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          monetization spec
+        </a>
+        .
       </p>
       <label className="block">
         <span className="text-body-sm text-secondary">Name</span>
@@ -220,7 +269,7 @@ function X402SubmitFlow() {
         type="submit"
         className="min-h-touch px-6 rounded-md bg-tertiary text-on-tertiary font-medium hover:bg-[#D96400] disabled:opacity-50"
         data-testid="x402-submit-btn"
-        disabled={submitMut.isPending || !termsAccepted}
+        disabled={submitMut.isPending || !termsAccepted || registrationDisabled}
       >
         {submitMut.isPending ? "Probing and publishing..." : "Probe and publish"}
       </button>

@@ -3,13 +3,12 @@
 use crate::models::tool::PublicToolSummary;
 use crate::models::Tool;
 use crate::server::functions::{
-    append_tool_filters, intent_to_tool_filters, push_list_query_filter,
-    resolve_list_search_match,
+    append_tool_filters, intent_to_tool_filters, push_list_query_filter, resolve_list_search_match,
 };
 use crate::server::queries::{COUNT_APPROVED_TOOLS_SQL, PUBLIC_TOOL_WHERE};
 use crate::server::tool_categories::is_public_tool_category;
 use crate::server::tool_search::{
-    resolve_search_intent, ToolSearchMatch, TOOL_SEARCH_VECTOR,
+    fts_query_bind, resolve_search_intent, ToolSearchMatch, TOOL_SEARCH_VECTOR,
 };
 use serde::Serialize;
 use serde_json::Value;
@@ -139,18 +138,27 @@ fn push_fts_rank_order<'qb>(
     search_text: &'qb str,
     match_mode: ToolSearchMatch,
 ) {
+    let Some(bind_value) = fts_query_bind(match_mode, search_text) else {
+        query.push(" ORDER BY stars DESC, updated_at DESC");
+        return;
+    };
     query.push(" ORDER BY ts_rank_cd(");
     query.push(TOOL_SEARCH_VECTOR);
     query.push(", ");
     match match_mode {
         ToolSearchMatch::And => {
             query.push("plainto_tsquery('english', ");
-            query.push_bind(search_text);
+            query.push_bind(bind_value);
+            query.push(")");
+        }
+        ToolSearchMatch::Prefix => {
+            query.push("to_tsquery('english', ");
+            query.push_bind(bind_value);
             query.push(")");
         }
         ToolSearchMatch::Or => {
             query.push("to_tsquery('english', replace(plainto_tsquery('english', ");
-            query.push_bind(search_text);
+            query.push_bind(bind_value);
             query.push(")::text, ' & ', ' | '))");
         }
     }

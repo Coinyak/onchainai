@@ -185,6 +185,7 @@ function BlueprintEditorWorkspace({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   const [linkingFromId, setLinkingFromId] = useState<string | null>(null);
+  const [linkingFromSide, setLinkingFromSide] = useState<"in" | "out" | null>(null);
   const [linkPointer, setLinkPointer] = useState<{ x: number; y: number } | null>(
     null,
   );
@@ -568,6 +569,7 @@ function BlueprintEditorWorkspace({
 
   const cancelLinking = useCallback(() => {
     setLinkingFromId(null);
+    setLinkingFromSide(null);
     setLinkPointer(null);
   }, []);
 
@@ -603,7 +605,7 @@ function BlueprintEditorWorkspace({
 
   const completeLinking = useCallback(
     (clientX: number, clientY: number) => {
-      if (!linkingFromId || readOnly) {
+      if (!linkingFromId || !linkingFromSide || readOnly) {
         cancelLinking();
         return;
       }
@@ -611,21 +613,35 @@ function BlueprintEditorWorkspace({
       const portEl = target?.closest("[data-port]");
       const nodeEl = target?.closest("[data-testid='blueprint-node']");
 
+      const connectOutToIn = (fromId: string, toId: string) => {
+        if (fromId !== toId) addEdgeBetween(fromId, toId);
+      };
+
       if (portEl) {
         const nodeId = portEl.getAttribute("data-node-id");
         const port = portEl.getAttribute("data-port");
-        if (nodeId && port === "in" && nodeId !== linkingFromId) {
-          addEdgeBetween(linkingFromId, nodeId);
+        if (!nodeId || nodeId === linkingFromId) {
+          cancelLinking();
+          return;
+        }
+        if (linkingFromSide === "out" && port === "in") {
+          connectOutToIn(linkingFromId, nodeId);
+        } else if (linkingFromSide === "in" && port === "out") {
+          connectOutToIn(nodeId, linkingFromId);
         }
       } else if (nodeEl) {
         const nodeId = nodeEl.getAttribute("data-node-id");
         if (nodeId && nodeId !== linkingFromId) {
-          addEdgeBetween(linkingFromId, nodeId);
+          if (linkingFromSide === "out") {
+            connectOutToIn(linkingFromId, nodeId);
+          } else {
+            connectOutToIn(nodeId, linkingFromId);
+          }
         }
       }
       cancelLinking();
     },
-    [addEdgeBetween, cancelLinking, linkingFromId, readOnly],
+    [addEdgeBetween, cancelLinking, linkingFromId, linkingFromSide, readOnly],
   );
 
   const handlePortPointerDown = useCallback(
@@ -634,13 +650,14 @@ function BlueprintEditorWorkspace({
       side: "out" | "in",
       e: React.PointerEvent<HTMLButtonElement>,
     ) => {
-      if (readOnly || side !== "out") return;
+      if (readOnly) return;
       e.stopPropagation();
       e.preventDefault();
       const node = nodes.find((n) => n.id === nodeId);
       if (!node) return;
-      const anchor = getNodeAnchor(node, "out");
+      const anchor = getNodeAnchor(node, side);
       setLinkingFromId(nodeId);
+      setLinkingFromSide(side);
       setLinkPointer(anchor);
       setSelectedId(null);
       setSelectedEdgeId(null);
@@ -757,6 +774,7 @@ function BlueprintEditorWorkspace({
     if (e.button !== 0) return;
     if ((e.target as HTMLElement).closest("[data-port]")) return;
     if ((e.target as HTMLElement).closest("[data-testid='blueprint-node']")) return;
+    if ((e.target as HTMLElement).closest(".blueprint-edge-hit, .blueprint-edge-handle")) return;
     if (linkingFromId) {
       cancelLinking();
       setLiveMessage("Link cancelled.");
@@ -1030,6 +1048,7 @@ function BlueprintEditorWorkspace({
                   name={activeDragTool.name}
                   logoUrl={activeDragTool.logo_url}
                   logoMonogram={activeDragTool.logo_monogram}
+                  status={activeDragTool.status}
                   size={32}
                 />
                 <span className="blueprint-node-tool-text">

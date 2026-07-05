@@ -6,6 +6,8 @@
   --color-primary: #1a1a1a;
   --color-secondary: #6b6b6b;
   --color-tertiary: #e76f00;
+  --color-accent: var(--color-tertiary);
+  --color-accent-text: var(--color-on-tertiary);
   --color-neutral-bg: #ffffff;
   --color-neutral-surface: #f5f5f0;
   --color-neutral-hover: #fafafa;
@@ -1089,12 +1091,19 @@
   min-width: 0;
 }
 
+.detail-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .search-typeahead-list {
   position: absolute;
   top: calc(100% + 4px);
   left: 0;
   right: 0;
-  z-index: 40;
+  z-index: 100;
   margin: 0;
   padding: 4px 0;
   list-style: none;

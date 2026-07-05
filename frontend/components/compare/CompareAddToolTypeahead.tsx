@@ -146,6 +146,7 @@ export function CompareAddToolTypeahead({
                   name={tool.name}
                   logoUrl={tool.logo_url}
                   logoMonogram={tool.logo_monogram}
+                  status={tool.status}
                   size={28}
                 />
                 <span className="compare-add-tool-option-text">

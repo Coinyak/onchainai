@@ -31,6 +31,7 @@ export function CompareInstallSections({ entries, slugs }: CompareInstallSection
                 name={tool.name}
                 logoUrl={tool.logo_url}
                 logoMonogram={tool.logo_monogram}
+                status={tool.status}
                 size={28}
               />
               <span className="compare-install-summary-text">

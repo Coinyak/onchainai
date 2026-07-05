@@ -35,6 +35,7 @@ export function RelatedToolsSection({ slug }: RelatedToolsSectionProps) {
               name={tool.name}
               logoUrl={tool.logo_url}
               logoMonogram={tool.logo_monogram}
+              status={tool.status}
               size={40}
             />
             <div className="related-tool-card-body">

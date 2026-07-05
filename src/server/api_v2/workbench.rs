@@ -116,11 +116,19 @@ async fn get_admin_tool_workbench(
 ) -> Result<Json<AdminToolWorkbenchView>, ApiError> {
     require_admin_from(&state, &headers).await?;
 
-    let tool = sqlx::query_as::<_, Tool>("SELECT * FROM tools WHERE slug = $1")
+    let tool = match sqlx::query_as::<_, Tool>("SELECT * FROM tools WHERE slug = $1")
         .bind(slug.trim())
         .fetch_one(&state.pool)
         .await
-        .map_err(|e| ApiError::Internal(format!("failed to load tool workbench: {e}")))?;
+    {
+        Ok(tool) => tool,
+        Err(sqlx::Error::RowNotFound) => {
+            return Err(ApiError::NotFound(format!("tool not found: {}", slug.trim())));
+        }
+        Err(e) => {
+            return Err(ApiError::Internal(format!("failed to load tool workbench: {e}")));
+        }
+    };
 
     let (trust, official_links) = compute_tool_trust(&state.pool, &tool)
         .await
