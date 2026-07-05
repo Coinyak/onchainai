@@ -199,8 +199,9 @@ export function ToolSearchCombobox({
       if (!root || root.contains(event.target as Node)) return;
       setTypeaheadDismissed(true);
       typeahead.closeDropdown();
-      if (document.activeElement === inputRef.current) {
-        inputRef.current.blur();
+      const input = inputRef.current;
+      if (input && document.activeElement === input) {
+        input.blur();
       }
     };
     document.addEventListener("pointerdown", onPointerDown);
