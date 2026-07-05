@@ -347,7 +347,7 @@ export function BlueprintNodeView({
         visible={railVisible}
         readOnly={readOnly}
         showChainsButton={availableChains.length > 0}
-        showStepButton={isSizable}
+        showStepButton={isSizable || node.kind === "chain"}
         hasStep={node.step != null}
         toolName={tool?.name}
         onOpenTool={node.kind === "tool" && tool && !toolMissing ? openTool : undefined}

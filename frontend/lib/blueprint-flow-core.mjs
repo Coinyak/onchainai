@@ -82,7 +82,13 @@ export function buildFlowSection(nodes, edges) {
   });
 
   for (const list of outEdges.values()) {
-    list.sort((a, b) => cmpStr(labelOf(flowEdges[a].to), labelOf(flowEdges[b].to)));
+    list.sort((a, b) => {
+      const byLabel = cmpStr(labelOf(flowEdges[a].to), labelOf(flowEdges[b].to));
+      if (byLabel !== 0) return byLabel;
+      const byTo = cmpStr(flowEdges[a].to, flowEdges[b].to);
+      if (byTo !== 0) return byTo;
+      return a - b;
+    });
   }
 
   const visited = new Array(flowEdges.length).fill(false);

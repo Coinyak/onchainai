@@ -120,11 +120,22 @@ export function BlueprintEdgesLayer({
         })}
       </svg>
 
-      {!readOnly && (
-        <div className="blueprint-edge-chrome-layer" data-testid="blueprint-edge-chrome">
-          {rendered.map(({ edge, x1, y1, x2, y2, midX, midY, selected }) => (
-            <Fragment key={edge.id}>
-              {edge.label && !selected && (
+      <div
+        className="blueprint-edge-chrome-layer"
+        data-testid="blueprint-edge-chrome"
+      >
+        {rendered.map(({ edge, x1, y1, x2, y2, midX, midY, selected }) => (
+          <Fragment key={edge.id}>
+            {edge.label && !selected &&
+              (readOnly ? (
+                <span
+                  className="blueprint-edge-label blueprint-edge-label-readonly"
+                  style={{ left: midX, top: midY }}
+                  title={edge.label}
+                >
+                  {edge.label}
+                </span>
+              ) : (
                 <button
                   type="button"
                   className="blueprint-edge-label"
@@ -137,42 +148,41 @@ export function BlueprintEdgesLayer({
                 >
                   {edge.label}
                 </button>
-              )}
-              {selected && (
-                <>
-                  <button
-                    type="button"
-                    className="blueprint-edge-delete"
-                    data-testid="blueprint-edge-delete"
-                    style={{ left: midX, top: midY }}
-                    aria-label="Delete link"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onDeleteEdge(edge.id);
-                    }}
-                  >
-                    <X size={13} aria-hidden="true" />
-                  </button>
-                  <span
-                    className="blueprint-edge-endpoint"
-                    data-testid="blueprint-edge-endpoint-from"
-                    style={{ left: x1, top: y1 }}
-                    onPointerDown={(e) => onEndpointPointerDown(edge.id, "from", e)}
-                    onClick={(e) => e.stopPropagation()}
-                  />
-                  <span
-                    className="blueprint-edge-endpoint"
-                    data-testid="blueprint-edge-endpoint-to"
-                    style={{ left: x2, top: y2 }}
-                    onPointerDown={(e) => onEndpointPointerDown(edge.id, "to", e)}
-                    onClick={(e) => e.stopPropagation()}
-                  />
-                </>
-              )}
-            </Fragment>
-          ))}
-        </div>
-      )}
+              ))}
+            {!readOnly && selected && (
+              <>
+                <button
+                  type="button"
+                  className="blueprint-edge-delete"
+                  data-testid="blueprint-edge-delete"
+                  style={{ left: midX, top: midY }}
+                  aria-label="Delete link"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDeleteEdge(edge.id);
+                  }}
+                >
+                  <X size={13} aria-hidden="true" />
+                </button>
+                <span
+                  className="blueprint-edge-endpoint"
+                  data-testid="blueprint-edge-endpoint-from"
+                  style={{ left: x1, top: y1 }}
+                  onPointerDown={(e) => onEndpointPointerDown(edge.id, "from", e)}
+                  onClick={(e) => e.stopPropagation()}
+                />
+                <span
+                  className="blueprint-edge-endpoint"
+                  data-testid="blueprint-edge-endpoint-to"
+                  style={{ left: x2, top: y2 }}
+                  onPointerDown={(e) => onEndpointPointerDown(edge.id, "to", e)}
+                  onClick={(e) => e.stopPropagation()}
+                />
+              </>
+            )}
+          </Fragment>
+        ))}
+      </div>
     </>
   );
 }

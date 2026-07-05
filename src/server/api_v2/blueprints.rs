@@ -807,11 +807,13 @@ fn build_flow_section(nodes: &[ExportNode], edges: &Value) -> String {
         out_edges.entry(edge.from.clone()).or_default().push(idx);
     }
 
-    // Deterministic output: sort each node's out-edges by their target label.
+    // Deterministic output: sort out-edges by target label, then id, then index.
     for indices in out_edges.values_mut() {
         indices.sort_by(|&a, &b| {
             flow_label_for(&node_map, &flow_edges[a].to)
                 .cmp(&flow_label_for(&node_map, &flow_edges[b].to))
+                .then_with(|| flow_edges[a].to.cmp(&flow_edges[b].to))
+                .then_with(|| a.cmp(&b))
         });
     }
 

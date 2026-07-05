@@ -216,7 +216,7 @@
 }
 
 .blueprint-edge-label-input {
-  min-height: 36px;
+  min-height: 44px;
   width: 120px;
   padding: 0 10px;
   border: 1px solid var(--color-border);
@@ -506,8 +506,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 22px;
-  height: 22px;
+  width: 44px;
+  height: 44px;
   padding: 0;
   border: 1px solid #fecdca;
   border-radius: 999px;
@@ -522,13 +522,28 @@
 }
 
 .blueprint-edge-endpoint {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border: 0;
+  background: transparent;
+  cursor: grab;
+}
+
+.blueprint-edge-endpoint::before {
+  content: "";
   width: 12px;
   height: 12px;
   border: 2px solid var(--color-tertiary);
   border-radius: 50%;
   background: var(--color-neutral-bg);
-  cursor: grab;
   box-shadow: 0 0 0 2px rgba(231, 111, 0, 0.15);
+}
+
+.blueprint-edge-label-readonly {
+  pointer-events: none;
 }
 
 .blueprint-edge-label {
@@ -912,15 +927,26 @@
 
 .blueprint-node-resize {
   position: absolute;
-  right: 2px;
-  bottom: 2px;
+  right: 0;
+  bottom: 0;
   z-index: 5;
+  width: 44px;
+  height: 44px;
+  border: 0;
+  background: transparent;
+  cursor: nwse-resize;
+  touch-action: none;
+}
+
+.blueprint-node-resize::after {
+  content: "";
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
   width: 12px;
   height: 12px;
   border-right: 2px solid var(--color-border-strong);
   border-bottom: 2px solid var(--color-border-strong);
-  cursor: nwse-resize;
-  touch-action: none;
 }
 
 .blueprint-node-ghost {
