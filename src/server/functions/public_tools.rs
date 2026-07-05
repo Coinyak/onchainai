@@ -306,14 +306,24 @@ pub(crate) fn append_tool_filters<'qb>(
 fn push_list_query_filter<'qb>(
     query: &mut sqlx::QueryBuilder<'qb, sqlx::Postgres>,
     search: Option<&'qb str>,
+    match_mode: crate::server::tool_search::ToolSearchMatch,
 ) {
-    if let Some(text) = search.filter(|q| !q.trim().is_empty()) {
-        query.push(
-            " AND to_tsvector('english', coalesce(name, '') || ' ' || coalesce(description, '')) \
-             @@ plainto_tsquery('english', ",
-        );
-        query.push_bind(text);
-        query.push(")");
+    let Some(text) = search.filter(|q| !q.trim().is_empty()) else {
+        return;
+    };
+    use crate::server::tool_search::{ToolSearchMatch, TOOL_SEARCH_VECTOR};
+    query.push(" AND ").push(TOOL_SEARCH_VECTOR).push(" @@ ");
+    match match_mode {
+        ToolSearchMatch::And => {
+            query.push("plainto_tsquery('english', ");
+            query.push_bind(text);
+            query.push(")");
+        }
+        ToolSearchMatch::Or => {
+            query.push("to_tsquery('english', replace(plainto_tsquery('english', ");
+            query.push_bind(text);
+            query.push(")::text, ' & ', ' | '))");
+        }
     }
 }
 
@@ -387,10 +397,28 @@ pub(crate) async fn fetch_list_tools(
     filters: &ToolFilters,
     query: Option<&str>,
 ) -> Result<Vec<Tool>, FnError> {
+    use crate::server::queries::{MCP_SEARCH_TOOLS_COUNT_OR_SQL, MCP_SEARCH_TOOLS_COUNT_SQL};
+    use crate::server::tool_search::{resolve_search_match, ToolSearchMatch};
+
     let offset = offset.max(0);
     let limit = clamp_list_tools_limit(limit);
+    let search_text = query.filter(|q| !q.trim().is_empty());
+    let match_mode = if let Some(text) = search_text {
+        resolve_search_match(
+            pool,
+            MCP_SEARCH_TOOLS_COUNT_SQL,
+            MCP_SEARCH_TOOLS_COUNT_OR_SQL,
+            text,
+            None,
+            None,
+        )
+        .await
+        .map_err(|e| FnError::new(format!("search match resolve failed: {e}")))?
+    } else {
+        ToolSearchMatch::And
+    };
     let mut q = sqlx::QueryBuilder::new(LIST_APPROVED_TOOLS_SQL);
-    push_list_query_filter(&mut q, query);
+    push_list_query_filter(&mut q, query, match_mode);
     append_tool_filters(&mut q, filters);
     push_list_order_offset_limit(&mut q, sort, offset, limit);
 
@@ -520,10 +548,10 @@ pub struct PublicDashboardSnapshot {
     pub chain_counts: Vec<DashboardBucket>,
     pub trust_counts: Vec<DashboardBucket>,
     pub pricing_counts: Vec<DashboardBucket>,
-    pub new_tools: Vec<Tool>,
-    pub popular_tools: Vec<Tool>,
-    pub x402_tools: Vec<Tool>,
-    pub high_trust_tools: Vec<Tool>,
+    pub new_tools: Vec<crate::models::tool::PublicToolSummary>,
+    pub popular_tools: Vec<crate::models::tool::PublicToolSummary>,
+    pub x402_tools: Vec<crate::models::tool::PublicToolSummary>,
+    pub high_trust_tools: Vec<crate::models::tool::PublicToolSummary>,
     pub as_of: chrono::DateTime<chrono::Utc>,
 }
 
@@ -764,6 +792,8 @@ pub(crate) async fn fetch_public_dashboard_snapshot(
         fetch_list_tools(pool, "hot", 0, limit, &high_trust_filters, None),
     );
 
+    use crate::models::tool::tools_to_public_summaries;
+
     Ok(PublicDashboardSnapshot {
         metrics: metrics?,
         type_counts: type_counts?,
@@ -774,10 +804,10 @@ pub(crate) async fn fetch_public_dashboard_snapshot(
             .collect(),
         trust_counts: trust_counts?,
         pricing_counts: pricing_counts?,
-        new_tools: new_tools?,
-        popular_tools: popular_tools?,
-        x402_tools: x402_tools?,
-        high_trust_tools: high_trust_tools?,
+        new_tools: tools_to_public_summaries(new_tools?),
+        popular_tools: tools_to_public_summaries(popular_tools?),
+        x402_tools: tools_to_public_summaries(x402_tools?),
+        high_trust_tools: tools_to_public_summaries(high_trust_tools?),
         as_of: chrono::Utc::now(),
     })
 }

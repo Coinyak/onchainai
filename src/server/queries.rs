@@ -67,13 +67,33 @@ pub const SEARCH_APPROVED_TOOLS_SQL: &str = concat!(
         WHERE "#,
     public_tool_where!(),
     r#"
-          AND (
-            to_tsvector('english', coalesce(name, '') || ' ' || coalesce(description, ''))
+          AND to_tsvector('english', coalesce(name, '') || ' ' || coalesce(description, ''))
             @@ plainto_tsquery('english', $1)
-          )
           AND ($2::text IS NULL OR function = $2)
           AND ($3::text IS NULL OR $3 = ANY(chains))
-        ORDER BY stars DESC, created_at DESC
+        ORDER BY ts_rank_cd(
+            to_tsvector('english', coalesce(name, '') || ' ' || coalesce(description, '')),
+            plainto_tsquery('english', $1)
+        ) DESC, stars DESC, created_at DESC
+        LIMIT 50
+    "#
+);
+
+pub const SEARCH_APPROVED_TOOLS_OR_SQL: &str = concat!(
+    r#"
+        SELECT *
+        FROM tools
+        WHERE "#,
+    public_tool_where!(),
+    r#"
+          AND to_tsvector('english', coalesce(name, '') || ' ' || coalesce(description, ''))
+            @@ to_tsquery('english', replace(plainto_tsquery('english', $1)::text, ' & ', ' | '))
+          AND ($2::text IS NULL OR function = $2)
+          AND ($3::text IS NULL OR $3 = ANY(chains))
+        ORDER BY ts_rank_cd(
+            to_tsvector('english', coalesce(name, '') || ' ' || coalesce(description, '')),
+            to_tsquery('english', replace(plainto_tsquery('english', $1)::text, ' & ', ' | '))
+        ) DESC, stars DESC, created_at DESC
         LIMIT 50
     "#
 );
@@ -86,6 +106,19 @@ pub const MCP_SEARCH_TOOLS_COUNT_SQL: &str = concat!(
     r#"
           AND to_tsvector('english', coalesce(name, '') || ' ' || coalesce(description, ''))
               @@ plainto_tsquery('english', $1)
+          AND ($2::text IS NULL OR function = $2)
+          AND ($3::text IS NULL OR $3 = ANY(chains))
+    "#
+);
+
+pub const MCP_SEARCH_TOOLS_COUNT_OR_SQL: &str = concat!(
+    r#"
+        SELECT COUNT(*)::bigint FROM tools
+        WHERE "#,
+    public_tool_where!(),
+    r#"
+          AND to_tsvector('english', coalesce(name, '') || ' ' || coalesce(description, ''))
+              @@ to_tsquery('english', replace(plainto_tsquery('english', $1)::text, ' & ', ' | '))
           AND ($2::text IS NULL OR function = $2)
           AND ($3::text IS NULL OR $3 = ANY(chains))
     "#
@@ -109,13 +142,31 @@ pub const MCP_SEARCH_TOOLS_RELEVANCE_SQL: &str = concat!(
     public_tool_where!(),
     r#"
           AND to_tsvector('english', coalesce(name, '') || ' ' || coalesce(description, ''))
-              @@ plainto_tsquery('english', $1)
+            @@ plainto_tsquery('english', $1)
           AND ($2::text IS NULL OR function = $2)
           AND ($3::text IS NULL OR $3 = ANY(chains))
         ORDER BY ts_rank_cd(
             to_tsvector('english', coalesce(name, '') || ' ' || coalesce(description, '')),
             plainto_tsquery('english', $1)
-        ) DESC, trust_score DESC, stars DESC, updated_at DESC
+        ) DESC, stars DESC, updated_at DESC
+        LIMIT $4 OFFSET $5
+    "#
+);
+
+pub const MCP_SEARCH_TOOLS_RELEVANCE_OR_SQL: &str = concat!(
+    r#"
+        SELECT * FROM tools
+        WHERE "#,
+    public_tool_where!(),
+    r#"
+          AND to_tsvector('english', coalesce(name, '') || ' ' || coalesce(description, ''))
+            @@ to_tsquery('english', replace(plainto_tsquery('english', $1)::text, ' & ', ' | '))
+          AND ($2::text IS NULL OR function = $2)
+          AND ($3::text IS NULL OR $3 = ANY(chains))
+        ORDER BY ts_rank_cd(
+            to_tsvector('english', coalesce(name, '') || ' ' || coalesce(description, '')),
+            to_tsquery('english', replace(plainto_tsquery('english', $1)::text, ' & ', ' | '))
+        ) DESC, stars DESC, updated_at DESC
         LIMIT $4 OFFSET $5
     "#
 );
@@ -130,7 +181,22 @@ pub const MCP_SEARCH_TOOLS_TRUST_SQL: &str = concat!(
               @@ plainto_tsquery('english', $1)
           AND ($2::text IS NULL OR function = $2)
           AND ($3::text IS NULL OR $3 = ANY(chains))
-        ORDER BY trust_score DESC, stars DESC, updated_at DESC
+        ORDER BY stars DESC, updated_at DESC
+        LIMIT $4 OFFSET $5
+    "#
+);
+
+pub const MCP_SEARCH_TOOLS_TRUST_OR_SQL: &str = concat!(
+    r#"
+        SELECT * FROM tools
+        WHERE "#,
+    public_tool_where!(),
+    r#"
+          AND to_tsvector('english', coalesce(name, '') || ' ' || coalesce(description, ''))
+              @@ to_tsquery('english', replace(plainto_tsquery('english', $1)::text, ' & ', ' | '))
+          AND ($2::text IS NULL OR function = $2)
+          AND ($3::text IS NULL OR $3 = ANY(chains))
+        ORDER BY stars DESC, updated_at DESC
         LIMIT $4 OFFSET $5
     "#
 );
@@ -145,7 +211,22 @@ pub const MCP_SEARCH_TOOLS_STARS_SQL: &str = concat!(
               @@ plainto_tsquery('english', $1)
           AND ($2::text IS NULL OR function = $2)
           AND ($3::text IS NULL OR $3 = ANY(chains))
-        ORDER BY stars DESC, trust_score DESC, updated_at DESC
+        ORDER BY stars DESC, updated_at DESC
+        LIMIT $4 OFFSET $5
+    "#
+);
+
+pub const MCP_SEARCH_TOOLS_STARS_OR_SQL: &str = concat!(
+    r#"
+        SELECT * FROM tools
+        WHERE "#,
+    public_tool_where!(),
+    r#"
+          AND to_tsvector('english', coalesce(name, '') || ' ' || coalesce(description, ''))
+              @@ to_tsquery('english', replace(plainto_tsquery('english', $1)::text, ' & ', ' | '))
+          AND ($2::text IS NULL OR function = $2)
+          AND ($3::text IS NULL OR $3 = ANY(chains))
+        ORDER BY stars DESC, updated_at DESC
         LIMIT $4 OFFSET $5
     "#
 );
@@ -158,6 +239,21 @@ pub const MCP_SEARCH_TOOLS_RECENT_SQL: &str = concat!(
     r#"
           AND to_tsvector('english', coalesce(name, '') || ' ' || coalesce(description, ''))
               @@ plainto_tsquery('english', $1)
+          AND ($2::text IS NULL OR function = $2)
+          AND ($3::text IS NULL OR $3 = ANY(chains))
+        ORDER BY updated_at DESC, stars DESC
+        LIMIT $4 OFFSET $5
+    "#
+);
+
+pub const MCP_SEARCH_TOOLS_RECENT_OR_SQL: &str = concat!(
+    r#"
+        SELECT * FROM tools
+        WHERE "#,
+    public_tool_where!(),
+    r#"
+          AND to_tsvector('english', coalesce(name, '') || ' ' || coalesce(description, ''))
+              @@ to_tsquery('english', replace(plainto_tsquery('english', $1)::text, ' & ', ' | '))
           AND ($2::text IS NULL OR function = $2)
           AND ($3::text IS NULL OR $3 = ANY(chains))
         ORDER BY updated_at DESC, stars DESC
