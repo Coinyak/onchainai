@@ -44,6 +44,7 @@ function PaletteToolItem({
         name={tool.name}
         logoUrl={tool.logo_url}
         logoMonogram={tool.logo_monogram}
+        status={tool.status}
         size={32}
       />
       <span className="blueprint-palette-item-text">

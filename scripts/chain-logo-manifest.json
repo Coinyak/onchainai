@@ -157,26 +157,30 @@
     {
       "id": "starknet",
       "label": "Starknet",
-      "kind": "public_svg",
-      "markers": ["#29296E"]
+      "kind": "wrap",
+      "source": "starknet_llama.jpg",
+      "markers": ["image", "data:image/jpeg"]
     },
     {
       "id": "aptos",
       "label": "Aptos",
-      "kind": "public_svg",
-      "markers": ["#2DD8A7"]
+      "kind": "wrap",
+      "source": "aptos_official.png",
+      "markers": ["image", "data:image/png"]
     },
     {
       "id": "near",
       "label": "NEAR",
-      "kind": "public_svg",
-      "markers": ["#00C08B"]
+      "kind": "wrap",
+      "source": "near_official.svg",
+      "markers": ["#00C08B", "path"]
     },
     {
       "id": "cosmos",
       "label": "Cosmos",
-      "kind": "public_svg",
-      "markers": ["#2E3148"]
+      "kind": "wrap",
+      "source": "cosmos_official.png",
+      "markers": ["image", "data:image/png"]
     },
     {
       "id": "celo",

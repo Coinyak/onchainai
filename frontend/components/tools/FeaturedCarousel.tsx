@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import type { FeaturedCard } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { isRenderableFeaturedImageUrl } from "@/lib/featured";
 
 interface FeaturedCarouselProps {
   cards: FeaturedCard[];
@@ -29,11 +30,6 @@ function prefersReducedMotion(): boolean {
   return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 }
 
-function hasRenderableImage(url: string | null | undefined): boolean {
-  const trimmed = url?.trim();
-  return Boolean(trimmed && (trimmed.startsWith("http://") || trimmed.startsWith("https://")));
-}
-
 function featuredEditHref(cards: FeaturedCard[], current: number): string {
   const card = cards[current];
   return card ? `/admin/featured?edit=${card.id}` : "/admin/featured";
@@ -48,7 +44,9 @@ function featuredAddHref(cards: FeaturedCard[], current: number): string {
 
 export function FeaturedCarousel({ cards }: FeaturedCarouselProps) {
   const { isAdmin } = useAuth();
-  const renderableCards = cards.filter((card) => hasRenderableImage(card.image_url));
+  const renderableCards = cards.filter((card) =>
+    isRenderableFeaturedImageUrl(card.image_url),
+  );
   const [active, setActive] = useState(0);
   const [paused, setPaused] = useState(false);
   const [brokenIds, setBrokenIds] = useState<Set<string>>(() => new Set());

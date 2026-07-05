@@ -65,7 +65,10 @@ pub struct X402ProbeDetails {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ProbeDetailsOutcome {
     Live(X402ProbeDetails),
-    NotPaymentRequired,
+    NotPaymentRequired {
+        status: u16,
+        body_snippet: Option<String>,
+    },
     SsrfBlocked(String),
     RequestFailed(String),
     ParseFailed,
@@ -197,6 +200,23 @@ fn truncate_body(body: &str) -> &str {
     &body[..end]
 }
 
+const PROBE_BODY_SNIPPET_MAX: usize = 200;
+
+fn probe_body_snippet(body: &str) -> Option<String> {
+    let trimmed = body.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    if trimmed.len() <= PROBE_BODY_SNIPPET_MAX {
+        return Some(trimmed.to_string());
+    }
+    let mut end = PROBE_BODY_SNIPPET_MAX;
+    while end > 0 && !trimmed.is_char_boundary(end) {
+        end -= 1;
+    }
+    Some(format!("{}…", &trimmed[..end]))
+}
+
 fn parse_first_payment_accept(body: &str) -> Option<X402ProbeDetails> {
     let trimmed = truncate_body(body.trim());
     if trimmed.is_empty() {
@@ -310,7 +330,10 @@ pub async fn probe_x402_details(url_str: &str) -> ProbeDetailsOutcome {
 
 pub fn classify_probe_details(status: StatusCode, body: &str) -> ProbeDetailsOutcome {
     if status != StatusCode::PAYMENT_REQUIRED {
-        return ProbeDetailsOutcome::NotPaymentRequired;
+        return ProbeDetailsOutcome::NotPaymentRequired {
+            status: status.as_u16(),
+            body_snippet: probe_body_snippet(body),
+        };
     }
     match parse_first_payment_accept(body) {
         Some(details) => ProbeDetailsOutcome::Live(details),
@@ -584,6 +607,26 @@ mod tests {
     fn classify_probe_response_rejects_non_402() {
         let outcome = classify_probe_response(StatusCode::OK, "ok");
         assert_eq!(outcome, ProbeOutcome::NotPaymentRequired);
+    }
+
+    #[test]
+    fn classify_probe_details_carries_http_status_and_body_snippet() {
+        let outcome = classify_probe_details(StatusCode::NOT_FOUND, "endpoint missing");
+        assert_eq!(
+            outcome,
+            ProbeDetailsOutcome::NotPaymentRequired {
+                status: 404,
+                body_snippet: Some("endpoint missing".into()),
+            }
+        );
+    }
+
+    #[test]
+    fn probe_body_snippet_truncates_long_bodies() {
+        let body = "x".repeat(300);
+        let snippet = probe_body_snippet(&body).expect("snippet");
+        assert!(snippet.len() <= PROBE_BODY_SNIPPET_MAX + 3);
+        assert!(snippet.ends_with('…'));
     }
 
     #[tokio::test]

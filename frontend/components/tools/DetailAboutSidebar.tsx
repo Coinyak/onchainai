@@ -95,6 +95,13 @@ export function DetailAboutSidebar({ tool }: DetailAboutSidebarProps) {
                 {riskLabel(tool.install_risk_level)}
               </span>
             )}
+            {tool.install_risk_reasons.length > 0 && (
+              <ul className="detail-risk-reasons mt-2 list-disc pl-5 text-body-sm text-secondary">
+                {tool.install_risk_reasons.map((reason) => (
+                  <li key={reason}>{reason}</li>
+                ))}
+              </ul>
+            )}
           </dd>
         </div>
       </dl>

@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { SiteShell } from "@/components/layout/SiteShell";
 
 export default function OnboardingProfilePage() {
@@ -49,11 +48,15 @@ export default function OnboardingProfilePage() {
             </button>
           </div>
         </form>
-        <p className="mt-6">
-          <Link href="/" className="text-tertiary">
+        <form className="mt-6" method="post" action={skipAction}>
+          <input type="hidden" name="next" value="/" />
+          <button
+            type="submit"
+            className="text-tertiary underline bg-transparent border-0 p-0 cursor-pointer font-inherit text-body-md"
+          >
             Back to home
-          </Link>
-        </p>
+          </button>
+        </form>
       </div>
     </SiteShell>
   );

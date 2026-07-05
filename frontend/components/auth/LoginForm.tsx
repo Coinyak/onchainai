@@ -1,13 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { clientApiBase, githubSignInHref, githubSwitchHref, googleSignInHref, isVercelPreviewHost, productionLoginHref } from "@/lib/auth-origin";
-import { useAuth } from "@/lib/auth";
-import { getAuthProviders } from "@/lib/api";
+import {
+  clientApiBase,
+  githubSignInHref,
+  githubSwitchHref,
+  isVercelPreviewHost,
+  productionLoginHref,
+} from "@/lib/auth-origin";
 import { hardNavigateAfterAuth } from "@/lib/auth-nav";
 import { GitHubMarkIcon } from "@/components/icons/GitHubMarkIcon";
-import { GoogleMarkIcon } from "@/components/icons/GoogleMarkIcon";
 import { connectWalletSiwx, SiwxError } from "@/lib/siwx";
 import { consumeReturnTo } from "@/lib/return-to";
 
@@ -26,21 +28,13 @@ export function LoginForm({
   authError = null,
   signedOut = false,
 }: LoginFormProps) {
-  const { data: providers } = useQuery({
-    queryKey: ["auth-providers"],
-    queryFn: getAuthProviders,
-    staleTime: 5 * 60 * 1000,
-  });
-  const [email, setEmail] = useState("");
-  const [emailMsg, setEmailMsg] = useState<string | null>(null);
-  const [emailBusy, setEmailBusy] = useState(false);
   const [walletBusy, setWalletBusy] = useState(false);
   const [walletMsg, setWalletMsg] = useState<string | null>(null);
 
   const apiBase = clientApiBase();
   const githubHref = githubSignInHref();
   const githubSwitchAction = githubSwitchHref();
-  const googleHref = googleSignInHref();
+
   const previewHost =
     typeof window !== "undefined" && isVercelPreviewHost(window.location.hostname);
 
@@ -51,30 +45,6 @@ export function LoginForm({
     ? "text-body-md text-secondary mb-6"
     : "text-body-md text-secondary mb-8";
 
-  async function sendMagicLink(e: React.FormEvent) {
-    e.preventDefault();
-    if (!email.trim()) return;
-    setEmailBusy(true);
-    setEmailMsg("Sending magic link...");
-    try {
-      const res = await fetch(`${apiBase}/auth/email`, {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: email.trim() }),
-      });
-      setEmailMsg(
-        res.ok
-          ? "Check your email for the sign-in link."
-          : "Could not send magic link. Try again.",
-      );
-    } catch {
-      setEmailMsg("Could not send magic link. Try again.");
-    } finally {
-      setEmailBusy(false);
-    }
-  }
-
   async function handleWalletSignIn() {
     setWalletBusy(true);
     setWalletMsg(null);
@@ -82,7 +52,6 @@ export function LoginForm({
       const { redirect } = await connectWalletSiwx(apiBase);
       const returnTo = consumeReturnTo();
       const target = returnTo || redirect;
-      // Hard-navigate so Set-Cookie from verify is visible to the next page load.
       hardNavigateAfterAuth(target);
     } catch (err) {
       const message =
@@ -118,9 +87,8 @@ export function LoginForm({
           role="status"
           data-testid="signed-out-notice"
         >
-          You are signed out of OnchainAI. If &quot;Continue with GitHub&quot; signs you back in
-          immediately, GitHub still has an active session — use{" "}
-          <strong>Sign out of GitHub</strong> below first, then sign in again.
+          You are signed out of OnchainAI. To use a different GitHub account, sign out of GitHub
+          from your profile menu (github.com → avatar → Sign out), then continue with GitHub below.
         </p>
       )}
       {previewHost && (
@@ -134,8 +102,8 @@ export function LoginForm({
           <a href={productionLoginHref()} className="text-primary underline hover:no-underline">
             www.onchain-ai.xyz
           </a>{" "}
-          or local dev (<code className="text-body-sm">localhost:3000</code>). Use wallet or email
-          sign-in below to stay authenticated on this preview deployment.
+          or local dev (<code className="text-body-sm">localhost:3000</code>). Use wallet sign-in
+          below to stay authenticated on this preview deployment.
         </p>
       )}
       <a
@@ -147,58 +115,19 @@ export function LoginForm({
         <GitHubMarkIcon size={18} className="shrink-0" />
         Continue with GitHub
       </a>
-      <div className="mt-2 text-center text-body-sm text-secondary">
-        Use a different GitHub account?{" "}
-        <form action={githubSwitchAction} method="post" className="inline">
-          <button
-            type="submit"
-            data-testid="github-switch-account"
-            className="text-primary underline hover:no-underline bg-transparent border-0 p-0 cursor-pointer font-inherit text-body-sm"
-          >
-            Sign out of GitHub
-          </button>
-        </form>
-        , then return here and continue with GitHub.
-      </div>
-      {providers?.google ? (
-        <a
-          href={googleHref}
-          rel="external"
-          data-testid="google-sign-in"
-          className="mt-3 flex items-center justify-center gap-2 w-full min-h-touch px-4 py-2.5 rounded-md border border-border-strong bg-neutral-bg text-body-md font-medium hover:bg-neutral-hover no-underline text-primary"
-        >
-          <GoogleMarkIcon size={18} className="shrink-0" />
-          Continue with Google
-        </a>
-      ) : (
-        <p
-          className="mt-3 rounded-md border border-border bg-neutral-hover px-4 py-3 text-body-sm text-secondary"
-          data-testid="google-sign-in-unavailable"
-        >
-          Google sign-in is not configured on this deployment yet. Use GitHub, wallet, or email.
-        </p>
-      )}
-      <form className="mt-3 flex gap-2" onSubmit={sendMagicLink}>
-        <input
-          type="email"
-          placeholder="you@example.com"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          className="flex-1 min-h-touch px-4 rounded-md border border-border bg-neutral-bg text-body-md focus:border-tertiary outline-none"
-          disabled={emailBusy}
-        />
-        <button
-          type="submit"
-          disabled={emailBusy || !email.trim()}
-          className="min-h-touch px-4 rounded-md border border-border-strong bg-neutral-bg text-body-md hover:bg-neutral-hover disabled:opacity-60"
-        >
-          Email
-        </button>
-      </form>
-      {emailMsg && (
-        <p className="mt-2 text-body-sm text-secondary" role="status">
-          {emailMsg}
-        </p>
+      {signedOut && (
+        <div className="mt-2 text-center text-body-sm text-secondary">
+          Clear your OnchainAI session:{" "}
+          <form action={githubSwitchAction} method="post" className="inline">
+            <button
+              type="submit"
+              data-testid="github-switch-account"
+              className="text-primary underline hover:no-underline bg-transparent border-0 p-0 cursor-pointer font-inherit text-body-sm"
+            >
+              Sign out locally
+            </button>
+          </form>
+        </div>
       )}
       <div className="mt-3">
         <button
@@ -208,7 +137,7 @@ export function LoginForm({
           onClick={() => void handleWalletSignIn()}
           className="flex items-center justify-center w-full min-h-touch px-4 py-2.5 rounded-md border border-border text-body-md font-medium hover:bg-neutral-hover disabled:opacity-60 text-primary"
         >
-          {walletBusy ? "Connecting wallet..." : "Connect Wallet (SIWX)"}
+          {walletBusy ? "Connecting wallet..." : "Connect Wallet"}
         </button>
       </div>
       {walletMsg && (

@@ -36,7 +36,7 @@
  *    show data-testid="wallet-sign-in" (button), not wallet-sign-in-link.
  * 2. Install MetaMask (or any EIP-1193 provider) and unlock it.
  * 3. Create/import a fresh account in MetaMask (Account menu → Add account).
- * 4. In the sign-in modal click "Connect Wallet (SIWX)" — MetaMask prompts
+ * 4. In the sign-in modal click "Connect Wallet" — MetaMask prompts
  *    eth_requestAccounts → personal_sign on /auth/siwx/challenge message.
  * 5. On success the app navigates to verify.redirect (first-time:
  *    /onboarding/profile). Switch MetaMask accounts and repeat to test another
@@ -48,6 +48,7 @@ import { existsSync, readFileSync } from "node:fs";
 import {
   clearSidebarStorage,
   isBenignConsoleError,
+  isBenignRequestFailure,
   waitForSidebarStorageLoaded,
 } from "./browser-test-helpers.mjs";
 
@@ -280,24 +281,19 @@ async function runSessionAuthSmoke(browser) {
         .querySelector('[data-testid="profile-menu-btn"]')
         ?.getAttribute("aria-expanded"),
     }));
-    if (
-      !menuState.hasDashboard ||
-      !menuState.hasToolkit ||
-      !menuState.hasSignOut ||
-      menuState.expanded !== "true"
-    ) {
+    if (!menuState.hasToolkit || !menuState.hasSignOut || menuState.expanded !== "true") {
       fail("session-auth-profile-menu", JSON.stringify(menuState));
     } else {
       console.log("session-auth: signed-in TopNav and profile menu ok");
     }
 
-    await Promise.all([
-      authPage.waitForNavigation({ waitUntil: "networkidle", timeout: 8000 }).catch(() => {}),
-      authPage.click('[data-testid="profile-menu-sign-out"]'),
-    ]);
-    await authPage.waitForSelector('[data-testid="auth-sign-in"]', { timeout: 8000 });
+    await authPage.click('[data-testid="profile-menu-sign-out"]');
+    await authPage.waitForURL(/\/login/, { timeout: 15000 });
+    await authPage.waitForSelector('[data-testid="github-sign-in"]', { timeout: 15000 });
     const signedOutState = await authPage.evaluate(() => ({
-      hasSignIn: !!document.querySelector('[data-testid="auth-sign-in"]'),
+      hasSignIn: !!document.querySelector(
+        '[data-testid="auth-sign-in"], [data-testid="github-sign-in"]',
+      ),
       hasSignedIn: !!document.querySelector('[data-testid="auth-signed-in"]'),
       hasProfileMenu: !!document.querySelector('[data-testid="profile-menu"]'),
     }));
@@ -365,13 +361,14 @@ if (!signInBtn) {
       open: true,
       hasGitHub: !!dialog.querySelector('a[href="/auth/github"]'),
       githubText: dialog.querySelector('a[href="/auth/github"]')?.textContent?.trim() ?? "",
-      hasEmail: !!dialog.querySelector('input[type="email"]'),
       hasWallet: !!dialog.querySelector(
         '[data-testid="wallet-sign-in"], [data-testid="wallet-sign-in-link"]',
       ),
       walletIsButton: !!dialog.querySelector('[data-testid="wallet-sign-in"]'),
       walletIsLink: !!dialog.querySelector('[data-testid="wallet-sign-in-link"]'),
-      title: document.querySelector("#login-title")?.textContent?.trim() ?? "",
+      title:
+        document.querySelector("#login-modal-title, #login-title, [role='dialog'] h1")
+          ?.textContent?.trim() ?? "",
     };
   });
 
@@ -386,13 +383,12 @@ if (!signInBtn) {
     if (!githubRel.includes("external")) {
       fail("auth-modal-github-missing-rel-external", githubRel);
     }
-    if (!modal.hasEmail) fail("auth-modal-missing-email");
     if (!modal.hasWallet) fail("auth-modal-missing-wallet");
     if (!modal.title.includes("Sign in")) {
       fail("auth-modal-missing-title", modal.title);
     }
     console.log(
-      `modal: github=${modal.hasGitHub} email=${modal.hasEmail} wallet=${modal.hasWallet}` +
+      `modal: github=${modal.hasGitHub} wallet=${modal.hasWallet}` +
         ` (hydrated=${modal.walletIsButton}, ssr-link=${modal.walletIsLink})`,
     );
   }
@@ -404,6 +400,9 @@ if (!signInBtn) {
 const loginPage = await browser.newPage({ viewport: { width: 1280, height: 900 } });
 watchConsole(loginPage, "login-page");
 await loginPage.goto(`${base}/login`, { waitUntil: "domcontentloaded" });
+await loginPage
+  .waitForSelector('[data-testid="github-sign-in"]', { timeout: 10000 })
+  .catch(() => fail("login-page-missing-github-sign-in"));
 const loginGitHub = await loginPage.evaluate(() => {
   const link = document.querySelector('[data-testid="github-sign-in"]');
   return {

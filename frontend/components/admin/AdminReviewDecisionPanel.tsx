@@ -2,10 +2,11 @@
 
 import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { reviewTool } from "@/lib/api";
+import { reviewTool, type Tool } from "@/lib/api";
 
 interface AdminReviewDecisionPanelProps {
   slug: string;
+  tool?: Tool;
   onReviewed?: () => void;
 }
 
@@ -17,7 +18,82 @@ const ACTIONS = [
   { id: "demote_verified", label: "Demote verified" },
 ];
 
-export function AdminReviewDecisionPanel({ slug, onReviewed }: AdminReviewDecisionPanelProps) {
+function safeHttpsUrl(url: string | null | undefined): string | null {
+  const trimmed = url?.trim();
+  if (!trimmed) return null;
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.protocol !== "https:") return null;
+    return parsed.href;
+  } catch {
+    return null;
+  }
+}
+
+function ToolContext({ tool }: { tool: Tool }) {
+  const repoUrl = safeHttpsUrl(tool.repo_url);
+  const homepageUrl = safeHttpsUrl(tool.homepage);
+
+  return (
+    <div className="admin-review-context mb-4 space-y-3 text-body-sm">
+      {tool.description?.trim() && (
+        <div>
+          <p className="text-secondary mb-1">Description</p>
+          <p className="whitespace-pre-wrap">{tool.description.trim()}</p>
+        </div>
+      )}
+      {(repoUrl || homepageUrl) && (
+        <div>
+          <p className="text-secondary mb-1">Links</p>
+          <ul className="space-y-1">
+            {repoUrl && (
+              <li>
+                <a href={repoUrl} className="text-tertiary underline-offset-2 hover:underline" target="_blank" rel="noopener noreferrer">
+                  Repository
+                </a>
+              </li>
+            )}
+            {homepageUrl && (
+              <li>
+                <a href={homepageUrl} className="text-tertiary underline-offset-2 hover:underline" target="_blank" rel="noopener noreferrer">
+                  Homepage
+                </a>
+              </li>
+            )}
+          </ul>
+        </div>
+      )}
+      <div>
+        <p className="text-secondary mb-1">Crypto relevance</p>
+        <p>
+          Score {tool.crypto_relevance_score} · status {tool.relevance_status}
+        </p>
+        {tool.crypto_relevance_reasons.length > 0 && (
+          <ul className="mt-1 list-disc pl-5 text-secondary">
+            {tool.crypto_relevance_reasons.map((reason) => (
+              <li key={reason}>{reason}</li>
+            ))}
+          </ul>
+        )}
+      </div>
+      <div>
+        <p className="text-secondary mb-1">Install risk</p>
+        <p>
+          Level {tool.install_risk_level}
+        </p>
+        {tool.install_risk_reasons.length > 0 && (
+          <ul className="mt-1 list-disc pl-5 text-secondary">
+            {tool.install_risk_reasons.map((reason) => (
+              <li key={reason}>{reason}</li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export function AdminReviewDecisionPanel({ slug, tool, onReviewed }: AdminReviewDecisionPanelProps) {
   const [reason, setReason] = useState("");
   const [error, setError] = useState<string | null>(null);
 
@@ -34,6 +110,7 @@ export function AdminReviewDecisionPanel({ slug, onReviewed }: AdminReviewDecisi
   return (
     <section className="admin-review-panel">
       <h3 className="text-h3 mb-3">Review decision</h3>
+      {tool && <ToolContext tool={tool} />}
       <label className="block text-body-sm text-secondary mb-2">Reason / notes</label>
       <textarea
         className="w-full min-h-[80px] p-3 rounded-md border border-border mb-3"

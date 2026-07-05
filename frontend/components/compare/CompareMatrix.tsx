@@ -93,6 +93,7 @@ export function CompareMatrix({ tools, onRemove, onAdd }: CompareMatrixProps) {
                       name={tool.name}
                       logoUrl={tool.logo_url}
                       logoMonogram={tool.logo_monogram}
+                      status={tool.status}
                       size={36}
                     />
                     <div>

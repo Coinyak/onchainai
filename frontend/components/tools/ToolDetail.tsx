@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/Badge";
 import { InstallSection } from "@/components/tools/InstallSection";
 import { InstallGuidePanel } from "@/components/tools/InstallGuidePanel";
 import { AddMcpAction } from "@/components/tools/AddMcpAction";
+import { ToolDetailBookmark } from "@/components/tools/ToolDetailBookmark";
 import { TrustFacts } from "@/components/tools/TrustFacts";
 import { DetailFilterChip } from "@/components/tools/DetailFilterChip";
 import { DetailAboutSidebar } from "@/components/tools/DetailAboutSidebar";
@@ -171,6 +172,7 @@ export function ToolDetail({
           name={tool.name}
           logoUrl={tool.logo_url}
           logoMonogram={tool.logo_monogram}
+          status={tool.status}
           size={compact ? 48 : 64}
         />
         <div className="tool-detail-heading detail-header-text">
@@ -178,13 +180,16 @@ export function ToolDetail({
             <h1 className={compact ? "text-h2 detail-title" : "text-h1 detail-title"}>
               {tool.name}
             </h1>
-            {!addMode && addMcpQueryBase && (
-              <AddMcpAction
-                tool={tool}
-                hrefSource={{ kind: "query_base", base: addMcpQueryBase }}
-                variant="detail_primary"
-              />
-            )}
+            <div className="detail-header-actions">
+              {!addMode && !compact && <ToolDetailBookmark tool={tool} />}
+              {!addMode && addMcpQueryBase && (
+                <AddMcpAction
+                  tool={tool}
+                  hrefSource={{ kind: "query_base", base: addMcpQueryBase }}
+                  variant="detail_primary"
+                />
+              )}
+            </div>
           </div>
           <div className="tool-detail-badges tool-badges">
             {!(tool.official_team && tool.status === "official") && (

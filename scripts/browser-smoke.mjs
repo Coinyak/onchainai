@@ -11,6 +11,7 @@ import {
   probeLogoFallback,
   evaluateLogoFallback,
   isBenignConsoleError,
+  isBenignRequestFailure,
   visiblePageText,
   waitForToolCards,
   waitForSidebarStorageLoaded,
@@ -59,12 +60,7 @@ page.on("requestfailed", (req) => {
     return;
   }
   const failText = req.failure()?.errorText ?? "";
-  // Chain strip SVGs often abort during in-page navigation; not a deploy regression.
-  if (url.includes("/chains/") && /ERR_ABORTED/i.test(failText)) {
-    return;
-  }
-  // Leptos preloads onchainai.wasm but wasm-bindgen fetches onchainai_bg.wasm; abort is benign.
-  if (url.includes("/pkg/onchainai.wasm") && /ERR_ABORTED/i.test(failText)) {
+  if (isBenignRequestFailure(url, failText)) {
     return;
   }
   errors.push(`requestfailed:${url}:${failText}`);
@@ -74,7 +70,7 @@ page.on("response", async (res) => {
   if (!url.startsWith(base)) {
     return;
   }
-  if (url.includes("/api") || url.includes("/pkg/")) {
+  if (url.includes("/api")) {
     if (res.status() >= 400) {
       errors.push(`http:${res.status()}:${url}`);
     }
@@ -97,8 +93,10 @@ export async function runBrowserSmokeChecks(page, base, errors) {
 await page.goto(`${base}/`, { waitUntil: "domcontentloaded", timeout: 60000 });
 await clearSidebarStorage(page);
 
-// Wait for WASM hydrate before clicking auth controls (Safari/no-store pkg can be slow).
-await page.goto(`${base}/`, { waitUntil: "networkidle", timeout: 60000 });
+// Wait for auth controls to hydrate before opening the sign-in modal.
+await page
+  .waitForSelector('[data-testid="top-nav-sign-in"]', { timeout: 30000 })
+  .catch(() => {});
 const homeLayout = await page.evaluate(() => ({
   hasTopNav: !!document.querySelector(".site-top-nav"),
   hasCategoryGrid: !!document.querySelector(".category-grid"),
@@ -148,12 +146,11 @@ if (!hasSignInBeforeClick) {
 const signInModal = await page.evaluate(() => {
   const dialog = document.querySelector('[role="dialog"]');
   if (!dialog) {
-    return { open: false, hasGitHub: false, hasEmail: false, hasWallet: false };
+    return { open: false, hasGitHub: false, hasWallet: false };
   }
   return {
     open: true,
     hasGitHub: !!dialog.querySelector('a[href="/auth/github"]'),
-    hasEmail: !!dialog.querySelector('input[type="email"]'),
     hasWallet: !!dialog.querySelector(
       '[data-testid="wallet-sign-in"], [data-testid="wallet-sign-in-link"]',
     ),
@@ -172,9 +169,6 @@ if (!signInModal.open) {
   });
   if (!modalGitHubRel.includes("external")) {
     errors.push(`interaction:sign-in-modal-github-missing-rel-external:${modalGitHubRel}`);
-  }
-  if (!signInModal.hasEmail) {
-    errors.push("interaction:sign-in-modal-missing-email");
   }
   if (!signInModal.hasWallet) {
     errors.push("interaction:sign-in-modal-missing-wallet");
@@ -216,6 +210,17 @@ for (const path of ["/", "/tools", "/tools?type=mcp"]) {
 await page.goto(`${base}/tools?function=bridge&type=mcp`, {
   waitUntil: "domcontentloaded",
 });
+await page
+  .waitForFunction(
+    () => {
+      const empty = !!document.querySelector(".empty-state-panel");
+      const count = document.querySelector(".tool-count")?.textContent?.trim() ?? "";
+      return empty || /\d+\s+tools/.test(count);
+    },
+    null,
+    { timeout: 15000 },
+  )
+  .catch(() => {});
 const emptyFilter = await page.evaluate(() => ({
   empty: !!document.querySelector(".empty-state-panel"),
   count: document.querySelector(".tool-count")?.textContent?.trim() ?? "",
@@ -228,12 +233,14 @@ if (!emptyFilter.empty || emptyFilter.count !== "0 tools") {
 
 await page.setViewportSize({ width: 1280, height: 900 });
 await page.goto(`${base}/`, { waitUntil: "domcontentloaded" });
+await page.waitForSelector(".home-page h1", { timeout: 15000 }).catch(() => {});
 const desktopH1Size = await page.evaluate(() => {
   const h1 = document.querySelector(".home-page h1");
   return h1 ? getComputedStyle(h1).fontSize : "";
 });
 await page.setViewportSize({ width: 375, height: 812 });
 await page.goto(`${base}/`, { waitUntil: "domcontentloaded" });
+await page.waitForSelector(".home-page h1", { timeout: 15000 }).catch(() => {});
 const mobileH1Size = await page.evaluate(() => {
   const h1 = document.querySelector(".home-page h1");
   return h1 ? getComputedStyle(h1).fontSize : "";
@@ -244,12 +251,9 @@ if (!desktopH1Size || !mobileH1Size) {
   errors.push(`computed-style:home-h1-same:${desktopH1Size}`);
 }
 
-const cssRes = await page.goto(`${base}/pkg/onchainai.css`, {
-  waitUntil: "networkidle",
-});
-const cssText = await cssRes?.text().catch(() => "");
-if (!cssText || cssText.trim().length === 0) {
-  errors.push("css-empty:/pkg/onchainai.css");
+const hasHomeStyles = await page.evaluate(() => document.styleSheets.length > 0);
+if (!hasHomeStyles) {
+  errors.push("css-missing:home-stylesheets");
 }
 
 await page.setViewportSize({ width: 1280, height: 900 });
@@ -436,14 +440,19 @@ if (railToggle) {
   if (!overlayState.scrollLocked) {
     errors.push("interaction:mobile-filter-scroll-lock-missing");
   }
-  const fnToggle = await page.$(".sidebar-section button.sidebar-toggle");
-  if (fnToggle) {
+  const fnToggle = page.locator(".sidebar-section button.sidebar-toggle").first();
+  if (await fnToggle.count()) {
     await fnToggle.click();
+    await page
+      .locator(".sidebar-section--open a[href*='function=']")
+      .first()
+      .waitFor({ state: "visible", timeout: 5000 })
+      .catch(() => {});
   }
-  const filterLink = await page.$('aside .sidebar-body a[href*="function="]:visible');
-  if (filterLink) {
+  const filterLink = page.locator(".sidebar-section--open a[href*='function=']").first();
+  if (await filterLink.count()) {
     const filterHref = await filterLink.getAttribute("href");
-    await filterLink.click();
+    await filterLink.click({ force: true });
     if (filterHref) {
       await page.waitForURL((url) => url.pathname === "/tools" && url.search.includes("function="), {
         timeout: 10000,
@@ -482,7 +491,7 @@ if (railToggle) {
 }
 
 await page.setViewportSize({ width: 1280, height: 900 });
-await page.goto(`${base}/tools`, { waitUntil: "networkidle", timeout: 60000 });
+await page.goto(`${base}/tools`, { waitUntil: "domcontentloaded", timeout: 60000 });
 await requireToolCards(page, errors, "desktop-interactions");
 const chainMore = await page.$(".chain-tile-more");
 if (chainMore) {

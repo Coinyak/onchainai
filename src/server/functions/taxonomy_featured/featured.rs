@@ -163,8 +163,12 @@ pub(crate) fn validate_featured_card_input(
     headline: Option<&str>,
     subtitle: Option<&str>,
 ) -> Result<(), &'static str> {
-    if image_url.trim().is_empty() {
+    let trimmed = image_url.trim();
+    if trimmed.is_empty() {
         return Err("image URL is required");
+    }
+    if !trimmed.starts_with("http://") && !trimmed.starts_with("https://") {
+        return Err("image URL must start with http:// or https://");
     }
     if let Some(h) = headline {
         if h.chars().count() > 120 {

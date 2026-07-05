@@ -24,7 +24,7 @@ export function AdminToolCardActions({
   onStatusChange,
 }: AdminToolCardActionsProps) {
   const [error, setError] = useState<string | null>(null);
-  const reviewHref = `/admin/tools?slug=${encodeURIComponent(slug)}`;
+  const reviewHref = `/admin/tools?slug=${encodeURIComponent(slug)}&lookup=1`;
 
   const verifyMut = useMutation({
     mutationFn: () =>

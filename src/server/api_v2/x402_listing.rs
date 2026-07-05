@@ -41,6 +41,7 @@ struct ProbeResponse {
     status: &'static str,
     details: Option<X402ProbeDetails>,
     reason: Option<String>,
+    http_status: Option<u16>,
 }
 
 fn probe_response(outcome: ProbeDetailsOutcome) -> ProbeResponse {
@@ -50,30 +51,37 @@ fn probe_response(outcome: ProbeDetailsOutcome) -> ProbeResponse {
             status: "live",
             details: Some(details),
             reason: None,
+            http_status: Some(402),
         },
-        ProbeDetailsOutcome::NotPaymentRequired => ProbeResponse {
+        ProbeDetailsOutcome::NotPaymentRequired { status, .. } => ProbeResponse {
             live: false,
             status: "not_payment_required",
             details: None,
-            reason: Some("endpoint did not return a valid 402 Payment Required response".into()),
+            reason: Some(format!(
+                "endpoint returned HTTP {status}, expected 402 Payment Required"
+            )),
+            http_status: Some(status),
         },
         ProbeDetailsOutcome::ParseFailed => ProbeResponse {
             live: false,
             status: "parse_failed",
             details: None,
             reason: Some("402 response did not include parseable x402 payment requirements".into()),
+            http_status: Some(402),
         },
         ProbeDetailsOutcome::SsrfBlocked(reason) => ProbeResponse {
             live: false,
             status: "blocked",
             details: None,
             reason: Some(reason),
+            http_status: None,
         },
         ProbeDetailsOutcome::RequestFailed(reason) => ProbeResponse {
             live: false,
             status: "request_failed",
             details: None,
             reason: Some(reason),
+            http_status: None,
         },
     }
 }
@@ -91,6 +99,7 @@ async fn record_probe_history(
     tool_id: Option<Uuid>,
     endpoint_url: &str,
     status: &str,
+    http_status: Option<u16>,
     actual_price: Option<&str>,
     latency_ms: i32,
 ) {
@@ -103,7 +112,7 @@ async fn record_probe_history(
     .bind(tool_id)
     .bind(endpoint_url)
     .bind(status)
-    .bind(if status == "live" { Some(402) } else { None })
+    .bind(http_status.map(i32::from))
     .bind(actual_price)
     .bind(latency_ms)
     .execute(pool)
@@ -137,6 +146,7 @@ async fn probe_endpoint(
         None,
         &url,
         probe_history_status(&response),
+        response.http_status,
         actual,
         latency_ms,
     )
@@ -358,6 +368,7 @@ async fn submit_listing(
             None,
             &endpoint_url,
             probe_history_status(&probe),
+            probe.http_status,
             None,
             latency_ms,
         )
@@ -466,6 +477,7 @@ async fn submit_listing(
         Some(tool_id),
         &endpoint_url,
         "live",
+        probe.http_status,
         details.amount.as_deref(),
         latency_ms,
     )
@@ -562,9 +574,23 @@ mod tests {
             description: None,
         }));
         assert_eq!(probe_history_status(&live), "live");
-        let dead = probe_response(ProbeDetailsOutcome::NotPaymentRequired);
+        assert_eq!(live.http_status, Some(402));
+        let dead = probe_response(ProbeDetailsOutcome::NotPaymentRequired {
+            status: 404,
+            body_snippet: Some("not found".into()),
+        });
         assert_eq!(probe_history_status(&dead), "dead");
+        assert_eq!(dead.http_status, Some(404));
+        assert!(dead
+            .reason
+            .as_deref()
+            .is_some_and(|reason| reason.contains("HTTP 404")));
+        assert!(!dead
+            .reason
+            .as_deref()
+            .is_some_and(|reason| reason.contains("not found")));
         let blocked = probe_response(ProbeDetailsOutcome::SsrfBlocked("blocked host".into()));
         assert_eq!(probe_history_status(&blocked), "invalid");
+        assert_eq!(blocked.http_status, None);
     }
 }

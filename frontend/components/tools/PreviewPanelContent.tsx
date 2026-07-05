@@ -75,6 +75,7 @@ export function PreviewPanelContent({
           name={tool.name}
           logoUrl={tool.logo_url}
           logoMonogram={tool.logo_monogram}
+          status={tool.status}
           size={48}
         />
         <div className="preview-header-main">

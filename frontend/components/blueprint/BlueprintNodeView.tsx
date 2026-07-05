@@ -202,6 +202,7 @@ export function BlueprintNodeView({
                   name={tool.name}
                   logoUrl={tool.logo_url}
                   logoMonogram={tool.logo_monogram}
+                  status={tool.status}
                   size={36}
                 />
                 <span className="blueprint-node-tool-text">
