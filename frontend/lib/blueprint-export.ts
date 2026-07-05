@@ -1,13 +1,14 @@
 import { toPng } from "html-to-image";
 import type { BlueprintEdge, BlueprintNode, PublicTool } from "@/lib/api";
+import { buildFlowSection } from "@/lib/blueprint-flow-core.mjs";
 import { SITE_ORIGIN } from "@/lib/site";
 
 const AGENT_EXPORT_TASK_TEMPLATE = `## Your task
 
-1. Read the attached blueprint image and this prompt together.
+1. Read the attached blueprint PNG together with this prompt (export PNG separately from the editor Share dock).
 2. For each slug in ## Tools, call OnchainAI MCP \`get_install_guide\` (platform: cursor).
 3. Summarize install risk; do not install critical-risk tools.
-4. Follow ## Flow when proposing order; if I edited this section, prefer my wording.
+4. When ## Order is present, treat it as the owner's step sequence; otherwise follow ## Flow. If you edited Flow/Order, prefer the user's wording.
 5. Ask before changing my toolkit or installing anything.`;
 
 type ExportNode = {
@@ -17,6 +18,7 @@ type ExportNode = {
   chainId?: string;
   text?: string;
   chains: string[];
+  step?: number;
 };
 
 function clientSiteOrigin(): string {
@@ -32,105 +34,34 @@ function parseExportNodes(nodes: BlueprintNode[]): ExportNode[] {
     chainId: node.chainId,
     text: node.text,
     chains: node.chains ?? [],
+    step: node.step,
   }));
 }
 
 function nodeFlowLabel(node: ExportNode): string {
-  if (node.kind === "tool") {
-    return node.slug ?? node.id;
-  }
+  if (node.kind === "tool") return node.slug ?? node.id;
   if (node.kind === "note") {
     const text = node.text?.trim() ?? "";
     if (!text) return "note";
     const chars = [...text];
-    if (chars.length > 48) {
-      return `note: ${chars.slice(0, 48).join("")}…`;
-    }
+    if (chars.length > 48) return `note: ${chars.slice(0, 48).join("")}…`;
     return `note: ${text}`;
   }
-  if (node.kind === "chain") {
-    return `chain: ${node.chainId ?? "unknown"}`;
-  }
+  if (node.kind === "chain") return `chain: ${node.chainId ?? "unknown"}`;
   return node.id;
 }
 
-function buildFlowSection(nodes: ExportNode[], edges: BlueprintEdge[]): string {
-  const nodeMap = new Map(nodes.map((node) => [node.id, node]));
-  const adj = new Map<string, string[]>();
-  const inDegree = new Map<string, number>();
-  const edgePairs: Array<[string, string]> = [];
+/** Mirrors Rust build_order_section. */
+export function buildOrderSection(exportNodes: ExportNode[]): string {
+  const stepped = exportNodes
+    .filter((node) => node.step != null)
+    .map((node) => ({ node, step: node.step as number }));
+  if (stepped.length === 0) return "";
 
-  for (const node of nodes) {
-    inDegree.set(node.id, 0);
-  }
-
-  for (const edge of edges) {
-    const fromId = edge.fromId.trim();
-    const toId = edge.toId.trim();
-    if (!fromId || !toId) continue;
-    if (!nodeMap.has(fromId) || !nodeMap.has(toId)) continue;
-
-    const neighbors = adj.get(fromId) ?? [];
-    neighbors.push(toId);
-    adj.set(fromId, neighbors);
-    inDegree.set(toId, (inDegree.get(toId) ?? 0) + 1);
-    inDegree.set(fromId, inDegree.get(fromId) ?? 0);
-    edgePairs.push([fromId, toId]);
-  }
-
-  if (edgePairs.length === 0) {
-    return "(no flow edges defined)";
-  }
-
-  const queue = [...inDegree.entries()]
-    .filter(([, degree]) => degree === 0)
-    .map(([id]) => id)
-    .sort();
-
-  const sorted: string[] = [];
-  while (queue.length > 0) {
-    const id = queue.shift();
-    if (!id) break;
-    sorted.push(id);
-
-    const neighbors = [...(adj.get(id) ?? [])].sort();
-    for (const next of neighbors) {
-      const degree = (inDegree.get(next) ?? 0) - 1;
-      inDegree.set(next, degree);
-      if (degree === 0) {
-        queue.push(next);
-        queue.sort();
-      }
-    }
-  }
-
-  const nodesInEdges = new Set(edgePairs.flatMap(([from, to]) => [from, to]));
-
-  if (sorted.length < nodesInEdges.size) {
-    return edgePairs
-      .map(([from, to]) => {
-        const fromLabel = nodeMap.get(from) ? nodeFlowLabel(nodeMap.get(from)!) : from;
-        const toLabel = nodeMap.get(to) ? nodeFlowLabel(nodeMap.get(to)!) : to;
-        return `- ${fromLabel} → ${toLabel}`;
-      })
-      .join("\n");
-  }
-
-  const sortedSet = new Set(sorted);
-  const labels = sorted
-    .map((id) => nodeMap.get(id))
-    .filter((node): node is ExportNode => !!node)
-    .map(nodeFlowLabel);
-
-  const orphans = nodes
-    .filter((node) => !sortedSet.has(node.id) && !nodesInEdges.has(node.id))
-    .map(nodeFlowLabel)
-    .sort();
-  labels.push(...orphans);
-
-  if (labels.length === 0) return "(no flow edges defined)";
-  if (labels.length === 1) return `- ${labels[0]}`;
-  return `- ${labels.join(" → ")}`;
+  stepped.sort((a, b) => a.step - b.step);
+  return stepped
+    .map(({ node, step }) => `- ${step}. ${nodeFlowLabel(node)} (${node.kind})`)
+    .join("\n");
 }
 
 export function buildDraftAgentMarkdown(
@@ -143,22 +74,37 @@ export function buildDraftAgentMarkdown(
   const origin = clientSiteOrigin();
   let markdown = `# ${title}\n\n`;
   markdown +=
-    "Read the attached blueprint image together with this prompt. " +
+    "Read the attached blueprint PNG together with this prompt (export PNG from the Share dock Image tab). " +
     "For each tool below, call OnchainAI MCP `get_install_guide` (platform: cursor) " +
     "before installing.\n\n";
 
   markdown += "## Tools\n\n";
-  const toolNodes = exportNodes.filter((node) => node.kind === "tool");
+  const toolNodes = exportNodes
+    .map((node, index) => ({ node, index }))
+    .filter(({ node }) => node.kind === "tool");
+  toolNodes.sort((a, b) => {
+    const stepA = a.node.step;
+    const stepB = b.node.step;
+    if (stepA != null && stepB != null) return stepA - stepB;
+    if (stepA != null) return -1;
+    if (stepB != null) return 1;
+    return a.index - b.index;
+  });
+
   if (toolNodes.length === 0) {
     markdown += "(none)\n\n";
   } else {
-    for (const node of toolNodes) {
+    for (const { node } of toolNodes) {
       const slug = node.slug ?? "unknown";
       const displayName = toolsBySlug[slug]?.name ?? slug;
       const chains = node.chains.length > 0 ? node.chains.join(", ") : "none specified";
       markdown += `### ${displayName}\n`;
       markdown += `- Slug: \`${slug}\`\n`;
       markdown += `- Chains: ${chains}\n`;
+      const installRisk = toolsBySlug[slug]?.install_risk_level;
+      if (installRisk) {
+        markdown += `- Install risk: ${installRisk}\n`;
+      }
       markdown += `- Page: ${origin}/tools/${slug}\n`;
       markdown += `- MCP: \`get_install_guide({ slug: "${slug}", platform: "cursor" })\`\n\n`;
     }
@@ -176,6 +122,13 @@ export function buildDraftAgentMarkdown(
       markdown += `- ${text}\n`;
     }
     markdown += "\n";
+  }
+
+  const orderSection = buildOrderSection(exportNodes);
+  if (orderSection) {
+    markdown += "## Order\n\n";
+    markdown += orderSection;
+    markdown += "\n\n";
   }
 
   markdown += "## Flow\n\n";
@@ -197,10 +150,13 @@ function triggerPngDownload(dataUrl: string, filename = "blueprint.png"): void {
   link.click();
 }
 
-export async function captureBlueprintViewport(viewportEl: HTMLElement): Promise<string> {
+async function captureElementPng(
+  viewportEl: HTMLElement,
+  targetEl: HTMLElement,
+): Promise<string> {
   viewportEl.setAttribute("data-blueprint-exporting", "true");
   try {
-    const dataUrl = await toPng(viewportEl, {
+    const dataUrl = await toPng(targetEl, {
       cacheBust: true,
       filter: shouldIncludeInCapture,
     });
@@ -209,4 +165,18 @@ export async function captureBlueprintViewport(viewportEl: HTMLElement): Promise
   } finally {
     viewportEl.removeAttribute("data-blueprint-exporting");
   }
+}
+
+/** Captures the visible viewport area (what is currently on screen). */
+export async function captureBlueprintViewport(viewportEl: HTMLElement): Promise<string> {
+  return captureElementPng(viewportEl, viewportEl);
+}
+
+/** Captures the full `.blueprint-canvas-surface` inside the viewport. */
+export async function captureBlueprintContent(viewportEl: HTMLElement): Promise<string> {
+  const surfaceEl = viewportEl.querySelector<HTMLElement>(".blueprint-canvas-surface");
+  if (!surfaceEl) {
+    throw new Error("Blueprint canvas surface not found");
+  }
+  return captureElementPng(viewportEl, surfaceEl);
 }

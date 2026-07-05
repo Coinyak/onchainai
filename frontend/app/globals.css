@@ -210,6 +210,33 @@
   box-shadow: 0 0 0 1px var(--color-neutral-bg);
 }
 
+.blueprint-edge-label-field {
+  display: inline-flex;
+  align-items: center;
+}
+
+.blueprint-edge-label-input {
+  min-height: 44px;
+  width: 120px;
+  padding: 0 10px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-neutral-bg);
+  font-size: var(--text-body-sm);
+  font-weight: 500;
+}
+
+.blueprint-edge-label-input:focus {
+  outline: none;
+  border-color: var(--color-border-strong);
+  background: var(--color-neutral-surface);
+}
+
+.blueprint-edge-label-input:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .blueprint-toolbar-back {
   font-size: var(--text-body-sm);
   color: var(--color-secondary);
@@ -460,6 +487,80 @@
   cursor: pointer;
 }
 
+.blueprint-edge-chrome-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
+}
+
+.blueprint-edge-delete,
+.blueprint-edge-endpoint,
+.blueprint-edge-label {
+  position: absolute;
+  pointer-events: auto;
+  transform: translate(-50%, -50%);
+}
+
+.blueprint-edge-delete {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 1px solid #fecdca;
+  border-radius: 999px;
+  background: #fff5f5;
+  color: #b42318;
+  cursor: pointer;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+}
+
+.blueprint-edge-delete:hover {
+  background: #fee4e2;
+}
+
+.blueprint-edge-endpoint {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border: 0;
+  background: transparent;
+  cursor: grab;
+}
+
+.blueprint-edge-endpoint::before {
+  content: "";
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--color-tertiary);
+  border-radius: 50%;
+  background: var(--color-neutral-bg);
+  box-shadow: 0 0 0 2px rgba(231, 111, 0, 0.15);
+}
+
+.blueprint-edge-label-readonly {
+  pointer-events: none;
+}
+
+.blueprint-edge-label {
+  max-width: 120px;
+  padding: 2px 6px;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: var(--color-neutral-bg);
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--color-secondary);
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .blueprint-empty-state {
   position: absolute;
   top: 50%;
@@ -520,10 +621,11 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
-  width: 260px;
-  max-width: 260px;
-  min-height: 112px;
+  min-width: 160px;
+  max-width: 520px;
+  min-height: 72px;
   padding: 10px 12px;
+  box-sizing: border-box;
 }
 
 .blueprint-node-tool-row1 {
@@ -671,11 +773,14 @@
 }
 
 .blueprint-node-note {
-  width: 260px;
-  max-width: 260px;
-  min-height: 88px;
+  display: flex;
+  flex-direction: column;
+  min-width: 160px;
+  max-width: 520px;
+  min-height: 72px;
   padding: 10px 12px;
   background: var(--color-neutral-surface);
+  box-sizing: border-box;
 }
 
 .blueprint-node-chain {
@@ -800,6 +905,50 @@
   transform: translate(-50%, -50%);
 }
 
+.blueprint-node-step {
+  position: absolute;
+  top: -8px;
+  left: -8px;
+  z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--color-tertiary);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  pointer-events: none;
+}
+
+.blueprint-node-resize {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  z-index: 5;
+  width: 44px;
+  height: 44px;
+  border: 0;
+  background: transparent;
+  cursor: nwse-resize;
+  touch-action: none;
+}
+
+.blueprint-node-resize::after {
+  content: "";
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  width: 12px;
+  height: 12px;
+  border-right: 2px solid var(--color-border-strong);
+  border-bottom: 2px solid var(--color-border-strong);
+}
+
 .blueprint-node-ghost {
   display: flex;
   flex-direction: column;
@@ -822,11 +971,11 @@
 
 .blueprint-node-note-input {
   width: 100%;
-  min-height: 68px;
-  max-height: 240px;
+  flex: 1;
+  min-height: 48px;
   border: 0;
   background: transparent;
-  resize: vertical;
+  resize: none;
   font-size: var(--text-body-md);
   line-height: 1.5;
   color: var(--color-primary);
@@ -985,6 +1134,17 @@
   margin: 0;
   font-size: var(--text-body-sm);
   color: var(--color-secondary);
+}
+
+.blueprint-share-stale {
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid #fecdca;
+  border-radius: var(--radius-sm);
+  background: #fff5f5;
+  font-size: var(--text-body-sm);
+  font-weight: 600;
+  color: #b42318;
 }
 
 .blueprint-share-empty {

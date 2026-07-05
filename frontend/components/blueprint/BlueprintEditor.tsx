@@ -48,8 +48,11 @@ import {
   BLUEPRINT_MAX_EDGES,
   BLUEPRINT_MAX_NODES,
   BLUEPRINT_NODE_CHAIN_SIZE,
+  BLUEPRINT_NODE_MAX_STEP,
   clampCoord,
   getNodeAnchor,
+  getNodeBounds,
+  type BlueprintEndpoint,
   type BlueprintPortSide,
   initialToolNodeChains,
   newEdgeId,
@@ -57,6 +60,7 @@ import {
   normalizeToolNodeChains,
   pointerToCanvasCoords,
   pruneEdgesForNodes,
+  truncateBlueprintLabel,
   type BlueprintEdgeStyle,
 } from "@/lib/blueprint-utils";
 import { timeAgo, typeBadgeLabel } from "@/lib/format";
@@ -65,6 +69,7 @@ import { BlueprintEdgesLayer } from "@/components/blueprint/BlueprintEdgesLayer"
 import { BlueprintPalette } from "@/components/blueprint/BlueprintPalette";
 import { BlueprintNodeView } from "@/components/blueprint/BlueprintNodeView";
 import { BlueprintShareDock } from "@/components/blueprint/BlueprintShareDock";
+
 import { ToolLogo } from "@/components/tools/ToolLogo";
 import { Badge } from "@/components/ui/Badge";
 
@@ -79,16 +84,22 @@ const BLUEPRINT_EDGE_PREFS_KEY = "onchainai-blueprint-edge-prefs";
 interface BlueprintEdgePrefs {
   style: BlueprintEdgeStyle;
   color: string;
+  dashed: boolean;
 }
 
 function loadBlueprintEdgePrefs(): BlueprintEdgePrefs {
+  const fallback: BlueprintEdgePrefs = {
+    style: "arrow",
+    color: BLUEPRINT_EDGE_COLORS[0].value,
+    dashed: false,
+  };
   if (typeof window === "undefined") {
-    return { style: "arrow", color: BLUEPRINT_EDGE_COLORS[0].value };
+    return fallback;
   }
   try {
     const raw = window.localStorage.getItem(BLUEPRINT_EDGE_PREFS_KEY);
     if (!raw) {
-      return { style: "arrow", color: BLUEPRINT_EDGE_COLORS[0].value };
+      return fallback;
     }
     const parsed = JSON.parse(raw) as Partial<BlueprintEdgePrefs>;
     const style = parsed.style === "solid" ? "solid" : "arrow";
@@ -97,9 +108,9 @@ function loadBlueprintEdgePrefs(): BlueprintEdgePrefs {
       BLUEPRINT_EDGE_COLORS.some((option) => option.value === parsed.color)
         ? parsed.color
         : BLUEPRINT_EDGE_COLORS[0].value;
-    return { style, color };
+    return { style, color, dashed: parsed.dashed === true };
   } catch {
-    return { style: "arrow", color: BLUEPRINT_EDGE_COLORS[0].value };
+    return fallback;
   }
 }
 
@@ -199,6 +210,17 @@ function BlueprintEditorWorkspace({
   const [edgeColor, setEdgeColor] = useState<string>(
     () => loadBlueprintEdgePrefs().color,
   );
+  const [edgeDashed, setEdgeDashed] = useState<boolean>(
+    () => loadBlueprintEdgePrefs().dashed,
+  );
+  const [reconnect, setReconnect] = useState<{
+    edgeId: string;
+    end: BlueprintEndpoint;
+  } | null>(null);
+  const [reconnectPointer, setReconnectPointer] = useState<{
+    x: number;
+    y: number;
+  } | null>(null);
   const [saveState, setSaveState] = useState<SaveState>("saved");
   const [savedAt, setSavedAt] = useState<string | null>(initialSavedAt);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -559,13 +581,43 @@ function BlueprintEditorWorkspace({
         toId,
         style: edgeStyle,
         color: edgeColor,
+        ...(edgeDashed ? { dashed: true } : {}),
       };
       updateEdges((prev) => [...prev, edge]);
       setSelectedEdgeId(edge.id);
       setSelectedId(null);
       setLiveMessage("Link added.");
     },
-    [edgeColor, edgeStyle, edges, readOnly, updateEdges],
+    [edgeColor, edgeDashed, edgeStyle, edges, readOnly, updateEdges],
+  );
+
+  const reconnectEdge = useCallback(
+    (edgeId: string, end: BlueprintEndpoint, newNodeId: string) => {
+      if (readOnly) return;
+      const edge = edges.find((e) => e.id === edgeId);
+      if (!edge) return;
+      const fromId = end === "from" ? newNodeId : edge.fromId;
+      const toId = end === "to" ? newNodeId : edge.toId;
+      if (fromId === toId) {
+        setLiveMessage("An edge can't connect a node to itself.");
+        return;
+      }
+      const duplicate = edges.some(
+        (e) =>
+          e.id !== edgeId &&
+          ((e.fromId === fromId && e.toId === toId) ||
+            (e.fromId === toId && e.toId === fromId)),
+      );
+      if (duplicate) {
+        setLiveMessage("Those nodes are already linked.");
+        return;
+      }
+      updateEdges((prev) =>
+        prev.map((e) => (e.id === edgeId ? { ...e, fromId, toId } : e)),
+      );
+      setLiveMessage("Link reconnected.");
+    },
+    [edges, readOnly, updateEdges],
   );
 
   const cancelLinking = useCallback(() => {
@@ -583,25 +635,98 @@ function BlueprintEditorWorkspace({
   const handleEdgeStyleChange = useCallback(
     (style: BlueprintEdgeStyle) => {
       setEdgeStyle(style);
-      saveBlueprintEdgePrefs({ style, color: edgeColor });
+      saveBlueprintEdgePrefs({ style, color: edgeColor, dashed: edgeDashed });
       if (!selectedEdgeId || readOnly) return;
       updateEdges((prev) =>
         prev.map((edge) => (edge.id === selectedEdgeId ? { ...edge, style } : edge)),
       );
     },
-    [edgeColor, readOnly, selectedEdgeId, updateEdges],
+    [edgeColor, edgeDashed, readOnly, selectedEdgeId, updateEdges],
   );
 
   const handleEdgeColorChange = useCallback(
     (color: string) => {
       setEdgeColor(color);
-      saveBlueprintEdgePrefs({ style: edgeStyle, color });
+      saveBlueprintEdgePrefs({ style: edgeStyle, color, dashed: edgeDashed });
       if (!selectedEdgeId || readOnly) return;
       updateEdges((prev) =>
         prev.map((edge) => (edge.id === selectedEdgeId ? { ...edge, color } : edge)),
       );
     },
-    [edgeStyle, readOnly, selectedEdgeId, updateEdges],
+    [edgeDashed, edgeStyle, readOnly, selectedEdgeId, updateEdges],
+  );
+
+  const handleEdgeDashedChange = useCallback(
+    (dashed: boolean) => {
+      setEdgeDashed(dashed);
+      saveBlueprintEdgePrefs({ style: edgeStyle, color: edgeColor, dashed });
+      if (!selectedEdgeId || readOnly) return;
+      updateEdges((prev) =>
+        prev.map((edge) =>
+          edge.id === selectedEdgeId ? { ...edge, dashed } : edge,
+        ),
+      );
+    },
+    [edgeColor, edgeStyle, readOnly, selectedEdgeId, updateEdges],
+  );
+
+  const handleEdgeLabelChange = useCallback(
+    (label: string) => {
+      if (!selectedEdgeId || readOnly) return;
+      const capped = truncateBlueprintLabel(label);
+      updateEdges((prev) =>
+        prev.map((edge) =>
+          edge.id === selectedEdgeId
+            ? { ...edge, label: capped.trim() ? capped : undefined }
+            : edge,
+        ),
+      );
+    },
+    [readOnly, selectedEdgeId, updateEdges],
+  );
+
+  const handleEndpointPointerDown = useCallback(
+    (
+      edgeId: string,
+      end: BlueprintEndpoint,
+      e: React.PointerEvent<HTMLSpanElement>,
+    ) => {
+      if (readOnly) return;
+      e.stopPropagation();
+      e.preventDefault();
+      setSelectedEdgeId(edgeId);
+      setSelectedId(null);
+      setReconnect({ edgeId, end });
+      const viewport = viewportRef.current;
+      if (viewport) {
+        setReconnectPointer(pointerToCanvasCoords(e.clientX, e.clientY, viewport));
+      }
+      setLiveMessage("Drag the endpoint onto another node.");
+    },
+    [readOnly],
+  );
+
+  const completeReconnect = useCallback(
+    (clientX: number, clientY: number) => {
+      if (!reconnect || readOnly) {
+        setReconnect(null);
+        setReconnectPointer(null);
+        return;
+      }
+      const target = document.elementFromPoint(clientX, clientY);
+      const portEl = target?.closest("[data-port]");
+      const nodeEl = target?.closest("[data-testid='blueprint-node']");
+      const nodeId =
+        portEl?.getAttribute("data-node-id") ??
+        nodeEl?.getAttribute("data-node-id") ??
+        null;
+      if (nodeId) {
+        reconnectEdge(reconnect.edgeId, reconnect.end, nodeId);
+      }
+      setReconnect(null);
+      setReconnectPointer(null);
+    },
+    [reconnect, readOnly, reconnectEdge],
   );
 
   const completeLinking = useCallback(
@@ -683,6 +808,57 @@ function BlueprintEditorWorkspace({
     [readOnly, toolsBySlug, updateNodes],
   );
 
+  const updateNodeSize = useCallback(
+    (id: string, w: number, h: number) => {
+      if (readOnly) return;
+      updateNodes((prev) =>
+        prev.map((n) =>
+          n.id === id && (n.kind === "tool" || n.kind === "note")
+            ? { ...n, w, h }
+            : n,
+        ),
+      );
+    },
+    [readOnly, updateNodes],
+  );
+
+  const toggleStep = useCallback(
+    (id: string) => {
+      if (readOnly) return;
+      const target = nodes.find((n) => n.id === id);
+      if (!target) return;
+      if (target.step == null) {
+        const maxStep = nodes.reduce((m, n) => Math.max(m, n.step ?? 0), 0);
+        if (maxStep >= BLUEPRINT_NODE_MAX_STEP) {
+          setLiveMessage(`Order badges are limited to ${BLUEPRINT_NODE_MAX_STEP}.`);
+          return;
+        }
+      }
+      updateNodes((prev) => {
+        const current = prev.find((n) => n.id === id);
+        if (!current) return prev;
+        if (current.step != null) {
+          // Drop this badge and renumber the rest so steps stay 1..N contiguous.
+          const remaining = prev
+            .filter((n) => n.id !== id && n.step != null)
+            .sort((a, b) => (a.step ?? 0) - (b.step ?? 0));
+          const order = new Map(remaining.map((n, i) => [n.id, i + 1]));
+          return prev.map((n) =>
+            n.id === id
+              ? { ...n, step: undefined }
+              : n.step != null
+                ? { ...n, step: order.get(n.id) }
+                : n,
+          );
+        }
+        const maxStep = prev.reduce((m, n) => Math.max(m, n.step ?? 0), 0);
+        return prev.map((n) => (n.id === id ? { ...n, step: maxStep + 1 } : n));
+      });
+      setLiveMessage("Order badge updated.");
+    },
+    [nodes, readOnly, updateNodes],
+  );
+
   const moveNode = useCallback(
     (id: string, dx: number, dy: number) => {
       if (readOnly) return;
@@ -762,10 +938,21 @@ function BlueprintEditorWorkspace({
     if (e.button !== 0) return;
     if ((e.target as HTMLElement).closest("[data-port]")) return;
     if ((e.target as HTMLElement).closest("[data-testid='blueprint-node']")) return;
-    if ((e.target as HTMLElement).closest(".blueprint-edge-hit, .blueprint-edge-handle")) return;
+    if (
+      (e.target as HTMLElement).closest(
+        ".blueprint-edge-hit, .blueprint-edge-endpoint, .blueprint-edge-delete, .blueprint-edge-label",
+      )
+    )
+      return;
     if (linkingFromId) {
       cancelLinking();
       setLiveMessage("Link cancelled.");
+      return;
+    }
+    if (reconnect) {
+      setReconnect(null);
+      setReconnectPointer(null);
+      setLiveMessage("Reconnect cancelled.");
       return;
     }
     const viewport = e.currentTarget;
@@ -827,6 +1014,27 @@ function BlueprintEditorWorkspace({
   }, [completeLinking, linkingFromId]);
 
   useEffect(() => {
+    if (!reconnect) return;
+
+    const onPointerMove = (e: PointerEvent) => {
+      const viewport = viewportRef.current;
+      if (!viewport) return;
+      setReconnectPointer(pointerToCanvasCoords(e.clientX, e.clientY, viewport));
+    };
+
+    const onPointerUp = (e: PointerEvent) => {
+      completeReconnect(e.clientX, e.clientY);
+    };
+
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", onPointerUp);
+    return () => {
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", onPointerUp);
+    };
+  }, [completeReconnect, reconnect]);
+
+  useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (readOnly) return;
       if (e.key === "Escape") {
@@ -834,6 +1042,11 @@ function BlueprintEditorWorkspace({
           e.preventDefault();
           cancelLinking();
           setLiveMessage("Link cancelled.");
+        } else if (reconnect) {
+          e.preventDefault();
+          setReconnect(null);
+          setReconnectPointer(null);
+          setLiveMessage("Reconnect cancelled.");
         }
         return;
       }
@@ -881,6 +1094,7 @@ function BlueprintEditorWorkspace({
     moveNode,
     nodes,
     readOnly,
+    reconnect,
     removeEdge,
     removeNode,
     selectedEdgeId,
@@ -918,10 +1132,14 @@ function BlueprintEditorWorkspace({
           visible={!!selectedEdgeId}
           edgeStyle={selectedEdge?.style ?? edgeStyle}
           edgeColor={selectedEdge?.color ?? edgeColor}
+          edgeDashed={selectedEdge?.dashed ?? edgeDashed}
+          edgeLabel={selectedEdge?.label ?? ""}
           selectedEdgeId={selectedEdgeId}
           readOnly={readOnly}
           onStyleChange={handleEdgeStyleChange}
           onColorChange={handleEdgeColorChange}
+          onDashedChange={handleEdgeDashedChange}
+          onLabelChange={handleEdgeLabelChange}
           onDeleteEdge={() => selectedEdgeId && removeEdge(selectedEdgeId)}
         />
         <div className="blueprint-toolbar-actions">
@@ -976,6 +1194,8 @@ function BlueprintEditorWorkspace({
                   cancelLinking();
                   setChainsPopoverOpenId(null);
                 }}
+                onDeleteEdge={removeEdge}
+                onEndpointPointerDown={handleEndpointPointerDown}
               />
               {linkingFromId && linkingFromSide && linkPointer && (() => {
                 const fromNode = nodes.find((n) => n.id === linkingFromId);
@@ -993,6 +1213,36 @@ function BlueprintEditorWorkspace({
                       x2={linkPointer.x}
                       y2={linkPointer.y}
                       stroke={edgeColor}
+                      strokeWidth={2}
+                      strokeDasharray="6 4"
+                    />
+                  </svg>
+                );
+              })()}
+              {reconnect && reconnectPointer && (() => {
+                const edge = edges.find((e) => e.id === reconnect.edgeId);
+                if (!edge) return null;
+                const fixedNodeId =
+                  reconnect.end === "from" ? edge.toId : edge.fromId;
+                const fixedNode = nodes.find((n) => n.id === fixedNodeId);
+                if (!fixedNode) return null;
+                const bounds = getNodeBounds(fixedNode);
+                const start = {
+                  x: bounds.x + bounds.w / 2,
+                  y: bounds.y + bounds.h / 2,
+                };
+                return (
+                  <svg
+                    className="blueprint-rubber-band-layer"
+                    aria-hidden="true"
+                    data-testid="blueprint-reconnect-band"
+                  >
+                    <line
+                      x1={start.x}
+                      y1={start.y}
+                      x2={reconnectPointer.x}
+                      y2={reconnectPointer.y}
+                      stroke={edge.color}
                       strokeWidth={2}
                       strokeDasharray="6 4"
                     />
@@ -1021,6 +1271,8 @@ function BlueprintEditorWorkspace({
                   onRemove={removeNode}
                   onTextChange={updateNodeText}
                   onChainsChange={updateNodeChains}
+                  onResize={updateNodeSize}
+                  onToggleStep={toggleStep}
                   onOpenChains={(id) => setChainsPopoverOpenId(id)}
                   onCloseChains={() => setChainsPopoverOpenId(null)}
                   onPortPointerDown={handlePortPointerDown}

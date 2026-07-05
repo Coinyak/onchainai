@@ -24,7 +24,34 @@ export const BLUEPRINT_NODE_NOTE_HEIGHT = 88;
 export const BLUEPRINT_NODE_CHAIN_SIZE = 48;
 export const BLUEPRINT_NODE_CHAIN_WRAP_HEIGHT = 66;
 
+// Custom card size bounds for tool/note nodes (kept in sync with the backend
+// clamp in src/server/api_v2/blueprints.rs). Chain stickers are fixed-size.
+export const BLUEPRINT_NODE_MIN_W = 160;
+export const BLUEPRINT_NODE_MAX_W = 520;
+export const BLUEPRINT_NODE_MIN_H = 72;
+export const BLUEPRINT_NODE_MAX_H = 420;
+// Height thresholds below which optional tool rows collapse so text never clips.
+export const BLUEPRINT_NODE_TOOL_TYPE_MIN_H = 88;
+export const BLUEPRINT_NODE_TOOL_CHAINS_MIN_H = 112;
+export const BLUEPRINT_NODE_MAX_STEP = 99;
+
+export function clampNodeWidth(w: number): number {
+  return Math.max(BLUEPRINT_NODE_MIN_W, Math.min(BLUEPRINT_NODE_MAX_W, Math.round(w)));
+}
+
+export function clampNodeHeight(h: number): number {
+  return Math.max(BLUEPRINT_NODE_MIN_H, Math.min(BLUEPRINT_NODE_MAX_H, Math.round(h)));
+}
+
+/** Mirrors Rust `chars().take(n)` for edge label normalization. */
+export function truncateBlueprintLabel(label: string, maxChars = 40): string {
+  return [...label].slice(0, maxChars).join("");
+}
+
 export type BlueprintPortSide = "top" | "right" | "bottom" | "left";
+
+/** Which end of an existing edge is being dragged during a reconnect. */
+export type BlueprintEndpoint = "from" | "to";
 
 export function snapToGrid(value: number, grid = BLUEPRINT_GRID): number {
   return Math.round(value / grid) * grid;
@@ -62,19 +89,15 @@ export function getNodeBounds(node: BlueprintNode): {
       h: BLUEPRINT_NODE_CHAIN_WRAP_HEIGHT,
     };
   }
-  if (node.kind === "note") {
-    return {
-      x: node.x,
-      y: node.y,
-      w: BLUEPRINT_NODE_NOTE_WIDTH,
-      h: BLUEPRINT_NODE_NOTE_HEIGHT,
-    };
-  }
+  const defaultW =
+    node.kind === "note" ? BLUEPRINT_NODE_NOTE_WIDTH : BLUEPRINT_NODE_TOOL_WIDTH;
+  const defaultH =
+    node.kind === "note" ? BLUEPRINT_NODE_NOTE_HEIGHT : BLUEPRINT_NODE_TOOL_HEIGHT;
   return {
     x: node.x,
     y: node.y,
-    w: BLUEPRINT_NODE_TOOL_WIDTH,
-    h: BLUEPRINT_NODE_TOOL_HEIGHT,
+    w: node.w != null ? clampNodeWidth(node.w) : defaultW,
+    h: node.h != null ? clampNodeHeight(node.h) : defaultH,
   };
 }
 

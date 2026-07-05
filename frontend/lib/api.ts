@@ -794,6 +794,11 @@ export interface BlueprintNode {
   text?: string;
   x: number;
   y: number;
+  /** Tool/note nodes only: custom card size (px). Omitted = default size. */
+  w?: number;
+  h?: number;
+  /** Optional 1-based order badge shown on the card. */
+  step?: number;
 }
 
 export interface BlueprintEdge {
@@ -802,6 +807,10 @@ export interface BlueprintEdge {
   toId: string;
   style: "solid" | "arrow";
   color: string;
+  /** Render the line dashed (alternative/optional branch). */
+  dashed?: boolean;
+  /** Short annotation shown on the arrow. */
+  label?: string;
 }
 
 export interface BlueprintListItem {

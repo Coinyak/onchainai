@@ -1,17 +1,22 @@
 "use client";
 
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { Share2, X } from "lucide-react";
-import {
-  getBlueprintAgentExport,
-  type BlueprintEdge,
-  type BlueprintNode,
-  type PublicTool,
-} from "@/lib/api";
+import type { BlueprintEdge, BlueprintNode, PublicTool } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import { buildDraftAgentMarkdown, captureBlueprintViewport } from "@/lib/blueprint-export";
+import {
+  buildDraftAgentMarkdown,
+  captureBlueprintContent,
+  captureBlueprintViewport,
+} from "@/lib/blueprint-export";
+import {
+  blueprintCanvasFingerprint,
+  loadSharePromptDraft,
+  saveSharePromptDraft,
+} from "@/lib/blueprint-share-storage";
 
 type ShareTab = "prompt" | "image";
+type CaptureTarget = "viewport" | "full" | null;
 
 export interface BlueprintShareDockProps {
   blueprintId: string;
@@ -34,73 +39,94 @@ export function BlueprintShareDock({
 }: BlueprintShareDockProps) {
   const { isAuthenticated } = useAuth();
   const panelId = useId();
-  const loadGenerationRef = useRef(0);
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState<ShareTab>("prompt");
   const [promptText, setPromptText] = useState("");
   const [baselineMarkdown, setBaselineMarkdown] = useState("");
+  const [baselineFingerprint, setBaselineFingerprint] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [capturing, setCapturing] = useState(false);
+  const [capturing, setCapturing] = useState<CaptureTarget>(null);
   const [copyState, setCopyState] = useState<"idle" | "copied" | "error">("idle");
+  const [copyLiveMessage, setCopyLiveMessage] = useState("");
+
+  const canvasFingerprint = useMemo(() => {
+    if (!open) return "";
+    return blueprintCanvasFingerprint(title, nodes, edges);
+  }, [open, title, nodes, edges]);
 
   const visible = isDraft || isAuthenticated;
   const hasNodes = nodes.length > 0;
   const isDirty = promptText !== baselineMarkdown;
+  const isCanvasStale =
+    open && hasNodes && baselineFingerprint !== "" && canvasFingerprint !== baselineFingerprint;
 
-  const generatePrompt = useCallback(async () => {
+  const applyFreshPrompt = useCallback(() => {
     if (!hasNodes) {
       setPromptText("");
       setBaselineMarkdown("");
+      setBaselineFingerprint("");
       setError(null);
       return;
     }
 
-    const generation = ++loadGenerationRef.current;
     setLoading(true);
     setError(null);
 
     try {
-      let markdown: string;
-      if (isDraft) {
-        markdown = buildDraftAgentMarkdown(title, nodes, edges, toolsBySlug);
-      } else {
-        const response = await getBlueprintAgentExport(blueprintId);
-        markdown = response.markdown;
-      }
-
-      if (generation !== loadGenerationRef.current) return;
+      const markdown = buildDraftAgentMarkdown(title, nodes, edges, toolsBySlug);
       setPromptText(markdown);
       setBaselineMarkdown(markdown);
+      setBaselineFingerprint(canvasFingerprint);
+      saveSharePromptDraft(blueprintId, canvasFingerprint, markdown);
     } catch (err) {
-      if (generation !== loadGenerationRef.current) return;
       setError(err instanceof Error ? err.message : "Failed to generate prompt");
     } finally {
-      if (generation === loadGenerationRef.current) {
-        setLoading(false);
-      }
+      setLoading(false);
     }
-  }, [blueprintId, edges, hasNodes, isDraft, nodes, title, toolsBySlug]);
+  }, [blueprintId, canvasFingerprint, edges, hasNodes, nodes, title, toolsBySlug]);
 
-  const resetPromptState = useCallback(() => {
-    setPromptText("");
-    setBaselineMarkdown("");
-    setError(null);
-    setPreviewUrl(null);
-    setCopyState("idle");
-  }, []);
+  const ensurePromptOnOpen = useCallback(() => {
+    if (!hasNodes) {
+      setError(null);
+      return;
+    }
+
+    if (baselineFingerprint && canvasFingerprint === baselineFingerprint && promptText) {
+      return;
+    }
+
+    const stored = loadSharePromptDraft(blueprintId);
+    if (stored && stored.fingerprint === canvasFingerprint) {
+      setPromptText(stored.markdown);
+      setBaselineMarkdown(stored.markdown);
+      setBaselineFingerprint(stored.fingerprint);
+      setError(null);
+      return;
+    }
+
+    applyFreshPrompt();
+  }, [
+    applyFreshPrompt,
+    baselineFingerprint,
+    blueprintId,
+    canvasFingerprint,
+    hasNodes,
+    promptText,
+  ]);
 
   const handleToggleOpen = useCallback(() => {
-    setOpen((prev) => {
-      const next = !prev;
-      if (next) {
-        resetPromptState();
-        void generatePrompt();
-      }
-      return next;
-    });
-  }, [generatePrompt, resetPromptState]);
+    setOpen((prev) => !prev);
+  }, []);
+
+  const wasOpenRef = useRef(false);
+  useEffect(() => {
+    if (open && !wasOpenRef.current) {
+      ensurePromptOnOpen();
+    }
+    wasOpenRef.current = open;
+  }, [open, ensurePromptOnOpen]);
 
   useEffect(() => {
     if (!open) return;
@@ -115,45 +141,72 @@ export function BlueprintShareDock({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [open]);
 
-  const handleRegenerate = useCallback(async () => {
-    if (
-      isDirty &&
-      !window.confirm("Replace your edits with a fresh draft from the current blueprint?")
-    ) {
-      return;
+  const handleRegenerate = useCallback(() => {
+    if (isDirty || isCanvasStale) {
+      const message =
+        isDirty && isCanvasStale
+          ? "Replace your edits and refresh the prompt from the current blueprint?"
+          : isDirty
+            ? "Replace your edits with a fresh draft from the current blueprint?"
+            : "Regenerate the prompt from the current blueprint?";
+      if (!window.confirm(message)) {
+        return;
+      }
     }
-    await generatePrompt();
-  }, [generatePrompt, isDirty]);
+    applyFreshPrompt();
+  }, [applyFreshPrompt, isCanvasStale, isDirty]);
 
   const handleCopyPrompt = useCallback(async () => {
     if (!promptText.trim()) return;
     try {
       await navigator.clipboard.writeText(promptText);
+      const draftFingerprint = baselineFingerprint || canvasFingerprint;
+      if (draftFingerprint) {
+        saveSharePromptDraft(blueprintId, draftFingerprint, promptText);
+      }
       setCopyState("copied");
-      window.setTimeout(() => setCopyState("idle"), 2000);
+      setCopyLiveMessage("Prompt copied. Attach PNG from Image tab.");
+      window.setTimeout(() => {
+        setCopyState("idle");
+        setCopyLiveMessage("");
+      }, 3000);
     } catch {
       setCopyState("error");
       window.setTimeout(() => setCopyState("idle"), 2000);
     }
+  }, [baselineFingerprint, blueprintId, canvasFingerprint, promptText]);
+
+  const handleDownloadMd = useCallback(() => {
+    if (!promptText.trim()) return;
+    const blob = new Blob([promptText], { type: "text/markdown;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.download = "blueprint-agent.md";
+    link.href = url;
+    link.click();
+    URL.revokeObjectURL(url);
   }, [promptText]);
 
-  const handleDownloadPng = useCallback(async () => {
+  const capturePng = useCallback(async (target: "viewport" | "full") => {
     const viewportEl = document.querySelector<HTMLElement>(".blueprint-canvas-viewport");
     if (!viewportEl) {
       setError("Canvas viewport not found");
       return;
     }
 
-    setCapturing(true);
+    setCapturing(target);
     setError(null);
     try {
-      const dataUrl = await captureBlueprintViewport(viewportEl);
+      const dataUrl =
+        target === "viewport"
+          ? await captureBlueprintViewport(viewportEl)
+          : await captureBlueprintContent(viewportEl);
       setPreviewUrl(dataUrl);
       setTab("image");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to capture blueprint");
     } finally {
-      setCapturing(false);
+      setCapturing(null);
     }
   }, []);
 
@@ -167,6 +220,10 @@ export function BlueprintShareDock({
       data-testid="blueprint-share-dock"
       onPointerDown={(event) => event.stopPropagation()}
     >
+      <div className="sr-only" aria-live="polite">
+        {copyLiveMessage}
+      </div>
+
       {open ? (
         <div
           id={panelId}
@@ -209,9 +266,16 @@ export function BlueprintShareDock({
           {tab === "prompt" ? (
             <div className="blueprint-share-prompt">
               {!hasNodes ? (
-                <p className="blueprint-share-empty">Add tools to generate a prompt.</p>
+                <p className="blueprint-share-empty">
+                  Add nodes to the canvas to generate a prompt.
+                </p>
               ) : (
                 <>
+                  {isCanvasStale ? (
+                    <p className="blueprint-share-stale" role="status">
+                      Blueprint changed — Regenerate to refresh the prompt.
+                    </p>
+                  ) : null}
                   <p className="blueprint-share-hint">
                     Auto-generated draft — edit before sending.
                   </p>
@@ -220,19 +284,37 @@ export function BlueprintShareDock({
                     data-testid="blueprint-share-prompt-edit"
                     rows={16}
                     value={promptText}
-                    onChange={(event) => setPromptText(event.target.value)}
+                    onChange={(event) => {
+                      const next = event.target.value;
+                      setPromptText(next);
+                      if (baselineFingerprint) {
+                        saveSharePromptDraft(blueprintId, baselineFingerprint, next);
+                      }
+                    }}
                     readOnly={loading}
                     spellCheck={false}
                   />
+                  <p className="blueprint-share-hint">
+                    Also download the PNG from the Image tab and attach it with this prompt.
+                  </p>
                   <div className="blueprint-share-actions">
                     <button
                       type="button"
                       className="blueprint-share-btn blueprint-share-btn-secondary"
                       data-testid="blueprint-share-regenerate"
-                      onClick={() => void handleRegenerate()}
+                      onClick={handleRegenerate}
                       disabled={loading || !hasNodes}
                     >
                       Regenerate
+                    </button>
+                    <button
+                      type="button"
+                      className="blueprint-share-btn blueprint-share-btn-secondary"
+                      data-testid="blueprint-download-md"
+                      onClick={handleDownloadMd}
+                      disabled={loading || !promptText.trim()}
+                    >
+                      Download .md
                     </button>
                     <button
                       type="button"
@@ -253,6 +335,10 @@ export function BlueprintShareDock({
             </div>
           ) : (
             <div className="blueprint-share-image">
+              <p className="blueprint-share-hint">
+                Viewport capture shows what&apos;s on screen. ## Flow and ## Order in the prompt
+                describe the full blueprint.
+              </p>
               {previewUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element -- data URL from html-to-image capture; next/image cannot preview dynamic blob/data URLs
                 <img
@@ -265,15 +351,26 @@ export function BlueprintShareDock({
                   Capture the current canvas to preview a clean PNG export.
                 </p>
               )}
-              <button
-                type="button"
-                className="blueprint-share-btn blueprint-share-btn-secondary"
-                data-testid="blueprint-download-png"
-                onClick={() => void handleDownloadPng()}
-                disabled={capturing}
-              >
-                {capturing ? "Capturing…" : "Download PNG"}
-              </button>
+              <div className="blueprint-share-actions">
+                <button
+                  type="button"
+                  className="blueprint-share-btn blueprint-share-btn-secondary"
+                  data-testid="blueprint-download-png"
+                  onClick={() => void capturePng("viewport")}
+                  disabled={capturing !== null}
+                >
+                  {capturing === "viewport" ? "Capturing…" : "Download viewport PNG"}
+                </button>
+                <button
+                  type="button"
+                  className="blueprint-share-btn blueprint-share-btn-secondary"
+                  data-testid="blueprint-download-full-png"
+                  onClick={() => void capturePng("full")}
+                  disabled={capturing !== null}
+                >
+                  {capturing === "full" ? "Capturing…" : "Download full canvas PNG"}
+                </button>
+              </div>
             </div>
           )}
 

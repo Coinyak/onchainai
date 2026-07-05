@@ -8,7 +8,15 @@ import { BlueprintToolChainMemo } from "@/components/blueprint/BlueprintToolChai
 import { ToolLogo } from "@/components/tools/ToolLogo";
 import { ChainLogo } from "@/components/tools/ChainLogo";
 import { typeBadgeLabel } from "@/lib/format";
-import { toolChainsForNode, type BlueprintPortSide } from "@/lib/blueprint-utils";
+import {
+  BLUEPRINT_NODE_TOOL_CHAINS_MIN_H,
+  BLUEPRINT_NODE_TOOL_TYPE_MIN_H,
+  clampNodeHeight,
+  clampNodeWidth,
+  getNodeBounds,
+  toolChainsForNode,
+  type BlueprintPortSide,
+} from "@/lib/blueprint-utils";
 
 const NODE_PORTS: {
   side: BlueprintPortSide;
@@ -37,6 +45,8 @@ interface BlueprintNodeViewProps {
   onRemove: (id: string) => void;
   onTextChange: (id: string, text: string) => void;
   onChainsChange: (id: string, chains: string[]) => void;
+  onResize?: (id: string, w: number, h: number) => void;
+  onToggleStep?: (id: string) => void;
   onOpenChains?: (id: string) => void;
   onCloseChains?: (id: string) => void;
   onToggleChains?: (id: string) => void;
@@ -62,6 +72,8 @@ export function BlueprintNodeView({
   onRemove,
   onTextChange,
   onChainsChange,
+  onResize,
+  onToggleStep,
   onOpenChains,
   onCloseChains,
   onToggleChains,
@@ -74,6 +86,12 @@ export function BlueprintNodeView({
   });
 
   const chainsButtonRef = useRef<HTMLButtonElement>(null);
+  const resizeRef = useRef<{
+    startX: number;
+    startY: number;
+    startW: number;
+    startH: number;
+  } | null>(null);
   const [hovered, setHovered] = useState(false);
   const [internalChainsOpen, setInternalChainsOpen] = useState(false);
 
@@ -81,6 +99,49 @@ export function BlueprintNodeView({
   const chainsOpen = chainsPopoverOpen ?? internalChainsOpen;
   const availableChains =
     node.kind === "tool" && tool && !toolMissing ? toolChainsForNode(tool.chains) : [];
+
+  const isSizable = node.kind === "tool" || node.kind === "note";
+  const bounds = getNodeBounds(node);
+  const sizeStyle = isSizable
+    ? { width: bounds.w, height: bounds.h }
+    : undefined;
+  // Collapse optional tool rows as the card shrinks so nothing clips.
+  const showTypeTag = bounds.h >= BLUEPRINT_NODE_TOOL_TYPE_MIN_H;
+  const showChainsRow = bounds.h >= BLUEPRINT_NODE_TOOL_CHAINS_MIN_H;
+  const canResize = isSizable && !readOnly && (selected || railVisible);
+
+  const handleResizePointerDown = (e: React.PointerEvent<HTMLSpanElement>) => {
+    if (readOnly) return;
+    e.stopPropagation();
+    e.preventDefault();
+    resizeRef.current = {
+      startX: e.clientX,
+      startY: e.clientY,
+      startW: bounds.w,
+      startH: bounds.h,
+    };
+    e.currentTarget.setPointerCapture(e.pointerId);
+  };
+
+  const handleResizePointerMove = (e: React.PointerEvent<HTMLSpanElement>) => {
+    const start = resizeRef.current;
+    if (!start) return;
+    e.stopPropagation();
+    const w = clampNodeWidth(start.startW + (e.clientX - start.startX));
+    const h = clampNodeHeight(start.startH + (e.clientY - start.startY));
+    onResize?.(node.id, w, h);
+  };
+
+  const handleResizePointerUp = (e: React.PointerEvent<HTMLSpanElement>) => {
+    if (!resizeRef.current) return;
+    e.stopPropagation();
+    resizeRef.current = null;
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    } catch {
+      // pointer already released
+    }
+  };
 
   const translate = transform
     ? `translate3d(${transform.x}px, ${transform.y}px, 0)`
@@ -134,7 +195,8 @@ export function BlueprintNodeView({
     }
   };
 
-  const showPorts = !readOnly;
+  // Ports appear on focus or hover so the canvas stays clean but links stay discoverable.
+  const showPorts = !readOnly && (selected || connectPending || hovered);
 
   return (
     <div
@@ -173,9 +235,16 @@ export function BlueprintNodeView({
           />
         ))}
 
+      {node.step != null && (
+        <span className="blueprint-node-step" aria-label={`Step ${node.step}`}>
+          {node.step}
+        </span>
+      )}
+
       <div
         ref={setNodeRef}
         className={bodyClassName}
+        style={sizeStyle}
         onDoubleClick={() => openTool()}
         {...listeners}
         {...attributes}
@@ -223,10 +292,12 @@ export function BlueprintNodeView({
                   <span className="blueprint-node-tool-name">{tool.name}</span>
                 </span>
               </div>
-              <div className="blueprint-node-tool-row2">
-                <span className="blueprint-node-type-tag">{typeBadgeLabel(tool.type)}</span>
-              </div>
-              {availableChains.length > 0 && (
+              {showTypeTag && (
+                <div className="blueprint-node-tool-row2">
+                  <span className="blueprint-node-type-tag">{typeBadgeLabel(tool.type)}</span>
+                </div>
+              )}
+              {showChainsRow && availableChains.length > 0 && (
                 <div className="blueprint-node-tool-row3">
                   <BlueprintToolChainMemo
                     availableChains={availableChains}
@@ -256,15 +327,32 @@ export function BlueprintNodeView({
         )}
       </div>
 
+      {canResize && (
+        <span
+          className="blueprint-node-resize"
+          data-testid="blueprint-node-resize"
+          role="slider"
+          aria-label="Resize card"
+          aria-valuenow={bounds.w}
+          onPointerDown={handleResizePointerDown}
+          onPointerMove={handleResizePointerMove}
+          onPointerUp={handleResizePointerUp}
+          onClick={(e) => e.stopPropagation()}
+        />
+      )}
+
       <BlueprintNodeRail
         ref={chainsButtonRef}
         nodeKind={node.kind}
         visible={railVisible}
         readOnly={readOnly}
         showChainsButton={availableChains.length > 0}
+        showStepButton={isSizable || node.kind === "chain"}
+        hasStep={node.step != null}
         toolName={tool?.name}
         onOpenTool={node.kind === "tool" && tool && !toolMissing ? openTool : undefined}
         onOpenChains={availableChains.length > 0 ? handleOpenChains : undefined}
+        onToggleStep={onToggleStep ? () => onToggleStep(node.id) : undefined}
         onRemove={() => onRemove(node.id)}
       />
     </div>
