@@ -358,7 +358,12 @@ pub struct PublicToolSummary {
 
 impl From<Tool> for PublicToolSummary {
     fn from(tool: Tool) -> Self {
-        let tool = sanitize_tool_for_public_response(tool);
+        Self::from(PublicTool::from(tool))
+    }
+}
+
+impl From<PublicTool> for PublicToolSummary {
+    fn from(tool: PublicTool) -> Self {
         Self {
             slug: tool.slug,
             name: tool.name,

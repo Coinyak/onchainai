@@ -126,7 +126,7 @@ pub async fn require_axis_b_payment(
         "application/json",
     );
     let client = facilitator_client();
-    require_payment(&client, &gate, headers, requirements)
+    require_payment(&client, &gate, headers, requirements, None)
         .await
         .map(Some)
 }

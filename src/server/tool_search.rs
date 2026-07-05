@@ -1,5 +1,6 @@
 //! Shared full-text search semantics for public tool discovery (web + MCP).
 
+use crate::discovery::parse_search_intent;
 use sqlx::PgPool;
 
 /// Document vector used for public tool text search (name + description only).
@@ -75,6 +76,24 @@ pub async fn count_fts_matches(
         .await
 }
 
+/// When explicit `function`/`chain` are absent, extract them from natural-language query tokens.
+pub fn resolve_search_filters(
+    query: &str,
+    function: Option<String>,
+    chain: Option<String>,
+) -> (String, Option<String>, Option<String>) {
+    if function.is_some() || chain.is_some() {
+        return (query.trim().to_string(), function, chain);
+    }
+    let intent = parse_search_intent(query);
+    let effective_query = if intent.query_terms.trim().is_empty() {
+        query.trim().to_string()
+    } else {
+        intent.query_terms
+    };
+    (effective_query, intent.function, intent.chain)
+}
+
 /// Resolve AND vs OR: try AND count first; fall back to OR when zero and query is multi-token.
 /// Probes the OR count SQL before selecting OR mode so invalid `to_tsquery` inputs stay on AND
 /// (empty results) instead of surfacing as 500s.
@@ -112,5 +131,22 @@ mod tests {
     fn fts_fragments_reference_search_vector() {
         assert!(FTS_AND_MATCH.contains("plainto_tsquery"));
         assert!(FTS_OR_MATCH.contains("replace"));
+    }
+
+    #[test]
+    fn resolve_search_filters_extracts_bridge_and_base() {
+        let (q, function, chain) = resolve_search_filters("bridge USDC to Base", None, None);
+        assert_eq!(function.as_deref(), Some("bridge"));
+        assert_eq!(chain.as_deref(), Some("base"));
+        assert!(!q.is_empty());
+    }
+
+    #[test]
+    fn resolve_search_filters_honors_explicit_params() {
+        let (q, function, chain) =
+            resolve_search_filters("anything", Some("swap".into()), Some("solana".into()));
+        assert_eq!(q, "anything");
+        assert_eq!(function.as_deref(), Some("swap"));
+        assert_eq!(chain.as_deref(), Some("solana"));
     }
 }

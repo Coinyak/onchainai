@@ -239,8 +239,8 @@ mod tests {
             build_toolkit_payload(vec![ToolkitToolView::from_tool(tool)]).expect("toolkit payload");
 
         assert_eq!(payload.total, 1);
-        assert_eq!(payload.tools[0].referral_payout_address, None);
-        assert_eq!(payload.tools[0].x402_pay_to_address, None);
+        assert_eq!(payload.tools[0].slug, "bridge-mcp");
+        assert!(!payload.json_export.body.contains("referral_payout_address"));
         assert!(payload.markdown_export.body.contains("Bridge MCP"));
         assert!(payload.markdown_export.body.contains("npx bridge-mcp"));
         assert!(!payload.markdown_export.body.contains("0xoperatorpayout"));
@@ -262,7 +262,7 @@ mod tests {
         tool.relevance_status = "accepted".into();
         tool.install_command = Some("npx bridge-mcp".into());
         let item = ToolkitToolView {
-            tool,
+            tool: crate::models::tool::PublicTool::from(tool),
             note: Some("Use for Base bridge research".into()),
             tags: vec!["base".into(), "research".into()],
             source: "web".into(),

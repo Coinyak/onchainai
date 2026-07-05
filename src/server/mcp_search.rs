@@ -9,7 +9,7 @@ use crate::server::queries::{
     MCP_SEARCH_TOOLS_TRUST_SQL,
 };
 use crate::server::tool_categories::is_public_tool_category;
-use crate::server::tool_search::{resolve_search_match, ToolSearchMatch};
+use crate::server::tool_search::{resolve_search_filters, resolve_search_match, ToolSearchMatch};
 use serde::Serialize;
 use serde_json::Value;
 use sqlx::PgPool;
@@ -156,6 +156,7 @@ pub(crate) async fn mcp_search_tools(
     cursor: i64,
 ) -> Result<McpSearchPage, (i32, String)> {
     let query = validate_query(query)?;
+    let (query, category, chain) = resolve_search_filters(&query, category, chain);
     let category = validate_category(category.as_deref())?;
     let chain = validate_chain(chain.as_deref())?;
     let limit = limit.clamp(1, 25);

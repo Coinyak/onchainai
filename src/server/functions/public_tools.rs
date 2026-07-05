@@ -391,13 +391,24 @@ fn push_list_order_offset_limit(
     query.push(" LIMIT ").push_bind(limit);
 }
 
-/// Count approved tools with optional multi-axis filters.
+/// Count approved tools with optional multi-axis filters and optional FTS `search_q`.
 #[cfg(feature = "ssr")]
 pub(crate) async fn fetch_count_tools(
     pool: &sqlx::PgPool,
     filters: &ToolFilters,
+    search: Option<&str>,
 ) -> Result<i64, FnError> {
+    use crate::server::tool_search::ToolSearchMatch;
+
+    let search_text = search.filter(|q| !q.trim().is_empty());
+    let match_mode = if let Some(text) = search_text {
+        resolve_list_search_match(pool, text, filters).await?
+    } else {
+        ToolSearchMatch::And
+    };
+
     let mut q = sqlx::QueryBuilder::new(COUNT_APPROVED_TOOLS_SQL);
+    push_list_query_filter(&mut q, search, match_mode);
     append_tool_filters(&mut q, filters);
 
     let count = q
@@ -483,9 +494,9 @@ pub struct BrowserDataPayload {
     pub categories: Vec<(Category, i64)>,
     pub chains: Vec<(String, i64)>,
     pub total: i64,
-    pub tools: Vec<Tool>,
+    pub tools: Vec<crate::models::tool::PublicToolSummary>,
     pub comment_counts: HashMap<String, i64>,
-    pub preview_tool: Option<Tool>,
+    pub preview_tool: Option<crate::models::tool::PublicTool>,
 }
 
 pub const MAX_DASHBOARD_LIST_LIMIT: i64 = 12;
@@ -620,7 +631,7 @@ pub struct ToolkitExportTool {
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ToolkitToolView {
-    pub tool: Tool,
+    pub tool: crate::models::tool::PublicTool,
     pub note: Option<String>,
     pub tags: Vec<String>,
     pub source: String,
@@ -633,7 +644,7 @@ impl ToolkitToolView {
     pub fn from_tool(tool: Tool) -> Self {
         let now = chrono::Utc::now();
         Self {
-            tool,
+            tool: crate::models::tool::PublicTool::from(tool),
             note: None,
             tags: Vec::new(),
             source: "web".into(),
@@ -676,7 +687,7 @@ fn tool_to_toolkit_export(item: &ToolkitToolView) -> ToolkitExportTool {
 pub struct MyToolkitPayload {
     pub total: i64,
     pub items: Vec<ToolkitToolView>,
-    pub tools: Vec<Tool>,
+    pub tools: Vec<crate::models::tool::PublicToolSummary>,
     pub markdown_export: ToolkitExportPayload,
     pub json_export: ToolkitExportPayload,
 }
@@ -690,7 +701,7 @@ pub struct UpdateToolkitItemPayload {
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ToolComparisonView {
-    pub tool: Tool,
+    pub tool: crate::models::tool::PublicTool,
     pub official_links: Vec<ToolOfficialLink>,
     pub trust_facts: Vec<TrustFact>,
     pub viewer_bookmarked: bool,
@@ -844,7 +855,7 @@ fn sanitize_toolkit_items(items: Vec<ToolkitToolView>) -> Vec<ToolkitToolView> {
     items
         .into_iter()
         .map(|mut item| {
-            let mut tool = sanitize_tool_for_public_response(item.tool);
+            let mut tool = item.tool;
             tool.name = redact_secrets(&tool.name);
             tool.description = tool.description.map(|value| redact_secrets(&value));
             tool.install_command = tool.install_command.map(|value| redact_secrets(&value));
@@ -914,8 +925,12 @@ fn toolkit_markdown_for_items(items: &[ToolkitToolView]) -> String {
 }
 
 pub fn build_toolkit_payload(items: Vec<ToolkitToolView>) -> Result<MyToolkitPayload, FnError> {
+    use crate::models::tool::PublicToolSummary;
     let items = sanitize_toolkit_items(items);
-    let tools: Vec<Tool> = items.iter().map(|item| item.tool.clone()).collect();
+    let tools: Vec<PublicToolSummary> = items
+        .iter()
+        .map(|item| PublicToolSummary::from(item.tool.clone()))
+        .collect();
     let markdown_body = toolkit_markdown_for_items(&items);
     let export_tools: Vec<ToolkitExportTool> = items.iter().map(tool_to_toolkit_export).collect();
     let json_body = serde_json::to_string_pretty(&export_tools)
@@ -975,7 +990,7 @@ async fn fetch_user_toolkit(
             .ok()
             .flatten();
         items.push(ToolkitToolView {
-            tool,
+            tool: crate::models::tool::PublicTool::from(tool),
             note,
             tags,
             source,

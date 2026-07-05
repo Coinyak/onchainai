@@ -186,3 +186,4 @@ Submit status tracked in `docs/X402_ROADMAP.md` §10. Copy-paste payloads: `docs
 | `429 Too Many Requests` | Per-IP rate limit. Back off and retry. |
 | Tool not found by slug | Slugs come from `search_tools` results — don't guess them. |
 | Client only supports stdio | Use the `mcp-remote` bridge above. |
+| `Connection closed` on `check_endpoint_health` | Expected on Claude Code/Cursor — HTTP 402 is not an MCP JSON-RPC result. Use free `get_tool_detail` (x402 flags) or REST `GET /api/v2/premium/check-endpoint-health/{slug}` with an x402 wallet client. |

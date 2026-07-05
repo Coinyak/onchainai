@@ -328,7 +328,7 @@ fn get_dashboard_snapshot_definition() -> Value {
 fn check_endpoint_health_definition() -> Value {
     json!({
         "name": "check_endpoint_health",
-        "description": "Premium x402 trust data: endpoint liveness, 30-day probe uptime, and last probe time for a listed x402 tool. Requires x402 micropayment per call (HTTP 402 handshake via PAYMENT-SIGNATURE). Free discovery tools remain search_tools/get_tool_detail.",
+        "description": "Premium x402 trust data: endpoint liveness, 30-day probe uptime, and last probe time for a listed x402 tool. Requires x402 micropayment per call (HTTP 402 + PAYMENT-REQUIRED header). Standard MCP clients (Claude Code, Cursor) cannot complete payment and may show a connection error — use free get_tool_detail for x402 verification flags, or GET /api/v2/premium/check-endpoint-health/{slug} with an x402-capable HTTP client.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -528,7 +528,15 @@ async fn call_check_endpoint_health(
         "application/json",
     );
     let client = facilitator_client();
-    let settlement = match require_payment(&client, &config, headers, requirements).await {
+    let settlement = match require_payment(
+        &client,
+        &config,
+        headers,
+        requirements,
+        Some(crate::server::x402_payment::CHECK_ENDPOINT_HEALTH_PAYMENT_HINT),
+    )
+    .await
+    {
         Ok(s) => s,
         Err(resp) => return Ok(DispatchOutcome::Http(resp)),
     };

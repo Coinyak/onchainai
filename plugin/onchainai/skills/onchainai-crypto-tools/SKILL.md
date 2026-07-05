@@ -31,6 +31,7 @@ Use the connected `onchainai` MCP server to discover and safely install crypto t
 
 ## x402 And Paid Tools
 
+- Do **not** call `check_endpoint_health` from Claude Code, Cursor, or other MCP clients without x402 payment support — they show `Connection closed` instead of price info. Use free `get_tool_detail` for `x402_endpoint_verified`, `price_verified`, and `payment_verified`, or document REST `GET /api/v2/premium/check-endpoint-health/{slug}` for x402-native HTTP clients.
 - If `pricing = "x402"` or an `x402_price` is present, state that calls may charge on use and require a connected agent wallet.
 - Surface the returned price and endpoint/payment verification flags.
 - Say "operator verified" only when `payment_verified`, `x402_endpoint_verified`, and `price_verified` are all true.

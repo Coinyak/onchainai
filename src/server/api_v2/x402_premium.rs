@@ -36,7 +36,15 @@ async fn get_check_endpoint_health(
     );
 
     let client = facilitator_client();
-    let settlement = match require_payment(&client, &config, &headers, requirements).await {
+    let settlement = match require_payment(
+        &client,
+        &config,
+        &headers,
+        requirements,
+        Some(crate::server::x402_payment::CHECK_ENDPOINT_HEALTH_PAYMENT_HINT),
+    )
+    .await
+    {
         Ok(s) => s,
         Err(resp) => return resp,
     };
