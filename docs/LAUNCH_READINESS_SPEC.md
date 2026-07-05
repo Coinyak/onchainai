@@ -1,7 +1,7 @@
 # 공식 출범 준비 스펙 — GitHub 공개 + 에이전트 온보딩 + x402 활성화
 
 > 작성일: 2026-07-03 · 목적: 프라이빗 레포를 **공개 출범 가능한 상태**로 만드는 전 범위 분석 + 실행 스펙.
-> 관련: [SKILL_PLUGIN_SPEC.md](SKILL_PLUGIN_SPEC.md) · [X402_REFERRAL_SPEC.md](X402_REFERRAL_SPEC.md) · [CONNECT.md](CONNECT.md) · [PRODUCT_ENHANCEMENT_SPEC.md](PRODUCT_ENHANCEMENT_SPEC.md) · [UI 통합 감사 스펙](superpowers/specs/2026-07-03-visual-ui-audit-16-agent-spec.md)
+> 관련: [SKILL_PLUGIN_SPEC.md](SKILL_PLUGIN_SPEC.md) · [X402_REFERRAL_SPEC.md](X402_REFERRAL_SPEC.md) · [CONNECT.md](CONNECT.md) · [UI 통합 감사 스펙](superpowers/specs/2026-07-03-visual-ui-audit-16-agent-spec.md)
 > 표기: ✅ = 2026-07-03 기준 구현/완료, 🔲 = 남은 작업. 우선순위 P0(공개 전 필수) > P1(공개 직후 2주) > P2(후속).
 
 ---

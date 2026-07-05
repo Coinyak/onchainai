@@ -166,7 +166,7 @@ folder to any runtime that supports Agent Skills. The skill assumes the
 
 ## Listed on (external discovery)
 
-Submit status tracked in `docs/X402_ROADMAP.md` §10. Copy-paste payloads: `docs/listings/directory-forms.md`.
+Copy-paste payloads: `docs/listings/directory-forms.md`.
 
 | Channel | URL / artifact | Status |
 |---------|----------------|--------|

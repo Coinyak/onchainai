@@ -18,7 +18,7 @@
 - **Grok 완료분** (`origin/grok/ui-audit-p0p1` 67f4c21, PR 리뷰 대기): Agent Sync P0–P2(migration **030** `agent_tokens`·device flow·`bookmarks.source`·`agent_sync_log`, MCP **Bearer 인증** + `save_to_toolkit`/`save_stack_to_blueprint`/`link_status`, `/connect#agent-sync`, plugin 0.2.0), Blueprint v2(migration **029** edges), dashboard admin 가드, dev 워크플로 Next.js 전환(cargo-leptos 제거). Rust 테스트 427 passed.
 - **진행 순서(오너 확정)**: PR 리뷰 → 머지 → Railway+Vercel 배포 → `post-deploy-verify.sh`. **본 스펙 L 페이즈는 그 머지 후 main에서 브랜치** — migration 번호(031)·`api_v2/mod.rs` 라우터 충돌 회피.
 - **x402 활성화 스펙**([2026-07-03-x402-activation-spec](superpowers/specs/2026-07-03-x402-activation-spec.md), Grok 워크트리에 의도적 미커밋): 문서 상태 라벨은 "오너 패킷 대기"지만 **2026-07-04 프로덕션 실측 결과 §4 필수값 대부분 반영 완료** — site_settings에 bps=250·payout 주소(0x9626…)·builder code(bc_…) 저장됨, Base.dev 도메인 인증 meta 라이브(28d38c2), X2(site fallback)는 33177d3으로 구현됨. **실제 잔여**: ① X4 웹 어트리뷰션·X1/X3 Admin UI = 구현 작업(referral_events 0행인 이유), ② 고지 문구 EN/KO 확정(패킷 5·6), ③ `allow_x402_registration` 현재 **false** → L1 배포와 동시에 true 전환(런칭 스위치), ④ 파일럿 표(패킷 7)는 본 스펙의 Bazaar 시드+셀프 등록이 대체 — 불필요.
-- **정본 라벨은 `PRODUCT_ENHANCEMENT_SPEC.md` §K** (K1 어트리뷰션 / K2 프리미엄 MCP / K3 유료 노출·검증 / K4 가드레일). 본 문서 M2=K3, M3=K2 — 새 라벨이 아니라 그 항목의 상세 설계. §K의 2026-06-29 수익화 보류는 **2026-07-04 오너 결정으로 해제**(§K에 해제 주석 반영) — 본 스펙이 실행 스펙.
+- **수익화 라벨 K1–K4** (K1 어트리뷰션 / K2 프리미엄 MCP / K3 유료 노출·검증 / K4 가드레일). 본 문서 M2=K3, M3=K2 — 새 라벨이 아니라 그 항목의 상세 설계. 2026-06-29 수익화 보류는 **2026-07-04 오너 결정으로 해제** — 본 스펙이 실행 스펙.
 - **`allow_x402_registration` 통합**: 이미 `site_settings`에 존재(활성화 스펙 X8 지적 "저장만, 미강제"). **L1이 이 갭을 메운다** — false면 x402 타입 제출 차단. 중복 구현 금지.
 
 ## 0.5 전제 실측 (2026-07-04)

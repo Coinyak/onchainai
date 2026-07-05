@@ -1,6 +1,6 @@
 # OnchainAI — Skill & Plugin 배포 스펙
 
-> 작성일: 2026-06-29 · 상위 전략: [PRODUCT_ENHANCEMENT_SPEC.md](PRODUCT_ENHANCEMENT_SPEC.md) §J.
+> 작성일: 2026-06-29.
 > 목적: OnchainAI를 MCP 서버 단독이 아니라 **Skill(노하우) + Plugin(원클릭 배포)**으로 패키징하는 구체 스펙.
 > ⚠️ Skill/Plugin 포맷은 진화 중 — 구현 전 현재 Claude Code 플러그인 / Agent Skills 공식 문서로 필드 실측 확인(이 문서는 설계 의도 + 초안).
 

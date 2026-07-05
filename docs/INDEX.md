@@ -18,15 +18,10 @@
 
 ## Product & Launch
 
-- [REVENUE_FORECAST](REVENUE_FORECAST.md) — 최종 수익 전망: 무료 발견 + 에이전트 신뢰 + 프로바이더 B2B (어트리뷰션 P&L $0)
 - [CONNECT](CONNECT.md) — Connect any MCP client, install the Claude Code plugin/skill (user-facing)
 - [LAUNCH_READINESS_SPEC](LAUNCH_READINESS_SPEC.md) — GitHub 공개 전환 체크리스트, 온보딩 표면, 등재 채널, x402 검증 잡, 어댑션 계측
-- [PRODUCT_ENHANCEMENT_SPEC](PRODUCT_ENHANCEMENT_SPEC.md) — 고도화 스펙: 코드베이스 진단 → 우선순위 개선(기능·MCP·UI·견고화), 근거(파일:라인)→목표→작업→수용기준
-- [X402_MONETIZATION_SPEC](X402_MONETIZATION_SPEC.md) — x402 수익·제품 정본 (가격, 무료 티어, 금지, DoD)
 - [X402_OPEN_LISTING_SPEC](X402_OPEN_LISTING_SPEC.md) — x402 self-serve open listing + K2 check_endpoint_health premium (facilitator settle, no-custody)
-- [X402_ROADMAP](X402_ROADMAP.md) — x402 로드맵 (living plan: 페이즈 체크리스트·스프린트·KPI; **자문용, 변동 가능**)
 - [X402_REFERRAL_SPEC](X402_REFERRAL_SPEC.md) — x402 레퍼럴/어트리뷰션 설계 (no-custody 원칙)
-- [MCP_X402_MONETIZATION_SPEC](MCP_X402_MONETIZATION_SPEC.md) — MCP premium Axis B x402 (compare_tools/export_toolkit) — **Superseded**, X402_MONETIZATION_SPEC가 정본
 - [free-tier-guardian-spec](superpowers/specs/2026-07-04-free-tier-guardian-spec.md) — 영구 무료 티어 정책 (웹·MCP·compare_tools·SEO `/x402` 허브)
 - [SKILL_PLUGIN_SPEC](SKILL_PLUGIN_SPEC.md) — Skill + Plugin 패키징 스펙 (`plugin/onchainai/` 레이아웃)
 - [listings/](listings/) — 외부 디렉토리 등재 카피·제출 폼 (awesome-crypto-mcp-servers 엔트리, directory-forms)

@@ -177,15 +177,6 @@ function X402SubmitFlow() {
           rel="noopener noreferrer"
         >
           open listing spec
-        </a>{" "}
-        and{" "}
-        <a
-          href="https://github.com/Coinyak/onchainai/blob/main/docs/X402_MONETIZATION_SPEC.md"
-          className="text-tertiary underline"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          monetization spec
         </a>
         .
       </p>

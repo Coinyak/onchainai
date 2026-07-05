@@ -1,6 +1,6 @@
 # 구현 검증 매트릭스 (Codex 자가 검증용)
 
-> 목적: 코딩 에이전트(Codex 등)가 [PRODUCT_ENHANCEMENT_SPEC.md](PRODUCT_ENHANCEMENT_SPEC.md) 항목을 구현한 뒤 **"제대로 됐는지"를 기계적으로 확인**하는 장치.
+> 목적: 코딩 에이전트(Codex 등)가 구현 스펙 항목을 구현한 뒤 **"제대로 됐는지"를 기계적으로 확인**하는 장치.
 > 실행기: [`scripts/spec-verify.sh`](../scripts/spec-verify.sh). 이 표는 사람이 읽는 정본, 스크립트는 자동 실행분.
 
 ## 사용법 — 2개 모드

@@ -1,7 +1,7 @@
 //! x402 payment gate for OnchainAI-owned premium services (K2).
 //!
 //! Uses a facilitator for verify/settle only — no custody, no third-party proxy.
-//! Spec: docs/X402_OPEN_LISTING_SPEC.md §M2/M3, docs/PRODUCT_ENHANCEMENT_SPEC.md §K2.
+//! Spec: docs/X402_OPEN_LISTING_SPEC.md §M2/M3 (K2 premium).
 
 use std::sync::LazyLock;
 use std::time::Duration;

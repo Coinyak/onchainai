@@ -1,6 +1,6 @@
 # External directory submission copy-paste
 
-> Generated for operator one-click submit. Update dates in `docs/X402_ROADMAP.md` §10 after each success.
+> Generated for operator one-click submit. Update the status table in `docs/CONNECT.md` after each success.
 
 ## Done (2026-07-04)
 
