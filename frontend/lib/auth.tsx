@@ -3,6 +3,7 @@
 import {
   createContext,
   useContext,
+  useEffect,
   type ReactNode,
 } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -18,14 +19,37 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
+const SESSION_HINT = "onchainai_session=1";
+
+function sessionHintPresent(): boolean {
+  return typeof document !== "undefined" && document.cookie.includes(SESSION_HINT);
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const { data, isLoading, refetch } = useQuery({
     queryKey: ["me"],
     queryFn: getMe,
     staleTime: 0,
+    gcTime: 0,
     refetchOnMount: "always",
+    refetchOnWindowFocus: true,
     retry: false,
   });
+
+  useEffect(() => {
+    if (sessionHintPresent()) {
+      void refetch();
+    }
+
+    function onFocus() {
+      if (sessionHintPresent()) {
+        void refetch();
+      }
+    }
+
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, [refetch]);
 
   const value: AuthContextValue = {
     user: data ?? null,

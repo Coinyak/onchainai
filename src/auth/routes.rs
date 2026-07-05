@@ -28,7 +28,15 @@ pub struct OAuthCallbackQuery {
 
 #[derive(Debug, Deserialize)]
 struct GithubTokenResponse {
-    access_token: String,
+    access_token: Option<String>,
+    error: Option<String>,
+    error_description: Option<String>,
+}
+
+#[derive(Debug)]
+enum GithubExchangeError {
+    RedirectMismatch,
+    Other,
 }
 
 #[derive(Debug, Deserialize)]
@@ -111,8 +119,8 @@ pub async fn github_login(State(state): State<AppState>) -> Result<Response, Sta
 async fn exchange_github_code(
     config: &Config,
     code: &str,
-) -> Result<GithubTokenResponse, StatusCode> {
-    let client = auth_http_client().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+) -> Result<GithubTokenResponse, GithubExchangeError> {
+    let client = auth_http_client().map_err(|_| GithubExchangeError::Other)?;
 
     let redirect_uri = callback_url(config);
     let response = client
@@ -126,23 +134,38 @@ async fn exchange_github_code(
         }))
         .send()
         .await
-        .map_err(|_| StatusCode::BAD_GATEWAY)?;
+        .map_err(|_| GithubExchangeError::Other)?;
 
-    if !response.status().is_success() {
-        let status = response.status();
-        let body = response.text().await.unwrap_or_default();
+    let status = response.status();
+    let body = response.text().await.unwrap_or_default();
+    let token: GithubTokenResponse =
+        serde_json::from_str(&body).map_err(|_| GithubExchangeError::Other)?;
+
+    if let Some(err) = token.error.as_deref() {
+        tracing::warn!(
+            status = %status,
+            github_error = err,
+            description = token.error_description.as_deref().unwrap_or(""),
+            redirect_uri = %redirect_uri,
+            "GitHub OAuth token exchange rejected"
+        );
+        return Err(if err == "redirect_uri_mismatch" {
+            GithubExchangeError::RedirectMismatch
+        } else {
+            GithubExchangeError::Other
+        });
+    }
+
+    if !status.is_success() || token.access_token.as_deref().unwrap_or("").is_empty() {
         tracing::warn!(
             status = %status,
             body_len = body.len(),
             "GitHub OAuth token exchange failed"
         );
-        return Err(StatusCode::BAD_REQUEST);
+        return Err(GithubExchangeError::Other);
     }
 
-    response
-        .json::<GithubTokenResponse>()
-        .await
-        .map_err(|_| StatusCode::BAD_REQUEST)
+    Ok(token)
 }
 
 async fn fetch_github_user(access_token: &str) -> Result<GithubUser, StatusCode> {
@@ -196,11 +219,18 @@ pub async fn oauth_callback(
 
     let token = match exchange_github_code(config, &code).await {
         Ok(token) => token,
-        Err(_) => {
+        Err(GithubExchangeError::RedirectMismatch) => {
+            return Ok(Redirect::to("/login?auth=github_redirect_mismatch").into_response());
+        }
+        Err(GithubExchangeError::Other) => {
             return Ok(Redirect::to("/login?auth=github_token_exchange").into_response());
         }
     };
-    let github_user = match fetch_github_user(&token.access_token).await {
+    let access_token = token
+        .access_token
+        .as_deref()
+        .ok_or(StatusCode::BAD_REQUEST)?;
+    let github_user = match fetch_github_user(access_token).await {
         Ok(user) => user,
         Err(_) => {
             return Ok(Redirect::to("/login?auth=github_user_fetch").into_response());

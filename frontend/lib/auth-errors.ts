@@ -7,6 +7,8 @@ export function authErrorMessage(code: string | null | undefined): string | null
     github_missing_state: "GitHub sign-in expired. Try again.",
     github_state_mismatch: "GitHub sign-in could not be verified. Try again.",
     github_token_exchange: "Could not complete GitHub sign-in. Try again later.",
+    github_redirect_mismatch:
+      "GitHub OAuth callback URL is not registered for this site. Add https://www.onchain-ai.xyz/auth/callback in your GitHub OAuth app settings, then try again.",
     github_user_fetch: "Could not load your GitHub profile. Try again later.",
     github_profile_exists: "This GitHub account is already linked to another profile.",
     github_profile_setup: "Could not create your profile. Try again or contact support.",

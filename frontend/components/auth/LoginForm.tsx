@@ -1,11 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { clientApiBase, githubSignInHref, githubSwitchHref, googleSignInHref, isVercelPreviewHost, productionLoginHref } from "@/lib/auth-origin";
 import { useAuth } from "@/lib/auth";
 import { getAuthProviders } from "@/lib/api";
-import { hardNavigateAfterAuth, refreshSessionAfterAuth } from "@/lib/auth-nav";
+import { hardNavigateAfterAuth } from "@/lib/auth-nav";
 import { GitHubMarkIcon } from "@/components/icons/GitHubMarkIcon";
 import { GoogleMarkIcon } from "@/components/icons/GoogleMarkIcon";
 import { connectWalletSiwx, SiwxError } from "@/lib/siwx";
@@ -26,7 +26,6 @@ export function LoginForm({
   authError = null,
   signedOut = false,
 }: LoginFormProps) {
-  const queryClient = useQueryClient();
   const { data: providers } = useQuery({
     queryKey: ["auth-providers"],
     queryFn: getAuthProviders,
@@ -83,20 +82,8 @@ export function LoginForm({
       const { redirect } = await connectWalletSiwx(apiBase);
       const returnTo = consumeReturnTo();
       const target = returnTo || redirect;
-      const user = await refreshSessionAfterAuth(queryClient);
-      if (user && compact && onCancel) {
-        onCancel();
-      }
-      if (!user) {
-        hardNavigateAfterAuth(target);
-        return;
-      }
-      const current = `${window.location.pathname}${window.location.search}`;
-      const next = new URL(target, window.location.origin);
-      const nextPath = `${next.pathname}${next.search}`;
-      if (nextPath !== current) {
-        hardNavigateAfterAuth(target);
-      }
+      // Hard-navigate so Set-Cookie from verify is visible to the next page load.
+      hardNavigateAfterAuth(target);
     } catch (err) {
       const message =
         err instanceof SiwxError
