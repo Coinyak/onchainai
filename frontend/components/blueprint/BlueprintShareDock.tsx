@@ -6,7 +6,7 @@ import {
   getBlueprintAgentExport,
   type BlueprintEdge,
   type BlueprintNode,
-  type Tool,
+  type PublicTool,
 } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { buildDraftAgentMarkdown, captureBlueprintViewport } from "@/lib/blueprint-export";
@@ -19,7 +19,7 @@ export interface BlueprintShareDockProps {
   title: string;
   nodes: BlueprintNode[];
   edges: BlueprintEdge[];
-  toolsBySlug: Record<string, Tool | null>;
+  toolsBySlug: Record<string, PublicTool | null>;
   readOnlyLayout: boolean;
 }
 

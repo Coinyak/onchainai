@@ -5,6 +5,34 @@ mod tests {
     use super::*;
 
     #[test]
+    fn merge_search_intent_into_filters_adds_type_and_chain_without_dropping_url_filters() {
+        use crate::server::tool_search::resolve_search_intent;
+
+        let base = ToolFilters {
+            status: vec!["verified".into()],
+            ..Default::default()
+        };
+        let intent = resolve_search_intent("mcp base", None, None);
+        let merged = merge_search_intent_into_filters(&base, &intent);
+
+        assert_eq!(merged.status, vec!["verified"]);
+        assert_eq!(merged.tool_type, vec!["mcp"]);
+        assert_eq!(merged.chain, vec!["base"]);
+        assert!(intent.query.is_empty());
+    }
+
+    #[test]
+    fn intent_to_tool_filters_maps_type_only_query() {
+        use crate::server::tool_search::resolve_search_intent;
+
+        let intent = resolve_search_intent("mcp", None, None);
+        let filters = intent_to_tool_filters(&intent);
+        assert_eq!(filters.tool_type, vec!["mcp"]);
+        assert!(filters.function.is_empty());
+        assert!(filters.chain.is_empty());
+    }
+
+    #[test]
     fn tool_list_request_serializes_filters_field() {
         let req = ToolListRequest {
             sort: "hot".into(),

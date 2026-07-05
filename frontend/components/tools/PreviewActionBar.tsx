@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useMutation } from "@tanstack/react-query";
 import { ArrowLeftRight, Plug, Star } from "lucide-react";
-import type { Tool } from "@/lib/api";
+import type { PublicTool } from "@/lib/api";
 import { isBookmarked, setBookmark } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { LoginModal } from "@/components/auth/LoginModal";
@@ -16,7 +16,7 @@ import {
 } from "@/lib/install-guide";
 
 interface PreviewActionBarProps {
-  tool: Tool;
+  tool: PublicTool;
   fullPageHref: string;
   addMcpQueryBase?: string;
 }

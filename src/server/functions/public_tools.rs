@@ -214,6 +214,45 @@ pub struct ToolFilters {
     pub chain: Vec<String>,
 }
 
+fn merge_optional_filter(values: &mut Vec<String>, value: Option<&str>) {
+    if let Some(value) = value.filter(|part| !part.trim().is_empty()) {
+        if !values.iter().any(|existing| existing == value) {
+            values.push(value.to_string());
+        }
+    }
+}
+
+/// Build axis filters from parsed search intent (single value per axis).
+pub fn intent_to_tool_filters(
+    intent: &crate::server::tool_search::ResolvedSearchIntent,
+) -> ToolFilters {
+    let mut filters = ToolFilters::default();
+    merge_optional_filter(&mut filters.function, intent.function.as_deref());
+    merge_optional_filter(&mut filters.chain, intent.chain.as_deref());
+    merge_optional_filter(&mut filters.tool_type, intent.tool_type.as_deref());
+    merge_optional_filter(
+        &mut filters.install_risk,
+        intent.install_risk.as_deref(),
+    );
+    filters
+}
+
+/// Merge parsed intent into existing browser/API filters without dropping URL params.
+pub fn merge_search_intent_into_filters(
+    base: &ToolFilters,
+    intent: &crate::server::tool_search::ResolvedSearchIntent,
+) -> ToolFilters {
+    let mut merged = base.clone();
+    merge_optional_filter(&mut merged.function, intent.function.as_deref());
+    merge_optional_filter(&mut merged.chain, intent.chain.as_deref());
+    merge_optional_filter(&mut merged.tool_type, intent.tool_type.as_deref());
+    merge_optional_filter(
+        &mut merged.install_risk,
+        intent.install_risk.as_deref(),
+    );
+    merged
+}
+
 #[cfg(feature = "ssr")]
 fn append_scalar_union<'qb>(
     query: &mut sqlx::QueryBuilder<'qb, sqlx::Postgres>,
@@ -303,7 +342,7 @@ pub(crate) fn append_tool_filters<'qb>(
 }
 
 #[cfg(feature = "ssr")]
-async fn count_list_fts_matches(
+pub(crate) async fn count_list_fts_matches(
     pool: &sqlx::PgPool,
     search: &str,
     filters: &ToolFilters,
@@ -321,7 +360,7 @@ async fn count_list_fts_matches(
 }
 
 #[cfg(feature = "ssr")]
-async fn resolve_list_search_match(
+pub(crate) async fn resolve_list_search_match(
     pool: &sqlx::PgPool,
     search: &str,
     filters: &ToolFilters,
@@ -341,7 +380,7 @@ async fn resolve_list_search_match(
 }
 
 #[cfg(feature = "ssr")]
-fn push_list_query_filter<'qb>(
+pub(crate) fn push_list_query_filter<'qb>(
     query: &mut sqlx::QueryBuilder<'qb, sqlx::Postgres>,
     search: Option<&'qb str>,
     match_mode: crate::server::tool_search::ToolSearchMatch,
@@ -466,6 +505,61 @@ pub(crate) async fn fetch_list_tools(
         .fetch_all(pool)
         .await
         .map_err(|e| FnError::new(format!("list tools failed: {e}")))?;
+
+    Ok(sanitize_tools_for_public_response(tools))
+}
+
+/// REST/MCP search: apply full intent (FTS + axis filters) with relevance ranking.
+#[cfg(feature = "ssr")]
+pub(crate) async fn fetch_search_by_intent(
+    pool: &sqlx::PgPool,
+    intent: &crate::server::tool_search::ResolvedSearchIntent,
+) -> Result<Vec<Tool>, FnError> {
+    use crate::server::tool_search::{ToolSearchMatch, TOOL_SEARCH_VECTOR};
+
+    let filters = intent_to_tool_filters(intent);
+    validate_tool_filters(&filters)?;
+    let search_text = intent.query.trim();
+    let has_fts = !search_text.is_empty();
+    let match_mode = if has_fts {
+        resolve_list_search_match(pool, search_text, &filters).await?
+    } else {
+        ToolSearchMatch::And
+    };
+
+    let mut q = sqlx::QueryBuilder::new("SELECT * FROM tools WHERE ");
+    q.push(PUBLIC_TOOL_WHERE);
+    if has_fts {
+        push_list_query_filter(&mut q, Some(search_text), match_mode);
+    }
+    append_tool_filters(&mut q, &filters);
+    if has_fts {
+        q.push(" ORDER BY ts_rank_cd(");
+        q.push(TOOL_SEARCH_VECTOR);
+        q.push(", ");
+        match match_mode {
+            ToolSearchMatch::And => {
+                q.push("plainto_tsquery('english', ");
+                q.push_bind(search_text);
+                q.push(")");
+            }
+            ToolSearchMatch::Or => {
+                q.push("to_tsquery('english', replace(plainto_tsquery('english', ");
+                q.push_bind(search_text);
+                q.push(")::text, ' & ', ' | '))");
+            }
+        }
+        q.push(") DESC, stars DESC, created_at DESC");
+    } else {
+        q.push(" ORDER BY stars DESC, created_at DESC");
+    }
+    q.push(" LIMIT 50");
+
+    let tools = q
+        .build_query_as::<Tool>()
+        .fetch_all(pool)
+        .await
+        .map_err(|e| FnError::new(format!("search failed: {e}")))?;
 
     Ok(sanitize_tools_for_public_response(tools))
 }

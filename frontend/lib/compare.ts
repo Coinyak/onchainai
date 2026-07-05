@@ -1,4 +1,4 @@
-import type { Tool } from "@/lib/api";
+import type { PublicTool } from "@/lib/api";
 import { chainTagsForTool } from "@/lib/chains";
 import { statusBadgeLabel, timeAgo, typeBadgeLabel } from "@/lib/format";
 
@@ -75,7 +75,7 @@ function formatInstallRisk(level: string): string {
   }
 }
 
-export function compareCellText(tool: Tool, key: CompareRowKey): string {
+export function compareCellText(tool: PublicTool, key: CompareRowKey): string {
   switch (key) {
     case "type":
       return typeBadgeLabel(tool.type);
@@ -100,13 +100,13 @@ export function compareCellText(tool: Tool, key: CompareRowKey): string {
   }
 }
 
-export function rowValuesDiffer(tools: Tool[], key: CompareRowKey): boolean {
+export function rowValuesDiffer(tools: PublicTool[], key: CompareRowKey): boolean {
   if (tools.length < 2 || key === "chains") return false;
   const values = tools.map((tool) => compareCellText(tool, key).toLowerCase());
   return new Set(values).size > 1;
 }
 
-export function sharedChainIds(tools: Tool[]): Set<string> {
+export function sharedChainIds(tools: PublicTool[]): Set<string> {
   if (tools.length < 2) return new Set();
   const chainSets = tools.map(
     (tool) => new Set(chainTagsForTool(tool.chains).map((chain) => chain.id)),

@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import type { Tool } from "@/lib/api";
+import type { PublicTool } from "@/lib/api";
 import { ConnectGuideBlocks } from "@/components/connect/ConnectGuideBlocks";
 import { CodingClientLogo } from "@/components/tools/CodingClientLogo";
 import { logoIdForToolInstallClient } from "@/lib/coding-clients";
@@ -16,7 +16,7 @@ import {
 const COMPACT_INSTALL_CLIENTS: ToolInstallClient[] = ["cursor", "vscode", "generic", "more"];
 
 interface InstallGuidePanelProps {
-  tool: Tool;
+  tool: PublicTool;
   compact?: boolean;
   showProgress?: boolean;
 }

@@ -1,14 +1,14 @@
-import type { TrustFact, Tool } from "@/lib/api";
+import type { PublicTool, TrustFact } from "@/lib/api";
 import { timeAgo } from "@/lib/format";
 import { Check } from "lucide-react";
 
 interface TrustFactsProps {
-  tool: Tool;
+  tool: PublicTool;
   facts?: TrustFact[];
   variant?: "default" | "preview";
 }
 
-function buildDefaultFacts(tool: Tool): TrustFact[] {
+function buildDefaultFacts(tool: PublicTool): TrustFact[] {
   const facts: TrustFact[] = [];
   if (tool.status === "verified" || tool.status === "official") {
     facts.push({ label: "Verified", detail: `${tool.status} listing`, severity: "positive" });

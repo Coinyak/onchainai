@@ -21,6 +21,15 @@ pub const TS_RANK_AND: &str =
 pub const TS_RANK_OR: &str =
     "ts_rank_cd(to_tsvector('english', coalesce(name, '') || ' ' || coalesce(description, '')), to_tsquery('english', replace(plainto_tsquery('english', $1)::text, ' & ', ' | ')))";
 
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ResolvedSearchIntent {
+    pub query: String,
+    pub function: Option<String>,
+    pub chain: Option<String>,
+    pub tool_type: Option<String>,
+    pub install_risk: Option<String>,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ToolSearchMatch {
     And,
@@ -76,21 +85,21 @@ pub async fn count_fts_matches(
         .await
 }
 
-/// When explicit `function`/`chain` are absent, extract them from natural-language query tokens.
-pub fn resolve_search_filters(
+/// Parse natural-language query tokens into FTS text plus optional axis filters.
+/// Explicit `function` / `chain` parameters take priority over parsed intent values.
+pub fn resolve_search_intent(
     query: &str,
     function: Option<String>,
     chain: Option<String>,
-) -> (String, Option<String>, Option<String>) {
-    if function.is_some() || chain.is_some() {
-        return (query.trim().to_string(), function, chain);
-    }
+) -> ResolvedSearchIntent {
     let intent = parse_search_intent(query);
-    (
-        intent.query_terms.trim().to_string(),
-        intent.function,
-        intent.chain,
-    )
+    ResolvedSearchIntent {
+        query: intent.query_terms.trim().to_string(),
+        function: function.or(intent.function),
+        chain: chain.or(intent.chain),
+        tool_type: intent.tool_type,
+        install_risk: intent.install_risk,
+    }
 }
 
 /// Resolve AND vs OR: try AND count first; fall back to OR when zero and query is multi-token.
@@ -133,35 +142,38 @@ mod tests {
     }
 
     #[test]
-    fn resolve_search_filters_extracts_bridge_and_base() {
-        let (q, function, chain) = resolve_search_filters("bridge USDC to Base", None, None);
-        assert_eq!(function.as_deref(), Some("bridge"));
-        assert_eq!(chain.as_deref(), Some("base"));
-        assert!(!q.is_empty());
+    fn resolve_search_intent_extracts_bridge_and_base() {
+        let intent = resolve_search_intent("bridge USDC to Base", None, None);
+        assert_eq!(intent.function.as_deref(), Some("bridge"));
+        assert_eq!(intent.chain.as_deref(), Some("base"));
+        assert!(!intent.query.is_empty());
     }
 
     #[test]
-    fn resolve_search_filters_honors_explicit_params() {
-        let (q, function, chain) =
-            resolve_search_filters("anything", Some("swap".into()), Some("solana".into()));
-        assert_eq!(q, "anything");
-        assert_eq!(function.as_deref(), Some("swap"));
-        assert_eq!(chain.as_deref(), Some("solana"));
+    fn resolve_search_intent_honors_explicit_params_and_strips_query_tokens() {
+        let intent = resolve_search_intent(
+            "mcp wallet",
+            Some("swap".into()),
+            Some("solana".into()),
+        );
+        assert_eq!(intent.query, "wallet");
+        assert_eq!(intent.function.as_deref(), Some("swap"));
+        assert_eq!(intent.chain.as_deref(), Some("solana"));
+        assert_eq!(intent.tool_type.as_deref(), Some("mcp"));
     }
 
     #[test]
-    fn resolve_search_filters_empty_fts_when_intent_consumes_all_tokens() {
-        let (q, function, chain) = resolve_search_filters("mcp base", None, None);
-        assert_eq!(q, "");
-        assert!(function.is_none());
-        assert_eq!(chain.as_deref(), Some("base"));
+    fn resolve_search_intent_empty_fts_when_intent_consumes_all_tokens() {
+        let intent = resolve_search_intent("mcp base", None, None);
+        assert_eq!(intent.query, "");
+        assert!(intent.function.is_none());
+        assert_eq!(intent.chain.as_deref(), Some("base"));
     }
 
     #[test]
-    fn resolve_search_filters_empty_fts_for_type_only_query() {
-        let (q, function, chain) = resolve_search_filters("mcp", None, None);
-        assert_eq!(q, "");
-        assert!(function.is_none());
-        assert!(chain.is_none());
+    fn resolve_search_intent_maps_type_only_query() {
+        let intent = resolve_search_intent("mcp", None, None);
+        assert_eq!(intent.query, "");
+        assert_eq!(intent.tool_type.as_deref(), Some("mcp"));
     }
 }

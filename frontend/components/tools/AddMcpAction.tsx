@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { Plug } from "lucide-react";
-import type { Tool } from "@/lib/api";
+import type { InstallSurfaceTool } from "@/lib/api";
 import {
   addMcpActionLabel,
   addMcpHref,
@@ -22,7 +22,7 @@ function resolveHref(source: AddMcpHrefSource, slug: string): string {
 }
 
 interface AddMcpActionProps {
-  tool: Tool;
+  tool: InstallSurfaceTool;
   hrefSource: AddMcpHrefSource;
   variant?: AddMcpVariant;
 }

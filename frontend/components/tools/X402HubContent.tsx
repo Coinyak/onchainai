@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { SiteShell } from "@/components/layout/SiteShell";
 import { ConnectOnchainAiMcpCard } from "@/components/tools/ConnectOnchainAiMcpCard";
-import { listTools, X402_REFERRAL_DISCLOSURE, type Tool } from "@/lib/api";
+import { listTools, X402_REFERRAL_DISCLOSURE, type PublicToolSummary } from "@/lib/api";
 
 const HOW_IT_WORKS = [
   {
@@ -21,7 +21,7 @@ const HOW_IT_WORKS = [
   },
 ];
 
-function X402ToolRow({ tool }: { tool: Tool }) {
+function X402ToolRow({ tool }: { tool: PublicToolSummary }) {
   return (
     <li className="py-4 flex flex-col gap-1 min-w-0">
       <div className="flex items-baseline gap-3 min-w-0">

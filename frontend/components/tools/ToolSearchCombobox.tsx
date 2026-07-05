@@ -13,7 +13,7 @@ import {
 import { ToolLogo } from "@/components/tools/ToolLogo";
 import { Badge } from "@/components/ui/Badge";
 import { typeBadgeLabel } from "@/lib/format";
-import type { Tool } from "@/lib/api";
+import type { PublicToolSummary } from "@/lib/api";
 
 export type ToolSearchComboboxVariant = "hero" | "toolbar";
 
@@ -25,7 +25,7 @@ export interface ToolSearchComboboxProps {
   /** Called when the user submits a full search (Enter without selection). */
   onSubmitSearch?: (query: string) => void;
   /** Called when the user picks a typeahead result. */
-  onSelectTool?: (tool: Tool) => void;
+  onSelectTool?: (tool: PublicToolSummary) => void;
   /** Hero only: debounced live URL sync while typing. Toolbar uses blur/Enter commit. */
   onDebouncedQueryChange?: (query: string) => void;
   functionFilter?: string;
@@ -60,12 +60,12 @@ function TypeaheadList({
   onOptionPointerDown,
 }: {
   listboxId: string;
-  results: Tool[];
+  results: PublicToolSummary[];
   activeIndex: number;
   isLoading: boolean;
   query: string;
   onHover: (index: number) => void;
-  onSelect: (tool: Tool) => void;
+  onSelect: (tool: PublicToolSummary) => void;
   onOptionPointerDown?: () => void;
 }) {
   if (!query.trim()) return null;
@@ -203,7 +203,7 @@ export function ToolSearchCombobox({
       : "toolbar-search-input");
 
   const navigateToTool = useCallback(
-    (tool: Tool) => {
+    (tool: PublicToolSummary) => {
       typeahead.closeDropdown();
       setMobileExpanded(false);
       if (onSelectTool) {

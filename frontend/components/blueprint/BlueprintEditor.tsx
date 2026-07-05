@@ -29,7 +29,8 @@ import {
   type Blueprint,
   type BlueprintEdge,
   type BlueprintNode,
-  type Tool,
+  type PublicTool,
+  type PublicToolSummary,
 } from "@/lib/api";
 import { CHAIN_CATALOG } from "@/lib/chains";
 import { useAuth } from "@/lib/auth";
@@ -200,7 +201,7 @@ function BlueprintEditorWorkspace({
   const [savedAt, setSavedAt] = useState<string | null>(initialSavedAt);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [liveMessage, setLiveMessage] = useState("");
-  const [activeDragTool, setActiveDragTool] = useState<Tool | null>(null);
+  const [activeDragTool, setActiveDragTool] = useState<PublicTool | PublicToolSummary | null>(null);
   const [promoting, setPromoting] = useState(false);
 
   const viewportRef = useRef<HTMLDivElement | null>(null);
@@ -250,7 +251,7 @@ function BlueprintEditorWorkspace({
           }
         }),
       );
-      return Object.fromEntries(entries) as Record<string, Tool | null>;
+      return Object.fromEntries(entries) as Record<string, PublicTool | null>;
     },
     enabled: toolSlugs.length > 0,
   });
@@ -413,7 +414,7 @@ function BlueprintEditorWorkspace({
   );
 
   const addToolNode = useCallback(
-    (tool: Tool, x: number, y: number) => {
+    (tool: PublicTool | PublicToolSummary, x: number, y: number) => {
       if (readOnly) return;
       if (nodes.length >= BLUEPRINT_MAX_NODES) {
         setSaveError(`Blueprints accept at most ${BLUEPRINT_MAX_NODES} nodes.`);
@@ -436,7 +437,7 @@ function BlueprintEditorWorkspace({
   );
 
   const addToolAtViewportCenter = useCallback(
-    (tool: Tool) => {
+    (tool: PublicTool | PublicToolSummary) => {
       const viewport = viewportRef.current;
       if (!viewport) return;
       const x = viewport.scrollLeft + viewport.clientWidth / 2 - 110;
@@ -698,7 +699,7 @@ function BlueprintEditorWorkspace({
   const handleDragStart = (event: DragStartEvent) => {
     const data = event.active.data.current;
     if (data?.type === "palette-tool") {
-      setActiveDragTool(data.tool as Tool);
+      setActiveDragTool(data.tool as PublicTool | PublicToolSummary);
     }
   };
 
@@ -708,7 +709,7 @@ function BlueprintEditorWorkspace({
     const data = active.data.current;
 
     if (data?.type === "palette-tool" && over?.id === "blueprint-canvas") {
-      const tool = data.tool as Tool;
+      const tool = data.tool as PublicTool | PublicToolSummary;
       const translated = active.rect.current.translated;
       const viewport = viewportRef.current;
       if (translated && viewport) {

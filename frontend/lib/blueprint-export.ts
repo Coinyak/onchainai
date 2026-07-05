@@ -1,5 +1,5 @@
 import { toPng } from "html-to-image";
-import type { BlueprintEdge, BlueprintNode, Tool } from "@/lib/api";
+import type { BlueprintEdge, BlueprintNode, PublicTool } from "@/lib/api";
 import { SITE_ORIGIN } from "@/lib/site";
 
 const AGENT_EXPORT_TASK_TEMPLATE = `## Your task
@@ -137,7 +137,7 @@ export function buildDraftAgentMarkdown(
   title: string,
   nodes: BlueprintNode[],
   edges: BlueprintEdge[],
-  toolsBySlug: Record<string, Tool | null>,
+  toolsBySlug: Record<string, PublicTool | null>,
 ): string {
   const exportNodes = parseExportNodes(nodes);
   const origin = clientSiteOrigin();

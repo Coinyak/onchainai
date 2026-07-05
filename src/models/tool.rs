@@ -354,6 +354,15 @@ pub struct PublicToolSummary {
     pub x402_endpoint_verified: bool,
     pub referral_enabled: bool,
     pub logo_url: Option<String>,
+    pub logo_monogram: Option<String>,
+    pub install_command: Option<String>,
+    pub safe_copy_command: Option<String>,
+    pub official_team: Option<String>,
+    pub source: String,
+    pub license: Option<String>,
+    pub x402_price: Option<String>,
+    pub last_commit_at: Option<DateTime<Utc>>,
+    pub updated_at: DateTime<Utc>,
 }
 
 impl From<Tool> for PublicToolSummary {
@@ -380,6 +389,15 @@ impl From<PublicTool> for PublicToolSummary {
             x402_endpoint_verified: tool.x402_endpoint_verified,
             referral_enabled: tool.referral_enabled,
             logo_url: tool.logo_url,
+            logo_monogram: tool.logo_monogram,
+            install_command: tool.install_command,
+            safe_copy_command: tool.safe_copy_command,
+            official_team: tool.official_team,
+            source: tool.source,
+            license: tool.license,
+            x402_price: tool.x402_price,
+            last_commit_at: tool.last_commit_at,
+            updated_at: tool.updated_at,
         }
     }
 }

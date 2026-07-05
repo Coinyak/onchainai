@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { useDraggable } from "@dnd-kit/core";
 import { useQuery } from "@tanstack/react-query";
-import { listMyToolkit, searchTools, type Tool } from "@/lib/api";
+import { listMyToolkit, searchTools, type PublicTool, type PublicToolSummary } from "@/lib/api";
 import { CHAIN_CATALOG, type ChainMeta } from "@/lib/chains";
 import { ToolLogo } from "@/components/tools/ToolLogo";
 import { ChainLogo } from "@/components/tools/ChainLogo";
@@ -12,7 +12,7 @@ import { typeBadgeLabel } from "@/lib/format";
 
 interface BlueprintPaletteProps {
   readOnly: boolean;
-  onAddTool: (tool: Tool) => void;
+  onAddTool: (tool: PublicTool | PublicToolSummary) => void;
   onAddChain: (chain: ChainMeta) => void;
 }
 
@@ -21,9 +21,9 @@ function PaletteToolItem({
   readOnly,
   onAddTool,
 }: {
-  tool: Tool;
+  tool: PublicTool | PublicToolSummary;
   readOnly: boolean;
-  onAddTool: (tool: Tool) => void;
+  onAddTool: (tool: PublicTool | PublicToolSummary) => void;
 }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: `palette-${tool.slug}`,

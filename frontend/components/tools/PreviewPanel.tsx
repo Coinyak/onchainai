@@ -3,13 +3,13 @@
 import { useEffect, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import type { Tool } from "@/lib/api";
+import type { PublicTool } from "@/lib/api";
 import { ToolDetail } from "@/components/tools/ToolDetail";
 import { PreviewPanelContent } from "@/components/tools/PreviewPanelContent";
 import { PreviewActionBar } from "@/components/tools/PreviewActionBar";
 
 interface PreviewPanelProps {
-  tool: Tool;
+  tool: PublicTool;
   closeHref: string;
   fullPageHref: string;
   commentCount?: number;
