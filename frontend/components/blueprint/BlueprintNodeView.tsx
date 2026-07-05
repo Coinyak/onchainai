@@ -9,7 +9,6 @@ import { ToolLogo } from "@/components/tools/ToolLogo";
 import { ChainLogo } from "@/components/tools/ChainLogo";
 import { typeBadgeLabel } from "@/lib/format";
 import {
-  BLUEPRINT_NODE_TOOL_CHAINS_MIN_H,
   BLUEPRINT_NODE_TOOL_TYPE_MIN_H,
   clampNodeHeight,
   clampNodeWidth,
@@ -107,8 +106,9 @@ export function BlueprintNodeView({
     : undefined;
   // Collapse optional tool rows as the card shrinks so nothing clips.
   const showTypeTag = bounds.h >= BLUEPRINT_NODE_TOOL_TYPE_MIN_H;
-  const showChainsRow = bounds.h >= BLUEPRINT_NODE_TOOL_CHAINS_MIN_H;
   const canResize = isSizable && !readOnly && (selected || railVisible);
+  const showChainsOutside =
+    node.kind === "tool" && tool && !toolMissing && availableChains.length > 0;
 
   const handleResizePointerDown = (e: React.PointerEvent<HTMLSpanElement>) => {
     if (readOnly) return;
@@ -297,19 +297,6 @@ export function BlueprintNodeView({
                   <span className="blueprint-node-type-tag">{typeBadgeLabel(tool.type)}</span>
                 </div>
               )}
-              {showChainsRow && availableChains.length > 0 && (
-                <div className="blueprint-node-tool-row3">
-                  <BlueprintToolChainMemo
-                    availableChains={availableChains}
-                    selectedChainIds={node.chains ?? []}
-                    chainsPopoverOpen={chainsOpen}
-                    readOnly={readOnly}
-                    anchorRef={chainsButtonRef}
-                    onChange={(chains) => onChainsChange(node.id, chains)}
-                    onClose={handleCloseChains}
-                  />
-                </div>
-              )}
             </>
           )
         ) : (
@@ -326,6 +313,23 @@ export function BlueprintNodeView({
           />
         )}
       </div>
+
+      {showChainsOutside ? (
+        <div
+          className="blueprint-node-tool-chains-outer"
+          style={{ width: bounds.w }}
+        >
+          <BlueprintToolChainMemo
+            availableChains={availableChains}
+            selectedChainIds={node.chains ?? []}
+            chainsPopoverOpen={chainsOpen}
+            readOnly={readOnly}
+            anchorRef={chainsButtonRef}
+            onChange={(chains) => onChainsChange(node.id, chains)}
+            onClose={handleCloseChains}
+          />
+        </div>
+      ) : null}
 
       {canResize && (
         <span

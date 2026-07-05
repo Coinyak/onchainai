@@ -626,6 +626,8 @@
   min-height: 72px;
   padding: 10px 12px;
   box-sizing: border-box;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 .blueprint-node-tool-row1 {
@@ -645,15 +647,6 @@
   overflow: hidden;
 }
 
-.blueprint-node-tool-row3 {
-  display: flex;
-  align-items: center;
-  height: 18px;
-  min-height: 18px;
-  max-height: 18px;
-  overflow: hidden;
-}
-
 .blueprint-node-tool-text {
   display: flex;
   flex-direction: column;
@@ -662,13 +655,13 @@
 }
 
 .blueprint-node-tool-name {
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  overflow: hidden;
+  display: block;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  white-space: normal;
   font-size: var(--text-body-sm);
   font-weight: 600;
-  line-height: 1.25;
+  line-height: 1.35;
   color: var(--color-primary);
 }
 
@@ -688,20 +681,30 @@
   white-space: nowrap;
 }
 
+.blueprint-node-tool-chains-outer {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 4px;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.blueprint-node-tool-chains-outer .blueprint-node-tool-chains {
+  pointer-events: auto;
+}
+
 .blueprint-node-tool-chains {
-  flex: 1;
-  min-width: 0;
+  width: 100%;
 }
 
 .blueprint-node-tool-chain-badges {
   display: flex;
   align-items: center;
   justify-content: flex-start;
+  flex-wrap: wrap;
   gap: 3px;
-  height: 18px;
-  max-height: 18px;
-  overflow: hidden;
-  white-space: nowrap;
+  min-height: 18px;
 }
 
 .blueprint-node-tool-chain-badge {
@@ -712,10 +715,6 @@
   border-radius: 999px;
   background: var(--color-neutral-bg);
   box-shadow: 0 0 0 1px var(--color-border);
-}
-
-.blueprint-node-tool-chain-badge-preview {
-  opacity: 0.72;
 }
 
 .blueprint-node-tool-chain-overflow {
@@ -781,6 +780,8 @@
   padding: 10px 12px;
   background: var(--color-neutral-surface);
   box-sizing: border-box;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 .blueprint-node-chain {
@@ -965,8 +966,9 @@
 .blueprint-node-ghost-slug {
   font-size: var(--text-body-sm);
   color: var(--color-text-muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  white-space: normal;
 }
 
 .blueprint-node-note-input {
@@ -976,6 +978,9 @@
   border: 0;
   background: transparent;
   resize: none;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  white-space: pre-wrap;
   font-size: var(--text-body-md);
   line-height: 1.5;
   color: var(--color-primary);

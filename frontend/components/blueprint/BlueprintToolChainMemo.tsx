@@ -48,11 +48,10 @@ export function BlueprintToolChainMemo({
   const selectedSet = new Set(selectedChainIds);
   const hasMemoSelection = selectedChainIds.length > 0;
   const memoChains = availableChains.filter((chain) => selectedSet.has(chain.id));
-  const displayChains = hasMemoSelection ? memoChains : availableChains;
-  const overflowCount = Math.max(0, displayChains.length - MAX_VISIBLE_CHAIN_BADGES);
+  const overflowCount = Math.max(0, memoChains.length - MAX_VISIBLE_CHAIN_BADGES);
   const visibleBadges = overflowCount > 0
-    ? displayChains.slice(0, MAX_VISIBLE_CHAIN_BADGES)
-    : displayChains;
+    ? memoChains.slice(0, MAX_VISIBLE_CHAIN_BADGES)
+    : memoChains;
 
   const toggleChain = (chainId: string) => {
     if (selectedSet.has(chainId)) {
@@ -111,37 +110,33 @@ export function BlueprintToolChainMemo({
 
   if (availableChains.length === 0) return null;
 
-  const badgeLabel = hasMemoSelection ? "Selected chains" : "Supported networks";
-
   return (
     <>
-      <div
-        className="blueprint-node-tool-chains"
-        data-testid="blueprint-tool-chain-memo"
-        onClick={(e) => e.stopPropagation()}
-        onPointerDown={(e) => e.stopPropagation()}
-      >
-        <div className="blueprint-node-tool-chain-badges" aria-label={badgeLabel}>
-          {visibleBadges.map((chain) => (
-            <span
-              key={chain.id}
-              className={
-                hasMemoSelection
-                  ? "blueprint-node-tool-chain-badge"
-                  : "blueprint-node-tool-chain-badge blueprint-node-tool-chain-badge-preview"
-              }
-              title={chain.label}
-            >
-              <ChainLogo id={chain.id} label={chain.label} size={14} decorative />
-            </span>
-          ))}
-          {overflowCount > 0 && (
-            <span className="blueprint-node-tool-chain-overflow" title={`${overflowCount} more chains`}>
-              +{overflowCount}
-            </span>
-          )}
+      {hasMemoSelection ? (
+        <div
+          className="blueprint-node-tool-chains"
+          data-testid="blueprint-tool-chain-memo"
+          onClick={(e) => e.stopPropagation()}
+          onPointerDown={(e) => e.stopPropagation()}
+        >
+          <div className="blueprint-node-tool-chain-badges" aria-label="Selected networks">
+            {visibleBadges.map((chain) => (
+              <span
+                key={chain.id}
+                className="blueprint-node-tool-chain-badge"
+                title={chain.label}
+              >
+                <ChainLogo id={chain.id} label={chain.label} size={14} decorative />
+              </span>
+            ))}
+            {overflowCount > 0 && (
+              <span className="blueprint-node-tool-chain-overflow" title={`${overflowCount} more chains`}>
+                +{overflowCount}
+              </span>
+            )}
+          </div>
         </div>
-      </div>
+      ) : null}
 
       {chainsPopoverOpen &&
         !readOnly &&
