@@ -1,16 +1,19 @@
 "use client";
 
 import { forwardRef } from "react";
-import { ExternalLink, Link2, X } from "lucide-react";
+import { ExternalLink, Hash, Link2, X } from "lucide-react";
 
 interface BlueprintNodeRailProps {
   nodeKind: "tool" | "chain" | "note";
   visible: boolean;
   readOnly: boolean;
   showChainsButton?: boolean;
+  showStepButton?: boolean;
+  hasStep?: boolean;
   toolName?: string;
   onOpenTool?: () => void;
   onOpenChains?: () => void;
+  onToggleStep?: () => void;
   onRemove: () => void;
 }
 
@@ -21,9 +24,12 @@ export const BlueprintNodeRail = forwardRef<HTMLButtonElement, BlueprintNodeRail
       visible,
       readOnly,
       showChainsButton = false,
+      showStepButton = false,
+      hasStep = false,
       toolName,
       onOpenTool,
       onOpenChains,
+      onToggleStep,
       onRemove,
     },
     chainsButtonRef,
@@ -64,6 +70,21 @@ export const BlueprintNodeRail = forwardRef<HTMLButtonElement, BlueprintNodeRail
             }}
           >
             <Link2 size={16} />
+          </button>
+        )}
+        {showStepButton && onToggleStep && (
+          <button
+            type="button"
+            className={`blueprint-node-rail-btn${hasStep ? " blueprint-node-rail-btn-active" : ""}`}
+            aria-label={hasStep ? "Remove order number" : "Add order number"}
+            aria-pressed={hasStep}
+            data-testid="blueprint-node-rail-step"
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleStep();
+            }}
+          >
+            <Hash size={16} />
           </button>
         )}
         <button

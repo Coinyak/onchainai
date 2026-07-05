@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use uuid::Uuid;
 
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{HashMap, HashSet};
 
 use crate::config::SITE_ORIGIN;
 use crate::AppState;
@@ -26,6 +26,12 @@ const MAX_NOTE_TEXT: usize = 2000;
 const MAX_TITLE_LEN: usize = 200;
 const MAX_CHAIN_ID_LEN: usize = 64;
 const MAX_TOOL_NODE_CHAINS: usize = 8;
+const MAX_EDGE_LABEL_LEN: usize = 40;
+const NODE_MIN_W: i32 = 160;
+const NODE_MAX_W: i32 = 520;
+const NODE_MIN_H: i32 = 72;
+const NODE_MAX_H: i32 = 420;
+const NODE_MAX_STEP: i32 = 99;
 const AGENT_EXPORT_FILENAME: &str = "blueprint-agent.md";
 
 const AGENT_EXPORT_TASK_TEMPLATE: &str = r#"## Your task
@@ -136,6 +142,12 @@ struct BlueprintNodeInput {
     chains: Option<Vec<String>>,
     x: i32,
     y: i32,
+    #[serde(default)]
+    w: Option<i32>,
+    #[serde(default)]
+    h: Option<i32>,
+    #[serde(default)]
+    step: Option<i32>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -147,6 +159,46 @@ struct BlueprintEdgeInput {
     to_id: String,
     style: String,
     color: String,
+    #[serde(default)]
+    dashed: Option<bool>,
+    #[serde(default)]
+    label: Option<String>,
+}
+
+/// Clamp an optional dimension into [min, max]; `None` stays `None` (default size).
+fn clamp_dim(value: Option<i32>, min: i32, max: i32) -> Option<i32> {
+    value.map(|v| v.clamp(min, max))
+}
+
+/// Clamp an optional 1-based step badge into [1, NODE_MAX_STEP]; drop non-positive.
+fn normalize_step(value: Option<i32>) -> Option<i32> {
+    value.filter(|v| *v >= 1).map(|v| v.min(NODE_MAX_STEP))
+}
+
+/// Trim an optional edge label and cap its length; `None`/empty -> `None`.
+fn normalize_edge_label(value: Option<&str>) -> Option<String> {
+    let trimmed = value?.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    Some(trimmed.chars().take(MAX_EDGE_LABEL_LEN).collect())
+}
+
+/// Attach clamped custom width/height to a node payload when provided.
+fn apply_node_size(payload: &mut Value, w: Option<i32>, h: Option<i32>) {
+    if let Some(w) = clamp_dim(w, NODE_MIN_W, NODE_MAX_W) {
+        payload["w"] = serde_json::json!(w);
+    }
+    if let Some(h) = clamp_dim(h, NODE_MIN_H, NODE_MAX_H) {
+        payload["h"] = serde_json::json!(h);
+    }
+}
+
+/// Attach a normalized 1-based step badge to a node payload when provided.
+fn apply_node_step(payload: &mut Value, step: Option<i32>) {
+    if let Some(step) = normalize_step(step) {
+        payload["step"] = serde_json::json!(step);
+    }
 }
 
 fn normalize_tool_node_chains(
@@ -249,6 +301,8 @@ fn validate_nodes(nodes: &Value) -> Result<Value, ApiError> {
                 if !chains.is_empty() {
                     payload["chains"] = serde_json::json!(chains);
                 }
+                apply_node_size(&mut payload, node.w, node.h);
+                apply_node_step(&mut payload, node.step);
                 normalized.push(payload);
             }
             "note" => {
@@ -258,13 +312,16 @@ fn validate_nodes(nodes: &Value) -> Result<Value, ApiError> {
                         "note text must be at most {MAX_NOTE_TEXT} characters"
                     )));
                 }
-                normalized.push(serde_json::json!({
+                let mut payload = serde_json::json!({
                     "id": node.id,
                     "kind": "note",
                     "text": text,
                     "x": node.x,
                     "y": node.y,
-                }));
+                });
+                apply_node_size(&mut payload, node.w, node.h);
+                apply_node_step(&mut payload, node.step);
+                normalized.push(payload);
             }
             "chain" => {
                 let chain_id = node.chain_id.as_deref().unwrap_or("").trim();
@@ -278,13 +335,15 @@ fn validate_nodes(nodes: &Value) -> Result<Value, ApiError> {
                         "chainId must be at most {MAX_CHAIN_ID_LEN} characters"
                     )));
                 }
-                normalized.push(serde_json::json!({
+                let mut payload = serde_json::json!({
                     "id": node.id,
                     "kind": "chain",
                     "chainId": chain_id,
                     "x": node.x,
                     "y": node.y,
-                }));
+                });
+                apply_node_step(&mut payload, node.step);
+                normalized.push(payload);
             }
             other => {
                 return Err(ApiError::BadRequest(format!(
@@ -360,13 +419,20 @@ fn validate_edges(edges: &Value, node_ids: &[String]) -> Result<Value, ApiError>
             )));
         }
 
-        normalized.push(serde_json::json!({
+        let mut payload = serde_json::json!({
             "id": edge.id,
             "fromId": from_id,
             "toId": to_id,
             "style": style,
             "color": edge.color.trim().to_ascii_uppercase(),
-        }));
+        });
+        if edge.dashed.unwrap_or(false) {
+            payload["dashed"] = serde_json::json!(true);
+        }
+        if let Some(label) = normalize_edge_label(edge.label.as_deref()) {
+            payload["label"] = serde_json::json!(label);
+        }
+        normalized.push(payload);
     }
 
     Ok(Value::Array(normalized))
@@ -632,118 +698,191 @@ fn node_flow_label(node: &ExportNode) -> String {
     }
 }
 
+struct FlowEdge {
+    from: String,
+    to: String,
+    label: Option<String>,
+}
+
+fn flow_label_for(node_map: &HashMap<&str, &ExportNode>, id: &str) -> String {
+    node_map
+        .get(id)
+        .map(|node| node_flow_label(node))
+        .unwrap_or_else(|| id.to_string())
+}
+
+/// Follow a maximal simple path from `start_idx`, stopping at branch/merge
+/// points (nodes whose in- or out-degree is not exactly 1) or a revisited edge.
+fn walk_flow_segment(
+    start_idx: usize,
+    flow_edges: &[FlowEdge],
+    out_edges: &HashMap<String, Vec<usize>>,
+    in_deg: &HashMap<String, usize>,
+    out_deg: &HashMap<String, usize>,
+    node_map: &HashMap<&str, &ExportNode>,
+    visited: &mut [bool],
+) -> String {
+    let mut line = flow_label_for(node_map, &flow_edges[start_idx].from);
+    let mut cur = start_idx;
+    loop {
+        visited[cur] = true;
+        let edge = &flow_edges[cur];
+        match &edge.label {
+            Some(label) => line.push_str(&format!(" →({label}) ")),
+            None => line.push_str(" → "),
+        }
+        line.push_str(&flow_label_for(node_map, &edge.to));
+
+        let internal = in_deg.get(&edge.to).copied().unwrap_or(0) == 1
+            && out_deg.get(&edge.to).copied().unwrap_or(0) == 1;
+        if internal {
+            if let Some(next) = out_edges
+                .get(&edge.to)
+                .and_then(|list| list.first().copied())
+            {
+                if !visited[next] {
+                    cur = next;
+                    continue;
+                }
+            }
+        }
+        break;
+    }
+    line
+}
+
 fn build_flow_section(nodes: &[ExportNode], edges: &Value) -> String {
     let node_map: HashMap<&str, &ExportNode> =
         nodes.iter().map(|node| (node.id.as_str(), node)).collect();
     let edge_arr = edges.as_array().cloned().unwrap_or_default();
 
-    let mut adj: HashMap<String, Vec<String>> = HashMap::new();
-    let mut in_degree: HashMap<String, usize> = HashMap::new();
-    let mut edge_pairs: Vec<(String, String)> = Vec::new();
-
-    for node in nodes {
-        in_degree.entry(node.id.clone()).or_insert(0);
-    }
-
+    // Keep only edges whose endpoints both resolve, preserving insertion order.
+    let mut flow_edges: Vec<FlowEdge> = Vec::new();
     for edge in edge_arr {
-        let from_id = edge
+        let from = edge
             .get("fromId")
             .and_then(|v| v.as_str())
             .unwrap_or("")
             .trim();
-        let to_id = edge
+        let to = edge
             .get("toId")
             .and_then(|v| v.as_str())
             .unwrap_or("")
             .trim();
-        if from_id.is_empty() || to_id.is_empty() {
+        if from.is_empty() || to.is_empty() {
             continue;
         }
-        if !node_map.contains_key(from_id) || !node_map.contains_key(to_id) {
+        if !node_map.contains_key(from) || !node_map.contains_key(to) {
             continue;
         }
-
-        adj.entry(from_id.to_string())
-            .or_default()
-            .push(to_id.to_string());
-        *in_degree.entry(to_id.to_string()).or_insert(0) += 1;
-        in_degree.entry(from_id.to_string()).or_insert(0);
-        edge_pairs.push((from_id.to_string(), to_id.to_string()));
+        let label = edge
+            .get("label")
+            .and_then(|v| v.as_str())
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(str::to_string);
+        flow_edges.push(FlowEdge {
+            from: from.to_string(),
+            to: to.to_string(),
+            label,
+        });
     }
 
-    if edge_pairs.is_empty() {
+    if flow_edges.is_empty() {
         return "(no flow edges defined)".into();
     }
 
-    let mut queue: VecDeque<String> = in_degree
-        .iter()
-        .filter(|(_, degree)| **degree == 0)
-        .map(|(id, _)| id.clone())
-        .collect();
-    let mut queue_vec = queue.make_contiguous().to_vec();
-    queue_vec.sort();
-    queue = queue_vec.into();
+    let mut in_deg: HashMap<String, usize> = HashMap::new();
+    let mut out_deg: HashMap<String, usize> = HashMap::new();
+    let mut out_edges: HashMap<String, Vec<usize>> = HashMap::new();
+    for node in nodes {
+        in_deg.entry(node.id.clone()).or_insert(0);
+        out_deg.entry(node.id.clone()).or_insert(0);
+    }
+    for (idx, edge) in flow_edges.iter().enumerate() {
+        *out_deg.entry(edge.from.clone()).or_insert(0) += 1;
+        *in_deg.entry(edge.to.clone()).or_insert(0) += 1;
+        in_deg.entry(edge.from.clone()).or_insert(0);
+        out_deg.entry(edge.to.clone()).or_insert(0);
+        out_edges.entry(edge.from.clone()).or_default().push(idx);
+    }
 
-    let mut sorted = Vec::new();
-    while let Some(id) = queue.pop_front() {
-        sorted.push(id.clone());
-        if let Some(neighbors) = adj.get(&id) {
-            let mut next_ids = neighbors.clone();
-            next_ids.sort();
-            for next in next_ids {
-                if let Some(degree) = in_degree.get_mut(&next) {
-                    *degree -= 1;
-                    if *degree == 0 {
-                        queue.push_back(next);
-                    }
-                }
+    // Deterministic output: sort each node's out-edges by their target label.
+    for indices in out_edges.values_mut() {
+        indices.sort_by(|&a, &b| {
+            flow_label_for(&node_map, &flow_edges[a].to)
+                .cmp(&flow_label_for(&node_map, &flow_edges[b].to))
+        });
+    }
+
+    let mut visited = vec![false; flow_edges.len()];
+    let mut lines: Vec<String> = Vec::new();
+
+    // 1. Segments that begin at a junction (source/sink/branch/merge).
+    let mut junctions: Vec<String> = out_edges.keys().cloned().collect();
+    junctions.sort_by(|a, b| {
+        flow_label_for(&node_map, a)
+            .cmp(&flow_label_for(&node_map, b))
+            .then_with(|| a.cmp(b))
+    });
+    for from in &junctions {
+        let is_junction = in_deg.get(from).copied().unwrap_or(0) != 1
+            || out_deg.get(from).copied().unwrap_or(0) != 1;
+        if !is_junction {
+            continue;
+        }
+        let idx_list = out_edges.get(from).cloned().unwrap_or_default();
+        for idx in idx_list {
+            if !visited[idx] {
+                lines.push(walk_flow_segment(
+                    idx,
+                    &flow_edges,
+                    &out_edges,
+                    &in_deg,
+                    &out_deg,
+                    &node_map,
+                    &mut visited,
+                ));
             }
         }
     }
 
-    let nodes_in_edges: HashSet<String> = edge_pairs
-        .iter()
-        .flat_map(|(from, to)| [from.clone(), to.clone()])
-        .collect();
-
-    if sorted.len() < nodes_in_edges.len() {
-        return edge_pairs
-            .iter()
-            .map(|(from, to)| {
-                let from_label = node_map
-                    .get(from.as_str())
-                    .map(|node| node_flow_label(node))
-                    .unwrap_or_else(|| from.clone());
-                let to_label = node_map
-                    .get(to.as_str())
-                    .map(|node| node_flow_label(node))
-                    .unwrap_or_else(|| to.clone());
-                format!("- {from_label} → {to_label}")
-            })
-            .collect::<Vec<_>>()
-            .join("\n");
+    // 2. Remaining edges belong to pure cycles with no junction — emit them too.
+    for idx in 0..flow_edges.len() {
+        if !visited[idx] {
+            lines.push(walk_flow_segment(
+                idx,
+                &flow_edges,
+                &out_edges,
+                &in_deg,
+                &out_deg,
+                &node_map,
+                &mut visited,
+            ));
+        }
     }
 
-    let sorted_set: HashSet<&str> = sorted.iter().map(String::as_str).collect();
-    let mut labels: Vec<String> = sorted
+    // 3. Nodes touching no edge, listed on their own for completeness.
+    let touched: HashSet<&str> = flow_edges
         .iter()
-        .filter_map(|id| node_map.get(id.as_str()).map(|node| node_flow_label(node)))
+        .flat_map(|edge| [edge.from.as_str(), edge.to.as_str()])
         .collect();
-
     let mut orphans: Vec<String> = nodes
         .iter()
-        .filter(|node| !sorted_set.contains(node.id.as_str()) && !nodes_in_edges.contains(&node.id))
+        .filter(|node| !touched.contains(node.id.as_str()))
         .map(node_flow_label)
         .collect();
     orphans.sort();
-    labels.extend(orphans);
+    lines.extend(orphans);
 
-    if labels.is_empty() {
+    if lines.is_empty() {
         "(no flow edges defined)".into()
-    } else if labels.len() == 1 {
-        format!("- {}", labels[0])
     } else {
-        format!("- {}", labels.join(" → "))
+        lines
+            .iter()
+            .map(|line| format!("- {line}"))
+            .collect::<Vec<_>>()
+            .join("\n")
     }
 }
 
@@ -1053,5 +1192,98 @@ mod tests {
         ]);
 
         assert_eq!(collect_tool_slugs(&nodes), vec!["foo", "bar"]);
+    }
+
+    #[test]
+    fn validate_nodes_clamps_size_and_step() {
+        let nodes = json!([
+            {"id": "t1", "kind": "tool", "slug": "foo", "x": 0, "y": 0,
+             "w": 9000, "h": 10, "step": 250},
+            {"id": "n1", "kind": "note", "text": "", "x": 8, "y": 8, "w": 300, "h": 200},
+            {"id": "c1", "kind": "chain", "chainId": "base", "x": 0, "y": 0, "w": 400, "step": 2}
+        ]);
+        let result = validate_nodes(&nodes).unwrap();
+        let arr = result.as_array().unwrap();
+        // Tool: width clamped down to max, height clamped up to min, step capped.
+        assert_eq!(arr[0]["w"], json!(NODE_MAX_W));
+        assert_eq!(arr[0]["h"], json!(NODE_MIN_H));
+        assert_eq!(arr[0]["step"], json!(NODE_MAX_STEP));
+        // Note keeps in-range size.
+        assert_eq!(arr[1]["w"], json!(300));
+        assert_eq!(arr[1]["h"], json!(200));
+        // Chain never carries a size, but does carry a step.
+        assert!(arr[2].get("w").is_none());
+        assert_eq!(arr[2]["step"], json!(2));
+    }
+
+    #[test]
+    fn validate_edges_preserves_dashed_and_label() {
+        let nodes = json!([
+            {"id": "a", "kind": "tool", "slug": "foo", "x": 0, "y": 0},
+            {"id": "b", "kind": "note", "text": "", "x": 40, "y": 40}
+        ]);
+        let node_ids = node_ids_from_value(&validate_nodes(&nodes).unwrap()).unwrap();
+        let edges = json!([
+            {"id": "e1", "fromId": "a", "toId": "b", "style": "arrow",
+             "color": "#E76F00", "dashed": true, "label": "  swap to Base  "}
+        ]);
+        let result = validate_edges(&edges, &node_ids).unwrap();
+        assert_eq!(result[0]["dashed"], json!(true));
+        assert_eq!(result[0]["label"], json!("swap to Base"));
+    }
+
+    #[test]
+    fn validate_edges_omits_falsey_dashed_and_empty_label() {
+        let nodes = json!([
+            {"id": "a", "kind": "tool", "slug": "foo", "x": 0, "y": 0},
+            {"id": "b", "kind": "note", "text": "", "x": 40, "y": 40}
+        ]);
+        let node_ids = node_ids_from_value(&validate_nodes(&nodes).unwrap()).unwrap();
+        let edges = json!([
+            {"id": "e1", "fromId": "a", "toId": "b", "style": "solid",
+             "color": "#1A1A1A", "dashed": false, "label": "   "}
+        ]);
+        let result = validate_edges(&edges, &node_ids).unwrap();
+        assert!(result[0].get("dashed").is_none());
+        assert!(result[0].get("label").is_none());
+    }
+
+    #[test]
+    fn build_flow_section_splits_at_branch_points() {
+        let nodes = parse_export_nodes(&json!([
+            {"id": "hub", "kind": "tool", "slug": "gateway", "x": 0, "y": 0},
+            {"id": "base", "kind": "chain", "chainId": "base", "x": 40, "y": 0},
+            {"id": "bnb", "kind": "chain", "chainId": "bsc", "x": 40, "y": 40}
+        ]));
+        let edges = json!([
+            {"id": "e1", "fromId": "hub", "toId": "base", "style": "arrow", "color": "#1A1A1A"},
+            {"id": "e2", "fromId": "hub", "toId": "bnb", "style": "arrow", "color": "#1A1A1A",
+             "label": "swap"}
+        ]);
+
+        let flow = build_flow_section(&nodes, &edges);
+        let lines: Vec<&str> = flow.lines().collect();
+
+        // Branch point produces one line per outgoing branch, not a single chain.
+        assert_eq!(lines.len(), 2);
+        assert!(flow.contains("gateway → chain: base"));
+        assert!(flow.contains("gateway →(swap) chain: bsc"));
+    }
+
+    #[test]
+    fn build_flow_section_keeps_linear_path_on_one_line() {
+        let nodes = parse_export_nodes(&json!([
+            {"id": "a", "kind": "tool", "slug": "alpha", "x": 0, "y": 0},
+            {"id": "b", "kind": "tool", "slug": "beta", "x": 40, "y": 0},
+            {"id": "c", "kind": "tool", "slug": "gamma", "x": 80, "y": 0}
+        ]));
+        let edges = json!([
+            {"id": "e1", "fromId": "a", "toId": "b", "style": "arrow", "color": "#1A1A1A"},
+            {"id": "e2", "fromId": "b", "toId": "c", "style": "arrow", "color": "#1A1A1A"}
+        ]);
+
+        let flow = build_flow_section(&nodes, &edges);
+
+        assert_eq!(flow, "- alpha → beta → gamma");
     }
 }

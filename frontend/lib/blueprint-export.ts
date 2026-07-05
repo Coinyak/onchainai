@@ -54,83 +54,130 @@ function nodeFlowLabel(node: ExportNode): string {
   return node.id;
 }
 
+interface FlowEdge {
+  from: string;
+  to: string;
+  label?: string;
+}
+
+const cmpStr = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
+
+/**
+ * Follow a maximal simple path from `startIdx`, stopping at branch/merge points
+ * (nodes whose in- or out-degree is not exactly 1) or a revisited edge. Mirrors
+ * the Rust `walk_flow_segment` so drafts and saved blueprints read identically.
+ */
+function walkFlowSegment(
+  startIdx: number,
+  flowEdges: FlowEdge[],
+  outEdges: Map<string, number[]>,
+  inDeg: Map<string, number>,
+  outDeg: Map<string, number>,
+  labelOf: (id: string) => string,
+  visited: boolean[],
+): string {
+  let line = labelOf(flowEdges[startIdx].from);
+  let cur = startIdx;
+  for (;;) {
+    visited[cur] = true;
+    const edge = flowEdges[cur];
+    line += edge.label ? ` →(${edge.label}) ` : " → ";
+    line += labelOf(edge.to);
+
+    const internal =
+      (inDeg.get(edge.to) ?? 0) === 1 && (outDeg.get(edge.to) ?? 0) === 1;
+    if (internal) {
+      const next = outEdges.get(edge.to)?.[0];
+      if (next !== undefined && !visited[next]) {
+        cur = next;
+        continue;
+      }
+    }
+    break;
+  }
+  return line;
+}
+
 function buildFlowSection(nodes: ExportNode[], edges: BlueprintEdge[]): string {
   const nodeMap = new Map(nodes.map((node) => [node.id, node]));
-  const adj = new Map<string, string[]>();
-  const inDegree = new Map<string, number>();
-  const edgePairs: Array<[string, string]> = [];
+  const labelOf = (id: string): string => {
+    const node = nodeMap.get(id);
+    return node ? nodeFlowLabel(node) : id;
+  };
 
-  for (const node of nodes) {
-    inDegree.set(node.id, 0);
-  }
-
+  const flowEdges: FlowEdge[] = [];
   for (const edge of edges) {
-    const fromId = edge.fromId.trim();
-    const toId = edge.toId.trim();
-    if (!fromId || !toId) continue;
-    if (!nodeMap.has(fromId) || !nodeMap.has(toId)) continue;
-
-    const neighbors = adj.get(fromId) ?? [];
-    neighbors.push(toId);
-    adj.set(fromId, neighbors);
-    inDegree.set(toId, (inDegree.get(toId) ?? 0) + 1);
-    inDegree.set(fromId, inDegree.get(fromId) ?? 0);
-    edgePairs.push([fromId, toId]);
+    const from = edge.fromId?.trim() ?? "";
+    const to = edge.toId?.trim() ?? "";
+    if (!from || !to) continue;
+    if (!nodeMap.has(from) || !nodeMap.has(to)) continue;
+    const label = edge.label?.trim();
+    flowEdges.push({ from, to, label: label ? label : undefined });
   }
 
-  if (edgePairs.length === 0) {
-    return "(no flow edges defined)";
+  if (flowEdges.length === 0) return "(no flow edges defined)";
+
+  const inDeg = new Map<string, number>();
+  const outDeg = new Map<string, number>();
+  const outEdges = new Map<string, number[]>();
+  for (const node of nodes) {
+    inDeg.set(node.id, 0);
+    outDeg.set(node.id, 0);
+  }
+  flowEdges.forEach((edge, idx) => {
+    outDeg.set(edge.from, (outDeg.get(edge.from) ?? 0) + 1);
+    inDeg.set(edge.to, (inDeg.get(edge.to) ?? 0) + 1);
+    if (!inDeg.has(edge.from)) inDeg.set(edge.from, 0);
+    if (!outDeg.has(edge.to)) outDeg.set(edge.to, 0);
+    const list = outEdges.get(edge.from) ?? [];
+    list.push(idx);
+    outEdges.set(edge.from, list);
+  });
+
+  // Deterministic output: sort each node's out-edges by their target label.
+  for (const list of outEdges.values()) {
+    list.sort((a, b) => cmpStr(labelOf(flowEdges[a].to), labelOf(flowEdges[b].to)));
   }
 
-  const queue = [...inDegree.entries()]
-    .filter(([, degree]) => degree === 0)
-    .map(([id]) => id)
-    .sort();
+  const visited: boolean[] = new Array(flowEdges.length).fill(false);
+  const lines: string[] = [];
 
-  const sorted: string[] = [];
-  while (queue.length > 0) {
-    const id = queue.shift();
-    if (!id) break;
-    sorted.push(id);
-
-    const neighbors = [...(adj.get(id) ?? [])].sort();
-    for (const next of neighbors) {
-      const degree = (inDegree.get(next) ?? 0) - 1;
-      inDegree.set(next, degree);
-      if (degree === 0) {
-        queue.push(next);
-        queue.sort();
+  // 1. Segments that begin at a junction (source/sink/branch/merge).
+  const junctions = [...outEdges.keys()].sort(
+    (a, b) => cmpStr(labelOf(a), labelOf(b)) || cmpStr(a, b),
+  );
+  for (const from of junctions) {
+    const isJunction =
+      (inDeg.get(from) ?? 0) !== 1 || (outDeg.get(from) ?? 0) !== 1;
+    if (!isJunction) continue;
+    for (const idx of outEdges.get(from) ?? []) {
+      if (!visited[idx]) {
+        lines.push(
+          walkFlowSegment(idx, flowEdges, outEdges, inDeg, outDeg, labelOf, visited),
+        );
       }
     }
   }
 
-  const nodesInEdges = new Set(edgePairs.flatMap(([from, to]) => [from, to]));
-
-  if (sorted.length < nodesInEdges.size) {
-    return edgePairs
-      .map(([from, to]) => {
-        const fromLabel = nodeMap.get(from) ? nodeFlowLabel(nodeMap.get(from)!) : from;
-        const toLabel = nodeMap.get(to) ? nodeFlowLabel(nodeMap.get(to)!) : to;
-        return `- ${fromLabel} → ${toLabel}`;
-      })
-      .join("\n");
+  // 2. Remaining edges belong to pure cycles with no junction — emit them too.
+  for (let idx = 0; idx < flowEdges.length; idx += 1) {
+    if (!visited[idx]) {
+      lines.push(
+        walkFlowSegment(idx, flowEdges, outEdges, inDeg, outDeg, labelOf, visited),
+      );
+    }
   }
 
-  const sortedSet = new Set(sorted);
-  const labels = sorted
-    .map((id) => nodeMap.get(id))
-    .filter((node): node is ExportNode => !!node)
-    .map(nodeFlowLabel);
-
+  // 3. Nodes touching no edge, listed on their own for completeness.
+  const touched = new Set(flowEdges.flatMap((edge) => [edge.from, edge.to]));
   const orphans = nodes
-    .filter((node) => !sortedSet.has(node.id) && !nodesInEdges.has(node.id))
+    .filter((node) => !touched.has(node.id))
     .map(nodeFlowLabel)
-    .sort();
-  labels.push(...orphans);
+    .sort(cmpStr);
+  lines.push(...orphans);
 
-  if (labels.length === 0) return "(no flow edges defined)";
-  if (labels.length === 1) return `- ${labels[0]}`;
-  return `- ${labels.join(" → ")}`;
+  if (lines.length === 0) return "(no flow edges defined)";
+  return lines.map((line) => `- ${line}`).join("\n");
 }
 
 export function buildDraftAgentMarkdown(
