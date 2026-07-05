@@ -172,7 +172,7 @@
       "label": "NEAR",
       "kind": "wrap",
       "source": "near_official.svg",
-      "markers": ["#00C08B", "path"]
+      "markers": ["#00EC97", "path"]
     },
     {
       "id": "cosmos",
@@ -200,7 +200,7 @@
       "label": "Gnosis",
       "kind": "wrap",
       "source": "gnosis_official.svg",
-      "markers": ["#04795B", "path"]
+      "markers": ["#3E6957", "path"]
     },
     {
       "id": "cardano",

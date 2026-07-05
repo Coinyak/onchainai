@@ -250,6 +250,35 @@ const HTTPS_CDN_LOGO_HOST_SUFFIXES: &[&str] = &[
     ".fastly.net",
 ];
 
+/// GitHub orgs that serve the shared generic octocat placeholder (prod walkthrough LG1).
+const GENERIC_GITHUB_ORG_AVATARS: &[&str] = &[
+    "smartcontractkit",
+    "circle-fin",
+    "reown-com",
+    "web3-mcp-hub",
+];
+
+fn is_generic_github_org_avatar(url: &str) -> bool {
+    let Ok(parsed) = url::Url::parse(url.trim()) else {
+        return false;
+    };
+    if parsed.host_str() != Some("avatars.githubusercontent.com") {
+        return false;
+    }
+    let segment = parsed
+        .path()
+        .trim_start_matches('/')
+        .split('/')
+        .next()
+        .unwrap_or("");
+    if segment.is_empty() || segment == "u" {
+        return false;
+    }
+    GENERIC_GITHUB_ORG_AVATARS
+        .iter()
+        .any(|org| org.eq_ignore_ascii_case(segment))
+}
+
 /// Filter a stored logo URL through [`logo_url_is_safe_for_img`].
 pub fn sanitize_logo_url(url: Option<String>) -> Option<String> {
     url.filter(|u| logo_url_is_safe_for_img(u))
@@ -329,8 +358,12 @@ fn first_party_brand_logo(slug: &str) -> Option<String> {
 
 /// Logo URL to render for a tool, if safe.
 pub fn tool_logo_img_url(tool: &Tool) -> Option<String> {
+    let stored = sanitize_logo_url(tool.logo_url.clone()).filter(|url| {
+        !(matches!(tool.status.as_str(), "official" | "verified")
+            && is_generic_github_org_avatar(url))
+    });
     first_party_brand_logo(&tool.slug)
-        .or_else(|| sanitize_logo_url(tool.logo_url.clone()))
+        .or(stored)
         .or_else(|| github_owner_avatar_url(tool.repo_url.as_deref()))
         .or_else(|| homepage_favicon_url(tool.homepage.as_deref()))
 }
