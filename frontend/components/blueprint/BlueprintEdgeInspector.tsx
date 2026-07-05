@@ -9,10 +9,14 @@ interface BlueprintEdgeInspectorProps {
   visible: boolean;
   edgeStyle: BlueprintEdgeStyle;
   edgeColor: string;
+  edgeDashed: boolean;
+  edgeLabel: string;
   selectedEdgeId: string | null;
   readOnly: boolean;
   onStyleChange: (style: BlueprintEdgeStyle) => void;
   onColorChange: (color: string) => void;
+  onDashedChange: (dashed: boolean) => void;
+  onLabelChange: (label: string) => void;
   onDeleteEdge: () => void;
 }
 
@@ -20,10 +24,14 @@ export function BlueprintEdgeInspector({
   visible,
   edgeStyle,
   edgeColor,
+  edgeDashed,
+  edgeLabel,
   selectedEdgeId,
   readOnly,
   onStyleChange,
   onColorChange,
+  onDashedChange,
+  onLabelChange,
   onDeleteEdge,
 }: BlueprintEdgeInspectorProps) {
   return (
@@ -60,7 +68,31 @@ export function BlueprintEdgeInspector({
         >
           Arrow
         </button>
+        <button
+          type="button"
+          className={`blueprint-edge-style-btn${edgeDashed ? " blueprint-edge-style-btn-active" : ""}`}
+          onClick={() => onDashedChange(!edgeDashed)}
+          aria-pressed={edgeDashed}
+          disabled={readOnly}
+          data-testid="blueprint-edge-dashed"
+        >
+          Dashed
+        </button>
       </div>
+      <label className="blueprint-edge-label-field">
+        <span className="sr-only">Link label</span>
+        <input
+          type="text"
+          className="blueprint-edge-label-input"
+          value={edgeLabel}
+          onChange={(e) => onLabelChange(e.target.value)}
+          placeholder="Label"
+          maxLength={40}
+          disabled={readOnly || !selectedEdgeId}
+          aria-label="Link label"
+          data-testid="blueprint-edge-label-input"
+        />
+      </label>
       <div className="blueprint-edge-color-group" role="group" aria-label="Line color">
         {BLUEPRINT_EDGE_COLORS.map((option) => (
           <button

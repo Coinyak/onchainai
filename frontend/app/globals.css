@@ -210,6 +210,33 @@
   box-shadow: 0 0 0 1px var(--color-neutral-bg);
 }
 
+.blueprint-edge-label-field {
+  display: inline-flex;
+  align-items: center;
+}
+
+.blueprint-edge-label-input {
+  min-height: 36px;
+  width: 120px;
+  padding: 0 10px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-neutral-bg);
+  font-size: var(--text-body-sm);
+  font-weight: 500;
+}
+
+.blueprint-edge-label-input:focus {
+  outline: none;
+  border-color: var(--color-border-strong);
+  background: var(--color-neutral-surface);
+}
+
+.blueprint-edge-label-input:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .blueprint-toolbar-back {
   font-size: var(--text-body-sm);
   color: var(--color-secondary);

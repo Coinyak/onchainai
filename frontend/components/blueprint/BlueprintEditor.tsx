@@ -1081,6 +1081,7 @@ function BlueprintEditorWorkspace({
     moveNode,
     nodes,
     readOnly,
+    reconnect,
     removeEdge,
     removeNode,
     selectedEdgeId,
@@ -1118,10 +1119,14 @@ function BlueprintEditorWorkspace({
           visible={!!selectedEdgeId}
           edgeStyle={selectedEdge?.style ?? edgeStyle}
           edgeColor={selectedEdge?.color ?? edgeColor}
+          edgeDashed={selectedEdge?.dashed ?? edgeDashed}
+          edgeLabel={selectedEdge?.label ?? ""}
           selectedEdgeId={selectedEdgeId}
           readOnly={readOnly}
           onStyleChange={handleEdgeStyleChange}
           onColorChange={handleEdgeColorChange}
+          onDashedChange={handleEdgeDashedChange}
+          onLabelChange={handleEdgeLabelChange}
           onDeleteEdge={() => selectedEdgeId && removeEdge(selectedEdgeId)}
         />
         <div className="blueprint-toolbar-actions">
