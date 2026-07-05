@@ -9,9 +9,9 @@
 //! redirect so the server still boots without Google credentials.
 
 use crate::auth::session::{
-    cookie_secure_for_domain, cookie_value, ensure_google_profile, issue_access_token,
-    local_dev_host, post_auth_redirect_path, set_session_hint_cookie, ACCESS_TOKEN_COOKIE,
-    GOOGLE_STATE_COOKIE,
+    auth_http_client, cookie_secure_for_domain, cookie_value, ensure_google_profile,
+    issue_access_token, local_dev_host, post_auth_redirect_path, set_session_hint_cookie,
+    ACCESS_TOKEN_COOKIE, GOOGLE_STATE_COOKIE,
 };
 use crate::config::Config;
 use crate::AppState;
@@ -128,10 +128,7 @@ async fn exchange_google_code(
     let client_secret = config.google_client_secret.as_deref().unwrap_or_default();
     let redirect_uri = callback_url(config);
 
-    let client = reqwest::Client::builder()
-        .user_agent("OnchainAI/0.1")
-        .build()
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let client = auth_http_client().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let response = client
         .post(TOKEN_URL)
@@ -158,10 +155,7 @@ async fn exchange_google_code(
 }
 
 async fn fetch_google_userinfo(access_token: &str) -> Result<GoogleUserinfo, StatusCode> {
-    let client = reqwest::Client::builder()
-        .user_agent("OnchainAI/0.1")
-        .build()
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let client = auth_http_client().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let response = client
         .get(USERINFO_URL)

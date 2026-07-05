@@ -22,6 +22,7 @@ export function authErrorMessage(code: string | null | undefined): string | null
     google_profile_setup: "Could not create your profile. Try again or contact support.",
     google_profile: "Could not save your profile. Try again.",
     wallet_failed: "Wallet sign-in failed. Try again.",
+    wallet_profile_setup: "Could not create your profile. Try again or contact support.",
     admin_required: "Admin access required. Sign in with an admin account to continue.",
   };
   return messages[code] ?? "Sign-in failed. Try again.";

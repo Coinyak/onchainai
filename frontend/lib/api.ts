@@ -521,8 +521,19 @@ function filtersToQuery(filters: ToolFilters): URLSearchParams {
 
 // --- Auth ---
 
+export interface AuthProviders {
+  github: boolean;
+  google: boolean;
+  wallet: boolean;
+  email: boolean;
+}
+
 export async function getMe(): Promise<SessionUser | null> {
   return apiFetch<SessionUser | null>("/api/v2/me");
+}
+
+export async function getAuthProviders(): Promise<AuthProviders> {
+  return apiFetch<AuthProviders>("/api/v2/auth/providers");
 }
 
 export async function checkAdminAccess(): Promise<boolean> {

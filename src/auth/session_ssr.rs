@@ -8,7 +8,18 @@ use getrandom::getrandom;
 use jsonwebtoken::{decode, encode, Algorithm, DecodingKey, EncodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
+use std::time::Duration;
 use uuid::Uuid;
+
+/// Shared outbound HTTP client for OAuth / Supabase admin calls (bounded wait).
+pub(crate) fn auth_http_client() -> Result<reqwest::Client, String> {
+    reqwest::Client::builder()
+        .user_agent("OnchainAI/0.1")
+        .connect_timeout(Duration::from_secs(5))
+        .timeout(Duration::from_secs(15))
+        .build()
+        .map_err(|e| e.to_string())
+}
 
 /// Profile upsert failure during OAuth / SIWX sign-in.
 #[derive(Debug)]
@@ -370,10 +381,7 @@ async fn create_supabase_user_for_siwx(
     let email = format!("siwx-{wallet_key}@oauth.onchainai.local");
     let password = random_password();
 
-    let client = reqwest::Client::builder()
-        .user_agent("OnchainAI/0.1")
-        .build()
-        .map_err(|e| e.to_string())?;
+    let client = auth_http_client()?;
 
     let url = format!("{}/auth/v1/admin/users", config.supabase_url);
     let response = client
@@ -426,10 +434,7 @@ async fn create_supabase_user_for_github(
     let email = format!("github-{github_id}@oauth.onchainai.local");
     let password = random_password();
 
-    let client = reqwest::Client::builder()
-        .user_agent("OnchainAI/0.1")
-        .build()
-        .map_err(|e| e.to_string())?;
+    let client = auth_http_client()?;
 
     let url = format!("{}/auth/v1/admin/users", config.supabase_url);
     let response = client
@@ -564,10 +569,7 @@ async fn create_supabase_user_for_google(
     let synthetic_email = format!("google-{google_sub}@oauth.onchainai.local");
     let password = random_password();
 
-    let client = reqwest::Client::builder()
-        .user_agent("OnchainAI/0.1")
-        .build()
-        .map_err(|e| e.to_string())?;
+    let client = auth_http_client()?;
 
     let url = format!("{}/auth/v1/admin/users", config.supabase_url);
     let response = client

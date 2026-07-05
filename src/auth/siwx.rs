@@ -244,7 +244,16 @@ pub async fn verify(
         Ok(id) => id,
         Err(err) => {
             tracing::error!(error = %err, wallet = %row.wallet_address, "SIWX profile setup failed");
-            return Err(StatusCode::INTERNAL_SERVER_ERROR);
+            return Ok((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({
+                    "error": {
+                        "code": "wallet_profile_setup",
+                        "message": "Could not create your profile. Try again later."
+                    }
+                })),
+            )
+                .into_response());
         }
     };
 
