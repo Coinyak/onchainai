@@ -1,6 +1,6 @@
 # Branch Protection
 
-> Related docs: [[AGENT_HARNESS]] | [[../.github/workflows/ci.yml]]
+> Related docs: [AGENT_HARNESS](AGENT_HARNESS.md) | [ci.yml](../.github/workflows/ci.yml)
 
 Require the **`ci-success`** check before merging to `main`. That job aggregates:
 

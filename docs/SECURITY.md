@@ -1,6 +1,6 @@
 # OnchainAI 보안 설계
 
-> 관련 문서: [[INDEX]] | [[MVP_DESIGN]] | [[UI_UX_DESIGN]] | [[../AGENTS.md]]
+> 관련 문서: [INDEX](INDEX.md) | [MVP_DESIGN](MVP_DESIGN.md) | [UI_UX_DESIGN](UI_UX_DESIGN.md) | [AGENTS](../AGENTS.md)
 >
 > 작성: 2026-06-25. OWASP, SIWE Security Considerations, WalletConnect v2 Security, Rust API Security, Supabase RLS Best Practices 기반.
 

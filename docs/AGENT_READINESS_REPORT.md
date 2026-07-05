@@ -1,6 +1,6 @@
 # Agent Readiness Report
 
-> Related docs: [[AGENT_HARNESS]] | [[BUILD_DEPLOY_RULES]] | [[../AGENTS.md]]
+> Related docs: [AGENT_HARNESS](AGENT_HARNESS.md) | [BUILD_DEPLOY_RULES](BUILD_DEPLOY_RULES.md) | [AGENTS](../AGENTS.md)
 
 Use the readiness report when preparing this repo for Codex, Claude Code, Droid, Cursor, Copilot, Grok, or other coding agents. It is a Droid-style status report, not a replacement for task-specific tests.
 

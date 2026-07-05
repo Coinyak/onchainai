@@ -1,7 +1,7 @@
 # Handoff Packet Template
 
 > Copy this block between subagents. Coordinator merges packets before user handoff.
-> Related: [[MULTI_AGENT_COORDINATION]]
+> Related: [MULTI_AGENT_COORDINATION](MULTI_AGENT_COORDINATION.md)
 
 ## Template
 
