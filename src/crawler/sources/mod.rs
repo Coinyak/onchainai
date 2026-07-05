@@ -5,10 +5,12 @@
 //! the `crawler-sources` milestone; this module defines the trait and the
 //! shared HTTP client helpers used by all sources.
 
+pub mod bazaar;
 pub mod cryptoskill;
 pub mod github;
 pub mod mcp_registry;
 pub mod npm;
+pub mod vendor_orgs;
 pub mod web3mcp;
 
 use std::sync::Arc;
@@ -53,6 +55,14 @@ pub trait SourceCrawler: Send + Sync {
     /// the `sources` table without crashing the scheduler.
     async fn crawl(&self) -> anyhow::Result<Vec<RawTool>>;
 
+    /// Pool-aware crawl for sources that need DB context (e.g. `repo_url` exclusion).
+    ///
+    /// Default implementation ignores the pool and delegates to [`Self::crawl`].
+    async fn crawl_with_pool(&self, pool: &sqlx::PgPool) -> anyhow::Result<Vec<RawTool>> {
+        let _ = pool;
+        self.crawl().await
+    }
+
     /// Stable source identifier (e.g. `cryptoskill`, `github`).
     fn source_name(&self) -> &str;
 
@@ -68,6 +78,8 @@ pub fn default_crawlers() -> Vec<Arc<dyn SourceCrawler>> {
         Arc::new(web3mcp::Web3McpHubCrawler),
         Arc::new(github::GitHubTopicsCrawler),
         Arc::new(mcp_registry::OfficialMcpRegistryCrawler),
+        Arc::new(vendor_orgs::VendorOrgsCrawler),
+        Arc::new(bazaar::BazaarCrawler),
     ]
 }
 

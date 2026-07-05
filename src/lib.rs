@@ -14,6 +14,7 @@ pub mod models;
 pub mod public_install_guide;
 pub mod server;
 pub mod trust_verification;
+pub mod vendor_orgs;
 pub mod workbench;
 
 pub use config::{Config, CANONICAL_DOMAIN, MCP_ENDPOINT_CMD, SITE_ORIGIN};

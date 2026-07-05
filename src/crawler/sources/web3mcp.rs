@@ -158,15 +158,12 @@ fn server_to_raw(server: &ServerEntry) -> RawTool {
         tool_type: "mcp".to_string(),
         repo_url: Some(server.repository.clone()),
         homepage: Some(server.repository.clone()),
-        npm_package: None,
         install_command,
         mcp_endpoint,
         chains,
-        stars: 0,
-        last_commit_at: None,
         source: SOURCE_NAME.to_string(),
         source_url,
-        license: None,
+        ..Default::default()
     }
 }
 
@@ -214,7 +211,7 @@ pub async fn run_once(pool: &sqlx::PgPool) {
         Err(e) => {
             tracing::error!(source = SOURCE_NAME, error = %e, "crawl failed");
             crate::crawler::update_source_status(
-                pool,
+                crate::crawler::UpsertTarget::Pool(pool),
                 SOURCE_NAME,
                 WEB3MCP_REGISTRY_URL,
                 "error",

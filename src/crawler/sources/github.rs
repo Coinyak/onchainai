@@ -84,7 +84,7 @@ struct ReadmeResponse {
 }
 
 /// Build a GitHub HTTP client that already has User-Agent and timeout.
-fn github_client(token: Option<&str>) -> Result<reqwest::Client> {
+pub(super) fn github_client(token: Option<&str>) -> Result<reqwest::Client> {
     let mut client = reqwest::Client::builder()
         .user_agent(crate::crawler::sources::CRAWLER_USER_AGENT)
         .timeout(std::time::Duration::from_secs(
@@ -195,15 +195,12 @@ fn search_item_to_raw(item: &SearchItem) -> RawTool {
         tool_type,
         repo_url: Some(repo_url.clone()),
         homepage: Some(repo_url.clone()),
-        npm_package: None,
-        install_command: None,
-        mcp_endpoint: None,
         chains,
         stars: item.stargazers_count,
         last_commit_at,
         source: SOURCE_NAME.to_string(),
         source_url: Some(item.html_url.clone()),
-        license: None,
+        ..Default::default()
     }
 }
 
@@ -238,7 +235,7 @@ fn is_chain_topic(topic: &str) -> bool {
 }
 
 /// Parse an RFC3339 timestamp, returning `None` on failure.
-fn parse_datetime(s: &str) -> Option<DateTime<Utc>> {
+pub(super) fn parse_datetime(s: &str) -> Option<DateTime<Utc>> {
     DateTime::parse_from_rfc3339(s)
         .ok()
         .map(|dt| dt.with_timezone(&Utc))
@@ -548,7 +545,7 @@ pub async fn run_once(pool: &sqlx::PgPool) {
         Err(e) => {
             tracing::error!(source = SOURCE_NAME, error = %e, "topics crawl failed");
             crate::crawler::update_source_status(
-                pool,
+                crate::crawler::UpsertTarget::Pool(pool),
                 SOURCE_NAME,
                 "https://github.com/topics",
                 "error",

@@ -172,13 +172,11 @@ fn version_to_raw(version: &PackageVersion, source_pkg: &SearchPackage) -> RawTo
         homepage,
         npm_package,
         install_command,
-        mcp_endpoint: None,
         chains,
-        stars: 0,
-        last_commit_at: None,
         source: SOURCE_NAME.to_string(),
         source_url,
         license: version.license.clone(),
+        ..Default::default()
     }
 }
 
@@ -317,7 +315,7 @@ pub async fn run_once(pool: &sqlx::PgPool) {
         Err(e) => {
             tracing::error!(source = SOURCE_NAME, error = %e, "crawl failed");
             crate::crawler::update_source_status(
-                pool,
+                crate::crawler::UpsertTarget::Pool(pool),
                 SOURCE_NAME,
                 "https://registry.npmjs.org/",
                 "error",

@@ -36,6 +36,37 @@ pub struct RawTool {
     pub source: String,
     pub source_url: Option<String>,
     pub license: Option<String>,
+    /// Pricing tier (`free` | `freemium` | `paid` | `x402`). Defaults to `free`.
+    pub pricing: String,
+    pub x402_price: Option<String>,
+    pub x402_endpoint: Option<String>,
+    /// When set, overrides [`assess_relevance`] status (e.g. Bazaar ingest probe).
+    pub relevance_status_override: Option<String>,
+}
+
+impl Default for RawTool {
+    fn default() -> Self {
+        Self {
+            name: String::new(),
+            description: None,
+            tool_type: "mcp".to_string(),
+            repo_url: None,
+            homepage: None,
+            npm_package: None,
+            install_command: None,
+            mcp_endpoint: None,
+            chains: vec![],
+            stars: 0,
+            last_commit_at: None,
+            source: String::new(),
+            source_url: None,
+            license: None,
+            pricing: "free".to_string(),
+            x402_price: None,
+            x402_endpoint: None,
+            relevance_status_override: None,
+        }
+    }
 }
 
 /// Check whether `text` contains `keyword` as a whole-word match.
@@ -367,7 +398,10 @@ pub fn normalize(
     });
     review.crypto_relevance_score = relevance.score;
     review.crypto_relevance_reasons = relevance.reasons;
-    review.relevance_status = relevance.status;
+    review.relevance_status = raw
+        .relevance_status_override
+        .clone()
+        .unwrap_or(relevance.status);
 
     let install_safety = assess_install(raw.install_command.as_deref(), raw.npm_package.as_deref());
     review.install_risk_level = install_safety.risk_level;
@@ -410,8 +444,8 @@ pub fn normalize(
         review_policy_version: review.review_policy_version,
         claim_state: "unclaimed".to_string(),
         license: raw.license.clone(),
-        pricing: "free".to_string(),
-        x402_price: None,
+        pricing: raw.pricing.clone(),
+        x402_price: raw.x402_price.clone(),
         referral_enabled: false,
         referral_bps: None,
         referral_payout_address: None,
@@ -421,7 +455,7 @@ pub fn normalize(
         payment_verified: false,
         x402_endpoint_verified: false,
         price_verified: false,
-        x402_endpoint: None,
+        x402_endpoint: raw.x402_endpoint.clone(),
         x402_last_checked_at: None,
         x402_check_failures: 0,
         stars: raw.stars,
@@ -726,35 +760,15 @@ mod tests {
         let raws = vec![
             RawTool {
                 name: "Foo Bar".into(),
-                description: None,
                 tool_type: "mcp".into(),
-                repo_url: None,
-                homepage: None,
-                npm_package: None,
-                install_command: None,
-                mcp_endpoint: None,
-                chains: vec![],
-                stars: 0,
-                last_commit_at: None,
                 source: "manual".into(),
-                source_url: None,
-                license: None,
+                ..Default::default()
             },
             RawTool {
                 name: "Foo Bar".into(),
-                description: None,
                 tool_type: "cli".into(),
-                repo_url: None,
-                homepage: None,
-                npm_package: None,
-                install_command: None,
-                mcp_endpoint: None,
-                chains: vec![],
-                stars: 0,
-                last_commit_at: None,
                 source: "manual".into(),
-                source_url: None,
-                license: None,
+                ..Default::default()
             },
         ];
         let tools = normalize_batch(&raws);
@@ -777,13 +791,12 @@ mod tests {
             homepage: Some("https://gobob.xyz".into()),
             npm_package: Some("@gobob/gateway-cli".into()),
             install_command: Some("npx @gobob/gateway-cli".into()),
-            mcp_endpoint: None,
             chains: vec!["bitcoin".into(), "ethereum".into(), "base".into()],
             stars: 125,
-            last_commit_at: None,
             source: "github".into(),
             source_url: Some("https://github.com/bob-collective/bob".into()),
             license: Some("MIT".into()),
+            ..Default::default()
         }
     }
 
@@ -822,6 +835,22 @@ mod tests {
         assert!(!is_valid_github_owner("-bad"));
         assert!(!is_valid_github_owner("bad-"));
         assert!(!is_valid_github_owner("acme/repo"));
+    }
+
+    #[test]
+    fn normalize_propagates_x402_pricing_fields() {
+        let mut raw = sample_raw();
+        raw.pricing = "x402".into();
+        raw.x402_price = Some("$0.01".into());
+        raw.x402_endpoint = Some("https://api.example.com/x402/resource".into());
+        let taken = std::collections::HashSet::new();
+        let tool = normalize(&raw, &taken, "pending");
+        assert_eq!(tool.pricing, "x402");
+        assert_eq!(tool.x402_price.as_deref(), Some("$0.01"));
+        assert_eq!(
+            tool.x402_endpoint.as_deref(),
+            Some("https://api.example.com/x402/resource")
+        );
     }
 
     #[test]
@@ -893,17 +922,8 @@ mod tests {
             name: "Filesystem MCP".into(),
             description: Some("MCP server for local file operations".into()),
             tool_type: "mcp".into(),
-            repo_url: None,
-            homepage: None,
-            npm_package: None,
-            install_command: None,
-            mcp_endpoint: None,
-            chains: vec![],
-            stars: 0,
-            last_commit_at: None,
             source: "npm".into(),
-            source_url: None,
-            license: None,
+            ..Default::default()
         };
         let taken = std::collections::HashSet::new();
         let tool = normalize(&raw, &taken, "pending");
@@ -927,33 +947,15 @@ mod tests {
                 name: "Alpha".into(),
                 description: Some("swap dex".into()),
                 tool_type: "mcp".into(),
-                repo_url: None,
-                homepage: None,
-                npm_package: None,
-                install_command: None,
-                mcp_endpoint: None,
-                chains: vec![],
-                stars: 0,
-                last_commit_at: None,
                 source: "npm".into(),
-                source_url: None,
-                license: None,
+                ..Default::default()
             },
             RawTool {
                 name: "Beta Staking".into(),
-                description: None,
                 tool_type: "sdk".into(),
-                repo_url: None,
-                homepage: None,
-                npm_package: None,
-                install_command: None,
-                mcp_endpoint: None,
-                chains: vec![],
                 stars: 5,
-                last_commit_at: None,
                 source: "npm".into(),
-                source_url: None,
-                license: None,
+                ..Default::default()
             },
         ];
         let tools = normalize_batch(&raws);
