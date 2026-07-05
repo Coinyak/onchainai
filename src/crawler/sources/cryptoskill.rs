@@ -109,17 +109,10 @@ fn skill_to_raw(skill: &SkillEntry) -> RawTool {
         name: skill.display_name.clone(),
         description: Some(skill.description.clone()),
         tool_type: "skill".to_string(),
-        repo_url: None,
-        homepage: None,
-        npm_package: None,
         install_command: Some(format!("clawhub install {}", skill.name)),
-        mcp_endpoint: None,
-        chains: vec![],
-        stars: 0,
-        last_commit_at: None,
         source: SOURCE_NAME.to_string(),
         source_url: Some(source_url),
-        license: None,
+        ..Default::default()
     }
 }
 
@@ -173,7 +166,7 @@ pub async fn run_once(pool: &sqlx::PgPool) {
         Err(e) => {
             tracing::error!(source = SOURCE_NAME, error = %e, "crawl failed");
             crate::crawler::update_source_status(
-                pool,
+                crate::crawler::UpsertTarget::Pool(pool),
                 SOURCE_NAME,
                 "https://cryptoskill.org/skills.json",
                 "error",

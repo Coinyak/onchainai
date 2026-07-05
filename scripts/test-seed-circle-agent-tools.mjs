@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 // Structural test for PR-1 Circle for Agents seed manifest.
-// Drives the real dry-run entry point and parses verify-tool-official FIRST_PARTY_ORGS.
-import { readFileSync } from "node:fs";
+// Drives seed dry-run and exercises verify-tool-official FIRST_PARTY_ORGS loader.
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
+import { loadFirstPartyOrgs } from "./vendor-orgs-lib.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -27,9 +27,9 @@ function fail(msg) {
   process.exit(1);
 }
 
-const verifySrc = readFileSync(resolve(ROOT, "scripts/verify-tool-official.mjs"), "utf8");
-if (!/circlefin:\s*"Circle"/.test(verifySrc)) {
-  fail("FIRST_PARTY_ORGS missing circlefin: \"Circle\"");
+const firstPartyOrgs = loadFirstPartyOrgs();
+if (firstPartyOrgs.circlefin !== "Circle") {
+  fail(`FIRST_PARTY_ORGS loader missing circlefin: "Circle" (got ${firstPartyOrgs.circlefin ?? "undefined"})`);
 }
 
 if (EXPECTED_SLUGS.includes("skills")) {

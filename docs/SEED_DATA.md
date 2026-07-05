@@ -26,7 +26,7 @@ Read alongside [MVP_DESIGN.md](MVP_DESIGN.md) (schema), [SECURITY.md](SECURITY.m
 | Deterministic UUIDs | Fixed UUIDs from a `seed:` namespace (UUIDv5 or hand-assigned `00000000-0000-0000-0000-0000000000NN`) so FKs resolve and reruns are stable. |
 | Idempotent | Every insert uses `ON CONFLICT … DO NOTHING` (or `DO UPDATE` for mutable demo fields). |
 | Layered | `categories` already ship in `001_init`. Seed adds only profiles → tools → comments → upvotes → bookmarks, in FK order. |
-| Env-gated | Refuses to run unless `SEED_ENV in (dev, test)`. |
+| Env-gated | SQL seeds refuse unless `SEED_ENV in (dev, test)`. Operator curation uses a **separate** `prod-curate` lane (Section 7.1). |
 | Realistic | Names/descriptions/install commands resemble real crypto tooling, not `foo`/`bar`. |
 
 ## 3. Data Sets
@@ -118,11 +118,12 @@ admin toggles (`allow_free_registration`, `require_tool_approval`,
 `allow_x402_registration`, `search_keywords`) to demo the `/admin/settings` page;
 restore defaults in `reset.sql`.
 
-### 3.7 sources (~4) — Phase A, auth-free
-Seed the crawler `sources` rows (`cryptoskill`, `github-topics`, `web3-mcp-hub`,
-`npm`) with mixed `crawl_status` (`success`/`error`/`pending`) and `items_found`
-so `/admin/crawler` renders a realistic dashboard. `name` is UNIQUE →
-`ON CONFLICT (name) DO NOTHING`.
+### 3.7 sources (7 discovery + maintenance) — Phase A, auth-free
+Seed the crawler `sources` rows for all wired discovery sources (`cryptoskill`,
+`github`, `mcp-registry`, `npm`, `vendor_orgs`, `bazaar`, `web3-mcp-hub`) with
+mixed `crawl_status` (`success`/`error`/`pending`) and `items_found` so
+`/admin/crawler` renders a realistic dashboard. `sync_stars` is a maintenance job,
+not a discovery source. `name` is UNIQUE → `ON CONFLICT (name) DO NOTHING`.
 
 ## 4. Determinism
 
@@ -164,6 +165,49 @@ Both files MUST:
 4. Use `ON CONFLICT DO NOTHING` everywhere (mutable demo fields may `DO UPDATE`).
 
 ## 7. Production Guard (required)
+
+### 7.1 Operator curation lane (`SEED_ENV=prod-curate`)
+
+**Distinct from** `dev`/`test` SQL seeds (Section 7.2). Operator-curated catalog
+upserts use Node scripts built on `scripts/seed-tool-lib.mjs`:
+
+| Lane | Env | Writes prod? | Default |
+|------|-----|--------------|---------|
+| Dev/test SQL | `SEED_ENV=dev` or `test` | **No** — local/disposable DB only | `seeds/dev_seed.sql` |
+| Operator curation | `SEED_ENV=prod-curate` | **Yes** — explicit operator ack | dry-run when unset |
+
+**Dry-run (default):** omit `SEED_ENV` or set anything other than `prod-curate`.
+Script prints JSON (`mode: dry-run`, slug list, `apply_hint`) and exits without DB
+writes.
+
+**Apply (operator ack):**
+
+```bash
+# Circle 11 slugs (seed-circle-agent-tools.mjs)
+ENV_FILE=.env node scripts/seed-circle-agent-tools.mjs                    # dry-run
+ENV_FILE=.env SEED_ENV=prod-curate PG_INSECURE_SSL=1 \
+  node scripts/seed-circle-agent-tools.mjs                              # apply
+
+# After seed: promote repo-backed slugs via verify harness (not manual status)
+node scripts/verify-tool-official.mjs circle-gateway --apply
+node scripts/verify-tool-official.mjs --scan --apply --i-understand-bulk  # bulk
+```
+
+Example Circle slugs: `circle-agent-stack`, `circle-gateway`, `circle-cctp-v2`,
+`circle-cctp-provider-sdk`, `circle-dev-controlled-wallets`,
+`circle-user-controlled-wallets`, `circle-modular-wallets`, `circle-paymaster`,
+`circle-api-node-sdk`, `usdc-stablecoin-contracts`, `circle-x402-batching`.
+
+Other `prod-curate` scripts: `seed-onchainai-listing.mjs`,
+`seed-platform-agent-tools.mjs`, `seed-crypto-infra-tools.mjs`,
+`seed-ecosystem-tools.mjs`, `seed-cex-tools.mjs`. Workflow: dry-run → review JSON
+→ `SEED_ENV=prod-curate` apply → `verify-tool-official.mjs --apply` per slug.
+Runnerbook: `docs/OPERATOR_GUIDE.md` §5.
+
+This lane does **not** weaken the SQL seed prohibition below — never run
+`dev_seed.sql` against production.
+
+### 7.2 SQL seed guard (`dev` / `test` only)
 
 The seed file refuses to run outside dev/test. Example guard at the top of
 `dev_seed.sql`:

@@ -36,9 +36,9 @@
   - Allow x402 paid registration (x402 유료 등록 허용)
 
 ### `/admin/crawler` — Crawler Control (크롤러 제어)
-- 4개 발견 소스 상태/마지막 실행 시각 확인.
-- 소스별 **수동 크롤 즉시 실행(Trigger)**. (자동 스케줄과 별개)
-- **GitHub Stars Sync** — 별도 수동 동기화( Sync Now ) 버튼.
+- **7개 발견 소스** 상태/마지막 실행 시각 확인: `cryptoskill`, `github`, `mcp-registry`, `npm`, `vendor_orgs`, `bazaar`, `web3-mcp-hub` (`CRAWLER_SOURCE_DEFS`와 동기화).
+- 소스별 **수동 크롤 즉시 실행(Trigger)**. (자동 스케줄과 별개) — UI가 UUID를 보내는 버그가 있으면 §5 curl 우회.
+- **GitHub Stars Sync** (`sync_stars`) — 별도 유지보수 작업; Stars Sync Now 버튼.
 
 ### `/admin/categories` — Category Management
 - 기능 카테고리 **생성 / 수정 / 삭제** (CRUD).
@@ -65,8 +65,8 @@
 | 페이지 레이아웃·색상·폰트·컴포넌트 | `src/components/`, `src/pages/`, `style/`, `DESIGN.md` | 디자인 토큰, Tailwind, Leptos 컴포넌트. settings로 못 바꾸는 모든 시각 요소 |
 | 새 페이지 / 라우트 | `src/app.rs` | 새 URL 경로 추가 |
 | 새 어드민 기능 / 새 설정 항목 | `src/pages/admin/`, `src/server/functions.rs` | settings에 없는 새 토글·필드 추가 |
-| 크롤러 소스 추가·변경 | `src/crawler/sources/` | cryptoskill, web3mcp, github, npm 외 신규 소스 |
-| 크롤러 스케줄 변경 | `src/crawler/scheduler.rs` | cron 주기 (npm 1h, CryptoSkill 6h, web3mcp 12h, GitHub topics 1h, star sync 30m) |
+| 크롤러 소스 추가·변경 | `src/crawler/sources/` | 7개 발견 소스: `cryptoskill`, `github`, `mcp-registry`, `npm`, `vendor_orgs`, `bazaar`, `web3-mcp-hub` + `sync_stars` 유지보수 |
+| 크롤러 스케줄 변경 | `src/crawler/scheduler.rs` | cron (`CRAWLER_JOB_SPECS`): npm·github 1h, cryptoskill·bazaar 6h, mcp-registry·web3-mcp-hub 12h, vendor_orgs 일 03:45 UTC, sync_stars 30m |
 | 관련성/설치안전 판정 로직 | `src/crawler/relevance.rs`, `src/install_safety.rs` | 자동 심사 기준 |
 | DB 스키마 | `migrations/` | 테이블·컬럼 변경 후 `sqlx migrate run` + `sqlx prepare` |
 | MCP 서버 도구 | `src/server/mcp.rs` | 에이전트용 MCP 4개 도구 |
@@ -129,9 +129,10 @@ node scripts/verify-tool-official.mjs <slug>
 node scripts/verify-tool-official.mjs <slug> --apply
 
 # 전체 스캔(공개 도구 중 first-party org / 플랫폼 키워드 후보 일괄 판정)
-node scripts/verify-tool-official.mjs --scan [--apply]
+node scripts/verify-tool-official.mjs --scan [--apply --i-understand-bulk] [--limit N]
 ```
 
+- **일괄 적용**: `--scan --apply`는 반드시 `--i-understand-bulk`와 함께. 없으면 스크립트가 거부(deny-by-default).
 - **판정 규칙**: `official` = repo org가 first-party 목록(스크립트 상단 `FIRST_PARTY_ORGS`,
   PR로 확장)이거나 GitHub 도메인 인증 org + org 사이트가 도구 홈페이지와 일치.
   `verified` = repo 실존 + 아이덴티티 클러스터(org/npm scope/홈페이지 도메인) 일치.
@@ -146,7 +147,72 @@ node scripts/verify-tool-official.mjs --scan [--apply]
 
 ---
 
+## 5. Link-drop — 카탈로그 공급 4경로 (운영자 러너북)
+
+크롤러·시드·검증 하네스로 **새 도구를 카탈로그에 넣는** 운영 절차. 코드 변경 없이 아래만 따른다.
+
+### 5.1 크롤러 발견 → `/admin/tools` 심사 큐
+
+1. 7개 발견 소스가 주기적으로 upsert (`src/crawler/scheduler.rs`).
+2. **`vendor_orgs`**·**`bazaar`** 소스는 `persist_crawl_results_gated`로 **항상 `approval_status=pending`** — `require_tool_approval` 설정과 무관.
+3. 운영자: `/admin/tools`에서 relevance·install safety 큐를 검토하고 Approve/Reject.
+4. 수동 1회 실행이 필요하면 §5.4 curl 사용 (UI Trigger 버그 우회).
+
+### 5.2 운영자 큐레이션 시드 (`SEED_ENV=prod-curate`)
+
+SQL `dev_seed.sql`과 **별도 레인**. `scripts/seed-tool-lib.mjs` 기반 `scripts/seed-*.mjs`가 프로덕션에 operator-curated upsert.
+
+```bash
+# 1) 드라이런(기본): SEED_ENV 미설정 또는 prod-curate 아님 → JSON 요약만, DB 쓰기 없음
+ENV_FILE=.env node scripts/seed-circle-agent-tools.mjs
+
+# 2) 적용: 명시적 prod-curate + .env의 DATABASE_URL(프로덕션)
+ENV_FILE=.env SEED_ENV=prod-curate PG_INSECURE_SSL=1 node scripts/seed-circle-agent-tools.mjs
+```
+
+- Circle 11 slugs 예: `circle-agent-stack`, `circle-gateway`, `circle-cctp-v2`, … (`scripts/seed-circle-agent-tools.mjs` 참고).
+- 다른 스크립트: `seed-onchainai-listing.mjs`, `seed-platform-agent-tools.mjs`, `seed-crypto-infra-tools.mjs` 등 — 모두 동일 dry-run → `prod-curate` 패턴.
+- 상세: `docs/SEED_DATA.md` §7.1.
+
+### 5.3 verified/official 승격 (단일 + 일괄)
+
+§4 하네스. 시드·크롤 후 repo/org 증거가 있으면:
+
+```bash
+# 단일 슬러그
+node scripts/verify-tool-official.mjs circle-gateway --apply
+
+# 일괄 스캔 + 적용 (bulk ack 필수)
+node scripts/verify-tool-official.mjs --scan --apply --i-understand-bulk
+```
+
+수동 `tools.status` 변경 금지 — 하네스만 사용.
+
+### 5.4 크롤러 수동 Trigger — curl 우회 (UI UUID 버그)
+
+`/admin/crawler` Trigger가 소스 UUID 대신 **소스 이름**을 보내야 할 때까지:
+
+```bash
+API_URL=https://www.onchain-ai.xyz   # 또는 로컬 API
+# 관리자 세션 쿠키 필요 (브라우저에서 복사)
+
+curl -sS -X POST "$API_URL/api/v2/admin/crawler/trigger" \
+  -H "Cookie: $ADMIN_COOKIE" \
+  -H "Content-Type: application/json" \
+  -d '{"source":"bazaar"}'
+
+# vendor org sweep:
+curl -sS -X POST "$API_URL/api/v2/admin/crawler/trigger" \
+  -H "Cookie: $ADMIN_COOKIE" \
+  -H "Content-Type: application/json" \
+  -d '{"source":"vendor_orgs"}'
+```
+
+허용 `source` 값: `npm`, `cryptoskill`, `web3-mcp-hub`, `github`, `mcp-registry`, `vendor_orgs`, `bazaar`, `sync_stars` (`validate_trigger_crawler_source`).
+
+---
+
 ## 요약 3줄
-1. **운영자(노코드)**: 도구 승인/거부, 추천카드, 카테고리, 유저 정지, 댓글 삭제, 사이트 텍스트·MCP·크롤러 키워드·등록정책 토글, 크롤러 수동 실행.
+1. **운영자(노코드)**: 도구 승인/거부, 추천카드, 카테고리, 유저 정지, 댓글 삭제, 사이트 텍스트·MCP·크롤러 키워드·등록정책 토글, 크롤러 수동 실행, §5 link-drop(시드·verify·curl).
 2. **개발자(코드)**: 화면 모양·레이아웃·새 페이지·크롤러 소스/주기·판정 로직·DB·MCP·인증·배포.
 3. **유저**: 탐색·검색은 무료 공개 / 댓글·투표·북마크·제출·신고는 로그인(GitHub·이메일·지갑).

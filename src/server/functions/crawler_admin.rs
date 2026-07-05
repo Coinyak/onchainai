@@ -4,7 +4,10 @@ use super::*;
 pub(crate) const CRAWLER_SOURCE_DEFS: &[(&str, &str)] = &[
     ("cryptoskill", "Every 6h"),
     ("github", "Hourly (+30m offset)"),
+    ("mcp-registry", "Every 12h (+15m offset)"),
     ("npm", "Hourly"),
+    ("vendor_orgs", "Daily (03:45 UTC)"),
+    ("bazaar", "Every 6h (+20m offset)"),
     ("web3-mcp-hub", "Every 12h"),
 ];
 
@@ -35,7 +38,9 @@ pub(crate) fn default_schedule_minutes_for_source(name: &str) -> i32 {
     match name {
         "npm" | "github" => 60,
         "cryptoskill" => 360,
-        "web3-mcp-hub" => 720,
+        "mcp-registry" | "web3-mcp-hub" => 720,
+        "vendor_orgs" => 1440,
+        "bazaar" => 360,
         _ => 360,
     }
 }
@@ -131,7 +136,8 @@ pub(crate) async fn list_crawler_sources_inner(
 /// Validate manual crawler trigger input.
 pub(crate) fn validate_trigger_crawler_source(source: &str) -> Result<(), &'static str> {
     match source {
-        "npm" | "cryptoskill" | "web3-mcp-hub" | "github" | "sync_stars" => Ok(()),
+        "npm" | "cryptoskill" | "web3-mcp-hub" | "github" | "mcp-registry" | "vendor_orgs"
+        | "bazaar" | "sync_stars" => Ok(()),
         _ => Err("unknown crawler source"),
     }
 }

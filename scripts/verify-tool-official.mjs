@@ -40,60 +40,13 @@ import { readFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
+import { loadFirstPartyOrgs } from "./vendor-orgs-lib.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
 
-// Curated first-party GitHub orgs → official team label. Extend via PR; keep
-// entries defensible (vendor-controlled org, not fan/community orgs).
-const FIRST_PARTY_ORGS = {
-  github: "GitHub",
-  xdevplatform: "X Developer Platform",
-  twitterdev: "X Developer Platform",
-  modelcontextprotocol: "Model Context Protocol",
-  anthropics: "Anthropic",
-  openai: "OpenAI",
-  "google-gemini": "Google Gemini",
-  coinbase: "Coinbase",
-  circlefin: "Circle",
-  base: "Base",
-  "base-org": "Base",
-  "solana-labs": "Solana Labs",
-  "solana-foundation": "Solana Foundation",
-  "anza-xyz": "Anza (Solana)",
-  ethereum: "Ethereum Foundation",
-  uniswap: "Uniswap Labs",
-  aave: "Aave",
-  "aave-dao": "Aave",
-  smartcontractkit: "Chainlink",
-  "wormhole-foundation": "Wormhole",
-  "layerzero-labs": "LayerZero",
-  alchemyplatform: "Alchemy",
-  "thirdweb-dev": "thirdweb",
-  crossmint: "Crossmint",
-  "goat-sdk": "Crossmint GOAT",
-  farcasterxyz: "Farcaster",
-  neynarhq: "Neynar",
-  neynarxyz: "Neynar",
-  discord: "Discord",
-  grammyjs: "grammY",
-  metamask: "MetaMask",
-  consensys: "Consensys",
-  "safe-global": "Safe",
-  walletconnect: "WalletConnect",
-  "reown-com": "Reown (WalletConnect)",
-  projectopensea: "OpenSea",
-  "foundry-rs": "Foundry",
-  paradigmxyz: "Paradigm",
-  wevm: "wevm (wagmi/viem)",
-  "bob-collective": "BOB",
-  "ton-blockchain": "TON",
-  tronprotocol: "TRON",
-  "input-output-hk": "IOG (Cardano)",
-  chainstacklabs: "Chainstack",
-  quicknode: "QuickNode",
-  graphprotocol: "The Graph",
-};
+// Curated first-party GitHub orgs → official team label (scripts/vendor-orgs.json).
+const FIRST_PARTY_ORGS = loadFirstPartyOrgs();
 
 // Narrow scan keywords — org hits in FIRST_PARTY_ORGS are the primary signal.
 const PLATFORM_KEYWORDS = [

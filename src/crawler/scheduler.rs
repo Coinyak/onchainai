@@ -6,6 +6,8 @@
 //! - web3-mcp-hub: every 12h (`0 0 */12 * * *`)
 //! - GitHub topics: every hour at 30min offset (`0 30 * * * *`)
 //! - official MCP Registry: every 12h, offset 15min (`0 15 */12 * * *`)
+//! - vendor orgs: daily at 03:45 UTC (`0 45 3 * * *`)
+//! - Bazaar x402 discovery: every 6h at :20 (`0 20 */6 * * *`)
 //! - GitHub star sync: every 30min (`0 */30 * * * *`)
 //!
 //! The actual source crawl logic is added in a later milestone; this module
@@ -25,6 +27,8 @@ const CRYPTOSKILL_CRON: &str = "0 0 */6 * * *";
 const WEB3MCP_CRON: &str = "0 0 */12 * * *";
 const GITHUB_CRON: &str = "0 30 * * * *";
 const MCP_REGISTRY_CRON: &str = "0 15 */12 * * *";
+const VENDOR_ORGS_CRON: &str = "0 45 3 * * *";
+const BAZAAR_CRON: &str = "0 20 */6 * * *";
 const STAR_SYNC_CRON: &str = "0 */30 * * * *";
 
 pub(crate) const CRAWLER_JOB_SPECS: &[CrawlerJobSpec] = &[
@@ -47,6 +51,14 @@ pub(crate) const CRAWLER_JOB_SPECS: &[CrawlerJobSpec] = &[
     CrawlerJobSpec {
         source: "mcp-registry",
         cron: MCP_REGISTRY_CRON,
+    },
+    CrawlerJobSpec {
+        source: "vendor_orgs",
+        cron: VENDOR_ORGS_CRON,
+    },
+    CrawlerJobSpec {
+        source: "bazaar",
+        cron: BAZAAR_CRON,
     },
     CrawlerJobSpec {
         source: "sync_stars",
@@ -120,6 +132,28 @@ pub async fn start(pool: sqlx::PgPool) -> Result<()> {
     })?;
     scheduler.add(mcp_registry_job).await?;
 
+    // Vendor org GitHub sweep: daily at 03:45 UTC.
+    let vendor_orgs_pool = pool.clone();
+    let vendor_orgs_job = Job::new_async(VENDOR_ORGS_CRON, move |_uuid, _l| {
+        let pool = vendor_orgs_pool.clone();
+        Box::pin(async move {
+            tracing::info!("scheduled crawl: vendor orgs");
+            crate::crawler::sources::vendor_orgs::run_once(&pool).await;
+        })
+    })?;
+    scheduler.add(vendor_orgs_job).await?;
+
+    // CDP Bazaar x402 discovery: every 6h at :20 UTC.
+    let bazaar_pool = pool.clone();
+    let bazaar_job = Job::new_async(BAZAAR_CRON, move |_uuid, _l| {
+        let pool = bazaar_pool.clone();
+        Box::pin(async move {
+            tracing::info!("scheduled crawl: bazaar");
+            crate::crawler::sources::bazaar::run_once(&pool).await;
+        })
+    })?;
+    scheduler.add(bazaar_job).await?;
+
     // GitHub star sync: every 30min.
     let star_pool = pool.clone();
     let star_job = Job::new_async(STAR_SYNC_CRON, move |_uuid, _l| {
@@ -154,5 +188,11 @@ mod tests {
         assert!(CRAWLER_JOB_SPECS
             .iter()
             .any(|spec| { spec.source == "mcp-registry" && spec.cron == MCP_REGISTRY_CRON }));
+        assert!(CRAWLER_JOB_SPECS
+            .iter()
+            .any(|spec| { spec.source == "vendor_orgs" && spec.cron == VENDOR_ORGS_CRON }));
+        assert!(CRAWLER_JOB_SPECS
+            .iter()
+            .any(|spec| { spec.source == "bazaar" && spec.cron == BAZAAR_CRON }));
     }
 }

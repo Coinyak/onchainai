@@ -47,13 +47,11 @@ fn discovery_bob_raw_tool() -> RawTool {
         homepage: Some("https://docs.gobob.xyz/gateway/agents".into()),
         npm_package: Some("@gobob/gateway-cli".into()),
         install_command: Some("npx @gobob/gateway-cli".into()),
-        mcp_endpoint: None,
         chains: bob_gateway_all_chains(),
-        stars: 0,
-        last_commit_at: None,
         source: "npm".into(),
         source_url: Some("https://www.npmjs.com/package/@gobob/gateway-cli".into()),
         license: Some("MIT".into()),
+        ..Default::default()
     }
 }
 
@@ -113,9 +111,12 @@ async fn register_bob_gateway_cli_via_crawler_upsert_and_persist() {
     assert!(tool.chains.contains(&"bob".to_string()));
     assert_eq!(tool.relevance_status, "accepted");
 
-    upsert_tools(&pool, std::slice::from_ref(&tool))
-        .await
-        .expect("upsert_tools");
+    upsert_tools(
+        onchainai::crawler::UpsertTarget::Pool(&pool),
+        std::slice::from_ref(&tool),
+    )
+    .await
+    .expect("upsert_tools");
 
     let row: (
         String,

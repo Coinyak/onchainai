@@ -903,7 +903,52 @@ mod tests {
     #[test]
     fn validate_trigger_crawler_source_accepts_known_sources() {
         assert!(validate_trigger_crawler_source("npm").is_ok());
+        assert!(validate_trigger_crawler_source("mcp-registry").is_ok());
+        assert!(validate_trigger_crawler_source("vendor_orgs").is_ok());
+        assert!(validate_trigger_crawler_source("bazaar").is_ok());
         assert!(validate_trigger_crawler_source("sync_stars").is_ok());
+    }
+
+    #[test]
+    fn mcp_registry_scheduler_and_admin_wiring() {
+        use crate::crawler::scheduler::CRAWLER_JOB_SPECS;
+
+        assert!(
+            CRAWLER_JOB_SPECS
+                .iter()
+                .any(|spec| spec.source == "mcp-registry"),
+            "mcp-registry must be scheduled"
+        );
+        assert!(
+            CRAWLER_SOURCE_DEFS
+                .iter()
+                .any(|(name, _)| *name == "mcp-registry"),
+            "mcp-registry must appear in admin CRAWLER_SOURCE_DEFS"
+        );
+        assert!(validate_trigger_crawler_source("mcp-registry").is_ok());
+    }
+
+    #[test]
+    fn bazaar_scheduler_and_admin_wiring() {
+        use crate::crawler::scheduler::CRAWLER_JOB_SPECS;
+
+        assert!(
+            CRAWLER_JOB_SPECS
+                .iter()
+                .any(|spec| spec.source == "bazaar" && spec.cron == "0 20 */6 * * *"),
+            "bazaar must be scheduled every 6h"
+        );
+        assert!(
+            CRAWLER_SOURCE_DEFS
+                .iter()
+                .any(|(name, _)| *name == "bazaar"),
+            "bazaar must appear in admin CRAWLER_SOURCE_DEFS"
+        );
+        assert!(validate_trigger_crawler_source("bazaar").is_ok());
+        assert_eq!(
+            default_source_registry_url("bazaar"),
+            "https://api.cdp.coinbase.com/platform/v2/x402/discovery/resources"
+        );
     }
 
     #[test]

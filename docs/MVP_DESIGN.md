@@ -25,7 +25,8 @@
 ```
 ┌─────────────────────────────────────────────────────────┐
 │                    데이터 소스                            │
-│  CryptoSkill · web3-mcp-hub · GitHub topics · npm       │
+│  CryptoSkill · web3-mcp-hub · GitHub · npm · mcp-registry │
+│  vendor_orgs · CDP Bazaar x402                            │
 └──────────────────────────┬──────────────────────────────┘
                            │ 크롤 (tokio-cron-scheduler / 1h)
                            ▼
@@ -201,8 +202,11 @@ INSERT INTO categories (id, label, icon, description, sort_order) VALUES
 |---|---|---|---|
 | **CryptoSkill** | GitHub 저장소 JSON 또는 웹사이트 스크랩 | 6h | ~1,342 skills + 121 MCP |
 | **web3-mcp-hub** | registry.json 직접 fetch | 12h | ~50 MCP |
-| **GitHub topics** | `mcp-server`, `crypto-mcp`, `web3-mcp`, `blockchain-mcp` 검색 | 1h | 발견 속도 핵심 |
+| **GitHub topics** | `mcp-server`, `crypto-mcp`, `web3-mcp`, `blockchain-mcp` 검색 | 1h (+30m offset) | 발견 속도 핵심 |
 | **npm** | `mcp`, `crypto`, `web3`, `blockchain` 키워드 신규 패키지 | 1h | BOB Gateway CLI 같은 것 선제 |
+| **mcp-registry** | 공식 MCP Registry API (`registry.modelcontextprotocol.io`) | 12h (+15m offset) | 공식 등록 MCP 서버 |
+| **vendor_orgs** | `scripts/vendor-orgs.json` first-party GitHub org sweep | daily 03:45 UTC | Circle·Coinbase 등 벤더 MCP/CLI |
+| **bazaar** | CDP x402 discovery API (`/platform/v2/x402/discovery/resources`) | 6h (+20m offset) | L2 x402 API (항상 pending 심사) |
 
 ### 크롤 파이프라인 (Rust)
 
@@ -214,10 +218,26 @@ src/crawler/
 │   ├── cryptoskill.rs   # CryptoSkill 스크랩 (reqwest + scraper)
 │   ├── web3mcp.rs       # registry.json fetch (reqwest + serde_json)
 │   ├── github.rs        # GitHub topics 검색 (GitHub API + reqwest)
-│   └── npm.rs           # npm 신규 패키지 (npm API + reqwest)
+│   ├── npm.rs           # npm 신규 패키지 (npm API + reqwest)
+│   ├── mcp_registry.rs  # 공식 MCP Registry API
+│   ├── vendor_orgs.rs   # vendor-orgs.json org sweep (forced pending)
+│   └── bazaar.rs        # CDP Bazaar x402 discovery (forced pending)
 ├── normalizer.rs        # 소스별 데이터 → Tool 구조체로 정규화
 ├── deduper.rs           # repo_url 기준 중복 제거
-└── scheduler.rs         # tokio-cron-scheduler 주기 실행
+└── scheduler.rs         # tokio-cron-scheduler — CRAWLER_JOB_SPECS 8 jobs (7 discovery + sync_stars)
+```
+
+스케줄러 cron (`src/crawler/scheduler.rs`):
+
+```
+npm              0 0 * * * *        # hourly
+cryptoskill      0 0 */6 * * *      # every 6h
+web3-mcp-hub     0 0 */12 * * *     # every 12h
+github           0 30 * * * *       # hourly +30m
+mcp-registry     0 15 */12 * * *    # every 12h +15m
+vendor_orgs      0 45 3 * * *       # daily 03:45 UTC
+bazaar           0 20 */6 * * *      # every 6h +20m
+sync_stars       0 */30 * * * *     # every 30m (maintenance, not discovery)
 ```
 
 ### 핵심 구조체

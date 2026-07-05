@@ -79,11 +79,9 @@ fn registry_server_to_raw(server: &RegistryServer) -> RawTool {
         install_command,
         mcp_endpoint,
         chains: infer_chains(server),
-        stars: 0,
-        last_commit_at: None,
         source: SOURCE_NAME.to_string(),
         source_url: repo_url.or_else(|| Some(MCP_REGISTRY_URL.to_string())),
-        license: None,
+        ..Default::default()
     }
 }
 
@@ -180,7 +178,7 @@ pub async fn run_once(pool: &sqlx::PgPool) {
         Err(e) => {
             tracing::error!(source = SOURCE_NAME, error = %e, "crawl failed");
             crate::crawler::update_source_status(
-                pool,
+                crate::crawler::UpsertTarget::Pool(pool),
                 SOURCE_NAME,
                 MCP_REGISTRY_URL,
                 "error",
