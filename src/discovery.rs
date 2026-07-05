@@ -311,6 +311,14 @@ mod tests {
     }
 
     #[test]
+    fn search_intent_swap_base_maps_chain_and_function_without_fts() {
+        let intent = parse_search_intent("swap base");
+        assert_eq!(intent.function.as_deref(), Some("swap"));
+        assert_eq!(intent.chain.as_deref(), Some("base"));
+        assert_eq!(intent.query_terms, "");
+    }
+
+    #[test]
     fn search_intent_maps_risk_and_x402() {
         let intent = parse_search_intent("low risk x402");
         assert_eq!(intent.tool_type.as_deref(), Some("x402"));
