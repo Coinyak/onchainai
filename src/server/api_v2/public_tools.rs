@@ -16,8 +16,8 @@ use crate::server::functions::{
 };
 use crate::server::queries::{
     APPROVED_TOOLS_BY_SLUGS_SQL, BOOKMARKED_SLUGS_SQL, MCP_SEARCH_TOOLS_COUNT_OR_SQL,
-    MCP_SEARCH_TOOLS_COUNT_SQL, RECENT_APPROVED_TOOLS_SQL, TOOL_COMMENT_COUNT_BY_SLUG_SQL,
-    USER_TOOLKIT_SQL,
+    MCP_SEARCH_TOOLS_COUNT_SQL, RECENT_APPROVED_TOOLS_SQL, SEARCH_APPROVED_TOOLS_FILTER_SQL,
+    TOOL_COMMENT_COUNT_BY_SLUG_SQL, USER_TOOLKIT_SQL,
 };
 use crate::server::review_persistence::list_public_official_links;
 use crate::trust_verification::verify_tool_trust;
@@ -147,29 +147,38 @@ async fn search_tools(
     let (query, function, chain) =
         resolve_search_filters(&q.query, q.function.clone(), q.chain.clone());
 
-    let match_mode = resolve_search_match(
-        &state.pool,
-        MCP_SEARCH_TOOLS_COUNT_SQL,
-        MCP_SEARCH_TOOLS_COUNT_OR_SQL,
-        &query,
-        function.as_deref(),
-        chain.as_deref(),
-    )
-    .await
-    .map_err(|e| ApiError::Internal(format!("search count failed: {e}")))?;
-
-    let search_sql = match match_mode {
-        ToolSearchMatch::And => SEARCH_APPROVED_TOOLS_SQL,
-        ToolSearchMatch::Or => SEARCH_APPROVED_TOOLS_OR_SQL,
-    };
-
-    let tools = sqlx::query_as::<_, Tool>(search_sql)
-        .bind(&query)
-        .bind(function.as_deref())
-        .bind(chain.as_deref())
-        .fetch_all(&state.pool)
+    let tools = if query.is_empty() {
+        sqlx::query_as::<_, Tool>(SEARCH_APPROVED_TOOLS_FILTER_SQL)
+            .bind(function.as_deref())
+            .bind(chain.as_deref())
+            .fetch_all(&state.pool)
+            .await
+            .map_err(|e| ApiError::Internal(format!("search failed: {e}")))?
+    } else {
+        let match_mode = resolve_search_match(
+            &state.pool,
+            MCP_SEARCH_TOOLS_COUNT_SQL,
+            MCP_SEARCH_TOOLS_COUNT_OR_SQL,
+            &query,
+            function.as_deref(),
+            chain.as_deref(),
+        )
         .await
-        .map_err(|e| ApiError::Internal(format!("search failed: {e}")))?;
+        .map_err(|e| ApiError::Internal(format!("search count failed: {e}")))?;
+
+        let search_sql = match match_mode {
+            ToolSearchMatch::And => SEARCH_APPROVED_TOOLS_SQL,
+            ToolSearchMatch::Or => SEARCH_APPROVED_TOOLS_OR_SQL,
+        };
+
+        sqlx::query_as::<_, Tool>(search_sql)
+            .bind(&query)
+            .bind(function.as_deref())
+            .bind(chain.as_deref())
+            .fetch_all(&state.pool)
+            .await
+            .map_err(|e| ApiError::Internal(format!("search failed: {e}")))?
+    };
 
     Ok(Json(tools_to_public_summaries(tools)))
 }

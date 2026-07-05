@@ -86,12 +86,11 @@ pub fn resolve_search_filters(
         return (query.trim().to_string(), function, chain);
     }
     let intent = parse_search_intent(query);
-    let effective_query = if intent.query_terms.trim().is_empty() {
-        query.trim().to_string()
-    } else {
-        intent.query_terms
-    };
-    (effective_query, intent.function, intent.chain)
+    (
+        intent.query_terms.trim().to_string(),
+        intent.function,
+        intent.chain,
+    )
 }
 
 /// Resolve AND vs OR: try AND count first; fall back to OR when zero and query is multi-token.
@@ -148,5 +147,21 @@ mod tests {
         assert_eq!(q, "anything");
         assert_eq!(function.as_deref(), Some("swap"));
         assert_eq!(chain.as_deref(), Some("solana"));
+    }
+
+    #[test]
+    fn resolve_search_filters_empty_fts_when_intent_consumes_all_tokens() {
+        let (q, function, chain) = resolve_search_filters("mcp base", None, None);
+        assert_eq!(q, "");
+        assert!(function.is_none());
+        assert_eq!(chain.as_deref(), Some("base"));
+    }
+
+    #[test]
+    fn resolve_search_filters_empty_fts_for_type_only_query() {
+        let (q, function, chain) = resolve_search_filters("mcp", None, None);
+        assert_eq!(q, "");
+        assert!(function.is_none());
+        assert!(chain.is_none());
     }
 }

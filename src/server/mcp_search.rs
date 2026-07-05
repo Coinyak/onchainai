@@ -3,10 +3,13 @@
 use crate::models::tool::PublicToolSummary;
 use crate::models::Tool;
 use crate::server::queries::{
-    MCP_SEARCH_TOOLS_COUNT_OR_SQL, MCP_SEARCH_TOOLS_COUNT_SQL, MCP_SEARCH_TOOLS_RECENT_OR_SQL,
-    MCP_SEARCH_TOOLS_RECENT_SQL, MCP_SEARCH_TOOLS_RELEVANCE_OR_SQL, MCP_SEARCH_TOOLS_RELEVANCE_SQL,
-    MCP_SEARCH_TOOLS_STARS_OR_SQL, MCP_SEARCH_TOOLS_STARS_SQL, MCP_SEARCH_TOOLS_TRUST_OR_SQL,
-    MCP_SEARCH_TOOLS_TRUST_SQL,
+    MCP_SEARCH_TOOLS_COUNT_OR_SQL, MCP_SEARCH_TOOLS_COUNT_SQL,
+    MCP_SEARCH_TOOLS_FILTER_COUNT_SQL, MCP_SEARCH_TOOLS_FILTER_RECENT_SQL,
+    MCP_SEARCH_TOOLS_FILTER_RELEVANCE_SQL, MCP_SEARCH_TOOLS_FILTER_STARS_SQL,
+    MCP_SEARCH_TOOLS_FILTER_TRUST_SQL, MCP_SEARCH_TOOLS_RECENT_OR_SQL,
+    MCP_SEARCH_TOOLS_RECENT_SQL, MCP_SEARCH_TOOLS_RELEVANCE_OR_SQL,
+    MCP_SEARCH_TOOLS_RELEVANCE_SQL, MCP_SEARCH_TOOLS_STARS_OR_SQL, MCP_SEARCH_TOOLS_STARS_SQL,
+    MCP_SEARCH_TOOLS_TRUST_OR_SQL, MCP_SEARCH_TOOLS_TRUST_SQL,
 };
 use crate::server::tool_categories::is_public_tool_category;
 use crate::server::tool_search::{resolve_search_filters, resolve_search_match, ToolSearchMatch};
@@ -60,6 +63,15 @@ impl McpSearchSort {
             (Self::Stars, ToolSearchMatch::Or) => MCP_SEARCH_TOOLS_STARS_OR_SQL,
             (Self::Recent, ToolSearchMatch::And) => MCP_SEARCH_TOOLS_RECENT_SQL,
             (Self::Recent, ToolSearchMatch::Or) => MCP_SEARCH_TOOLS_RECENT_OR_SQL,
+        }
+    }
+
+    fn filter_only_query_sql(self) -> &'static str {
+        match self {
+            Self::Relevance => MCP_SEARCH_TOOLS_FILTER_RELEVANCE_SQL,
+            Self::Trust => MCP_SEARCH_TOOLS_FILTER_TRUST_SQL,
+            Self::Stars => MCP_SEARCH_TOOLS_FILTER_STARS_SQL,
+            Self::Recent => MCP_SEARCH_TOOLS_FILTER_RECENT_SQL,
         }
     }
 }
@@ -162,44 +174,67 @@ pub(crate) async fn mcp_search_tools(
     let limit = limit.clamp(1, 25);
     let fetch_limit = limit + 1;
 
-    let match_mode = resolve_search_match(
-        pool,
-        MCP_SEARCH_TOOLS_COUNT_SQL,
-        MCP_SEARCH_TOOLS_COUNT_OR_SQL,
-        &query,
-        category.as_deref(),
-        chain.as_deref(),
-    )
-    .await
-    .map_err(|e| (-32603, format!("db error: {e}")))?;
+    let (mut tools, total_count) = if query.is_empty() {
+        tokio::try_join!(
+            async {
+                sqlx::query_as::<_, Tool>(sort.filter_only_query_sql())
+                    .bind(category.as_deref())
+                    .bind(chain.as_deref())
+                    .bind(fetch_limit)
+                    .bind(cursor)
+                    .fetch_all(pool)
+                    .await
+                    .map_err(|e| (-32603, format!("db error: {e}")))
+            },
+            async {
+                sqlx::query_scalar::<_, i64>(MCP_SEARCH_TOOLS_FILTER_COUNT_SQL)
+                    .bind(category.as_deref())
+                    .bind(chain.as_deref())
+                    .fetch_one(pool)
+                    .await
+                    .map_err(|e| (-32603, format!("db error: {e}")))
+            }
+        )?
+    } else {
+        let match_mode = resolve_search_match(
+            pool,
+            MCP_SEARCH_TOOLS_COUNT_SQL,
+            MCP_SEARCH_TOOLS_COUNT_OR_SQL,
+            &query,
+            category.as_deref(),
+            chain.as_deref(),
+        )
+        .await
+        .map_err(|e| (-32603, format!("db error: {e}")))?;
 
-    let count_sql = match match_mode {
-        ToolSearchMatch::And => MCP_SEARCH_TOOLS_COUNT_SQL,
-        ToolSearchMatch::Or => MCP_SEARCH_TOOLS_COUNT_OR_SQL,
+        let count_sql = match match_mode {
+            ToolSearchMatch::And => MCP_SEARCH_TOOLS_COUNT_SQL,
+            ToolSearchMatch::Or => MCP_SEARCH_TOOLS_COUNT_OR_SQL,
+        };
+
+        tokio::try_join!(
+            async {
+                sqlx::query_as::<_, Tool>(sort.query_sql(match_mode))
+                    .bind(&query)
+                    .bind(category.as_deref())
+                    .bind(chain.as_deref())
+                    .bind(fetch_limit)
+                    .bind(cursor)
+                    .fetch_all(pool)
+                    .await
+                    .map_err(|e| (-32603, format!("db error: {e}")))
+            },
+            async {
+                sqlx::query_scalar::<_, i64>(count_sql)
+                    .bind(&query)
+                    .bind(category.as_deref())
+                    .bind(chain.as_deref())
+                    .fetch_one(pool)
+                    .await
+                    .map_err(|e| (-32603, format!("db error: {e}")))
+            }
+        )?
     };
-
-    let (mut tools, total_count) = tokio::try_join!(
-        async {
-            sqlx::query_as::<_, Tool>(sort.query_sql(match_mode))
-                .bind(&query)
-                .bind(category.as_deref())
-                .bind(chain.as_deref())
-                .bind(fetch_limit)
-                .bind(cursor)
-                .fetch_all(pool)
-                .await
-                .map_err(|e| (-32603, format!("db error: {e}")))
-        },
-        async {
-            sqlx::query_scalar::<_, i64>(count_sql)
-                .bind(&query)
-                .bind(category.as_deref())
-                .bind(chain.as_deref())
-                .fetch_one(pool)
-                .await
-                .map_err(|e| (-32603, format!("db error: {e}")))
-        }
-    )?;
 
     let fetched_more = tools.len() as i64 > limit;
     if fetched_more {

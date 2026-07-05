@@ -261,6 +261,84 @@ pub const MCP_SEARCH_TOOLS_RECENT_OR_SQL: &str = concat!(
     "#
 );
 
+/// MCP search without FTS — used when intent parsing leaves no text query terms.
+pub const MCP_SEARCH_TOOLS_FILTER_COUNT_SQL: &str = concat!(
+    r#"
+        SELECT COUNT(*)::bigint FROM tools
+        WHERE "#,
+    public_tool_where!(),
+    r#"
+          AND ($1::text IS NULL OR function = $1)
+          AND ($2::text IS NULL OR $2 = ANY(chains))
+    "#
+);
+
+pub const MCP_SEARCH_TOOLS_FILTER_RELEVANCE_SQL: &str = concat!(
+    r#"
+        SELECT * FROM tools
+        WHERE "#,
+    public_tool_where!(),
+    r#"
+          AND ($1::text IS NULL OR function = $1)
+          AND ($2::text IS NULL OR $2 = ANY(chains))
+        ORDER BY stars DESC, updated_at DESC
+        LIMIT $3 OFFSET $4
+    "#
+);
+
+pub const MCP_SEARCH_TOOLS_FILTER_TRUST_SQL: &str = concat!(
+    r#"
+        SELECT * FROM tools
+        WHERE "#,
+    public_tool_where!(),
+    r#"
+          AND ($1::text IS NULL OR function = $1)
+          AND ($2::text IS NULL OR $2 = ANY(chains))
+        ORDER BY stars DESC, updated_at DESC
+        LIMIT $3 OFFSET $4
+    "#
+);
+
+pub const MCP_SEARCH_TOOLS_FILTER_STARS_SQL: &str = concat!(
+    r#"
+        SELECT * FROM tools
+        WHERE "#,
+    public_tool_where!(),
+    r#"
+          AND ($1::text IS NULL OR function = $1)
+          AND ($2::text IS NULL OR $2 = ANY(chains))
+        ORDER BY stars DESC, updated_at DESC
+        LIMIT $3 OFFSET $4
+    "#
+);
+
+pub const MCP_SEARCH_TOOLS_FILTER_RECENT_SQL: &str = concat!(
+    r#"
+        SELECT * FROM tools
+        WHERE "#,
+    public_tool_where!(),
+    r#"
+          AND ($1::text IS NULL OR function = $1)
+          AND ($2::text IS NULL OR $2 = ANY(chains))
+        ORDER BY updated_at DESC, stars DESC
+        LIMIT $3 OFFSET $4
+    "#
+);
+
+pub const SEARCH_APPROVED_TOOLS_FILTER_SQL: &str = concat!(
+    r#"
+        SELECT *
+        FROM tools
+        WHERE "#,
+    public_tool_where!(),
+    r#"
+          AND ($1::text IS NULL OR function = $1)
+          AND ($2::text IS NULL OR $2 = ANY(chains))
+        ORDER BY stars DESC, created_at DESC
+        LIMIT 50
+    "#
+);
+
 pub const DASHBOARD_TYPE_COUNTS_SQL: &str = concat!(
     r#"
         SELECT type AS id, COUNT(*)::bigint AS count
