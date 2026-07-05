@@ -186,7 +186,7 @@ pub async fn handle_mcp_info() -> impl IntoResponse {
             "protocolVersion": DEFAULT_PROTOCOL_VERSION,
             "endpoint": format!("{}/mcp", crate::config::SITE_ORIGIN),
             "transport": "streamable-http",
-            "docs": "https://www.onchain-ai.xyz/connect",
+            "docs": format!("{}/connect", crate::config::SITE_ORIGIN),
             "tools": tools,
         })),
     )
@@ -894,6 +894,7 @@ mod tests {
         let value: Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(value["name"], "onchainai");
         assert_eq!(value["endpoint"], "https://www.onchain-ai.xyz/mcp");
+        assert_eq!(value["docs"], "https://www.onchain-ai.xyz/connect");
         assert_eq!(value["transport"], "streamable-http");
         let tools = value["tools"].as_array().unwrap();
         assert_eq!(tools.len(), 8);

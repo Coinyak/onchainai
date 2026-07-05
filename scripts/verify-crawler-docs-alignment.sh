@@ -57,11 +57,11 @@ for doc in "${CRAWLER_DOC_TARGETS[@]}"; do
   fi
   hit=$(grep -nE '4개 발견|4 crawler' "$doc" || true)
   if [[ -n "$hit" ]]; then
-    stale_hits+="${doc}:\n${hit}\n"
+    stale_hits+="${doc}:"$'\n'"${hit}"$'\n'
   fi
 done
 if [[ -n "$stale_hits" ]]; then
-  fail_check "stale crawler count wording found:\n$stale_hits"
+  fail_check "stale crawler count wording found:"$'\n'"${stale_hits}"
 else
   pass_check "no stale '4개 발견' / '4 crawler' in target docs"
 fi
