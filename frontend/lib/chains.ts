@@ -88,6 +88,9 @@ export const CHAIN_CATALOG: ChainMeta[] = [
 
 export const STRIP_PRIMARY_VISIBLE = 20;
 
+/** Bump when regenerating `public/chains` tiles (sync with scripts/chain-logo-manifest.json harness_round). */
+export const CHAIN_LOGO_ASSET_VERSION = "12";
+
 /** Chain IDs with a committed `/chains/<id>.svg` tile (no text-fallback tiles in strip). */
 export const CHAIN_LOGO_IDS = new Set<string>(
   CHAIN_CATALOG.map((entry) => entry.id),
@@ -140,7 +143,7 @@ export function resolveChain(dbValue: string): ChainMeta | undefined {
 }
 
 export function chainLogoPath(id: string): string {
-  return `/chains/${id.trim().toLowerCase()}.svg`;
+  return `/chains/${id.trim().toLowerCase()}.svg?v=${CHAIN_LOGO_ASSET_VERSION}`;
 }
 
 export function chainFallbackLabel(raw: string): string {
