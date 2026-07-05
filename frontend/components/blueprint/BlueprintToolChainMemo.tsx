@@ -103,10 +103,10 @@ export function BlueprintToolChainMemo({
       if (event.key === "Escape") onClose?.();
     };
 
-    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("pointerdown", handlePointerDown, true);
     document.addEventListener("keydown", handleKeyDown);
     return () => {
-      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("pointerdown", handlePointerDown, true);
       document.removeEventListener("keydown", handleKeyDown);
     };
   }, [anchorRef, chainsPopoverOpen, onClose, readOnly]);
@@ -164,9 +164,9 @@ export function BlueprintToolChainMemo({
                   aria-label={`${active ? "Remove" : "Add"} ${chain.label}`}
                   aria-pressed={active}
                   title={chain.label}
-                  onPointerDown={(e) => e.stopPropagation()}
-                  onClick={(e) => {
+                  onPointerDown={(e) => {
                     e.stopPropagation();
+                    if (e.button !== 0) return;
                     toggleChain(chain.id);
                   }}
                 >
