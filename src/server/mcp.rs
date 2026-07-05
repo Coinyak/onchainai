@@ -94,7 +94,7 @@ pub async fn handle_mcp(
 
     let result = match rpc_req.method.as_str() {
         "initialize" => Ok(json!({
-            "protocolVersion": "2024-11-05",
+            "protocolVersion": negotiate_protocol_version(rpc_req.params.as_ref()),
             "capabilities": { "tools": {} },
             "serverInfo": { "name": "onchainai", "version": env!("CARGO_PKG_VERSION") }
         })),
@@ -138,6 +138,59 @@ pub async fn handle_mcp(
         Ok(value) => (StatusCode::OK, Json(ok_response(id, value))).into_response(),
         Err((code, msg)) => (StatusCode::OK, Json(error_response(id, code, &msg))).into_response(),
     }
+}
+
+/// MCP protocol version this server implements and defaults to.
+const DEFAULT_PROTOCOL_VERSION: &str = "2024-11-05";
+
+/// Protocol versions the server is wire-compatible with (tools-only surface).
+/// The `initialize` response echoes the client's requested version when it is
+/// on this list, otherwise falls back to [`DEFAULT_PROTOCOL_VERSION`].
+const SUPPORTED_PROTOCOL_VERSIONS: &[&str] = &["2024-11-05", "2025-03-26", "2025-06-18"];
+
+/// Negotiate the `protocolVersion` for an `initialize` response: echo the
+/// client-requested version if supported, else the server default.
+fn negotiate_protocol_version(params: Option<&Value>) -> &'static str {
+    let requested = params
+        .and_then(|p| p.get("protocolVersion"))
+        .and_then(|v| v.as_str());
+    match requested {
+        Some(req) => SUPPORTED_PROTOCOL_VERSIONS
+            .iter()
+            .find(|&&v| v == req)
+            .copied()
+            .unwrap_or(DEFAULT_PROTOCOL_VERSION),
+        None => DEFAULT_PROTOCOL_VERSION,
+    }
+}
+
+/// GET `/mcp` — human/crawler-friendly discovery response. Standard MCP clients
+/// POST JSON-RPC here; a plain browser GET returns a 200 describing the server
+/// instead of a bare 405, so anyone who opens the URL understands it instantly.
+pub async fn handle_mcp_info() -> impl IntoResponse {
+    let tools: Vec<Value> = tool_definitions(false)
+        .into_iter()
+        .map(|def| {
+            json!({
+                "name": def.get("name").cloned().unwrap_or(Value::Null),
+                "description": def.get("description").cloned().unwrap_or(Value::Null),
+            })
+        })
+        .collect();
+    (
+        StatusCode::OK,
+        Json(json!({
+            "name": "onchainai",
+            "version": env!("CARGO_PKG_VERSION"),
+            "description": "OnchainAI MCP server — discover, compare, and install crypto/onchain AI tools. POST JSON-RPC 2.0 to this endpoint from an MCP client.",
+            "protocolVersion": DEFAULT_PROTOCOL_VERSION,
+            "endpoint": format!("{}/mcp", crate::config::SITE_ORIGIN),
+            "transport": "streamable-http",
+            "docs": "https://www.onchain-ai.xyz/connect",
+            "tools": tools,
+        })),
+    )
+        .into_response()
 }
 
 fn ok_response(id: Value, result: Value) -> JsonRpcResponse {
@@ -806,6 +859,48 @@ mod tests {
         referral_metadata_for_tool, InstallGuide, ReferralMetadata,
     };
     use crate::server::queries::MCP_SEARCH_TOOLS_BASE_SQL;
+
+    #[test]
+    fn protocol_version_echoes_supported_and_falls_back() {
+        // Supported requested version is echoed verbatim.
+        assert_eq!(
+            negotiate_protocol_version(Some(&json!({ "protocolVersion": "2025-06-18" }))),
+            "2025-06-18"
+        );
+        assert_eq!(
+            negotiate_protocol_version(Some(&json!({ "protocolVersion": "2024-11-05" }))),
+            "2024-11-05"
+        );
+        // Unknown or absent version falls back to the server default.
+        assert_eq!(
+            negotiate_protocol_version(Some(&json!({ "protocolVersion": "1999-01-01" }))),
+            DEFAULT_PROTOCOL_VERSION
+        );
+        assert_eq!(
+            negotiate_protocol_version(Some(&json!({}))),
+            DEFAULT_PROTOCOL_VERSION
+        );
+        assert_eq!(negotiate_protocol_version(None), DEFAULT_PROTOCOL_VERSION);
+    }
+
+    #[test]
+    fn mcp_info_lists_public_tools_and_endpoint() {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let response = rt.block_on(handle_mcp_info()).into_response();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = rt
+            .block_on(axum::body::to_bytes(response.into_body(), 1024 * 1024))
+            .unwrap();
+        let value: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(value["name"], "onchainai");
+        assert_eq!(value["endpoint"], "https://www.onchain-ai.xyz/mcp");
+        assert_eq!(value["transport"], "streamable-http");
+        let tools = value["tools"].as_array().unwrap();
+        assert_eq!(tools.len(), 8);
+        assert!(tools
+            .iter()
+            .all(|t| t["name"].is_string() && t["description"].is_string()));
+    }
 
     #[test]
     fn tools_list_has_eight_public_tools_including_premium() {

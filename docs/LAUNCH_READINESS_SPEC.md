@@ -93,11 +93,13 @@ Rust 바이너리는 API/MCP/크롤러(Railway), DB는 Supabase. Vercel이 `/api
   testid, 설치 2-명령 + 복사 버튼, 스킬 단독 설치 안내, 기존 클라이언트 카드 9개 불변).
   프로덕션 빌드 + 브라우저 스냅샷/콘솔 검증 완료. 배포 전 `ui-change-gate.sh` 최종 확인만.
 - ✅ **푸터에 llms.txt·Connect MCP 링크** — 구현·브라우저 확인 완료.
-- **P2 · `GET /mcp` 안내 응답**: 현재 405 — JSON `{name, endpoint, docs, tools[]}` 200 응답으로
-  바꾸면 브라우저로 열어본 사람/크롤러가 즉시 이해. (클라이언트 호환성 재확인 후.)
-- **P2 · initialize의 `protocolVersion` 에코**: 서버가 `2024-11-05` 고정 응답 — 클라이언트 요청
-  버전이 지원 목록에 있으면 그대로 에코하도록 (`src/server/mcp.rs`). 현 시점 실연결 문제는 없음.
-- **P2 · serverInfo.version을 Cargo 버전과 동기화** (`env!("CARGO_PKG_VERSION")`).
+- ✅ **P2 · `GET /mcp` 안내 응답** (2026-07-05): `handle_mcp_info`가 JSON `{name, version, description,
+  protocolVersion, endpoint, transport, docs, tools[]}` 200 반환 — POST(JSON-RPC)는 불변. 라우트에
+  `.get(...)` 추가(`src/lib.rs`), 유닛 테스트 `mcp_info_lists_public_tools_and_endpoint`. *배포 전까지 프로덕션은 405.*
+- ✅ **P2 · initialize의 `protocolVersion` 에코** (2026-07-05): `negotiate_protocol_version`이 클라이언트
+  요청 버전이 지원목록(`2024-11-05`/`2025-03-26`/`2025-06-18`)이면 에코, 아니면 기본값 폴백
+  (`src/server/mcp.rs`). 유닛 테스트 `protocol_version_echoes_supported_and_falls_back`.
+- ✅ **P2 · serverInfo.version을 Cargo 버전과 동기화**: 이미 `env!("CARGO_PKG_VERSION")` 적용 상태.
 
 ---
 
@@ -213,7 +215,7 @@ ALTER TABLE tools
 | 7 | MCP Registry/Smithery/등재 일괄 (§3) | P1 | 1d 수동 | 🔲 |
 | 8 | funnel_events + /api/v2/events + 대시보드 위젯 (§5) | P1 | 1–2d | 🔲 |
 | 9 | TOOL_OWNERS.md + OPERATOR_GUIDE x402 섹션 | P1 | 0.5d | 🔲 |
-| 10 | GET /mcp 안내 응답, protocolVersion 에코, 버전 동기화 | P2 | 0.5d | 🔲 |
+| 10 | GET /mcp 안내 응답, protocolVersion 에코, 버전 동기화 | P2 | 0.5d | ✅ 2026-07-05 (배포 대기) |
 | 11 | 컬렉션→플러그인 export (SKILL_PLUGIN_SPEC §3 J3) | P2 | 별도 스펙 | 🔲 |
 | 12 | UI 통합 감사 잔여 — P0: 🔧A0/A2 운영 정렬 · B/C/D 랜딩 회귀 검증(슬라이스 0) · G2 featured 겹침 → P1: J1–J2 빈상태·H3 CTA·I 검색·K1 배지·L1/L4 (상세: [통합 감사 스펙 = Grok 실행 패킷 v3.1](superpowers/specs/2026-07-03-visual-ui-audit-16-agent-spec.md)) | P0/P1 | 1–2d | ◐ Phase A/B/C/D ✅(`bfcb662`·`f81c78e`·`ae8e9aa`) · 잔여 Grok 위임 (결정 완료 §0.3) |
 

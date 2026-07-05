@@ -277,7 +277,10 @@ pub fn build_app(pool: sqlx::PgPool, config: Config) -> axum::Router {
     };
 
     let mcp_routes = Router::new()
-        .route("/mcp", axum::routing::post(server::mcp::handle_mcp))
+        .route(
+            "/mcp",
+            axum::routing::post(server::mcp::handle_mcp).get(server::mcp::handle_mcp_info),
+        )
         .with_state(state.clone())
         .layer(mcp_rate_limit);
 

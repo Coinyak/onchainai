@@ -378,7 +378,12 @@ pub(crate) async fn resolve_list_search_match(
     } else {
         None
     };
-    Ok(select_search_match(search, and_count, prefix_count, or_count))
+    Ok(select_search_match(
+        search,
+        and_count,
+        prefix_count,
+        or_count,
+    ))
 }
 
 #[cfg(feature = "ssr")]

@@ -123,10 +123,15 @@ async fn get_admin_tool_workbench(
     {
         Ok(tool) => tool,
         Err(sqlx::Error::RowNotFound) => {
-            return Err(ApiError::NotFound(format!("tool not found: {}", slug.trim())));
+            return Err(ApiError::NotFound(format!(
+                "tool not found: {}",
+                slug.trim()
+            )));
         }
         Err(e) => {
-            return Err(ApiError::Internal(format!("failed to load tool workbench: {e}")));
+            return Err(ApiError::Internal(format!(
+                "failed to load tool workbench: {e}"
+            )));
         }
     };
 

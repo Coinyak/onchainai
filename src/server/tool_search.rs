@@ -219,7 +219,12 @@ pub async fn resolve_search_match(
     } else {
         None
     };
-    Ok(select_search_match(query, and_count, prefix_count, or_count))
+    Ok(select_search_match(
+        query,
+        and_count,
+        prefix_count,
+        or_count,
+    ))
 }
 
 #[cfg(test)]
