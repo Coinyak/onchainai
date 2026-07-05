@@ -70,12 +70,14 @@ fn type_id(token: &str) -> Option<&'static str> {
 }
 
 fn function_id(token: &str) -> Option<&'static str> {
+    // Values must match `tools.function` / `PUBLIC_TOOL_CATEGORY_IDS` (see normalizer).
     match token {
         "bridge" => Some("bridge"),
-        "swap" | "trading" | "trade" => Some("trading-swap"),
-        "payment" | "payments" => Some("payments-x402"),
+        "swap" => Some("swap"),
+        "trading" | "trade" => Some("trading"),
+        "payment" | "payments" => Some("payments"),
         "agent" | "agents" => Some("ai-agent"),
-        "data" | "indexing" | "indexer" => Some("data-indexing"),
+        "data" | "indexing" | "indexer" => Some("data"),
         _ => None,
     }
 }
@@ -136,6 +138,7 @@ pub fn parse_search_intent(query: &str) -> SearchIntent {
         }
         if let Some(function) = function_id(token) {
             intent.function.get_or_insert_with(|| function.to_string());
+            continue;
         }
         query_terms.push(token.clone());
     }
@@ -297,8 +300,22 @@ mod tests {
         let intent_api = parse_search_intent("api bridge tool");
         assert_eq!(intent_api.tool_type.as_deref(), Some("api"));
         assert_eq!(intent_api.function.as_deref(), Some("bridge"));
-        // function tokens stay in query_terms (only tool_type tokens are removed)
-        assert_eq!(intent_api.query_terms, "bridge tool");
+        assert_eq!(intent_api.query_terms, "tool");
+    }
+
+    #[test]
+    fn search_intent_uniswap_swap_maps_swap_function_not_trading_slug() {
+        let intent = parse_search_intent("uniswap swap");
+        assert_eq!(intent.function.as_deref(), Some("swap"));
+        assert_eq!(intent.query_terms, "uniswap");
+    }
+
+    #[test]
+    fn search_intent_swap_base_maps_chain_and_function_without_fts() {
+        let intent = parse_search_intent("swap base");
+        assert_eq!(intent.function.as_deref(), Some("swap"));
+        assert_eq!(intent.chain.as_deref(), Some("base"));
+        assert_eq!(intent.query_terms, "");
     }
 
     #[test]
