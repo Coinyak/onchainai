@@ -792,8 +792,9 @@ function BlueprintEditorWorkspace({
   const updateNodeChains = useCallback(
     (id: string, chains: string[]) => {
       if (readOnly) return;
-      updateNodes((prev) =>
-        prev.map((n) => {
+      let nextNodes: BlueprintNode[] | null = null;
+      updateNodes((prev) => {
+        const next = prev.map((n) => {
           if (n.id !== id || n.kind !== "tool") return n;
           const normalized = normalizeToolNodeChains(chains);
           if (normalized.length === 0) {
@@ -801,11 +802,20 @@ function BlueprintEditorWorkspace({
             return rest;
           }
           return { ...n, chains: normalized };
-        }),
-      );
+        });
+        nextNodes = next;
+        return next;
+      });
+      if (isDraft && nextNodes) {
+        if (saveTimerRef.current) {
+          clearTimeout(saveTimerRef.current);
+          saveTimerRef.current = null;
+        }
+        persistDraft(titleRef.current, nextNodes, edgesRef.current);
+      }
       setLiveMessage("Chain selection updated.");
     },
-    [readOnly, updateNodes],
+    [isDraft, persistDraft, readOnly, updateNodes],
   );
 
   const updateNodeSize = useCallback(
