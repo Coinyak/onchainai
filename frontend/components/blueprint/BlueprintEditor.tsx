@@ -48,7 +48,6 @@ import {
   BLUEPRINT_MAX_EDGES,
   BLUEPRINT_MAX_NODES,
   BLUEPRINT_NODE_CHAIN_SIZE,
-  BLUEPRINT_NODE_MAX_STEP,
   clampCoord,
   getNodeAnchor,
   getNodeBounds,
@@ -822,41 +821,19 @@ function BlueprintEditorWorkspace({
     [readOnly, updateNodes],
   );
 
-  const toggleStep = useCallback(
-    (id: string) => {
+  const setNodeStep = useCallback(
+    (id: string, step: number | undefined) => {
       if (readOnly) return;
-      const target = nodes.find((n) => n.id === id);
-      if (!target) return;
-      if (target.step == null) {
-        const maxStep = nodes.reduce((m, n) => Math.max(m, n.step ?? 0), 0);
-        if (maxStep >= BLUEPRINT_NODE_MAX_STEP) {
-          setLiveMessage(`Order badges are limited to ${BLUEPRINT_NODE_MAX_STEP}.`);
-          return;
-        }
+      updateNodes((prev) =>
+        prev.map((n) => (n.id === id ? { ...n, step } : n)),
+      );
+      if (step != null) {
+        setLiveMessage(`Order set to ${step}.`);
+      } else {
+        setLiveMessage("Order badge cleared.");
       }
-      updateNodes((prev) => {
-        const current = prev.find((n) => n.id === id);
-        if (!current) return prev;
-        if (current.step != null) {
-          // Drop this badge and renumber the rest so steps stay 1..N contiguous.
-          const remaining = prev
-            .filter((n) => n.id !== id && n.step != null)
-            .sort((a, b) => (a.step ?? 0) - (b.step ?? 0));
-          const order = new Map(remaining.map((n, i) => [n.id, i + 1]));
-          return prev.map((n) =>
-            n.id === id
-              ? { ...n, step: undefined }
-              : n.step != null
-                ? { ...n, step: order.get(n.id) }
-                : n,
-          );
-        }
-        const maxStep = prev.reduce((m, n) => Math.max(m, n.step ?? 0), 0);
-        return prev.map((n) => (n.id === id ? { ...n, step: maxStep + 1 } : n));
-      });
-      setLiveMessage("Order badge updated.");
     },
-    [nodes, readOnly, updateNodes],
+    [readOnly, updateNodes],
   );
 
   const moveNode = useCallback(
@@ -1272,7 +1249,7 @@ function BlueprintEditorWorkspace({
                   onTextChange={updateNodeText}
                   onChainsChange={updateNodeChains}
                   onResize={updateNodeSize}
-                  onToggleStep={toggleStep}
+                  onStepChange={setNodeStep}
                   onOpenChains={(id) => setChainsPopoverOpenId(id)}
                   onCloseChains={() => setChainsPopoverOpenId(null)}
                   onPortPointerDown={handlePortPointerDown}

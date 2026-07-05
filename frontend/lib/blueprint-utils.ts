@@ -35,6 +35,15 @@ export const BLUEPRINT_NODE_TOOL_TYPE_MIN_H = 88;
 export const BLUEPRINT_NODE_TOOL_CHAINS_MIN_H = 112;
 export const BLUEPRINT_NODE_MAX_STEP = 99;
 
+/** Parse a step badge from user input; empty/invalid clears the badge. */
+export function parseBlueprintStepInput(raw: string): number | undefined {
+  const trimmed = raw.trim();
+  if (!trimmed) return undefined;
+  const parsed = Number.parseInt(trimmed, 10);
+  if (!Number.isFinite(parsed) || parsed < 1) return undefined;
+  return Math.min(BLUEPRINT_NODE_MAX_STEP, parsed);
+}
+
 export function clampNodeWidth(w: number): number {
   return Math.max(BLUEPRINT_NODE_MIN_W, Math.min(BLUEPRINT_NODE_MAX_W, Math.round(w)));
 }

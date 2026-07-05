@@ -11,8 +11,10 @@ import { typeBadgeLabel } from "@/lib/format";
 import {
   BLUEPRINT_NODE_TOOL_TYPE_MIN_H,
   clampNodeHeight,
+  BLUEPRINT_NODE_MAX_STEP,
   clampNodeWidth,
   getNodeBounds,
+  parseBlueprintStepInput,
   toolChainsForNode,
   type BlueprintPortSide,
 } from "@/lib/blueprint-utils";
@@ -45,7 +47,7 @@ interface BlueprintNodeViewProps {
   onTextChange: (id: string, text: string) => void;
   onChainsChange: (id: string, chains: string[]) => void;
   onResize?: (id: string, w: number, h: number) => void;
-  onToggleStep?: (id: string) => void;
+  onStepChange?: (id: string, step: number | undefined) => void;
   onOpenChains?: (id: string) => void;
   onCloseChains?: (id: string) => void;
   onToggleChains?: (id: string) => void;
@@ -72,7 +74,7 @@ export function BlueprintNodeView({
   onTextChange,
   onChainsChange,
   onResize,
-  onToggleStep,
+  onStepChange,
   onOpenChains,
   onCloseChains,
   onToggleChains,
@@ -235,11 +237,25 @@ export function BlueprintNodeView({
           />
         ))}
 
-      {node.step != null && (
+      {!readOnly && selected && onStepChange ? (
+        <input
+          type="number"
+          className="blueprint-node-step blueprint-node-step-input"
+          min={1}
+          max={BLUEPRINT_NODE_MAX_STEP}
+          value={node.step ?? ""}
+          placeholder="#"
+          aria-label="Order number"
+          data-testid="blueprint-node-step-input"
+          onClick={(e) => e.stopPropagation()}
+          onPointerDown={(e) => e.stopPropagation()}
+          onChange={(e) => onStepChange(node.id, parseBlueprintStepInput(e.target.value))}
+        />
+      ) : node.step != null ? (
         <span className="blueprint-node-step" aria-label={`Step ${node.step}`}>
           {node.step}
         </span>
-      )}
+      ) : null}
 
       <div
         ref={setNodeRef}
@@ -352,11 +368,15 @@ export function BlueprintNodeView({
         readOnly={readOnly}
         showChainsButton={availableChains.length > 0}
         showStepButton={isSizable || node.kind === "chain"}
-        hasStep={node.step != null}
+        stepValue={node.step}
         toolName={tool?.name}
         onOpenTool={node.kind === "tool" && tool && !toolMissing ? openTool : undefined}
         onOpenChains={availableChains.length > 0 ? handleOpenChains : undefined}
-        onToggleStep={onToggleStep ? () => onToggleStep(node.id) : undefined}
+        onStepChange={
+          onStepChange
+            ? (step) => onStepChange(node.id, step)
+            : undefined
+        }
         onRemove={() => onRemove(node.id)}
       />
     </div>

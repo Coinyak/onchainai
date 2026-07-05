@@ -2,6 +2,7 @@
 
 import { forwardRef } from "react";
 import { ExternalLink, Hash, Link2, X } from "lucide-react";
+import { BLUEPRINT_NODE_MAX_STEP, parseBlueprintStepInput } from "@/lib/blueprint-utils";
 
 interface BlueprintNodeRailProps {
   nodeKind: "tool" | "chain" | "note";
@@ -9,11 +10,11 @@ interface BlueprintNodeRailProps {
   readOnly: boolean;
   showChainsButton?: boolean;
   showStepButton?: boolean;
-  hasStep?: boolean;
+  stepValue?: number;
   toolName?: string;
   onOpenTool?: () => void;
   onOpenChains?: () => void;
-  onToggleStep?: () => void;
+  onStepChange?: (step: number | undefined) => void;
   onRemove: () => void;
 }
 
@@ -25,11 +26,11 @@ export const BlueprintNodeRail = forwardRef<HTMLButtonElement, BlueprintNodeRail
       readOnly,
       showChainsButton = false,
       showStepButton = false,
-      hasStep = false,
+      stepValue,
       toolName,
       onOpenTool,
       onOpenChains,
-      onToggleStep,
+      onStepChange,
       onRemove,
     },
     chainsButtonRef,
@@ -72,20 +73,26 @@ export const BlueprintNodeRail = forwardRef<HTMLButtonElement, BlueprintNodeRail
             <Link2 size={16} />
           </button>
         )}
-        {showStepButton && onToggleStep && (
-          <button
-            type="button"
-            className={`blueprint-node-rail-btn${hasStep ? " blueprint-node-rail-btn-active" : ""}`}
-            aria-label={hasStep ? "Remove order number" : "Add order number"}
-            aria-pressed={hasStep}
+        {showStepButton && onStepChange && (
+          <label
+            className="blueprint-node-rail-step"
             data-testid="blueprint-node-rail-step"
-            onClick={(e) => {
-              e.stopPropagation();
-              onToggleStep();
-            }}
+            title="Order number (duplicates allowed)"
           >
-            <Hash size={16} />
-          </button>
+            <Hash size={14} aria-hidden="true" />
+            <input
+              type="number"
+              className="blueprint-node-rail-step-input"
+              min={1}
+              max={BLUEPRINT_NODE_MAX_STEP}
+              value={stepValue ?? ""}
+              placeholder="#"
+              aria-label="Order number"
+              onClick={(e) => e.stopPropagation()}
+              onPointerDown={(e) => e.stopPropagation()}
+              onChange={(e) => onStepChange(parseBlueprintStepInput(e.target.value))}
+            />
+          </label>
         )}
         <button
           type="button"

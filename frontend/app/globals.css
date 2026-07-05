@@ -926,6 +926,83 @@
   pointer-events: none;
 }
 
+.blueprint-node-step-input {
+  pointer-events: auto;
+  width: 32px;
+  min-width: 32px;
+  height: 22px;
+  padding: 0 4px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 999px;
+  background: var(--color-tertiary);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  text-align: center;
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+.blueprint-node-step-input::placeholder {
+  color: rgba(255, 255, 255, 0.65);
+}
+
+.blueprint-node-step-input:focus-visible {
+  outline: 2px solid rgba(231, 111, 0, 0.45);
+  outline-offset: 1px;
+}
+
+.blueprint-node-step-input::-webkit-outer-spin-button,
+.blueprint-node-step-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.blueprint-node-rail-step {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0 6px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-neutral-bg);
+  color: #4b4b4b;
+  cursor: text;
+}
+
+.blueprint-node-rail-step-input {
+  width: 28px;
+  min-height: 28px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  text-align: center;
+  color: var(--color-primary);
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+.blueprint-node-rail-step-input::placeholder {
+  color: var(--color-text-muted);
+}
+
+.blueprint-node-rail-step-input:focus-visible {
+  outline: none;
+}
+
+.blueprint-node-rail-step-input::-webkit-outer-spin-button,
+.blueprint-node-rail-step-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
 .blueprint-node-resize {
   position: absolute;
   right: 0;
