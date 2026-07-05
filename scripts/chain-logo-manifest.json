@@ -221,7 +221,7 @@
       "label": "Scroll",
       "kind": "wrap",
       "source": "scroll_official.svg",
-      "markers": ["#101010", "path"]
+      "markers": ["#FFEEDA", "#EBC28E", "path"]
     },
     {
       "id": "moonbeam",
