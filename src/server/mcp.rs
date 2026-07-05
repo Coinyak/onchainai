@@ -264,7 +264,7 @@ fn search_tools_definition() -> Value {
                 "sort": {
                     "type": "string",
                     "enum": ["relevance", "trust", "stars", "recent"],
-                    "description": "Ranking strategy. Defaults to relevance, which combines text relevance, trust, stars, and freshness"
+                    "description": "Ranking strategy. trust currently sorts by stars until a dedicated trust signal ships. Defaults to relevance."
                 },
                 "limit": {
                     "type": "integer",

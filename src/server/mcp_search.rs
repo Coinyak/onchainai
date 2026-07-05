@@ -1,6 +1,6 @@
 //! MCP search paging and ranking helpers.
 
-use crate::models::tool::{sanitize_tools_for_public_response, PublicToolSummary};
+use crate::models::tool::PublicToolSummary;
 use crate::models::Tool;
 use crate::server::queries::{
     MCP_SEARCH_TOOLS_COUNT_OR_SQL, MCP_SEARCH_TOOLS_COUNT_SQL, MCP_SEARCH_TOOLS_RECENT_OR_SQL,
@@ -214,10 +214,7 @@ pub(crate) async fn mcp_search_tools(
     };
     // Align with next_cursor: if offset cap blocks another page, do not claim has_more.
     let has_more = next_cursor.is_some();
-    let summaries = sanitize_tools_for_public_response(tools)
-        .into_iter()
-        .map(PublicToolSummary::from)
-        .collect();
+    let summaries = tools.into_iter().map(PublicToolSummary::from).collect();
 
     Ok(McpSearchPage {
         tools: summaries,

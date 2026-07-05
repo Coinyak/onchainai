@@ -1,7 +1,9 @@
 //! Public catalog and toolkit endpoints.
 
 use crate::filter_query::build_tool_filters;
-use crate::models::tool::{sanitize_tools_for_public_response, PublicTool};
+use crate::models::tool::{
+    sanitize_tools_for_public_response, tools_to_public_summaries, PublicTool, PublicToolSummary,
+};
 use crate::models::{Category, Tool};
 use crate::server::functions::{
     browser_visible_limit_for_page, build_toolkit_payload, clamp_browser_page_param,
@@ -111,14 +113,14 @@ fn default_dashboard_limit() -> i64 {
 async fn get_recent_tools(
     State(state): State<AppState>,
     Query(q): Query<LimitQuery>,
-) -> Result<Json<Vec<Tool>>, ApiError> {
+) -> Result<Json<Vec<PublicToolSummary>>, ApiError> {
     let limit = q.limit.clamp(1, 100);
     let tools = sqlx::query_as::<_, Tool>(RECENT_APPROVED_TOOLS_SQL)
         .bind(limit)
         .fetch_all(&state.pool)
         .await
         .map_err(|e| ApiError::Internal(format!("failed to load tools: {e}")))?;
-    Ok(Json(sanitize_tools_for_public_response(tools)))
+    Ok(Json(tools_to_public_summaries(tools)))
 }
 
 async fn get_categories(
@@ -133,7 +135,7 @@ async fn get_categories(
 async fn search_tools(
     State(state): State<AppState>,
     Query(q): Query<SearchQuery>,
-) -> Result<Json<Vec<Tool>>, ApiError> {
+) -> Result<Json<Vec<PublicToolSummary>>, ApiError> {
     validate_search_tools_input(&q.query, &q.function, &q.chain)
         .map_err(ApiError::from_server_fn)?;
 
@@ -164,7 +166,7 @@ async fn search_tools(
         .await
         .map_err(|e| ApiError::Internal(format!("search failed: {e}")))?;
 
-    Ok(Json(sanitize_tools_for_public_response(tools)))
+    Ok(Json(tools_to_public_summaries(tools)))
 }
 
 async fn get_tool_by_slug(

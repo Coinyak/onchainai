@@ -303,6 +303,44 @@ pub(crate) fn append_tool_filters<'qb>(
 }
 
 #[cfg(feature = "ssr")]
+async fn count_list_fts_matches(
+    pool: &sqlx::PgPool,
+    search: &str,
+    filters: &ToolFilters,
+    match_mode: crate::server::tool_search::ToolSearchMatch,
+) -> Result<i64, FnError> {
+    let mut q = sqlx::QueryBuilder::new(COUNT_APPROVED_TOOLS_SQL);
+    push_list_query_filter(&mut q, Some(search), match_mode);
+    append_tool_filters(&mut q, filters);
+    let count = q
+        .build_query_as::<(i64,)>()
+        .fetch_one(pool)
+        .await
+        .map_err(|e| FnError::new(format!("search count failed: {e}")))?;
+    Ok(count.0)
+}
+
+#[cfg(feature = "ssr")]
+async fn resolve_list_search_match(
+    pool: &sqlx::PgPool,
+    search: &str,
+    filters: &ToolFilters,
+) -> Result<crate::server::tool_search::ToolSearchMatch, FnError> {
+    use crate::server::tool_search::{should_try_or_fallback, ToolSearchMatch};
+
+    let and_count =
+        count_list_fts_matches(pool, search, filters, ToolSearchMatch::And).await?;
+    if and_count == 0 && should_try_or_fallback(search) {
+        match count_list_fts_matches(pool, search, filters, ToolSearchMatch::Or).await {
+            Ok(_) => Ok(ToolSearchMatch::Or),
+            Err(_) => Ok(ToolSearchMatch::And),
+        }
+    } else {
+        Ok(ToolSearchMatch::And)
+    }
+}
+
+#[cfg(feature = "ssr")]
 fn push_list_query_filter<'qb>(
     query: &mut sqlx::QueryBuilder<'qb, sqlx::Postgres>,
     search: Option<&'qb str>,
@@ -397,23 +435,13 @@ pub(crate) async fn fetch_list_tools(
     filters: &ToolFilters,
     query: Option<&str>,
 ) -> Result<Vec<Tool>, FnError> {
-    use crate::server::queries::{MCP_SEARCH_TOOLS_COUNT_OR_SQL, MCP_SEARCH_TOOLS_COUNT_SQL};
-    use crate::server::tool_search::{resolve_search_match, ToolSearchMatch};
+    use crate::server::tool_search::ToolSearchMatch;
 
     let offset = offset.max(0);
     let limit = clamp_list_tools_limit(limit);
     let search_text = query.filter(|q| !q.trim().is_empty());
     let match_mode = if let Some(text) = search_text {
-        resolve_search_match(
-            pool,
-            MCP_SEARCH_TOOLS_COUNT_SQL,
-            MCP_SEARCH_TOOLS_COUNT_OR_SQL,
-            text,
-            None,
-            None,
-        )
-        .await
-        .map_err(|e| FnError::new(format!("search match resolve failed: {e}")))?
+        resolve_list_search_match(pool, text, filters).await?
     } else {
         ToolSearchMatch::And
     };

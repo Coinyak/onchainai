@@ -558,6 +558,14 @@ export function buildPublicInstallGuide(
 
   const command = primaryInstallCommand(tool);
   if (tool.type === "skill") {
+    const steps = [
+      "Install the skill using the command below (e.g. clawhub or your agent skills runtime).",
+      "Do not paste this into MCP server settings — skills are not MCP configs.",
+      "Open the docs link for usage after install.",
+    ];
+    if (!command) {
+      steps.push("No install command is listed — use the docs or repository link below.");
+    }
     return {
       slug,
       tool_name: tool.name,
@@ -565,16 +573,13 @@ export function buildPublicInstallGuide(
       risk_level: tool.install_risk_level,
       risk_reasons: tool.install_risk_reasons,
       warning: installWarningText(tool.install_risk_level),
-      blocked: false,
+      blocked: !command,
       copy_gate: copyGateForRisk(tool.install_risk_level),
       command,
       config_json: null,
       copy_text: command,
       copy_label: "Copy command",
-      steps: [
-        "Install the skill using the command below (e.g. clawhub or your agent skills runtime).",
-        "Do not paste this into MCP server settings — skills are not MCP configs.",
-      ],
+      steps,
       connect_blocks: [
         {
           steps: ["Run the install command, then open the docs for usage."],
@@ -584,9 +589,6 @@ export function buildPublicInstallGuide(
         },
       ],
       ...toolGuideMeta(tool),
-      docs_links: [],
-      x402_notice: null,
-      referral_disclosure: null,
     };
   }
 
@@ -594,6 +596,13 @@ export function buildPublicInstallGuide(
     (tool.type === "cli" || tool.type === "sdk" || tool.type === "api") &&
     !isMcpCatalogTool(tool)
   ) {
+    const steps = [
+      "Run the install command in your terminal or package manager.",
+      "Open the repository or docs link for setup and API keys.",
+    ];
+    if (!command) {
+      steps.push("No install command is listed — use the docs or repository link below.");
+    }
     return {
       slug,
       tool_name: tool.name,
@@ -601,16 +610,13 @@ export function buildPublicInstallGuide(
       risk_level: tool.install_risk_level,
       risk_reasons: tool.install_risk_reasons,
       warning: installWarningText(tool.install_risk_level),
-      blocked: false,
+      blocked: !command,
       copy_gate: copyGateForRisk(tool.install_risk_level),
       command,
       config_json: null,
       copy_text: command,
       copy_label: "Copy command",
-      steps: [
-        "Run the install command in your terminal or package manager.",
-        "Open the repository or docs link for setup.",
-      ],
+      steps,
       connect_blocks: [
         {
           steps: ["Copy and run the install command below."],
@@ -620,9 +626,6 @@ export function buildPublicInstallGuide(
         },
       ],
       ...toolGuideMeta(tool),
-      docs_links: [],
-      x402_notice: null,
-      referral_disclosure: null,
     };
   }
 

@@ -76,17 +76,22 @@ pub async fn count_fts_matches(
 }
 
 /// Resolve AND vs OR: try AND count first; fall back to OR when zero and query is multi-token.
+/// Probes the OR count SQL before selecting OR mode so invalid `to_tsquery` inputs stay on AND
+/// (empty results) instead of surfacing as 500s.
 pub async fn resolve_search_match(
     pool: &PgPool,
     count_sql_and: &str,
-    _count_sql_or: &str,
+    count_sql_or: &str,
     query: &str,
     category: Option<&str>,
     chain: Option<&str>,
 ) -> Result<ToolSearchMatch, sqlx::Error> {
     let and_count = count_fts_matches(pool, count_sql_and, query, category, chain).await?;
     if and_count == 0 && should_try_or_fallback(query) {
-        Ok(ToolSearchMatch::Or)
+        match count_fts_matches(pool, count_sql_or, query, category, chain).await {
+            Ok(_) => Ok(ToolSearchMatch::Or),
+            Err(_) => Ok(ToolSearchMatch::And),
+        }
     } else {
         Ok(ToolSearchMatch::And)
     }

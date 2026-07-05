@@ -341,6 +341,12 @@ fn command_only_guide(
     let risk_level = tool.install_risk_level.clone();
     let copy_gate = CopyGate::for_risk(&risk_level);
     let command = primary_install_command(tool);
+    let mut steps = steps;
+    if command.is_none() {
+        steps.push(
+            "No install command is listed — use the docs or repository link below.".into(),
+        );
+    }
     PublicInstallGuide {
         slug: slug.to_string(),
         tool_name: tool.name.clone(),
@@ -348,7 +354,7 @@ fn command_only_guide(
         risk_level: risk_level.clone(),
         risk_reasons: tool.install_risk_reasons.clone(),
         warning: install_warning_text(&risk_level).map(str::to_string),
-        blocked: false,
+        blocked: command.is_none(),
         copy_gate,
         command: command.clone(),
         config_json: None,
