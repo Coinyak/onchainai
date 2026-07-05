@@ -30,15 +30,12 @@ export function SearchBar({ defaultValue = "", searchPath = "/" }: SearchBarProp
   const handleCommitQuery = useCallback(
     (query: string) => {
       const trimmed = query.trim();
-      if (!trimmed) {
-        if (defaultValue) router.replace(searchPath, { scroll: false });
-        return;
-      }
+      if (!trimmed) return;
       const separator = searchPath.includes("?") ? "&" : "?";
       const target = `${searchPath}${separator}q=${encodeURIComponent(trimmed)}`;
       router.replace(target, { scroll: false });
     },
-    [defaultValue, router, searchPath],
+    [router, searchPath],
   );
 
   return (

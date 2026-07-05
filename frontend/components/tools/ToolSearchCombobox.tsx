@@ -158,6 +158,7 @@ export function ToolSearchCombobox({
   useEffect(() => {
     const next = (defaultValue ?? "").trim();
     if (next === lastUrlQuery.current) return;
+    if (document.activeElement === inputRef.current) return;
     lastUrlQuery.current = next;
     setQuery(defaultValue ?? "");
   }, [defaultValue]);
@@ -166,7 +167,7 @@ export function ToolSearchCombobox({
     if (variant !== "hero" || !onDebouncedQueryChange) return;
     const timer = window.setTimeout(() => {
       const trimmed = query.trim();
-      if (trimmed === lastUrlQuery.current) return;
+      if (!trimmed || trimmed === lastUrlQuery.current) return;
       lastUrlQuery.current = trimmed;
       onDebouncedQueryChange(trimmed);
     }, TOOL_SEARCH_DEBOUNCE_MS);
