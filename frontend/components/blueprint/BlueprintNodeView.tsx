@@ -211,16 +211,20 @@ export function BlueprintNodeView({
               </div>
               <div className="blueprint-node-tool-row2">
                 <span className="blueprint-node-type-tag">{typeBadgeLabel(tool.type)}</span>
-                <BlueprintToolChainMemo
-                  availableChains={availableChains}
-                  selectedChainIds={node.chains ?? []}
-                  chainsPopoverOpen={chainsOpen}
-                  readOnly={readOnly}
-                  anchorRef={chainsButtonRef}
-                  onChange={(chains) => onChainsChange(node.id, chains)}
-                  onClose={handleCloseChains}
-                />
               </div>
+              {availableChains.length > 0 && (
+                <div className="blueprint-node-tool-row3">
+                  <BlueprintToolChainMemo
+                    availableChains={availableChains}
+                    selectedChainIds={node.chains ?? []}
+                    chainsPopoverOpen={chainsOpen}
+                    readOnly={readOnly}
+                    anchorRef={chainsButtonRef}
+                    onChange={(chains) => onChainsChange(node.id, chains)}
+                    onClose={handleCloseChains}
+                  />
+                </div>
+              )}
             </>
           )
         ) : (

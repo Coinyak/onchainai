@@ -23,9 +23,15 @@ function positionPopover(
   anchorEl: HTMLElement | null,
 ) {
   if (!popoverEl || !anchorEl) return;
-  const rect = anchorEl.getBoundingClientRect();
-  popoverEl.style.top = `${rect.bottom + 6}px`;
-  popoverEl.style.left = `${rect.right + 6}px`;
+  const anchorRect = anchorEl.getBoundingClientRect();
+  const popoverRect = popoverEl.getBoundingClientRect();
+  const margin = 8;
+  let left = anchorRect.left - popoverRect.width - margin;
+  if (left < margin) {
+    left = anchorRect.right + margin;
+  }
+  popoverEl.style.top = `${anchorRect.top}px`;
+  popoverEl.style.left = `${left}px`;
 }
 
 export function BlueprintToolChainMemo({
@@ -40,11 +46,13 @@ export function BlueprintToolChainMemo({
   const popoverRef = useRef<HTMLDivElement>(null);
 
   const selectedSet = new Set(selectedChainIds);
-  const displayedChains = availableChains.filter((chain) => selectedSet.has(chain.id));
-  const overflowCount = Math.max(0, displayedChains.length - MAX_VISIBLE_CHAIN_BADGES);
+  const hasMemoSelection = selectedChainIds.length > 0;
+  const memoChains = availableChains.filter((chain) => selectedSet.has(chain.id));
+  const displayChains = hasMemoSelection ? memoChains : availableChains;
+  const overflowCount = Math.max(0, displayChains.length - MAX_VISIBLE_CHAIN_BADGES);
   const visibleBadges = overflowCount > 0
-    ? displayedChains.slice(0, MAX_VISIBLE_CHAIN_BADGES)
-    : displayedChains;
+    ? displayChains.slice(0, MAX_VISIBLE_CHAIN_BADGES)
+    : displayChains;
 
   const toggleChain = (chainId: string) => {
     if (selectedSet.has(chainId)) {
@@ -103,35 +111,37 @@ export function BlueprintToolChainMemo({
 
   if (availableChains.length === 0) return null;
 
-  const showBadges = !chainsPopoverOpen;
+  const badgeLabel = hasMemoSelection ? "Selected chains" : "Supported networks";
 
   return (
     <>
-      {showBadges && (
-        <div
-          className="blueprint-node-tool-chains"
-          data-testid="blueprint-tool-chain-memo"
-          onClick={(e) => e.stopPropagation()}
-          onPointerDown={(e) => e.stopPropagation()}
-        >
-          <div className="blueprint-node-tool-chain-badges" aria-label="Selected chains">
-            {visibleBadges.map((chain) => (
-              <span
-                key={chain.id}
-                className="blueprint-node-tool-chain-badge"
-                title={chain.label}
-              >
-                <ChainLogo id={chain.id} label={chain.label} size={14} decorative />
-              </span>
-            ))}
-            {overflowCount > 0 && (
-              <span className="blueprint-node-tool-chain-overflow" title={`${overflowCount} more chains`}>
-                +{overflowCount}
-              </span>
-            )}
-          </div>
+      <div
+        className="blueprint-node-tool-chains"
+        data-testid="blueprint-tool-chain-memo"
+        onClick={(e) => e.stopPropagation()}
+        onPointerDown={(e) => e.stopPropagation()}
+      >
+        <div className="blueprint-node-tool-chain-badges" aria-label={badgeLabel}>
+          {visibleBadges.map((chain) => (
+            <span
+              key={chain.id}
+              className={
+                hasMemoSelection
+                  ? "blueprint-node-tool-chain-badge"
+                  : "blueprint-node-tool-chain-badge blueprint-node-tool-chain-badge-preview"
+              }
+              title={chain.label}
+            >
+              <ChainLogo id={chain.id} label={chain.label} size={14} decorative />
+            </span>
+          ))}
+          {overflowCount > 0 && (
+            <span className="blueprint-node-tool-chain-overflow" title={`${overflowCount} more chains`}>
+              +{overflowCount}
+            </span>
+          )}
         </div>
-      )}
+      </div>
 
       {chainsPopoverOpen &&
         !readOnly &&

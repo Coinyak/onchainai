@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { useDraggable } from "@dnd-kit/core";
 import { useQuery } from "@tanstack/react-query";
 import { listMyToolkit, searchTools, type PublicTool, type PublicToolSummary } from "@/lib/api";
-import { CHAIN_CATALOG, type ChainMeta } from "@/lib/chains";
+import { CHAIN_CATALOG, chainTagsForTool, type ChainMeta } from "@/lib/chains";
 import { ToolLogo } from "@/components/tools/ToolLogo";
 import { ChainLogo } from "@/components/tools/ChainLogo";
 import { Badge } from "@/components/ui/Badge";
@@ -15,6 +15,8 @@ interface BlueprintPaletteProps {
   onAddTool: (tool: PublicTool | PublicToolSummary) => void;
   onAddChain: (chain: ChainMeta) => void;
 }
+
+const PALETTE_CHAIN_VISIBLE = 4;
 
 function PaletteToolItem({
   tool,
@@ -30,6 +32,10 @@ function PaletteToolItem({
     data: { type: "palette-tool", tool },
     disabled: readOnly,
   });
+
+  const chains = chainTagsForTool(tool.chains);
+  const visibleChains = chains.slice(0, PALETTE_CHAIN_VISIBLE);
+  const extraChains = Math.max(0, chains.length - PALETTE_CHAIN_VISIBLE);
 
   return (
     <button
@@ -50,6 +56,18 @@ function PaletteToolItem({
       <span className="blueprint-palette-item-text">
         <span className="blueprint-palette-item-name">{tool.name}</span>
         <Badge variant="neutral">{typeBadgeLabel(tool.type)}</Badge>
+        {visibleChains.length > 0 && (
+          <span className="blueprint-palette-item-chains" aria-label="Supported networks">
+            {visibleChains.map((chain) => (
+              <ChainLogo key={chain.id} id={chain.id} label={chain.label} size={14} decorative />
+            ))}
+            {extraChains > 0 && (
+              <span className="blueprint-palette-item-chains-more" title={`${extraChains} more networks`}>
+                +{extraChains}
+              </span>
+            )}
+          </span>
+        )}
       </span>
     </button>
   );
