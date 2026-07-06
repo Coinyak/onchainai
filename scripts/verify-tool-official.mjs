@@ -7,7 +7,8 @@
 // tool_review_events audit row. Deny-by-default: no evidence, no change.
 //
 // Usage:
-//   node scripts/verify-tool-official.mjs <slug> [<slug>...] [--apply]
+//   node scripts/verify-tool-official.mjs <slug> [--apply]
+//   node scripts/verify-tool-official.mjs <slug>... [--apply --i-understand-bulk]
 //   node scripts/verify-tool-official.mjs --scan [--apply --i-understand-bulk] [--limit N]
 //   node scripts/verify-tool-official.mjs <slug> --expect-org <org> [--apply]
 //
@@ -505,13 +506,13 @@ function isScanCandidate(tool) {
 
 if (!SCAN && slugs.length === 0) {
   console.error(
-    "usage: node scripts/verify-tool-official.mjs <slug> [--apply] | --scan [--apply --i-understand-bulk]",
+    "usage: node scripts/verify-tool-official.mjs <slug> [--apply] | <slug>... [--apply --i-understand-bulk] | --scan [--apply --i-understand-bulk]",
   );
   process.exit(2);
 }
-if (SCAN && APPLY && !BULK_APPLY) {
+if (APPLY && !BULK_APPLY && (SCAN || slugs.length > 1)) {
   console.error(
-    "refusing --scan --apply without --i-understand-bulk (bulk promotions need explicit ack)",
+    "refusing bulk --apply without --i-understand-bulk (bulk promotions need explicit ack)",
   );
   process.exit(2);
 }

@@ -101,6 +101,11 @@ async function main() {
     console.error("refusing --apply without --i-understand-bulk");
     process.exit(2);
   }
+  if (APPLY && process.env.PG_INSECURE_SSL === "1") {
+    console.error(
+      "warning: PG_INSECURE_SSL=1 disables Postgres TLS certificate verification",
+    );
+  }
 
   const slugs = await fetchSlugs();
   const mode = APPLY ? "apply" : "dry-run";
@@ -119,7 +124,7 @@ async function main() {
     const verifyArgs = [
       resolve(ROOT, "scripts/verify-tool-official.mjs"),
       ...chunk,
-      ...(APPLY ? ["--apply"] : []),
+      ...(APPLY ? ["--apply", "--i-understand-bulk"] : []),
     ];
     const run = spawnSync(process.execPath, verifyArgs, {
       env: process.env,
