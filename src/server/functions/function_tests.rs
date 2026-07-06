@@ -931,6 +931,7 @@ mod tests {
     #[test]
     fn validate_trigger_crawler_source_accepts_known_sources() {
         assert!(validate_trigger_crawler_source("npm").is_ok());
+        assert!(validate_trigger_crawler_source("clawhub").is_ok());
         assert!(validate_trigger_crawler_source("mcp-registry").is_ok());
         assert!(validate_trigger_crawler_source("vendor_orgs").is_ok());
         assert!(validate_trigger_crawler_source("bazaar").is_ok());

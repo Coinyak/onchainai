@@ -27,10 +27,10 @@ done < <(
     | sort
 )
 
-if [[ ${#CODE_SOURCES[@]} -ne 7 ]]; then
-  fail_check "expected 7 CRAWLER_SOURCE_DEFS entries, got ${#CODE_SOURCES[@]}: ${CODE_SOURCES[*]}"
+if [[ ${#CODE_SOURCES[@]} -ne 8 ]]; then
+  fail_check "expected 8 CRAWLER_SOURCE_DEFS entries, got ${#CODE_SOURCES[@]}: ${CODE_SOURCES[*]}"
 else
-  pass_check "CRAWLER_SOURCE_DEFS has 7 discovery sources: ${CODE_SOURCES[*]}"
+  pass_check "CRAWLER_SOURCE_DEFS has 8 discovery sources: ${CODE_SOURCES[*]}"
 fi
 
 # --- OPERATOR_GUIDE must mention every wired source ---

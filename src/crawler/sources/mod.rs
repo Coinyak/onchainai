@@ -6,6 +6,7 @@
 //! shared HTTP client helpers used by all sources.
 
 pub mod bazaar;
+pub mod clawhub;
 pub mod cryptoskill;
 pub mod github;
 pub mod mcp_registry;
@@ -75,6 +76,7 @@ pub fn default_crawlers() -> Vec<Arc<dyn SourceCrawler>> {
     vec![
         Arc::new(npm::NpmCrawler),
         Arc::new(cryptoskill::CryptoSkillCrawler),
+        Arc::new(clawhub::ClawHubCrawler),
         Arc::new(web3mcp::Web3McpHubCrawler),
         Arc::new(github::GitHubTopicsCrawler),
         Arc::new(mcp_registry::OfficialMcpRegistryCrawler),
