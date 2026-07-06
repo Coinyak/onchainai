@@ -329,7 +329,9 @@ mod tests {
         let err = crawl_with_base(&server.uri())
             .await
             .expect_err("all failed queries should error");
-        assert!(err.to_string().contains("all ClawHub search queries failed"));
+        assert!(err
+            .to_string()
+            .contains("all ClawHub search queries failed"));
     }
 
     #[test]
