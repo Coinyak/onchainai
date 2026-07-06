@@ -200,8 +200,21 @@ pub fn http_mcp_universal_install_command(endpoint: &str) -> Option<String> {
     if endpoint.chars().any(|c| {
         matches!(
             c,
-            ';' | '&' | '|' | '`' | '$' | '(' | ')' | '<' | '>' | '\n' | '\r' | '\'' | '\\'
-                | '"' | ' ' | '\t'
+            ';' | '&'
+                | '|'
+                | '`'
+                | '$'
+                | '('
+                | ')'
+                | '<'
+                | '>'
+                | '\n'
+                | '\r'
+                | '\''
+                | '\\'
+                | '"'
+                | ' '
+                | '\t'
         )
     }) {
         return None;
@@ -838,12 +851,18 @@ mod tests {
 
     #[test]
     fn http_mcp_universal_install_command_rejects_shell_metacharacters() {
-        assert_eq!(http_mcp_universal_install_command("https://evil.com/mcp;rm"), None);
+        assert_eq!(
+            http_mcp_universal_install_command("https://evil.com/mcp;rm"),
+            None
+        );
         assert_eq!(
             http_mcp_universal_install_command("https://evil.com/mcp\"injection"),
             None
         );
-        assert_eq!(http_mcp_universal_install_command("https://evil.com/ mcp"), None);
+        assert_eq!(
+            http_mcp_universal_install_command("https://evil.com/ mcp"),
+            None
+        );
         assert_eq!(
             http_mcp_universal_install_command("https://evil.com/\tmcp"),
             None
