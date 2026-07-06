@@ -84,20 +84,101 @@ fn format_failed_queries(failed_queries: &[String]) -> String {
     msg
 }
 
+/// Slug → GitHub repo name when it differs from the ClawHub slug.
+const SLUG_REPO_OVERRIDES: &[(&str, &str)] = &[("tinyplace", "tiny.place")];
+
+/// Slug → first-party homepage for verify-harness identity checks.
+const SLUG_HOMEPAGE_OVERRIDES: &[(&str, &str)] = &[("tinyplace", "https://tiny.place")];
+
+/// Slug → npm package when SKILL.md metadata is not fetched.
+const SLUG_NPM_OVERRIDES: &[(&str, &str)] = &[("tinyplace", "@tinyhumansai/tinyplace")];
+
+/// Owner → default GitHub repo for single-repo foundations (e.g. x402-foundation/x402).
+const OWNER_REPO_DEFAULTS: &[(&str, &str, &str)] =
+    &[("x402-foundation", "x402", "https://x402.org")];
+
+fn github_repo_name(slug: &str, display_name: &str) -> String {
+    SLUG_REPO_OVERRIDES
+        .iter()
+        .find(|(s, _)| *s == slug)
+        .map(|(_, repo)| repo.to_string())
+        .unwrap_or_else(|| {
+            if display_name.contains('.') && !display_name.contains(' ') {
+                display_name.to_string()
+            } else {
+                slug.to_string()
+            }
+        })
+}
+
+fn infer_repo_url(hit: &SearchHit) -> Option<String> {
+    if let Some(owner) = hit
+        .owner_handle
+        .as_deref()
+        .map(str::trim)
+        .filter(|o| !o.is_empty())
+    {
+        let repo = github_repo_name(&hit.slug, &hit.display_name);
+        return Some(format!("https://github.com/{owner}/{repo}"));
+    }
+    OWNER_REPO_DEFAULTS
+        .iter()
+        .find(|(_, repo, _)| *repo == hit.slug || hit.display_name.eq_ignore_ascii_case(repo))
+        .map(|(owner, repo, _)| format!("https://github.com/{owner}/{repo}"))
+}
+
+fn infer_homepage(hit: &SearchHit, repo_url: &Option<String>) -> Option<String> {
+    SLUG_HOMEPAGE_OVERRIDES
+        .iter()
+        .find(|(s, _)| *s == hit.slug)
+        .map(|(_, url)| url.to_string())
+        .or_else(|| {
+            repo_url.as_ref().and_then(|url| {
+                OWNER_REPO_DEFAULTS
+                    .iter()
+                    .find(|(owner, repo, _homepage)| {
+                        url.eq_ignore_ascii_case(&format!("https://github.com/{owner}/{repo}"))
+                    })
+                    .map(|(_, _, homepage)| homepage.to_string())
+            })
+        })
+}
+
+fn infer_npm_package(hit: &SearchHit) -> Option<String> {
+    SLUG_NPM_OVERRIDES
+        .iter()
+        .find(|(s, _)| *s == hit.slug)
+        .map(|(_, pkg)| pkg.to_string())
+        .or_else(|| {
+            hit.owner_handle.as_deref().and_then(|owner| {
+                let repo = github_repo_name(&hit.slug, &hit.display_name);
+                if owner == "tinyhumansai" && repo == "tiny.place" {
+                    Some("@tinyhumansai/tinyplace".to_string())
+                } else {
+                    None
+                }
+            })
+        })
+}
+
 fn hit_to_raw(hit: &SearchHit) -> RawTool {
     let description = hit
         .summary
         .as_deref()
         .filter(|text| !text.trim().is_empty())
         .map(str::to_string);
+    let repo_url = infer_repo_url(hit);
+    let homepage = infer_homepage(hit, &repo_url);
+    let npm_package = infer_npm_package(hit);
 
     RawTool {
         name: hit.display_name.clone(),
         description,
         tool_type: "skill".to_string(),
         install_command: Some(format!("clawhub install {}", hit.slug)),
-        // ClawHub slugs do not reliably map to GitHub repo names (e.g. tinyplace vs tiny.place).
-        repo_url: None,
+        repo_url,
+        homepage,
+        npm_package,
         source: SOURCE_NAME.to_string(),
         source_url: Some(skill_page_url(&hit.slug)),
         ..Default::default()
@@ -310,11 +391,45 @@ mod tests {
             tiny.install_command.as_deref(),
             Some("clawhub install tinyplace")
         );
-        assert!(tiny.repo_url.is_none());
+        assert_eq!(
+            tiny.repo_url.as_deref(),
+            Some("https://github.com/tinyhumansai/tiny.place")
+        );
+        assert_eq!(tiny.homepage.as_deref(), Some("https://tiny.place"));
+        assert_eq!(tiny.npm_package.as_deref(), Some("@tinyhumansai/tinyplace"));
         assert!(tiny
             .source_url
             .as_deref()
             .is_some_and(|u| u.contains("clawhub")));
+    }
+
+    #[test]
+    fn infer_repo_url_maps_tinyplace_slug_to_dotted_repo() {
+        let hit = SearchHit {
+            slug: "tinyplace".into(),
+            display_name: "tiny.place".into(),
+            summary: None,
+            owner_handle: Some("tinyhumansai".into()),
+        };
+        assert_eq!(
+            infer_repo_url(&hit).as_deref(),
+            Some("https://github.com/tinyhumansai/tiny.place")
+        );
+    }
+
+    #[test]
+    fn infer_homepage_uses_x402_org_for_foundation_repo() {
+        let hit = SearchHit {
+            slug: "x402".into(),
+            display_name: "x402".into(),
+            summary: None,
+            owner_handle: Some("x402-foundation".into()),
+        };
+        let repo = infer_repo_url(&hit);
+        assert_eq!(
+            infer_homepage(&hit, &repo).as_deref(),
+            Some("https://x402.org")
+        );
     }
 
     #[tokio::test]
