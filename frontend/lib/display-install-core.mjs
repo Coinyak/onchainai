@@ -1,15 +1,20 @@
 /** @typedef {{ safe_copy_command?: string | null; install_command?: string | null; type?: string; mcp_endpoint?: string | null }} InstallSurfaceTool */
 
+import { universalMcpInstallCommand } from "./mcp-deeplinks-core.mjs";
+
+export { universalMcpInstallCommand };
+
 const SHELL_METACHAR_RE = /[;&|`$()<>\n\r'\\]/;
 const HTTP_URL_RE = /https?:\/\/[^\s'"]+/g;
 const CLIENT_MCP_CMD_RE =
-  /^(?:claude\s+mcp\s+add|codex\s+mcp\s+add|cursor\s+mcp\s+add|npx\s+(?:add-mcp|mcp-remote))\b/i;
+  /^(?:claude\s+mcp\s+add|codex\s+mcp\s+add|cursor\s+mcp\s+add|npx\s+mcp-remote)\b/i;
 
 /**
- * @param {string} httpUrl
+ * @param {string} cmd
  */
-export function universalMcpInstallCommand(httpUrl) {
-  return `npx add-mcp ${httpUrl.trim()}`;
+export function isClientSpecificMcpCommand(cmd) {
+  const trimmed = cmd?.trim();
+  return Boolean(trimmed && CLIENT_MCP_CMD_RE.test(trimmed));
 }
 
 /**
@@ -67,27 +72,34 @@ function isMcpCatalogTool(tool) {
 
 /**
  * @param {InstallSurfaceTool} tool
+ * @param {string} raw
  */
-function shouldUniversalizeMcpCommand(tool, raw) {
-  if (!isMcpCatalogTool(tool)) return false;
-  if (tool.mcp_endpoint && isValidHttpMcpUrl(tool.mcp_endpoint)) return true;
-  if (raw && CLIENT_MCP_CMD_RE.test(raw)) return true;
-  return false;
+function resolveHttpMcpEndpoint(tool, raw) {
+  if (tool.mcp_endpoint && isValidHttpMcpUrl(tool.mcp_endpoint)) {
+    return tool.mcp_endpoint.trim();
+  }
+  return httpUrlFromMcpInstallCommand(raw);
 }
 
 /**
  * @param {InstallSurfaceTool} tool
  */
 export function displayInstallCommand(tool) {
-  const raw = tool.safe_copy_command?.trim() || tool.install_command?.trim() || "";
+  const safe = tool.safe_copy_command?.trim() || "";
+  const install = tool.install_command?.trim() || "";
 
-  const endpointUrl =
-    tool.mcp_endpoint && isValidHttpMcpUrl(tool.mcp_endpoint)
-      ? tool.mcp_endpoint.trim()
-      : httpUrlFromMcpInstallCommand(raw);
+  // Operator-curated copy wins unless it is a legacy/client-specific MCP string.
+  if (safe && !isClientSpecificMcpCommand(safe)) {
+    return safe;
+  }
 
-  if (endpointUrl && shouldUniversalizeMcpCommand(tool, raw)) {
-    return universalMcpInstallCommand(endpointUrl);
+  const raw = safe || install;
+
+  if (raw && isMcpCatalogTool(tool) && isClientSpecificMcpCommand(raw)) {
+    const endpointUrl = resolveHttpMcpEndpoint(tool, raw);
+    if (endpointUrl) {
+      return universalMcpInstallCommand(endpointUrl);
+    }
   }
 
   if (raw) return raw;

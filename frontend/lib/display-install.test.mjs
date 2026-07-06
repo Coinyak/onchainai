@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   displayInstallCommand,
   httpUrlFromMcpInstallCommand,
+  isClientSpecificMcpCommand,
   universalMcpInstallCommand,
 } from "./display-install-core.mjs";
 
@@ -56,13 +57,33 @@ test("endpoint-only mcp tool uses universal command", () => {
   assert.equal(cmd, "npx add-mcp https://api.example.com/mcp");
 });
 
-test("safe_copy_command takes precedence for parsing", () => {
+test("client-specific safe_copy_command is universalized", () => {
   const cmd = displayInstallCommand({
     type: "mcp",
     safe_copy_command: "claude mcp add foo https://safe.example/mcp",
     install_command: "npx @other/pkg",
   });
   assert.equal(cmd, "npx add-mcp https://safe.example/mcp");
+});
+
+test("custom safe_copy_command is preserved even with mcp_endpoint", () => {
+  const custom = "npx @operator/pkg --flag required";
+  const cmd = displayInstallCommand({
+    type: "mcp",
+    safe_copy_command: custom,
+    mcp_endpoint: "https://api.example.com/mcp",
+  });
+  assert.equal(cmd, custom);
+});
+
+test("universal safe_copy_command is preserved as-is", () => {
+  const universal = "npx add-mcp https://api.example.com/mcp";
+  const cmd = displayInstallCommand({
+    type: "mcp",
+    safe_copy_command: universal,
+    mcp_endpoint: "https://api.example.com/mcp",
+  });
+  assert.equal(cmd, universal);
 });
 
 test("httpUrlFromMcpInstallCommand parses host-only legacy command", () => {
@@ -77,4 +98,11 @@ test("universalMcpInstallCommand is idempotent shape", () => {
     universalMcpInstallCommand("https://x/mcp"),
     "npx add-mcp https://x/mcp",
   );
+});
+
+test("isClientSpecificMcpCommand detects legacy and client CLIs", () => {
+  assert.equal(isClientSpecificMcpCommand("claude mcp add foo https://x/mcp"), true);
+  assert.equal(isClientSpecificMcpCommand("npx mcp-remote https://x/mcp"), true);
+  assert.equal(isClientSpecificMcpCommand("npx add-mcp https://x/mcp"), false);
+  assert.equal(isClientSpecificMcpCommand("npx @scope/pkg"), false);
 });

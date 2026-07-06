@@ -1,17 +1,21 @@
-import { SITE_ORIGIN } from "@/lib/site";
+import {
+  ONCHAINAI_CLAUDE_CODE_CMD as ONCHAINAI_CLAUDE_CODE_CMD_CORE,
+  ONCHAINAI_MCP_HTTP_URL as ONCHAINAI_MCP_HTTP_URL_CORE,
+  ONCHAINAI_MCP_SERVER_NAME as ONCHAINAI_MCP_SERVER_NAME_CORE,
+  ONCHAINAI_MCP_UNIVERSAL_CMD as ONCHAINAI_MCP_UNIVERSAL_CMD_CORE,
+  universalMcpInstallCommand as universalMcpInstallCommandCore,
+} from "./mcp-deeplinks-core.mjs";
 
-export const ONCHAINAI_MCP_SERVER_NAME = "onchainai";
+export const ONCHAINAI_MCP_SERVER_NAME = ONCHAINAI_MCP_SERVER_NAME_CORE;
 
-export const ONCHAINAI_MCP_HTTP_URL = `${SITE_ORIGIN}/mcp`;
+export const ONCHAINAI_MCP_HTTP_URL = ONCHAINAI_MCP_HTTP_URL_CORE;
 
-export function universalMcpInstallCommand(httpUrl: string): string {
-  return `npx add-mcp ${httpUrl.trim()}`;
-}
+export const universalMcpInstallCommand = universalMcpInstallCommandCore;
 
-export const ONCHAINAI_MCP_UNIVERSAL_CMD = universalMcpInstallCommand(ONCHAINAI_MCP_HTTP_URL);
+export const ONCHAINAI_MCP_UNIVERSAL_CMD = ONCHAINAI_MCP_UNIVERSAL_CMD_CORE;
 
 /** Production /mcp responds 405 Allow: POST — streamable HTTP transport (2026-07-03 curl). */
-export const ONCHAINAI_CLAUDE_CODE_CMD = `claude mcp add --transport http ${ONCHAINAI_MCP_SERVER_NAME} ${ONCHAINAI_MCP_HTTP_URL}`;
+export const ONCHAINAI_CLAUDE_CODE_CMD = ONCHAINAI_CLAUDE_CODE_CMD_CORE;
 
 export const ONCHAINAI_PLUGIN_MARKETPLACE_CMD =
   "/plugin marketplace add Coinyak/onchainai";
