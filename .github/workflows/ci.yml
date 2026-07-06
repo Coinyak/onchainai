@@ -1,10 +1,12 @@
-# OnchainAI CI — rust baseline, agent harness contract, UI coherence on UI-touched PRs.
+# OnchainAI CI — fast rust baseline on PRs; heavy agent-harness + UI coherence on demand.
 #
-# Merge gate: ci-success (requires rust + agent-harness; ui-coherence when UI paths change).
+# Merge gate: ci-success (requires rust; agent-harness + ui-coherence also gate when run manually).
 #
 # Triggers:
-# - pull_request → main (same-repo PRs only; fork PRs skip to save Actions budget)
-# - workflow_dispatch (manual re-run: Actions tab or `gh workflow run ci.yml`)
+# - pull_request → main (same-repo PRs only): rust job only — fast fmt/clippy/test.
+# - workflow_dispatch (manual): full suite incl. agent-harness + ui-coherence
+#   (Actions tab or `gh workflow run ci.yml`). Heavy UI/browser checks stay local via
+#   ./scripts/ui-change-gate.sh; run them here on demand before a risky merge.
 name: CI
 
 on:
@@ -12,10 +14,8 @@ on:
   pull_request:
     branches: [main]
 
-# paths-filter reads PR file lists via the API on pull_request events.
 permissions:
   contents: read
-  pull-requests: read
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
@@ -48,7 +48,8 @@ jobs:
 
   agent-harness:
     name: agent-harness
-    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository
+    # Heavy (Playwright + chromium). Manual only — not a PR merge gate.
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -84,33 +85,11 @@ jobs:
       - name: Readiness (CI strict L1–L4)
         run: ./scripts/agent-readiness-report.sh --strict-ci
 
-  ui-changes:
-    name: ui-changes
-    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: ubuntu-latest
-    outputs:
-      ui: ${{ steps.filter.outputs.ui }}
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: dorny/paths-filter@v3
-        id: filter
-        with:
-          filters: |
-            ui:
-              - 'frontend/**'
-              - 'public/chains/**'
-              - 'src/config.rs'
-              - 'src/install_safety.rs'
-              - 'src/public_install_guide.rs'
-              - 'src/models/**'
-              - 'scripts/ui-watch-paths.inc.sh'
-              - 'scripts/sync-ui-watch-paths.mjs'
-
   ui-coherence:
     name: ui-coherence
-    needs: ui-changes
-    if: (github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository) && needs.ui-changes.outputs.ui == 'true'
+    # Heavy (release build + Postgres + browser smoke). Manual only — not a PR merge gate.
+    # UI coherence is covered locally by ./scripts/ui-change-gate.sh while iterating.
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     services:
@@ -199,11 +178,14 @@ jobs:
           echo "rust: ${{ needs.rust.result }}"
           echo "agent-harness: ${{ needs.agent-harness.result }}"
           echo "ui-coherence: ${{ needs.ui-coherence.result }}"
+          # rust is the PR merge gate — always required.
           if [[ "${{ needs.rust.result }}" != "success" ]]; then
             echo "rust job failed" >&2
             exit 1
           fi
-          if [[ "${{ needs.agent-harness.result }}" != "success" ]]; then
+          # agent-harness + ui-coherence are manual-only: skipped on PRs (OK),
+          # but must pass when run via workflow_dispatch.
+          if [[ "${{ needs.agent-harness.result }}" == "failure" ]]; then
             echo "agent-harness job failed" >&2
             exit 1
           fi

@@ -483,4 +483,14 @@ mod tests {
             .unwrap()
             .contains("blocked"));
     }
+
+    #[test]
+    fn low_risk_npx_add_mcp_http_endpoint() {
+        let assessment = assess_install(Some("npx add-mcp https://api.example.com/mcp"), None);
+        assert_eq!(assessment.risk_level, "low");
+        assert_eq!(
+            assessment.safe_copy_command.as_deref(),
+            Some("npx add-mcp https://api.example.com/mcp")
+        );
+    }
 }

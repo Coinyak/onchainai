@@ -62,7 +62,7 @@ Also once after clone (macOS): `./scripts/install-disk-autoclean.sh` schedules a
 - Auth is required for comments, upvotes, bookmarks, and admin routes; admin checks must be server-side.
 - After schema changes, run migrations and `sqlx prepare`.
 - Before commits/PRs, run relevant tests plus clippy/format, or state exactly why not.
-- Never auto-trigger CI or review bots. CI is `workflow_dispatch`-only; CodeRabbit/qodo are manual (`.coderabbit.yaml`, `.pr_agent.toml`) — run them only when the user asks for a specific PR/diff, never proactively. Pushing can wake them, so use `[skip ci]` when a push should run nothing.
+- Never auto-trigger review bots. Same-repo PRs to `main` auto-run only the fast `rust` job (fmt/clippy/test); heavy `agent-harness` + `ui-coherence` are `workflow_dispatch`-only. CodeRabbit/qodo are manual (`.coderabbit.yaml`, `.pr_agent.toml`) — run them only when the user asks for a specific PR/diff, never proactively. Pushing can wake them, so use `[skip ci]` when a push should run nothing.
 
 ## Review Mode
 

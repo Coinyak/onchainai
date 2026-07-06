@@ -189,26 +189,41 @@ pub fn copy_label_aria(copy_label: &str) -> &'static str {
     }
 }
 
-fn generic_mcp_remote_command(endpoint: &str) -> Option<String> {
+/// Universal install command for HTTP(S) MCP endpoints (`npx add-mcp <url>`).
+pub fn http_mcp_universal_install_command(endpoint: &str) -> Option<String> {
     let endpoint = endpoint.trim();
-    // Validate scheme via url parsing, then reject any shell metacharacters
-    // so a pasted `npx mcp-remote {endpoint}` can't be turned into multiple
-    // shell commands. Only http(s) URLs with a host are accepted.
     let parsed = url::Url::parse(endpoint).ok()?;
     if !matches!(parsed.scheme(), "http" | "https") {
         return None;
     }
     parsed.host_str()?;
-    // Reject if the raw endpoint contains shell control characters.
     if endpoint.chars().any(|c| {
         matches!(
             c,
-            ';' | '&' | '|' | '`' | '$' | '(' | ')' | '<' | '>' | '\n' | '\r'
+            ';' | '&'
+                | '|'
+                | '`'
+                | '$'
+                | '('
+                | ')'
+                | '<'
+                | '>'
+                | '\n'
+                | '\r'
+                | '\''
+                | '\\'
+                | '"'
+                | ' '
+                | '\t'
         )
     }) {
         return None;
     }
-    Some(format!("npx mcp-remote '{endpoint}'"))
+    Some(format!("npx add-mcp {}", parsed.as_str()))
+}
+
+fn generic_mcp_remote_command(endpoint: &str) -> Option<String> {
+    http_mcp_universal_install_command(endpoint)
 }
 
 fn primary_install_command(tool: &Tool) -> Option<String> {
@@ -720,11 +735,11 @@ mod tests {
         let guide = build_public_install_guide(&tool, "test-tool", InstallPlatform::GenericMcp);
         assert_eq!(
             guide.command.as_deref(),
-            Some("npx mcp-remote 'https://api.example.com/mcp'")
+            Some("npx add-mcp https://api.example.com/mcp")
         );
         assert_eq!(
             guide.copy_text.as_deref(),
-            Some("npx mcp-remote 'https://api.example.com/mcp'")
+            Some("npx add-mcp https://api.example.com/mcp")
         );
     }
 
@@ -747,7 +762,7 @@ mod tests {
         // Valid endpoint still produces a quoted command.
         assert_eq!(
             generic_mcp_remote_command("https://api.example.com/mcp"),
-            Some("npx mcp-remote 'https://api.example.com/mcp'".into())
+            Some("npx add-mcp https://api.example.com/mcp".into())
         );
     }
 
@@ -820,9 +835,37 @@ mod tests {
 
     #[test]
     fn onchainai_connect_guide_uses_endpoint_command() {
-        let cmd = "npx mcp-remote www.onchain-ai.xyz/mcp";
+        let cmd = "npx add-mcp https://www.onchain-ai.xyz/mcp";
         let guide = build_onchainai_connect_guide(InstallPlatform::Claude, cmd);
         assert!(guide.config_json.is_some());
-        assert!(guide.copy_text.unwrap().contains("mcp-remote"));
+        assert!(guide.copy_text.unwrap().contains("add-mcp"));
+    }
+
+    #[test]
+    fn http_mcp_universal_install_command_accepts_valid_https() {
+        assert_eq!(
+            http_mcp_universal_install_command("https://api.example.com/mcp"),
+            Some("npx add-mcp https://api.example.com/mcp".into())
+        );
+    }
+
+    #[test]
+    fn http_mcp_universal_install_command_rejects_shell_metacharacters() {
+        assert_eq!(
+            http_mcp_universal_install_command("https://evil.com/mcp;rm"),
+            None
+        );
+        assert_eq!(
+            http_mcp_universal_install_command("https://evil.com/mcp\"injection"),
+            None
+        );
+        assert_eq!(
+            http_mcp_universal_install_command("https://evil.com/ mcp"),
+            None
+        );
+        assert_eq!(
+            http_mcp_universal_install_command("https://evil.com/\tmcp"),
+            None
+        );
     }
 }
