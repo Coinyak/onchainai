@@ -420,11 +420,12 @@ pub(crate) fn push_list_query_filter<'qb>(
 }
 
 #[cfg(feature = "ssr")]
-fn push_list_order_offset_limit(
-    query: &mut sqlx::QueryBuilder<'_, sqlx::Postgres>,
+fn push_list_order_offset_limit<'qb>(
+    query: &mut sqlx::QueryBuilder<'qb, sqlx::Postgres>,
     sort: &str,
     offset: i64,
     limit: i64,
+    search: Option<(&'qb str, crate::server::tool_search::ToolSearchMatch)>,
 ) {
     match sort {
         "new" => {
@@ -438,11 +439,55 @@ fn push_list_order_offset_limit(
             );
         }
         _ => {
-            query.push(" ORDER BY stars DESC, created_at DESC");
+            // Default ("hot") sort: when a search query is active, relevance
+            // (ts_rank_cd) must outrank stars, or an exact name match like
+            // "Base MCP" can lose to unrelated tools with more stars.
+            if let Some((text, match_mode)) = search {
+                push_fts_rank_order_clause(query, text, match_mode);
+            } else {
+                query.push(" ORDER BY stars DESC, created_at DESC");
+            }
         }
     }
     query.push(" OFFSET ").push_bind(offset);
     query.push(" LIMIT ").push_bind(limit);
+}
+
+/// Shared `ORDER BY ts_rank_cd(...) DESC, stars DESC, created_at DESC` clause,
+/// falling back to `stars DESC, created_at DESC` if the query has no bindable terms.
+#[cfg(feature = "ssr")]
+fn push_fts_rank_order_clause<'qb>(
+    query: &mut sqlx::QueryBuilder<'qb, sqlx::Postgres>,
+    search_text: &'qb str,
+    match_mode: crate::server::tool_search::ToolSearchMatch,
+) {
+    use crate::server::tool_search::{fts_query_bind, ToolSearchMatch, TOOL_SEARCH_VECTOR};
+
+    let Some(bind_value) = fts_query_bind(match_mode, search_text) else {
+        query.push(" ORDER BY stars DESC, created_at DESC");
+        return;
+    };
+    query.push(" ORDER BY ts_rank_cd(");
+    query.push(TOOL_SEARCH_VECTOR);
+    query.push(", ");
+    match match_mode {
+        ToolSearchMatch::And => {
+            query.push("plainto_tsquery('english', ");
+            query.push_bind(bind_value);
+            query.push(")");
+        }
+        ToolSearchMatch::Prefix => {
+            query.push("to_tsquery('english', ");
+            query.push_bind(bind_value);
+            query.push(")");
+        }
+        ToolSearchMatch::Or => {
+            query.push("to_tsquery('english', replace(plainto_tsquery('english', ");
+            query.push_bind(bind_value);
+            query.push(")::text, ' & ', ' | '))");
+        }
+    }
+    query.push(") DESC, stars DESC, created_at DESC");
 }
 
 /// Count approved tools with optional multi-axis filters and optional FTS `search_q`.
@@ -513,7 +558,8 @@ pub(crate) async fn fetch_list_tools(
     let mut q = sqlx::QueryBuilder::new(LIST_APPROVED_TOOLS_SQL);
     push_list_query_filter(&mut q, query, match_mode);
     append_tool_filters(&mut q, filters);
-    push_list_order_offset_limit(&mut q, sort, offset, limit);
+    let search_for_order = search_text.map(|text| (text, match_mode));
+    push_list_order_offset_limit(&mut q, sort, offset, limit, search_for_order);
 
     let tools = q
         .build_query_as::<Tool>()
@@ -530,7 +576,7 @@ pub(crate) async fn fetch_search_by_intent(
     pool: &sqlx::PgPool,
     intent: &crate::server::tool_search::ResolvedSearchIntent,
 ) -> Result<Vec<Tool>, FnError> {
-    use crate::server::tool_search::{fts_query_bind, ToolSearchMatch, TOOL_SEARCH_VECTOR};
+    use crate::server::tool_search::ToolSearchMatch;
 
     let filters = intent_to_tool_filters(intent);
     validate_tool_filters(&filters)?;
@@ -549,31 +595,18 @@ pub(crate) async fn fetch_search_by_intent(
     }
     append_tool_filters(&mut q, &filters);
     if has_fts {
-        q.push(" ORDER BY ts_rank_cd(");
-        q.push(TOOL_SEARCH_VECTOR);
-        q.push(", ");
-        if let Some(bind_value) = fts_query_bind(match_mode, search_text) {
-            match match_mode {
-                ToolSearchMatch::And => {
-                    q.push("plainto_tsquery('english', ");
-                    q.push_bind(bind_value);
-                    q.push(")");
-                }
-                ToolSearchMatch::Prefix => {
-                    q.push("to_tsquery('english', ");
-                    q.push_bind(bind_value);
-                    q.push(")");
-                }
-                ToolSearchMatch::Or => {
-                    q.push("to_tsquery('english', replace(plainto_tsquery('english', ");
-                    q.push_bind(bind_value);
-                    q.push(")::text, ' & ', ' | '))");
-                }
-            }
-        }
-        q.push(") DESC, stars DESC, created_at DESC");
+        push_fts_rank_order_clause(&mut q, search_text, match_mode);
     } else {
-        q.push(" ORDER BY stars DESC, created_at DESC");
+        // Axis-token extraction (e.g. "base mcp" -> chain=base, tool_type=mcp)
+        // can empty `search_text` entirely. Rank (not filter) by the untouched
+        // raw query so a literal name match like "Base MCP" still surfaces
+        // first instead of falling back to a pure stars/date sort.
+        let raw_query = intent.raw_query.trim();
+        if raw_query.is_empty() {
+            q.push(" ORDER BY stars DESC, created_at DESC");
+        } else {
+            push_fts_rank_order_clause(&mut q, raw_query, ToolSearchMatch::And);
+        }
     }
     q.push(" LIMIT 50");
 

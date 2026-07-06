@@ -36,6 +36,11 @@ pub struct ResolvedSearchIntent {
     pub chain: Option<String>,
     pub tool_type: Option<String>,
     pub install_risk: Option<String>,
+    /// Untouched input text, kept even when `query` is emptied by axis-token
+    /// extraction (e.g. "base mcp" -> chain=base, tool_type=mcp, query="").
+    /// Used to rank literal name matches (like a tool named "Base MCP")
+    /// instead of losing all relevance signal to a stars/date fallback.
+    pub raw_query: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -148,6 +153,7 @@ pub fn resolve_search_intent(
         chain: chain.or(intent.chain),
         tool_type: intent.tool_type,
         install_risk: intent.install_risk,
+        raw_query: query.trim().to_string(),
     }
 }
 

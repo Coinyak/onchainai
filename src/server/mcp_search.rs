@@ -227,12 +227,21 @@ pub(crate) async fn mcp_search_tools(
         push_list_query_filter(&mut list_q, Some(search_text), match_mode);
     }
     append_tool_filters(&mut list_q, &filters);
-    push_mcp_sort_order(
-        &mut list_q,
-        sort,
-        if has_fts { Some(search_text) } else { None },
-        match_mode,
-    );
+    // Axis-token extraction (e.g. "base mcp" -> chain=base, tool_type=mcp) can
+    // empty `search_text` entirely. Fall back to ranking (not filtering) by
+    // the untouched raw query so a literal name match like "Base MCP" still
+    // surfaces first instead of losing all relevance signal.
+    let (rank_text, rank_match_mode) = if has_fts {
+        (Some(search_text), match_mode)
+    } else {
+        let raw_query = intent.raw_query.trim();
+        if raw_query.is_empty() {
+            (None, match_mode)
+        } else {
+            (Some(raw_query), ToolSearchMatch::And)
+        }
+    };
+    push_mcp_sort_order(&mut list_q, sort, rank_text, rank_match_mode);
     list_q
         .push(" LIMIT ")
         .push_bind(fetch_limit)
