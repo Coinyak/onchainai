@@ -32,12 +32,13 @@ const NODE_MAX_W: i32 = 520;
 const NODE_MIN_H: i32 = 72;
 const NODE_MAX_H: i32 = 420;
 const NODE_MAX_STEP: i32 = 99;
+const NODE_MAX_STEPS_PER_NODE: usize = 8;
 const AGENT_EXPORT_FILENAME: &str = "blueprint-agent.md";
 
 const AGENT_EXPORT_TASK_TEMPLATE: &str = r#"## Your task
 
 1. Read the attached blueprint PNG together with this prompt (export PNG separately from the editor Share dock).
-2. For each slug in ## Tools, call OnchainAI MCP `get_install_guide` (platform: cursor).
+2. For each slug in ## Tools, call OnchainAI MCP `get_install_guide` (platform: {platform}).
 3. Summarize install risk; do not install critical-risk tools.
 4. When ## Order is present, treat it as the owner's step sequence; otherwise follow ## Flow. If you edited Flow/Order, prefer the user's wording.
 5. Ask before changing my toolkit or installing anything."#;
@@ -128,7 +129,7 @@ struct ExportNode {
     chain_id: Option<String>,
     text: Option<String>,
     chains: Vec<String>,
-    step: Option<i32>,
+    steps: Vec<i32>,
 }
 
 #[derive(Debug, Clone)]
@@ -155,6 +156,8 @@ struct BlueprintNodeInput {
     h: Option<i32>,
     #[serde(default)]
     step: Option<i32>,
+    #[serde(default)]
+    steps: Option<Vec<i32>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -182,6 +185,42 @@ fn normalize_step(value: Option<i32>) -> Option<i32> {
     value.filter(|v| *v >= 1).map(|v| v.min(NODE_MAX_STEP))
 }
 
+/// Normalize a steps array: dedupe, sort, clamp to [1, NODE_MAX_STEP], cap at max per node.
+fn normalize_steps(values: Option<&[i32]>) -> Vec<i32> {
+    let Some(values) = values else {
+        return Vec::new();
+    };
+    let mut seen = std::collections::HashSet::new();
+    let mut result = Vec::new();
+    for &v in values {
+        if v < 1 {
+            continue;
+        }
+        let clamped = v.min(NODE_MAX_STEP);
+        if seen.insert(clamped) {
+            result.push(clamped);
+        }
+        if result.len() >= NODE_MAX_STEPS_PER_NODE {
+            break;
+        }
+    }
+    result.sort();
+    result
+}
+
+/// Merge legacy `step` (single) into `steps` (array) for backward compatibility.
+fn merge_step_and_steps(step: Option<i32>, steps: Option<&[i32]>) -> Vec<i32> {
+    let mut merged = normalize_steps(steps);
+    if let Some(s) = normalize_step(step) {
+        if !merged.contains(&s) {
+            merged.push(s);
+            merged.sort();
+            merged.truncate(NODE_MAX_STEPS_PER_NODE);
+        }
+    }
+    merged
+}
+
 /// Trim an optional edge label and cap its length; `None`/empty -> `None`.
 fn normalize_edge_label(value: Option<&str>) -> Option<String> {
     let trimmed = value?.trim();
@@ -201,10 +240,10 @@ fn apply_node_size(payload: &mut Value, w: Option<i32>, h: Option<i32>) {
     }
 }
 
-/// Attach a normalized 1-based step badge to a node payload when provided.
-fn apply_node_step(payload: &mut Value, step: Option<i32>) {
-    if let Some(step) = normalize_step(step) {
-        payload["step"] = serde_json::json!(step);
+/// Attach a normalized steps array to a node payload when provided.
+fn apply_node_steps(payload: &mut Value, steps: &[i32]) {
+    if !steps.is_empty() {
+        payload["steps"] = serde_json::json!(steps);
     }
 }
 
@@ -298,6 +337,7 @@ fn validate_nodes(nodes: &Value) -> Result<Value, ApiError> {
                     )));
                 }
                 let chains = normalize_tool_node_chains(node.chains.as_deref(), idx)?;
+                let steps = merge_step_and_steps(node.step, node.steps.as_deref());
                 let mut payload = serde_json::json!({
                     "id": node.id,
                     "kind": "tool",
@@ -309,7 +349,7 @@ fn validate_nodes(nodes: &Value) -> Result<Value, ApiError> {
                     payload["chains"] = serde_json::json!(chains);
                 }
                 apply_node_size(&mut payload, node.w, node.h);
-                apply_node_step(&mut payload, node.step);
+                apply_node_steps(&mut payload, &steps);
                 normalized.push(payload);
             }
             "note" => {
@@ -319,6 +359,7 @@ fn validate_nodes(nodes: &Value) -> Result<Value, ApiError> {
                         "note text must be at most {MAX_NOTE_TEXT} characters"
                     )));
                 }
+                let steps = merge_step_and_steps(node.step, node.steps.as_deref());
                 let mut payload = serde_json::json!({
                     "id": node.id,
                     "kind": "note",
@@ -327,7 +368,7 @@ fn validate_nodes(nodes: &Value) -> Result<Value, ApiError> {
                     "y": node.y,
                 });
                 apply_node_size(&mut payload, node.w, node.h);
-                apply_node_step(&mut payload, node.step);
+                apply_node_steps(&mut payload, &steps);
                 normalized.push(payload);
             }
             "chain" => {
@@ -342,6 +383,7 @@ fn validate_nodes(nodes: &Value) -> Result<Value, ApiError> {
                         "chainId must be at most {MAX_CHAIN_ID_LEN} characters"
                     )));
                 }
+                let steps = merge_step_and_steps(node.step, node.steps.as_deref());
                 let mut payload = serde_json::json!({
                     "id": node.id,
                     "kind": "chain",
@@ -349,7 +391,7 @@ fn validate_nodes(nodes: &Value) -> Result<Value, ApiError> {
                     "x": node.x,
                     "y": node.y,
                 });
-                apply_node_step(&mut payload, node.step);
+                apply_node_steps(&mut payload, &steps);
                 normalized.push(payload);
             }
             other => {
@@ -658,10 +700,32 @@ fn parse_export_nodes(nodes: &Value) -> Vec<ExportNode> {
                         .collect::<Vec<_>>()
                 })
                 .unwrap_or_default();
-            let step = item
-                .get("step")
-                .and_then(|v| v.as_i64())
-                .map(|v| v as i32);
+            let steps: Vec<i32> = item
+                .get("steps")
+                .and_then(|v| v.as_array())
+                .map(|values| {
+                    values
+                        .iter()
+                        .filter_map(|s| s.as_i64().map(|v| v as i32))
+                        .filter(|s| *s >= 1)
+                        .map(|s| s.min(NODE_MAX_STEP))
+                        .take(NODE_MAX_STEPS_PER_NODE)
+                        .collect()
+                })
+                .unwrap_or_default();
+            // Fall back to legacy `step` field
+            let mut steps = if steps.is_empty() {
+                item.get("step")
+                    .and_then(|v| v.as_i64())
+                    .map(|v| vec![v.min(NODE_MAX_STEP as i64) as i32])
+                    .unwrap_or_default()
+            } else {
+                steps
+            };
+            // Dedupe and sort so steps.first() is always the minimum
+            steps.sort();
+            steps.dedup();
+            steps.truncate(NODE_MAX_STEPS_PER_NODE);
 
             Some(ExportNode {
                 id,
@@ -670,7 +734,7 @@ fn parse_export_nodes(nodes: &Value) -> Vec<ExportNode> {
                 chain_id,
                 text,
                 chains,
-                step,
+                steps,
             })
         })
         .collect()
@@ -914,10 +978,13 @@ fn build_flow_section(nodes: &[ExportNode], edges: &Value) -> String {
 }
 
 fn build_order_section(nodes: &[ExportNode]) -> String {
-    let mut stepped: Vec<(&ExportNode, i32)> = nodes
-        .iter()
-        .filter_map(|node| node.step.map(|step| (node, step)))
-        .collect();
+    // Expand each node's steps into (node, step) pairs, then sort globally.
+    let mut stepped: Vec<(&ExportNode, i32)> = Vec::new();
+    for node in nodes {
+        for &step in &node.steps {
+            stepped.push((node, step));
+        }
+    }
     if stepped.is_empty() {
         return String::new();
     }
@@ -934,14 +1001,15 @@ fn build_agent_export_markdown(
     nodes: &Value,
     edges: &Value,
     tool_meta: &HashMap<String, ToolExportMeta>,
+    platform: &str,
 ) -> String {
     let export_nodes = parse_export_nodes(nodes);
     let mut markdown = format!("# {title}\n\n");
-    markdown.push_str(
+    markdown.push_str(&format!(
         "Read the attached blueprint image together with this prompt. \
-For each tool below, call OnchainAI MCP `get_install_guide` (platform: cursor) \
+For each tool below, call OnchainAI MCP `get_install_guide` (platform: {platform}) \
 before installing.\n\n",
-    );
+    ));
 
     markdown.push_str("## Tools\n\n");
     let mut tool_nodes: Vec<(usize, &ExportNode)> = export_nodes
@@ -950,7 +1018,9 @@ before installing.\n\n",
         .filter(|(_, node)| node.kind == "tool")
         .collect();
     tool_nodes.sort_by(|(idx_a, a), (idx_b, b)| {
-        match (a.step, b.step) {
+        let a_min = a.steps.first().copied();
+        let b_min = b.steps.first().copied();
+        match (a_min, b_min) {
             (Some(step_a), Some(step_b)) => step_a.cmp(&step_b).then(idx_a.cmp(idx_b)),
             (Some(_), None) => std::cmp::Ordering::Less,
             (None, Some(_)) => std::cmp::Ordering::Greater,
@@ -971,18 +1041,21 @@ before installing.\n\n",
             } else {
                 node.chains.join(", ")
             };
-            markdown.push_str(&format!("### {display_name}\n"));
+            let step_badges: String = if node.steps.is_empty() {
+                String::new()
+            } else {
+                let badges: Vec<String> = node.steps.iter().map(|s| format!("#{s}")).collect();
+                format!(" {}", badges.join(" "))
+            };
+            markdown.push_str(&format!("### {display_name}{step_badges}\n"));
             markdown.push_str(&format!("- Slug: `{slug}`\n"));
             markdown.push_str(&format!("- Chains: {chains}\n"));
             if let Some(meta) = tool_meta.get(slug) {
-                markdown.push_str(&format!(
-                    "- Install risk: {}\n",
-                    meta.install_risk_level
-                ));
+                markdown.push_str(&format!("- Install risk: {}\n", meta.install_risk_level));
             }
             markdown.push_str(&format!("- Page: {SITE_ORIGIN}/tools/{slug}\n"));
             markdown.push_str(&format!(
-                "- MCP: `get_install_guide({{ slug: \"{slug}\", platform: \"cursor\" }})`\n\n"
+                "- MCP: `get_install_guide({{ slug: \"{slug}\", platform: \"{platform}\" }})`\n\n"
             ));
         }
     }
@@ -1015,7 +1088,7 @@ before installing.\n\n",
     markdown.push_str("## Flow\n\n");
     markdown.push_str(&build_flow_section(&export_nodes, edges));
     markdown.push_str("\n\n");
-    markdown.push_str(AGENT_EXPORT_TASK_TEMPLATE);
+    markdown.push_str(&AGENT_EXPORT_TASK_TEMPLATE.replace("{platform}", platform));
     markdown
 }
 
@@ -1070,7 +1143,20 @@ async fn agent_export_blueprint(
     let row = fetch_owned_blueprint(&state, id, user.id).await?;
     let slugs = collect_tool_slugs(&row.nodes);
     let tool_meta = fetch_tool_export_meta(&state, &slugs).await?;
-    let markdown = build_agent_export_markdown(&row.title, &row.nodes, &row.edges, &tool_meta);
+
+    // Default platform is generic; cursor/claude also accepted.
+    let platform = headers
+        .get("x-blueprint-platform")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("generic");
+    let platform = match platform {
+        "cursor" => "cursor",
+        "claude" => "claude",
+        _ => "generic",
+    };
+
+    let markdown =
+        build_agent_export_markdown(&row.title, &row.nodes, &row.edges, &tool_meta, platform);
 
     Ok(Json(AgentExportResponse {
         title: row.title,
@@ -1236,7 +1322,8 @@ mod tests {
             },
         );
 
-        let markdown = build_agent_export_markdown("My Stack", &nodes, &edges, &tool_meta);
+        let markdown =
+            build_agent_export_markdown("My Stack", &nodes, &edges, &tool_meta, "cursor");
 
         assert!(markdown.starts_with("# My Stack\n"));
         assert!(markdown.contains("get_install_guide"));
@@ -1292,12 +1379,40 @@ mod tests {
     }
 
     #[test]
+    fn build_order_section_supports_multi_step_nodes() {
+        let nodes = parse_export_nodes(&json!([
+            {"id": "t1", "kind": "tool", "slug": "alpha", "x": 0, "y": 0, "steps": [1, 7]},
+            {"id": "t2", "kind": "tool", "slug": "beta", "x": 0, "y": 0, "steps": [3]}
+        ]));
+
+        let order = build_order_section(&nodes);
+
+        assert_eq!(
+            order,
+            "- 1. alpha (tool)\n- 3. beta (tool)\n- 7. alpha (tool)"
+        );
+    }
+
+    #[test]
+    fn build_agent_export_markdown_includes_step_badges_in_tool_heading() {
+        let nodes = json!([
+            {"id": "t1", "kind": "tool", "slug": "alpha", "x": 0, "y": 0, "steps": [1, 7]}
+        ]);
+        let markdown =
+            build_agent_export_markdown("Stack", &nodes, &json!([]), &HashMap::new(), "generic");
+
+        assert!(markdown.contains("### alpha #1 #7"));
+        assert!(markdown.contains("platform: \"generic\""));
+    }
+
+    #[test]
     fn build_agent_export_markdown_includes_order_section_after_notes() {
         let nodes = json!([
             {"id": "t1", "kind": "tool", "slug": "alpha", "x": 0, "y": 0, "step": 1},
             {"id": "n1", "kind": "note", "text": "memo", "x": 0, "y": 0}
         ]);
-        let markdown = build_agent_export_markdown("Stack", &nodes, &json!([]), &HashMap::new());
+        let markdown =
+            build_agent_export_markdown("Stack", &nodes, &json!([]), &HashMap::new(), "cursor");
 
         let notes_pos = markdown.find("## Notes").unwrap();
         let order_pos = markdown.find("## Order").unwrap();
@@ -1316,7 +1431,8 @@ mod tests {
             {"id": "t3", "kind": "tool", "slug": "third", "x": 20, "y": 0, "step": 1},
             {"id": "t4", "kind": "tool", "slug": "fourth", "x": 30, "y": 0}
         ]);
-        let markdown = build_agent_export_markdown("Stack", &nodes, &json!([]), &HashMap::new());
+        let markdown =
+            build_agent_export_markdown("Stack", &nodes, &json!([]), &HashMap::new(), "cursor");
 
         let third_pos = markdown.find("### third").unwrap();
         let second_pos = markdown.find("### second").unwrap();
@@ -1385,16 +1501,16 @@ mod tests {
         ]);
         let result = validate_nodes(&nodes).unwrap();
         let arr = result.as_array().unwrap();
-        // Tool: width clamped down to max, height clamped up to min, step capped.
+        // Tool: width clamped down to max, height clamped up to min, step migrated to steps array capped.
         assert_eq!(arr[0]["w"], json!(NODE_MAX_W));
         assert_eq!(arr[0]["h"], json!(NODE_MIN_H));
-        assert_eq!(arr[0]["step"], json!(NODE_MAX_STEP));
+        assert_eq!(arr[0]["steps"], json!([NODE_MAX_STEP]));
         // Note keeps in-range size.
         assert_eq!(arr[1]["w"], json!(300));
         assert_eq!(arr[1]["h"], json!(200));
-        // Chain never carries a size, but does carry a step.
+        // Chain never carries a size, but does carry steps (migrated from legacy step).
         assert!(arr[2].get("w").is_none());
-        assert_eq!(arr[2]["step"], json!(2));
+        assert_eq!(arr[2]["steps"], json!([2]));
     }
 
     #[test]

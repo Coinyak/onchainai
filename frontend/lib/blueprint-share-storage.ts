@@ -36,7 +36,8 @@ function canonicalizeBlueprint(
     if (chainId) parts.push(`chainId:${chainId}`);
     if (node.text !== undefined) parts.push(`text:${node.text}`);
     if (node.chains?.length) parts.push(`chains:${[...node.chains].sort().join(",")}`);
-    if (node.step != null) parts.push(`step:${node.step}`);
+    if (node.steps?.length) parts.push(`steps:${[...node.steps].sort((a, b) => a - b).join(",")}`);
+    else if (node.step != null) parts.push(`step:${node.step}`);
     return parts.join("|");
   });
 

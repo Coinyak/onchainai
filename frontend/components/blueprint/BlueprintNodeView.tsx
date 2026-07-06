@@ -46,10 +46,11 @@ interface BlueprintNodeViewProps {
   onTextChange: (id: string, text: string) => void;
   onChainsChange: (id: string, chains: string[]) => void;
   onResize?: (id: string, w: number, h: number) => void;
-  onStepChange?: (id: string, step: number | undefined) => void;
+  onStepChange?: (id: string, steps: number[]) => void;
   onOpenChains?: (id: string) => void;
   onCloseChains?: (id: string) => void;
   onToggleChains?: (id: string) => void;
+  suggestedNextStep?: number;
   onPortPointerDown?: (
     nodeId: string,
     side: BlueprintPortSide,
@@ -77,6 +78,7 @@ export function BlueprintNodeView({
   onOpenChains,
   onCloseChains,
   onToggleChains,
+  suggestedNextStep,
   onPortPointerDown,
 }: BlueprintNodeViewProps) {
   const { attributes, listeners, setNodeRef, transform } = useDraggable({
@@ -243,13 +245,17 @@ export function BlueprintNodeView({
       {!readOnly && (selected || hovered) && onStepChange ? (
         <BlueprintNodeStepField
           className="blueprint-node-step blueprint-node-step-input"
-          value={node.step}
-          aria-label="Order number"
+          values={node.steps ?? (node.step != null ? [node.step] : [])}
+          aria-label="Order numbers"
           data-testid="blueprint-node-step-input"
           onClick={(e) => e.stopPropagation()}
           onPointerDown={(e) => e.stopPropagation()}
-          onChange={(step) => onStepChange(node.id, step)}
+          onChange={(steps) => onStepChange(node.id, steps)}
         />
+      ) : node.steps && node.steps.length > 0 ? (
+        <span className="blueprint-node-step" aria-label={`Steps ${node.steps.join(", ")}`}>
+          {node.steps.map((s) => `#${s}`).join(" ")}
+        </span>
       ) : node.step != null ? (
         <span className="blueprint-node-step" aria-label={`Step ${node.step}`}>
           {node.step}
@@ -367,13 +373,14 @@ export function BlueprintNodeView({
         readOnly={readOnly}
         showChainsButton={availableChains.length > 0}
         showStepButton={isSizable || node.kind === "chain"}
-        stepValue={node.step}
+        stepValues={node.steps ?? (node.step != null ? [node.step] : [])}
+        suggestedNextStep={suggestedNextStep}
         toolName={tool?.name}
         onOpenTool={node.kind === "tool" && tool && !toolMissing ? openTool : undefined}
         onOpenChains={availableChains.length > 0 ? handleOpenChains : undefined}
         onStepChange={
           onStepChange
-            ? (step) => onStepChange(node.id, step)
+            ? (steps) => onStepChange(node.id, steps)
             : undefined
         }
         onRemove={() => onRemove(node.id)}

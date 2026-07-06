@@ -797,7 +797,9 @@ export interface BlueprintNode {
   /** Tool/note nodes only: custom card size (px). Omitted = default size. */
   w?: number;
   h?: number;
-  /** Optional 1-based order badge shown on the card. */
+  /** Optional 1-based order badges shown on the card (e.g. [1, 7]). */
+  steps?: number[];
+  /** @deprecated Use `steps` instead. Single order badge (migrated on load). */
   step?: number;
 }
 

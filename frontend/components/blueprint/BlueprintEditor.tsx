@@ -51,6 +51,7 @@ import {
   clampCoord,
   getNodeAnchor,
   getNodeBounds,
+  normalizeNodeSteps,
   type BlueprintEndpoint,
   type BlueprintPortSide,
   initialToolNodeChains,
@@ -288,6 +289,18 @@ function BlueprintEditorWorkspace({
     () => edges.find((edge) => edge.id === selectedEdgeId) ?? null,
     [edges, selectedEdgeId],
   );
+
+  // Suggest the next available step number (1 + max across all nodes).
+  const suggestedNextStep = useMemo(() => {
+    let max = 0;
+    for (const node of nodes) {
+      const steps = node.steps ?? (node.step != null ? [node.step] : []);
+      for (const s of steps) {
+        if (s > max) max = s;
+      }
+    }
+    return Math.min(max + 1, 99);
+  }, [nodes]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -837,20 +850,27 @@ function BlueprintEditorWorkspace({
   );
 
   const setNodeStep = useCallback(
-    (id: string, step: number | undefined) => {
+    (id: string, steps: number[]) => {
       if (readOnly) return;
+      const normalized = normalizeNodeSteps(steps);
       updateNodes((prev) =>
         prev.map((n) => {
           if (n.id !== id) return n;
-          if (step == null) {
-            const { step: _removed, ...rest } = n;
+          if (normalized.length === 0) {
+            // Remove both `steps` and legacy `step`
+            const rest = { ...n };
+            delete (rest as { steps?: number[] }).steps;
+            delete (rest as { step?: number }).step;
             return rest;
           }
-          return { ...n, step };
+          // Strip legacy `step`, set `steps` array
+          const rest = { ...n };
+          delete (rest as { step?: number }).step;
+          return { ...rest, steps: normalized };
         }),
       );
-      if (step != null) {
-        setLiveMessage(`Order set to ${step}.`);
+      if (normalized.length > 0) {
+        setLiveMessage(`Order set to ${normalized.map((s) => `#${s}`).join(" ")}.`);
       } else {
         setLiveMessage("Order badge cleared.");
       }
@@ -1271,6 +1291,7 @@ function BlueprintEditorWorkspace({
                   connectPending={linkingFromId === node.id}
                   readOnly={readOnly}
                   chainsPopoverOpen={chainsPopoverOpenId === node.id}
+                  suggestedNextStep={suggestedNextStep}
                   onSelect={handleNodeSelect}
                   onRemove={removeNode}
                   onTextChange={updateNodeText}
