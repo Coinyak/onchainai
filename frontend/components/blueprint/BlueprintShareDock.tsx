@@ -8,7 +8,11 @@ import {
   buildDraftAgentMarkdown,
   captureBlueprintContent,
   captureBlueprintViewport,
+  BLUEPRINT_EXPORT_PLATFORMS,
+  DEFAULT_EXPORT_PLATFORM,
+  type BlueprintExportPlatform,
 } from "@/lib/blueprint-export";
+import { CodingClientLogo } from "@/components/tools/CodingClientLogo";
 import {
   blueprintCanvasFingerprint,
   loadSharePromptDraft,
@@ -41,6 +45,7 @@ export function BlueprintShareDock({
   const panelId = useId();
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState<ShareTab>("prompt");
+  const [platform, setPlatform] = useState<BlueprintExportPlatform>(DEFAULT_EXPORT_PLATFORM);
   const [promptText, setPromptText] = useState("");
   const [baselineMarkdown, setBaselineMarkdown] = useState("");
   const [baselineFingerprint, setBaselineFingerprint] = useState("");
@@ -62,7 +67,8 @@ export function BlueprintShareDock({
   const isCanvasStale =
     open && hasNodes && baselineFingerprint !== "" && canvasFingerprint !== baselineFingerprint;
 
-  const applyFreshPrompt = useCallback(() => {
+  const applyFreshPrompt = useCallback(
+    (platformOverride?: BlueprintExportPlatform) => {
     if (!hasNodes) {
       setPromptText("");
       setBaselineMarkdown("");
@@ -75,7 +81,8 @@ export function BlueprintShareDock({
     setError(null);
 
     try {
-      const markdown = buildDraftAgentMarkdown(title, nodes, edges, toolsBySlug);
+      const effectivePlatform = platformOverride ?? platform;
+      const markdown = buildDraftAgentMarkdown(title, nodes, edges, toolsBySlug, effectivePlatform);
       setPromptText(markdown);
       setBaselineMarkdown(markdown);
       setBaselineFingerprint(canvasFingerprint);
@@ -85,7 +92,7 @@ export function BlueprintShareDock({
     } finally {
       setLoading(false);
     }
-  }, [blueprintId, canvasFingerprint, edges, hasNodes, nodes, title, toolsBySlug]);
+  }, [blueprintId, canvasFingerprint, edges, hasNodes, nodes, platform, title, toolsBySlug]);
 
   const ensurePromptOnOpen = useCallback(() => {
     if (!hasNodes) {
@@ -279,6 +286,35 @@ export function BlueprintShareDock({
                   <p className="blueprint-share-hint">
                     Auto-generated draft — edit before sending.
                   </p>
+                  <div className="blueprint-share-platform-row" role="radiogroup" aria-label="Target coding tool">
+                    <span className="blueprint-share-platform-label">Tool:</span>
+                    <div className="blueprint-share-platform-chips">
+                      {BLUEPRINT_EXPORT_PLATFORMS.map((p) => (
+                        <button
+                          key={p.id}
+                          type="button"
+                          role="radio"
+                          aria-checked={platform === p.id}
+                          className={`blueprint-share-platform-chip${platform === p.id ? " blueprint-share-platform-chip-active" : ""}`}
+                          data-testid={`blueprint-share-platform-${p.id}`}
+                          onClick={() => {
+                            setPlatform(p.id);
+                            if (hasNodes && !isDirty) {
+                              setTimeout(() => applyFreshPrompt(p.id), 0);
+                            }
+                          }}
+                        >
+                          <CodingClientLogo
+                            id={p.logoId}
+                            label={p.label}
+                            size={16}
+                            decorative
+                          />
+                          {p.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                   <textarea
                     className="blueprint-share-prompt-edit"
                     data-testid="blueprint-share-prompt-edit"

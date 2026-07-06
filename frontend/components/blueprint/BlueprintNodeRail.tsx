@@ -10,11 +10,12 @@ interface BlueprintNodeRailProps {
   readOnly: boolean;
   showChainsButton?: boolean;
   showStepButton?: boolean;
-  stepValue?: number;
+  stepValues?: number[];
+  suggestedNextStep?: number;
   toolName?: string;
   onOpenTool?: () => void;
   onOpenChains?: () => void;
-  onStepChange?: (step: number | undefined) => void;
+  onStepChange?: (steps: number[]) => void;
   onRemove: () => void;
 }
 
@@ -26,7 +27,8 @@ export const BlueprintNodeRail = forwardRef<HTMLButtonElement, BlueprintNodeRail
       readOnly,
       showChainsButton = false,
       showStepButton = false,
-      stepValue,
+      stepValues,
+      suggestedNextStep,
       toolName,
       onOpenTool,
       onOpenChains,
@@ -77,13 +79,14 @@ export const BlueprintNodeRail = forwardRef<HTMLButtonElement, BlueprintNodeRail
           <label
             className="blueprint-node-rail-step"
             data-testid="blueprint-node-rail-step"
-            title="Order number (duplicates allowed)"
+            title="Order numbers (e.g. #1 #7 — duplicates allowed)"
           >
             <Hash size={14} aria-hidden="true" />
             <BlueprintNodeStepField
               className="blueprint-node-rail-step-input"
-              value={stepValue}
-              aria-label="Order number"
+              values={stepValues ?? []}
+              placeholder={suggestedNextStep ? `#${suggestedNextStep}` : "#"}
+              aria-label="Order numbers"
               onClick={(e) => e.stopPropagation()}
               onPointerDown={(e) => e.stopPropagation()}
               onChange={onStepChange}

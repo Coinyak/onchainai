@@ -34,6 +34,7 @@ export const BLUEPRINT_NODE_MAX_H = 420;
 export const BLUEPRINT_NODE_TOOL_TYPE_MIN_H = 88;
 export const BLUEPRINT_NODE_TOOL_CHAINS_MIN_H = 112;
 export const BLUEPRINT_NODE_MAX_STEP = 99;
+export const BLUEPRINT_NODE_MAX_STEPS_PER_NODE = 8;
 
 /** Parse a step badge from user input; empty/invalid clears the badge. */
 export function parseBlueprintStepInput(raw: string): number | undefined {
@@ -42,6 +43,41 @@ export function parseBlueprintStepInput(raw: string): number | undefined {
   const parsed = Number.parseInt(trimmed, 10);
   if (!Number.isFinite(parsed) || parsed < 1) return undefined;
   return Math.min(BLUEPRINT_NODE_MAX_STEP, parsed);
+}
+
+/**
+ * Parse a multi-number step input like "#1 #7" or "1,7" or "1 7".
+ * Returns a sorted, deduplicated array of valid step numbers (1..99).
+ * Empty/invalid input returns an empty array.
+ */
+export function parseBlueprintStepsInput(raw: string): number[] {
+  const parts = raw.split(/[\s,]+/).map((p) => p.trim()).filter(Boolean);
+  if (parts.length === 0) return [];
+  const seen = new Set<number>();
+  for (const part of parts) {
+    const cleaned = part.replace(/^#/, "");
+    const parsed = Number.parseInt(cleaned, 10);
+    if (!Number.isFinite(parsed) || parsed < 1) continue;
+    seen.add(Math.min(BLUEPRINT_NODE_MAX_STEP, parsed));
+    if (seen.size >= BLUEPRINT_NODE_MAX_STEPS_PER_NODE) break;
+  }
+  return [...seen].sort((a, b) => a - b);
+}
+
+/** Normalize a steps array: dedupe, sort, clamp, cap at max per node. */
+export function normalizeNodeSteps(steps: number[]): number[] {
+  const seen = new Set<number>();
+  const result: number[] = [];
+  for (const step of steps) {
+    if (!Number.isFinite(step) || step < 1) continue;
+    const clamped = Math.min(BLUEPRINT_NODE_MAX_STEP, Math.floor(step));
+    if (!seen.has(clamped)) {
+      seen.add(clamped);
+      result.push(clamped);
+    }
+    if (result.length >= BLUEPRINT_NODE_MAX_STEPS_PER_NODE) break;
+  }
+  return result.sort((a, b) => a - b);
 }
 
 export function clampNodeWidth(w: number): number {

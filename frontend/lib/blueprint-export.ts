@@ -3,10 +3,40 @@ import type { BlueprintEdge, BlueprintNode, PublicTool } from "@/lib/api";
 import { buildFlowSection } from "@/lib/blueprint-flow-core.mjs";
 import { SITE_ORIGIN } from "@/lib/site";
 
+export type BlueprintExportPlatform =
+  | "generic"
+  | "claude"
+  | "cursor"
+  | "vscode"
+  | "chatgpt"
+  | "codex"
+  | "gemini"
+  | "windsurf";
+
+export interface BlueprintExportPlatformMeta {
+  id: BlueprintExportPlatform;
+  label: string;
+  mcpPlatform: string;
+  logoId: string;
+}
+
+export const BLUEPRINT_EXPORT_PLATFORMS: BlueprintExportPlatformMeta[] = [
+  { id: "generic", label: "Generic", mcpPlatform: "generic", logoId: "generic" },
+  { id: "claude", label: "Claude", mcpPlatform: "claude", logoId: "claude" },
+  { id: "cursor", label: "Cursor", mcpPlatform: "cursor", logoId: "cursor" },
+  { id: "vscode", label: "VS Code", mcpPlatform: "generic", logoId: "vscode" },
+  { id: "chatgpt", label: "ChatGPT", mcpPlatform: "generic", logoId: "openai" },
+  { id: "codex", label: "Codex CLI", mcpPlatform: "generic", logoId: "openai" },
+  { id: "gemini", label: "Gemini", mcpPlatform: "generic", logoId: "gemini" },
+  { id: "windsurf", label: "Windsurf", mcpPlatform: "generic", logoId: "windsurf" },
+];
+
+export const DEFAULT_EXPORT_PLATFORM: BlueprintExportPlatform = "generic";
+
 const AGENT_EXPORT_TASK_TEMPLATE = `## Your task
 
 1. Read the attached blueprint PNG together with this prompt (export PNG separately from the editor Share dock).
-2. For each slug in ## Tools, call OnchainAI MCP \`get_install_guide\` (platform: cursor).
+2. For each slug in ## Tools, call OnchainAI MCP \`get_install_guide\` (platform: {platform}).
 3. Summarize install risk; do not install critical-risk tools.
 4. When ## Order is present, treat it as the owner's step sequence; otherwise follow ## Flow. If you edited Flow/Order, prefer the user's wording.
 5. Ask before changing my toolkit or installing anything.`;
@@ -18,7 +48,7 @@ type ExportNode = {
   chainId?: string;
   text?: string;
   chains: string[];
-  step?: number;
+  steps: number[];
 };
 
 function clientSiteOrigin(): string {
@@ -34,7 +64,7 @@ function parseExportNodes(nodes: BlueprintNode[]): ExportNode[] {
     chainId: node.chainId,
     text: node.text,
     chains: node.chains ?? [],
-    step: node.step,
+    steps: node.steps ?? (node.step != null ? [node.step] : []),
   }));
 }
 
@@ -53,9 +83,13 @@ function nodeFlowLabel(node: ExportNode): string {
 
 /** Mirrors Rust build_order_section. */
 export function buildOrderSection(exportNodes: ExportNode[]): string {
-  const stepped = exportNodes
-    .filter((node) => node.step != null)
-    .map((node) => ({ node, step: node.step as number }));
+  // Expand each node's steps into (node, step) pairs, then sort globally.
+  const stepped: { node: ExportNode; step: number }[] = [];
+  for (const node of exportNodes) {
+    for (const step of node.steps) {
+      stepped.push({ node, step });
+    }
+  }
   if (stepped.length === 0) return "";
 
   stepped.sort((a, b) => a.step - b.step);
@@ -69,13 +103,15 @@ export function buildDraftAgentMarkdown(
   nodes: BlueprintNode[],
   edges: BlueprintEdge[],
   toolsBySlug: Record<string, PublicTool | null>,
+  platform: BlueprintExportPlatform = DEFAULT_EXPORT_PLATFORM,
 ): string {
   const exportNodes = parseExportNodes(nodes);
   const origin = clientSiteOrigin();
+  const mcpPlatform = BLUEPRINT_EXPORT_PLATFORMS.find((p) => p.id === platform)?.mcpPlatform ?? "generic";
   let markdown = `# ${title}\n\n`;
   markdown +=
     "Read the attached blueprint PNG together with this prompt (export PNG from the Share dock Image tab). " +
-    "For each tool below, call OnchainAI MCP `get_install_guide` (platform: cursor) " +
+    `For each tool below, call OnchainAI MCP \`get_install_guide\` (platform: ${mcpPlatform}) ` +
     "before installing.\n\n";
 
   markdown += "## Tools\n\n";
@@ -83,11 +119,11 @@ export function buildDraftAgentMarkdown(
     .map((node, index) => ({ node, index }))
     .filter(({ node }) => node.kind === "tool");
   toolNodes.sort((a, b) => {
-    const stepA = a.node.step;
-    const stepB = b.node.step;
-    if (stepA != null && stepB != null) return stepA - stepB;
-    if (stepA != null) return -1;
-    if (stepB != null) return 1;
+    const aMin = a.node.steps.length > 0 ? Math.min(...a.node.steps) : null;
+    const bMin = b.node.steps.length > 0 ? Math.min(...b.node.steps) : null;
+    if (aMin != null && bMin != null) return aMin - bMin;
+    if (aMin != null) return -1;
+    if (bMin != null) return 1;
     return a.index - b.index;
   });
 
@@ -98,7 +134,10 @@ export function buildDraftAgentMarkdown(
       const slug = node.slug ?? "unknown";
       const displayName = toolsBySlug[slug]?.name ?? slug;
       const chains = node.chains.length > 0 ? node.chains.join(", ") : "none specified";
-      markdown += `### ${displayName}\n`;
+      const stepBadges = node.steps.length > 0
+        ? ` #${node.steps.sort((a, b) => a - b).join(" #")}`
+        : "";
+      markdown += `### ${displayName}${stepBadges}\n`;
       markdown += `- Slug: \`${slug}\`\n`;
       markdown += `- Chains: ${chains}\n`;
       const installRisk = toolsBySlug[slug]?.install_risk_level;
@@ -106,7 +145,7 @@ export function buildDraftAgentMarkdown(
         markdown += `- Install risk: ${installRisk}\n`;
       }
       markdown += `- Page: ${origin}/tools/${slug}\n`;
-      markdown += `- MCP: \`get_install_guide({ slug: "${slug}", platform: "cursor" })\`\n\n`;
+      markdown += `- MCP: \`get_install_guide({ slug: "${slug}", platform: "${mcpPlatform}" })\`\n\n`;
     }
   }
 
@@ -134,7 +173,7 @@ export function buildDraftAgentMarkdown(
   markdown += "## Flow\n\n";
   markdown += buildFlowSection(exportNodes, edges);
   markdown += "\n\n";
-  markdown += AGENT_EXPORT_TASK_TEMPLATE;
+  markdown += AGENT_EXPORT_TASK_TEMPLATE.replace("{platform}", mcpPlatform);
   return markdown;
 }
 
