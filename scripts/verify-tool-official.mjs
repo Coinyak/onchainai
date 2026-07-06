@@ -279,14 +279,16 @@ const identityTokensRelated = (a, b) => {
 const identityClusterAligned = (repoUrl, homepage, npmPackage) => {
   const gh = repoUrl ? parseGithubRepo(repoUrl) : null;
   const org = gh?.org;
+  const repo = gh?.repo;
   const scope = npmScope(npmPackage);
   const home = homepage ? hostLabel(homepage) : null;
   const domainLabel = home?.label;
   if (!org || !scope || !domainLabel) return false;
+  if (!identityTokensRelated(org, scope)) return false;
   return (
-    identityTokensRelated(org, scope) &&
-    (identityTokensRelated(org, domainLabel) ||
-      identityTokensRelated(scope, domainLabel))
+    identityTokensRelated(org, domainLabel) ||
+    identityTokensRelated(scope, domainLabel) ||
+    (repo ? identityTokensRelated(repo, domainLabel) : false)
   );
 };
 
@@ -340,12 +342,15 @@ async function collectEvidence(tool) {
 
   const scope = npmScope(tool.npm_package);
   evidence.npm_scope = scope;
+  evidence.npm_registry_exists = false;
   if (tool.npm_package) {
     try {
       const res = await fetch(
         `https://registry.npmjs.org/${encodeURIComponent(tool.npm_package)}`,
       );
       if (res.ok) {
+        evidence.npm_registry_exists = true;
+        evidence.checks.push("npm package exists on registry");
         const meta = await res.json();
         const repoField =
           typeof meta.repository === "string"
@@ -429,6 +434,20 @@ function decide(tool, evidence) {
     return {
       decision: "verified",
       reason: "identity cluster aligned (github org + npm scope + homepage)",
+    };
+  }
+  if (
+    !evidence.repo_exists &&
+    evidence.identity_cluster_aligned &&
+    evidence.npm_registry_exists &&
+    evidence.npm_scope &&
+    evidence.github_org &&
+    identityTokensRelated(evidence.github_org, evidence.npm_scope)
+  ) {
+    return {
+      decision: "verified",
+      reason:
+        "identity cluster aligned (scoped npm + homepage; github repo unavailable)",
     };
   }
   return {

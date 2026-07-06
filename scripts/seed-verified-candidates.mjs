@@ -62,11 +62,12 @@ const TOOLS = [
   }),
   tool({
     slug: "socket-v2-sdk",
+    repo_url: "https://github.com/SocketDotTech/plugin",
     homepage: "https://socket.tech",
     npm_package: "@socketdottech/socket-v2-sdk",
     crypto_relevance_reasons: [
       "bridge/cross-chain",
-      "operator-curated: SocketDotTech org + scoped npm + socket.tech identity cluster",
+      "operator-curated: SocketDotTech/plugin active repo (consumes @socket.tech/socket-v2-sdk); @socketdottech scope + socket.tech identity cluster",
     ],
   }),
   tool({
@@ -104,7 +105,7 @@ const TOOLS = [
     npm_package: "@drakensoftware/chaingate",
     crypto_relevance_reasons: [
       "wallet/dev tooling",
-      "operator-curated: drakensoftware scoped npm (homepage cluster pending)",
+      "operator-curated: drakensoftware scoped npm + repo-name/homepage cluster",
     ],
   }),
   tool({
@@ -113,7 +114,7 @@ const TOOLS = [
     npm_package: "@drakensoftware/chaingate-react",
     crypto_relevance_reasons: [
       "wallet/dev tooling",
-      "operator-curated: drakensoftware scoped npm (homepage cluster pending)",
+      "operator-curated: drakensoftware scoped npm + repo-name/homepage cluster",
     ],
   }),
 ];
