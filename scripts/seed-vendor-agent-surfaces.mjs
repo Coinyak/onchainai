@@ -1,18 +1,19 @@
 #!/usr/bin/env node
 // Operator gate fix for first-party vendor_orgs agent/MCP/skill surfaces.
-// Sets approval_status + relevance_status only — status via verify-tool-official.mjs.
+// Sets approval_status + relevance_status only — never mutates tools.status on conflict.
+// Gate fixes skip quarantined/rejected rows unless SEED_FORCE_GATE_FIX=1.
 //
 // Usage:
 //   node scripts/seed-vendor-agent-surfaces.mjs
 //   ENV_FILE=.env SEED_ENV=prod-curate PG_INSECURE_SSL=1 node scripts/seed-vendor-agent-surfaces.mjs
 
-import { resolve, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
-import { createRequire } from "node:module";
-import { tool, loadEnv } from "./seed-tool-lib.mjs";
-
-const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const require = createRequire(import.meta.url);
+import {
+  tool,
+  loadEnv,
+  connectPg,
+  runInTransaction,
+  forceGateFix,
+} from "./seed-tool-lib.mjs";
 
 const TOOLS = [
   tool({
@@ -186,7 +187,7 @@ const UPSERT_SQL = `
 INSERT INTO tools (
   name, slug, description, function, asset_class, actor, type,
   repo_url, homepage, npm_package, install_command, mcp_endpoint,
-  chains, status, approval_status, rejection_reason,
+  chains, approval_status, rejection_reason,
   crypto_relevance_score, crypto_relevance_reasons, relevance_status,
   install_risk_level, install_risk_reasons, requires_secret,
   license, pricing, stars, source, review_policy_version,
@@ -194,7 +195,7 @@ INSERT INTO tools (
 ) VALUES (
   $1, $2, $3, $4, $5, $6, $7,
   $8, $9, $10, $11, $12,
-  $13, 'community', 'approved', NULL,
+  $13, 'approved', NULL,
   $14, $15, 'accepted',
   $16, $17, $18,
   $19, 'free', $20, $21, 'operator-vendor-agent-surfaces-v1',
@@ -213,11 +214,25 @@ ON CONFLICT (slug) DO UPDATE SET
   install_command = COALESCE(EXCLUDED.install_command, tools.install_command),
   mcp_endpoint = COALESCE(EXCLUDED.mcp_endpoint, tools.mcp_endpoint),
   chains = CASE WHEN cardinality(EXCLUDED.chains) > 0 THEN EXCLUDED.chains ELSE tools.chains END,
-  approval_status = 'approved',
-  rejection_reason = NULL,
+  approval_status = CASE
+    WHEN $22::boolean THEN 'approved'
+    WHEN tools.quarantined_at IS NOT NULL THEN tools.approval_status
+    WHEN tools.approval_status = 'rejected' THEN tools.approval_status
+    ELSE 'approved'
+  END,
+  rejection_reason = CASE
+    WHEN $22::boolean THEN NULL
+    WHEN tools.quarantined_at IS NOT NULL OR tools.approval_status = 'rejected' THEN tools.rejection_reason
+    ELSE NULL
+  END,
   crypto_relevance_score = EXCLUDED.crypto_relevance_score,
   crypto_relevance_reasons = EXCLUDED.crypto_relevance_reasons,
-  relevance_status = 'accepted',
+  relevance_status = CASE
+    WHEN $22::boolean THEN 'accepted'
+    WHEN tools.quarantined_at IS NOT NULL THEN tools.relevance_status
+    WHEN tools.relevance_status = 'rejected' THEN tools.relevance_status
+    ELSE 'accepted'
+  END,
   install_risk_level = EXCLUDED.install_risk_level,
   install_risk_reasons = EXCLUDED.install_risk_reasons,
   requires_secret = EXCLUDED.requires_secret,
@@ -225,21 +240,13 @@ ON CONFLICT (slug) DO UPDATE SET
   stars = GREATEST(tools.stars, EXCLUDED.stars),
   source = EXCLUDED.source,
   review_policy_version = EXCLUDED.review_policy_version,
-  quarantined_at = NULL,
+  quarantined_at = CASE
+    WHEN $22::boolean THEN NULL
+    ELSE tools.quarantined_at
+  END,
   updated_at = now()
 RETURNING slug, approval_status, relevance_status, (xmax = 0) AS inserted;
 `;
-
-function pgSslOption(env, databaseUrl) {
-  const mode = (env.PGSSLMODE || "").toLowerCase();
-  const wantsSsl =
-    mode === "require" ||
-    /supabase\.(co|com)/i.test(databaseUrl) ||
-    databaseUrl.includes("sslmode=require");
-  if (!wantsSsl) return undefined;
-  if (env.PG_INSECURE_SSL === "1") return { rejectUnauthorized: false };
-  return true;
-}
 
 async function main() {
   const env = loadEnv();
@@ -255,6 +262,8 @@ async function main() {
           slugs: TOOLS.map((t) => t.slug),
           apply_hint:
             "ENV_FILE=.env SEED_ENV=prod-curate PG_INSECURE_SSL=1 node scripts/seed-vendor-agent-surfaces.mjs",
+          force_gate_fix_hint:
+            "Add SEED_FORCE_GATE_FIX=1 to override quarantined/rejected rows",
         },
         null,
         2,
@@ -263,56 +272,64 @@ async function main() {
     return;
   }
 
-  const DATABASE_URL = env.DATABASE_URL || "";
-  if (!DATABASE_URL) {
-    console.error("DATABASE_URL missing");
-    process.exit(2);
-  }
-
-  const pg = require(resolve(ROOT, "scripts/ops/node_modules/pg"));
-  const client = new pg.Client({
-    connectionString: DATABASE_URL,
-    ...(pgSslOption(env, DATABASE_URL) !== undefined
-      ? { ssl: pgSslOption(env, DATABASE_URL) }
-      : {}),
-  });
-  await client.connect();
-  const results = [];
-  for (const t of TOOLS) {
-    const r = await client.query(UPSERT_SQL, [
-      t.name,
-      t.slug,
-      t.description,
-      t.function,
-      t.asset_class,
-      t.actor,
-      t.type,
-      t.repo_url,
-      t.homepage,
-      t.npm_package,
-      t.install_command,
-      t.mcp_endpoint,
-      t.chains,
-      t.crypto_relevance_score,
-      t.crypto_relevance_reasons,
-      t.install_risk_level,
-      t.install_risk_reasons,
-      t.requires_secret,
-      t.license,
-      t.stars,
-      t.source,
-    ]);
-    results.push({
-      slug: r.rows[0].slug,
-      action: r.rows[0].inserted ? "inserted" : "updated",
-      approval_status: r.rows[0].approval_status,
-      relevance_status: r.rows[0].relevance_status,
+  const client = await connectPg(env);
+  const force = forceGateFix(env);
+  try {
+    const results = await runInTransaction(client, async () => {
+      const rows = [];
+      for (const t of TOOLS) {
+        const r = await client.query(UPSERT_SQL, [
+          t.name,
+          t.slug,
+          t.description,
+          t.function,
+          t.asset_class,
+          t.actor,
+          t.type,
+          t.repo_url,
+          t.homepage,
+          t.npm_package,
+          t.install_command,
+          t.mcp_endpoint,
+          t.chains,
+          t.crypto_relevance_score,
+          t.crypto_relevance_reasons,
+          t.install_risk_level,
+          t.install_risk_reasons,
+          t.requires_secret,
+          t.license,
+          t.stars,
+          t.source,
+          force,
+        ]);
+        rows.push({
+          slug: r.rows[0].slug,
+          action: r.rows[0].inserted ? "inserted" : "updated",
+          approval_status: r.rows[0].approval_status,
+          relevance_status: r.rows[0].relevance_status,
+        });
+      }
+      return rows;
     });
+    console.log(
+      JSON.stringify(
+        {
+          ok: true,
+          mode: "apply",
+          script: "seed-vendor-agent-surfaces.mjs",
+          force_gate_fix: force,
+          tools: results,
+        },
+        null,
+        2,
+      ),
+    );
+  } catch (error) {
+    console.error(error);
+    process.exit(1);
+  } finally {
+    await client.end();
   }
-  await client.end();
-  console.log(
-    JSON.stringify({ ok: true, mode: "apply", script: "seed-vendor-agent-surfaces.mjs", tools: results }, null, 2),
-  );
 }
 
 main().catch((e) => {
