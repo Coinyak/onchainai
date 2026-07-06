@@ -252,6 +252,7 @@ pub async fn upsert_tools(target: UpsertTarget<'_>, tools: &[models::Tool]) -> a
 pub(crate) fn default_source_registry_url(source_name: &str) -> &'static str {
     match source_name {
         "npm" => "https://registry.npmjs.org/",
+        "clawhub" => "https://clawhub.ai/api/v1",
         "cryptoskill" => "https://cryptoskill.org/skills.json",
         "web3-mcp-hub" => {
             "https://raw.githubusercontent.com/rudazy/web3-mcp-hub/main/registry.json"
@@ -603,11 +604,12 @@ pub async fn persist_crawl_results_gated(
 /// invoked from a background `tokio::spawn` at the call site.
 pub async fn trigger_source(pool: &sqlx::PgPool, source: &str) {
     use crate::crawler::sources::{
-        bazaar, cryptoskill, github, mcp_registry, npm, vendor_orgs, web3mcp,
+        bazaar, clawhub, cryptoskill, github, mcp_registry, npm, vendor_orgs, web3mcp,
     };
 
     match source {
         "npm" => npm::run_once(pool).await,
+        "clawhub" => clawhub::run_once(pool).await,
         "cryptoskill" => cryptoskill::run_once(pool).await,
         "web3-mcp-hub" => web3mcp::run_once(pool).await,
         "github" => github::run_once(pool).await,

@@ -1,0 +1,83 @@
+{
+  "version": 1,
+  "tools": [
+    {
+      "id": "tiny-place",
+      "slug": "tiny-place",
+      "match": {
+        "repo_url": "https://github.com/tinyhumansai/tiny.place",
+        "homepage": "https://tiny.place",
+        "search_queries": ["tiny-place", "tinyplace", "tinyhumans"]
+      },
+      "expected_sources": ["clawhub", "vendor_orgs"],
+      "notes": "Agent social economy; SKILL.md + npm CLI"
+    },
+    {
+      "id": "x402-protocol",
+      "slug": "x402",
+      "match": {
+        "repo_url": "https://github.com/x402-foundation/x402",
+        "search_queries": ["x402-foundation", "x402"]
+      },
+      "expected_sources": ["vendor_orgs", "npm"],
+      "notes": "HTTP 402 reference implementation"
+    },
+    {
+      "id": "clawrouter",
+      "slug": "clawrouter",
+      "match": {
+        "repo_url": "https://github.com/BlockRunAI/ClawRouter",
+        "search_queries": ["clawrouter", "blockrun"]
+      },
+      "expected_sources": ["vendor_orgs", "github"],
+      "notes": "OpenClaw x402 router"
+    },
+    {
+      "id": "coinbase-agentkit",
+      "slug": "agentkit",
+      "match": {
+        "repo_url": "https://github.com/coinbase/agentkit",
+        "search_queries": ["agentkit", "coinbase-agentkit"]
+      },
+      "expected_sources": ["vendor_orgs"],
+      "notes": "Official Coinbase agent wallet SDK"
+    },
+    {
+      "id": "agenti-skill",
+      "slug": "agenti",
+      "match": {
+        "search_queries": ["agenti"]
+      },
+      "expected_sources": ["cryptoskill"],
+      "notes": "Regression: already listed ClawHub skill"
+    },
+    {
+      "id": "goldrush-x402",
+      "slug": "goldrush-x402",
+      "match": {
+        "search_queries": ["goldrush-x402", "goldrush"]
+      },
+      "expected_sources": ["cryptoskill"],
+      "notes": "Regression: x402 skill already listed"
+    },
+    {
+      "id": "onchainai-self",
+      "slug": "onchainai",
+      "match": {
+        "search_queries": ["onchainai"]
+      },
+      "expected_sources": ["github"],
+      "notes": "Self-register pipeline health"
+    },
+    {
+      "id": "aifinpay-agent",
+      "slug": "aifinpay-agent",
+      "match": {
+        "npm_package": "@aifinpay/agent",
+        "search_queries": ["aifinpay"]
+      },
+      "expected_sources": ["npm"],
+      "notes": "Regression: npm agent SDK"
+    }
+  ]
+}

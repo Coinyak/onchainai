@@ -36,7 +36,7 @@
   - Allow x402 paid registration (x402 유료 등록 허용)
 
 ### `/admin/crawler` — Crawler Control (크롤러 제어)
-- **7개 발견 소스** 상태/마지막 실행 시각 확인: `cryptoskill`, `github`, `mcp-registry`, `npm`, `vendor_orgs`, `bazaar`, `web3-mcp-hub` (`CRAWLER_SOURCE_DEFS`와 동기화).
+- **8개 발견 소스** 상태/마지막 실행 시각 확인: `clawhub`, `cryptoskill`, `github`, `mcp-registry`, `npm`, `vendor_orgs`, `bazaar`, `web3-mcp-hub` (`CRAWLER_SOURCE_DEFS`와 동기화).
 - 소스별 **수동 크롤 즉시 실행(Trigger)**. (자동 스케줄과 별개) — UI가 UUID를 보내는 버그가 있으면 §5 curl 우회.
 - **GitHub Stars Sync** (`sync_stars`) — 별도 유지보수 작업; Stars Sync Now 버튼.
 
@@ -45,6 +45,7 @@
 | 소스 | 무엇을 긁나 | 주기 | 심사 |
 |------|-------------|------|------|
 | `github` | GitHub **topic** 검색 (`mcp-server`, `crypto-mcp`, …) | 1h | 사이트 설정 따름 |
+| `clawhub` | ClawHub **skill** 검색 (`x402`, `crypto`, `solana`, …) | 6h (+10m) | 사이트 설정 따름 |
 | `vendor_orgs` | `scripts/vendor-orgs.json` **curated org** repo sweep (Circle, Coinbase, …) | 일 03:45 UTC | **항상 pending** |
 | `bazaar` | Coinbase CDP **x402 API** discovery (GitHub 아님) | 6h | **항상 pending** |
 
@@ -73,8 +74,8 @@
 | 페이지 레이아웃·색상·폰트·컴포넌트 | `src/components/`, `src/pages/`, `style/`, `DESIGN.md` | 디자인 토큰, Tailwind, Leptos 컴포넌트. settings로 못 바꾸는 모든 시각 요소 |
 | 새 페이지 / 라우트 | `src/app.rs` | 새 URL 경로 추가 |
 | 새 어드민 기능 / 새 설정 항목 | `src/pages/admin/`, `src/server/functions.rs` | settings에 없는 새 토글·필드 추가 |
-| 크롤러 소스 추가·변경 | `src/crawler/sources/` | 7개 발견 소스: `cryptoskill`, `github`, `mcp-registry`, `npm`, `vendor_orgs`, `bazaar`, `web3-mcp-hub` + `sync_stars` 유지보수 |
-| 크롤러 스케줄 변경 | `src/crawler/scheduler.rs` | cron (`CRAWLER_JOB_SPECS`): npm·github 1h, cryptoskill·bazaar 6h, mcp-registry·web3-mcp-hub 12h, vendor_orgs 일 03:45 UTC, sync_stars 30m |
+| 크롤러 소스 추가·변경 | `src/crawler/sources/` | 8개 발견 소스: `clawhub`, `cryptoskill`, `github`, `mcp-registry`, `npm`, `vendor_orgs`, `bazaar`, `web3-mcp-hub` + `sync_stars` 유지보수 |
+| 크롤러 스케줄 변경 | `src/crawler/scheduler.rs` | cron (`CRAWLER_JOB_SPECS`): npm·github 1h, cryptoskill·clawhub·bazaar 6h, mcp-registry·web3-mcp-hub 12h, vendor_orgs 일 03:45 UTC, sync_stars 30m |
 | 관련성/설치안전 판정 로직 | `src/crawler/relevance.rs`, `src/install_safety.rs` | 자동 심사 기준 |
 | DB 스키마 | `migrations/` | 테이블·컬럼 변경 후 `sqlx migrate run` + `sqlx prepare` |
 | MCP 서버 도구 | `src/server/mcp.rs` | 에이전트용 MCP 4개 도구 |
@@ -216,7 +217,9 @@ curl -sS -X POST "$API_URL/api/v2/admin/crawler/trigger" \
   -d '{"source":"vendor_orgs"}'
 ```
 
-허용 `source` 값: `npm`, `cryptoskill`, `web3-mcp-hub`, `github`, `mcp-registry`, `vendor_orgs`, `bazaar`, `sync_stars` (`validate_trigger_crawler_source`).
+허용 `source` 값: `npm`, `clawhub`, `cryptoskill`, `web3-mcp-hub`, `github`, `mcp-registry`, `vendor_orgs`, `bazaar`, `sync_stars` (`validate_trigger_crawler_source`).
+
+**Discovery gap audit (read-only):** `node scripts/discovery-gap-audit.mjs` — ground-truth recall vs public catalog (`fixtures/discovery-ground-truth.json`). `--live-probe` checks ClawHub/GitHub availability for misses.
 
 ---
 

@@ -3,6 +3,7 @@
 //! Cron expressions (see MVP_DESIGN.md section 3):
 //! - npm: every hour (`0 0 * * * *`)
 //! - CryptoSkill: every 6h (`0 0 */6 * * *`)
+//! - ClawHub: every 6h at :10 (`0 10 */6 * * *`)
 //! - web3-mcp-hub: every 12h (`0 0 */12 * * *`)
 //! - GitHub topics: every hour at 30min offset (`0 30 * * * *`)
 //! - official MCP Registry: every 12h, offset 15min (`0 15 */12 * * *`)
@@ -24,6 +25,7 @@ pub(crate) struct CrawlerJobSpec {
 
 const NPM_CRON: &str = "0 0 * * * *";
 const CRYPTOSKILL_CRON: &str = "0 0 */6 * * *";
+const CLAWHUB_CRON: &str = "0 10 */6 * * *";
 const WEB3MCP_CRON: &str = "0 0 */12 * * *";
 const GITHUB_CRON: &str = "0 30 * * * *";
 const MCP_REGISTRY_CRON: &str = "0 15 */12 * * *";
@@ -39,6 +41,10 @@ pub(crate) const CRAWLER_JOB_SPECS: &[CrawlerJobSpec] = &[
     CrawlerJobSpec {
         source: "cryptoskill",
         cron: CRYPTOSKILL_CRON,
+    },
+    CrawlerJobSpec {
+        source: "clawhub",
+        cron: CLAWHUB_CRON,
     },
     CrawlerJobSpec {
         source: "web3-mcp-hub",
@@ -98,6 +104,17 @@ pub async fn start(pool: sqlx::PgPool) -> Result<()> {
         })
     })?;
     scheduler.add(cs_job).await?;
+
+    // ClawHub: every 6h at :10 UTC (offset from CryptoSkill).
+    let clawhub_pool = pool.clone();
+    let clawhub_job = Job::new_async(CLAWHUB_CRON, move |_uuid, _l| {
+        let pool = clawhub_pool.clone();
+        Box::pin(async move {
+            tracing::info!("scheduled crawl: clawhub");
+            crate::crawler::sources::clawhub::run_once(&pool).await;
+        })
+    })?;
+    scheduler.add(clawhub_job).await?;
 
     // web3-mcp-hub: every 12h.
     let w3_pool = pool.clone();

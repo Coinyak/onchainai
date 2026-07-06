@@ -9,6 +9,7 @@
     { "github": "base", "team": "Base", "crawl": true, "npm_scopes": ["@base-org"] },
     { "github": "base-org", "team": "Base", "crawl": false },
     { "github": "bob-collective", "team": "BOB", "crawl": true },
+    { "github": "BlockRunAI", "team": "BlockRun", "crawl": true },
     { "github": "chainstacklabs", "team": "Chainstack", "crawl": false },
     { "github": "circlefin", "team": "Circle", "crawl": true, "npm_scopes": ["@circle-fin"] },
     { "github": "coinbase", "team": "Coinbase", "crawl": true, "npm_scopes": ["@coinbase"] },
@@ -40,6 +41,7 @@
     { "github": "solana-foundation", "team": "Solana Foundation", "crawl": true },
     { "github": "solana-labs", "team": "Solana Labs", "crawl": true },
     { "github": "thirdweb-dev", "team": "thirdweb", "crawl": true, "npm_scopes": ["@thirdweb-dev"] },
+    { "github": "tinyhumansai", "team": "Tiny Humans (OpenHuman)", "crawl": true, "npm_scopes": ["@tinyhumansai"] },
     { "github": "ton-blockchain", "team": "TON", "crawl": true },
     { "github": "tronprotocol", "team": "TRON", "crawl": true },
     { "github": "twitterdev", "team": "X Developer Platform", "crawl": false },
@@ -47,6 +49,7 @@
     { "github": "walletconnect", "team": "WalletConnect", "crawl": false },
     { "github": "wevm", "team": "wevm (wagmi/viem)", "crawl": false },
     { "github": "wormhole-foundation", "team": "Wormhole", "crawl": true },
+    { "github": "x402-foundation", "team": "x402 Foundation", "crawl": true, "npm_scopes": ["@x402"] },
     { "github": "xdevplatform", "team": "X Developer Platform", "crawl": false }
   ]
 }
