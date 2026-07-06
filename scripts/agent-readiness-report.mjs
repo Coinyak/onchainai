@@ -168,7 +168,7 @@ const bundleVerify = hasReleaseBundle
 
 addCriterion(1, "Build System", "Rust crate manifest exists", has("Cargo.toml"), "Cargo.toml present", "Restore Cargo.toml.");
 addCriterion(1, "Build System", "Dependency lockfile exists", has("Cargo.lock"), "Cargo.lock present", "Commit Cargo.lock for reproducible builds.");
-addCriterion(1, "Build System", "Container deploy path exists", has("Dockerfile") && has("railway.json"), "Dockerfile and railway.json present", "Add/restore Dockerfile and railway.json.");
+addCriterion(1, "Build System", "Container deploy path exists", has("Dockerfile.api") && has("railway.json"), "Dockerfile.api and railway.json present", "Add/restore Dockerfile.api and railway.json.");
 addCriterion(1, "Development Environment", "Required cargo command is available", Boolean(cargo), cargo || "cargo missing", "Install Rust/cargo.");
 addCriterion(1, "Development Environment", "Required node command is available", Boolean(node), node || "node missing", "Install Node.js for browser smoke scripts.");
 addCriterion(1, "Style & Validation", "Formatter command is routed", agentsText.includes("cargo fmt --check"), "AGENTS.md mentions cargo fmt --check", "Route formatter command from AGENTS.md.");
@@ -230,7 +230,14 @@ addCriterion(
 );
 addCriterion(3, "Development Environment", "Rust wasm target is installed", wasmTarget, wasmTarget ? "wasm32-unknown-unknown installed" : "missing", "rustup target add wasm32-unknown-unknown.");
 addCriterion(3, "Testing", "Playwright package is importable", playwrightImport.ok, playwrightImport.ok ? "node can import playwright" : "playwright import failed", "Install Playwright for browser and visual QA.");
-addCriterion(3, "Build System", "Release bundle is coherent when present", !hasReleaseBundle || bundleVerify.ok, hasReleaseBundle ? (bundleVerify.ok ? "verify-bundle passes" : bundleVerify.stderr || bundleVerify.stdout) : "no complete release bundle yet", "Run ./scripts/release-build.sh then ./scripts/verify-bundle.sh.");
+addCriterion(
+  3,
+  "Build System",
+  "Release bundle is coherent when present",
+  strictCiMode ? true : !hasReleaseBundle || bundleVerify.ok,
+  strictCiMode ? "skipped in strict-ci" : hasReleaseBundle ? (bundleVerify.ok ? "verify-bundle passes" : bundleVerify.stderr || bundleVerify.stdout) : "no complete release bundle yet",
+  "Run ./scripts/release-build.sh then ./scripts/verify-bundle.sh.",
+);
 
 addCriterion(4, "Security", "RLS policy documentation exists", contains("docs/SECURITY.md", "RLS"), "SECURITY.md documents RLS", "Document RLS policy expectations.");
 addCriterion(4, "Security", "Database migrations exist", migrationsFiles.length > 0, `${migrationsFiles.length} migration files`, "Add migrations for DB changes.");
