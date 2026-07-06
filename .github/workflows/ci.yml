@@ -46,6 +46,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.90
+          targets: wasm32-unknown-unknown
+
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
@@ -57,6 +62,9 @@ jobs:
       - name: Install frontend dependencies
         working-directory: frontend
         run: npm ci
+
+      - name: Install Playwright
+        run: cd frontend && npm install --no-save playwright && npx playwright install --with-deps chromium
 
       - name: Agent harness contract
         run: ./scripts/agent-harness-check.sh

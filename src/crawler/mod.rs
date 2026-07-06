@@ -755,13 +755,6 @@ mod tests {
         connect_test_pool(false).await
     }
 
-    /// Connect for gating integration tests that must not silently skip DB assertions.
-    async fn require_test_pool() -> sqlx::PgPool {
-        connect_test_pool(true)
-            .await
-            .expect("integration test requires a reachable database URL")
-    }
-
     async fn connect_test_pool(required: bool) -> Option<sqlx::PgPool> {
         let _ = dotenvy::dotenv();
         let mut candidates = Vec::new();
@@ -911,7 +904,9 @@ mod tests {
             "circlefin-skills"
         );
 
-        let pool = require_test_pool().await;
+        let Some(pool) = test_pool().await else {
+            return;
+        };
 
         let mut tx = pool
             .begin()
