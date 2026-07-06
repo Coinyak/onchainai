@@ -19,8 +19,24 @@ import {
 const args = process.argv.slice(2);
 const JSON_OUT = args.includes("--json");
 const LIVE_PROBE = args.includes("--live-probe");
-const minRecallIdx = args.indexOf("--min-catalog-recall");
-const MIN_RECALL = minRecallIdx >= 0 ? Number(args[minRecallIdx + 1]) : null;
+
+function parseMinCatalogRecall(argv) {
+  const idx = argv.indexOf("--min-catalog-recall");
+  if (idx < 0) return null;
+  const raw = argv[idx + 1];
+  if (raw == null || raw.startsWith("--")) {
+    console.error("discovery-gap-audit: --min-catalog-recall requires a numeric value in [0, 1]");
+    process.exit(2);
+  }
+  const value = Number(raw);
+  if (!Number.isFinite(value) || value < 0 || value > 1) {
+    console.error(`discovery-gap-audit: invalid --min-catalog-recall value: ${raw}`);
+    process.exit(2);
+  }
+  return value;
+}
+
+const MIN_RECALL = parseMinCatalogRecall(args);
 
 async function liveProbeForTool(tool) {
   const probes = [];
@@ -62,7 +78,9 @@ async function main() {
 
     if (!JSON_OUT) {
       const status = catalog.found ? "IN_CATALOG" : "MISSING";
-      const via = catalog.found ? ` via query=${catalog.query} slug=${catalog.slug}` : "";
+      const via = catalog.found
+        ? ` via slug=${catalog.slug}${catalog.matched_via ? ` (${catalog.matched_via})` : ""}`
+        : "";
       console.log(`${status} ${tool.id}${via}`);
       if (LIVE_PROBE && entry.live) {
         const liveStatus = entry.live.found ? "LIVE_OK" : "LIVE_MISS";

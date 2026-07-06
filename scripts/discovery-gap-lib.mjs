@@ -4,7 +4,8 @@ import { fileURLToPath } from "node:url";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const GROUND_TRUTH_PATH = resolve(ROOT, "fixtures/discovery-ground-truth.json");
-const PUBLIC_API = "https://www.onchain-ai.xyz/api/v2/tools/search";
+const PUBLIC_SEARCH_API = "https://www.onchain-ai.xyz/api/v2/tools/search";
+const PUBLIC_DETAIL_API = "https://www.onchain-ai.xyz/api/v2/tools";
 
 export function loadGroundTruth() {
   return JSON.parse(readFileSync(GROUND_TRUTH_PATH, "utf8"));
@@ -35,10 +36,20 @@ function rowMatchesTool(row, tool) {
 }
 
 export async function searchPublicCatalog(query) {
-  const url = `${PUBLIC_API}?query=${encodeURIComponent(query)}&limit=10`;
+  const url = `${PUBLIC_SEARCH_API}?query=${encodeURIComponent(query)}&limit=10`;
   const res = await fetch(url);
   if (!res.ok) {
     throw new Error(`catalog search ${res.status} for ${query}`);
+  }
+  return res.json();
+}
+
+export async function fetchPublicToolDetail(slug) {
+  const url = `${PUBLIC_DETAIL_API}/${encodeURIComponent(slug)}`;
+  const res = await fetch(url);
+  if (res.status === 404) return null;
+  if (!res.ok) {
+    throw new Error(`tool detail ${res.status} for ${slug}`);
   }
   return res.json();
 }
@@ -50,17 +61,32 @@ export async function catalogProbePublic(tool) {
     tool.id,
   ].filter(Boolean);
 
-  const seen = new Set();
+  const seenQueries = new Set();
+  const candidateSlugs = new Set();
+
   for (const query of queries) {
-    if (seen.has(query)) continue;
-    seen.add(query);
+    if (seenQueries.has(query)) continue;
+    seenQueries.add(query);
     const rows = await searchPublicCatalog(query);
-    const hit = rows.find((row) => rowMatchesTool(row, tool));
-    if (hit) {
-      return { found: true, slug: hit.slug, source: hit.source, query };
+    for (const row of rows) {
+      if (row?.slug) candidateSlugs.add(row.slug);
     }
   }
-  return { found: false, slug: null, source: null, query: null };
+
+  for (const slug of candidateSlugs) {
+    const detail = await fetchPublicToolDetail(slug);
+    if (detail && rowMatchesTool(detail, tool)) {
+      return {
+        found: true,
+        slug: detail.slug,
+        source: detail.source,
+        query: null,
+        matched_via: "detail",
+      };
+    }
+  }
+
+  return { found: false, slug: null, source: null, query: null, matched_via: null };
 }
 
 export async function liveProbeClawhub(slug) {

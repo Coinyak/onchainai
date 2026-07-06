@@ -15,6 +15,7 @@ use crate::crawler::sources::{http_client, SourceCrawler};
 const CLAWHUB_API_BASE: &str = "https://clawhub.ai/api/v1";
 const CLAWHUB_WEB_BASE: &str = "https://clawhub.ai/skills";
 const SOURCE_NAME: &str = "clawhub";
+const MAX_FAILURE_QUERIES_IN_MSG: usize = 8;
 
 /// Crypto/agent search queries run against `GET /api/v1/search`.
 const SEARCH_QUERIES: &[&str] = &[
@@ -35,12 +36,20 @@ const SEARCH_QUERIES: &[&str] = &[
 
 const SEARCH_LIMIT: u32 = 50;
 
+/// Outcome of a ClawHub sweep; may include partial per-query failures.
+#[derive(Debug)]
+pub struct ClawHubCrawlOutcome {
+    pub raws: Vec<RawTool>,
+    pub failed_queries: Vec<String>,
+}
+
 #[derive(Debug, Clone, Deserialize)]
 struct SearchResponse {
     #[serde(default)]
     results: Vec<SearchHit>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, Deserialize)]
 struct SearchHit {
     slug: String,
@@ -55,12 +64,24 @@ fn skill_page_url(slug: &str) -> String {
     format!("{CLAWHUB_WEB_BASE}/{slug}")
 }
 
-fn infer_repo_url(owner: Option<&str>, slug: &str) -> Option<String> {
-    let owner = owner?.trim();
-    if owner.is_empty() {
-        return None;
+fn format_failed_queries(failed_queries: &[String]) -> String {
+    let shown: Vec<_> = failed_queries
+        .iter()
+        .take(MAX_FAILURE_QUERIES_IN_MSG)
+        .cloned()
+        .collect();
+    let mut msg = format!(
+        "partial query failures ({}): {}",
+        failed_queries.len(),
+        shown.join(", ")
+    );
+    if failed_queries.len() > MAX_FAILURE_QUERIES_IN_MSG {
+        msg.push_str(&format!(
+            " (+{} more)",
+            failed_queries.len() - MAX_FAILURE_QUERIES_IN_MSG
+        ));
     }
-    Some(format!("https://github.com/{owner}/{slug}"))
+    msg
 }
 
 fn hit_to_raw(hit: &SearchHit) -> RawTool {
@@ -75,10 +96,22 @@ fn hit_to_raw(hit: &SearchHit) -> RawTool {
         description,
         tool_type: "skill".to_string(),
         install_command: Some(format!("clawhub install {}", hit.slug)),
-        repo_url: infer_repo_url(hit.owner_handle.as_deref(), &hit.slug),
+        // ClawHub slugs do not reliably map to GitHub repo names (e.g. tinyplace vs tiny.place).
+        repo_url: None,
         source: SOURCE_NAME.to_string(),
         source_url: Some(skill_page_url(&hit.slug)),
         ..Default::default()
+    }
+}
+
+fn insert_raw(raw: RawTool, seen: &mut HashSet<String>, out: &mut Vec<RawTool>) {
+    let slug = raw
+        .install_command
+        .as_deref()
+        .and_then(|cmd| cmd.strip_prefix("clawhub install "))
+        .unwrap_or(&raw.name);
+    if seen.insert(slug.to_string()) {
+        out.push(raw);
     }
 }
 
@@ -108,46 +141,88 @@ async fn search_query(
 }
 
 /// Crawl ClawHub using the production API base URL.
-pub async fn crawl_with_base(base_url: &str) -> Result<Vec<RawTool>> {
+pub async fn crawl_with_base(base_url: &str) -> Result<ClawHubCrawlOutcome> {
     let client = http_client().context("building ClawHub HTTP client")?;
     let mut seen = HashSet::new();
     let mut out = Vec::new();
+    let mut failed_queries = Vec::new();
+    let mut success_count = 0usize;
 
     for query in SEARCH_QUERIES {
         match search_query(&client, base_url, query).await {
             Ok(hits) => {
+                success_count += 1;
                 for raw in hits {
-                    let slug = raw
-                        .install_command
-                        .as_deref()
-                        .and_then(|cmd| cmd.strip_prefix("clawhub install "))
-                        .unwrap_or(&raw.name);
-                    if seen.insert(slug.to_string()) {
-                        out.push(raw);
-                    }
+                    insert_raw(raw, &mut seen, &mut out);
                 }
             }
             Err(e) => {
                 tracing::warn!(source = SOURCE_NAME, query, error = %e, "search query failed");
+                failed_queries.push((*query).to_string());
             }
         }
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
     }
 
-    Ok(out)
+    if success_count == 0 {
+        anyhow::bail!(
+            "all ClawHub search queries failed ({} queries)",
+            SEARCH_QUERIES.len()
+        );
+    }
+
+    Ok(ClawHubCrawlOutcome {
+        raws: out,
+        failed_queries,
+    })
 }
 
 /// Fetch crypto-relevant skills from the production ClawHub API.
 pub async fn crawl() -> Result<Vec<RawTool>> {
-    crawl_with_base(CLAWHUB_API_BASE).await
+    let outcome = crawl_with_base(CLAWHUB_API_BASE).await?;
+    if !outcome.failed_queries.is_empty() {
+        tracing::warn!(
+            source = SOURCE_NAME,
+            failed = outcome.failed_queries.len(),
+            error = %format_failed_queries(&outcome.failed_queries),
+            "clawhub partial query failures (returning successful raws)"
+        );
+    }
+    Ok(outcome.raws)
 }
 
 /// Run a full crawl and persist results.
 pub async fn run_once(pool: &sqlx::PgPool) {
-    match crawl().await {
-        Ok(raws) => {
-            tracing::info!(source = SOURCE_NAME, count = raws.len(), "crawl completed");
-            crate::crawler::persist_crawl_results(pool, SOURCE_NAME, CLAWHUB_API_BASE, raws).await;
+    match crawl_with_base(CLAWHUB_API_BASE).await {
+        Ok(outcome) => {
+            let count = outcome.raws.len() as i32;
+            tracing::info!(
+                source = SOURCE_NAME,
+                count = outcome.raws.len(),
+                failed_queries = outcome.failed_queries.len(),
+                "crawl completed"
+            );
+            if !outcome.raws.is_empty() {
+                crate::crawler::persist_crawl_results(
+                    pool,
+                    SOURCE_NAME,
+                    CLAWHUB_API_BASE,
+                    outcome.raws,
+                )
+                .await;
+            }
+            if !outcome.failed_queries.is_empty() {
+                let msg = format_failed_queries(&outcome.failed_queries);
+                crate::crawler::update_source_status(
+                    crate::crawler::UpsertTarget::Pool(pool),
+                    SOURCE_NAME,
+                    CLAWHUB_API_BASE,
+                    "error",
+                    count,
+                    Some(&msg),
+                )
+                .await;
+            }
         }
         Err(e) => {
             tracing::error!(source = SOURCE_NAME, error = %e, "crawl failed");
@@ -220,11 +295,12 @@ mod tests {
             .mount(&server)
             .await;
 
-        let raws = crawl_with_base(&server.uri())
+        let outcome = crawl_with_base(&server.uri())
             .await
             .expect("crawl should succeed");
 
-        let tiny = raws
+        let tiny = outcome
+            .raws
             .iter()
             .find(|r| r.name == "tiny.place")
             .expect("tiny.place hit");
@@ -234,14 +310,34 @@ mod tests {
             tiny.install_command.as_deref(),
             Some("clawhub install tinyplace")
         );
-        assert_eq!(
-            tiny.repo_url.as_deref(),
-            Some("https://github.com/tinyhumansai/tinyplace")
-        );
+        assert!(tiny.repo_url.is_none());
         assert!(tiny
             .source_url
             .as_deref()
             .is_some_and(|u| u.contains("clawhub")));
+    }
+
+    #[tokio::test]
+    async fn crawl_returns_err_when_all_queries_fail() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/search"))
+            .respond_with(ResponseTemplate::new(500))
+            .mount(&server)
+            .await;
+
+        let err = crawl_with_base(&server.uri())
+            .await
+            .expect_err("all failed queries should error");
+        assert!(err.to_string().contains("all ClawHub search queries failed"));
+    }
+
+    #[test]
+    fn format_failed_queries_truncates_long_lists() {
+        let failed: Vec<String> = (0..12).map(|i| format!("q{i}")).collect();
+        let msg = format_failed_queries(&failed);
+        assert!(msg.contains("partial query failures (12)"));
+        assert!(msg.contains("(+4 more)"));
     }
 
     #[test]
