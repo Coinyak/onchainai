@@ -32,7 +32,7 @@ function X402ToolRow({ tool }: { tool: PublicToolSummary }) {
           {tool.name}
         </Link>
         {tool.x402_price && (
-          <span className="text-body-sm text-secondary whitespace-nowrap">
+          <span className="text-body-sm text-secondary min-w-0">
             {tool.x402_price}
           </span>
         )}

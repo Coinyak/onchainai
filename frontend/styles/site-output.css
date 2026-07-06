@@ -2591,7 +2591,7 @@ body.sidebar-scroll-locked { overflow: hidden; }
 }
 @media (max-width: 1023px) {
   .toolbar-desktop { display: none !important; }
-  .toolbar-mobile { display: block; }
+  .toolbar-mobile { display: block; width: 100%; min-width: 0; max-width: 100%; }
   .toolbar-mobile-count {
     display: block;
     margin-bottom: 6px;
@@ -2603,6 +2603,8 @@ body.sidebar-scroll-locked { overflow: hidden; }
     align-items: center;
     gap: 8px;
     flex-wrap: wrap;
+    width: 100%;
+    min-width: 0;
     padding: 8px 0;
     overflow-x: visible;
   }
