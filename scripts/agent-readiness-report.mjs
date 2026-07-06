@@ -187,7 +187,7 @@ addCriterion(2, "Documentation", "Security doc exists", has("docs/SECURITY.md"),
 addCriterion(2, "Documentation", "Architecture doc exists", has("docs/MVP_DESIGN.md"), "MVP_DESIGN.md present", "Restore architecture doc.");
 addCriterion(2, "Documentation", "Docs index routes agent readiness", contains("docs/INDEX.md", "AGENT_READINESS_REPORT"), "docs/INDEX.md links readiness report", "Add readiness report to docs index.");
 addCriterion(2, "Development Environment", ".env template exists", has(".env.example"), ".env.example present", "Add .env.example with non-secret placeholders.");
-addCriterion(2, "Security", "x402 guardrails are documented", has("docs/X402_REFERRAL_SPEC.md") && agentsText.includes("x402 is attribution"), "x402 docs and AGENTS hard rule present", "Restore x402 referral/trust guardrails.");
+addCriterion(2, "Security", "x402 guardrails are documented", has("docs/X402_REFERRAL_SPEC.md") && agentsText.includes("attribution only"), "x402 docs and AGENTS hard rule present", "Restore x402 referral/trust guardrails.");
 
 addCriterion(3, "Agent Harness", "Agent harness check is executable", executable("scripts/agent-harness-check.sh"), "scripts/agent-harness-check.sh executable", "chmod +x scripts/agent-harness-check.sh.");
 addCriterion(
