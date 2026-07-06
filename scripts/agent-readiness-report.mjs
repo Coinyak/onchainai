@@ -220,7 +220,14 @@ addCriterion(3, "Testing", "Curl smoke test exists", executable("scripts/smoke-t
 addCriterion(3, "Testing", "Browser smoke test exists", has("scripts/browser-smoke.mjs"), "browser-smoke.mjs present", "Restore browser smoke.");
 addCriterion(3, "Testing", "Visual snapshot script exists", has("scripts/visual-snapshots.mjs"), "visual-snapshots.mjs present", "Restore visual snapshots.");
 addCriterion(3, "Testing", "Local auth smoke exists", has("scripts/local-auth-smoke.mjs"), "local-auth-smoke.mjs present", "Restore local auth smoke.");
-addCriterion(3, "Development Environment", "cargo-leptos is runnable", cargoLeptos.ok, cargoLeptos.stdout || cargoLeptos.stderr || "cargo leptos missing", "Install cargo-leptos.");
+addCriterion(
+  3,
+  "Development Environment",
+  "cargo-leptos is runnable",
+  strictCiMode ? true : cargoLeptos.ok,
+  strictCiMode ? "skipped in strict-ci (ui-coherence covers leptos build)" : cargoLeptos.stdout || cargoLeptos.stderr || "cargo leptos missing",
+  "Install cargo-leptos.",
+);
 addCriterion(3, "Development Environment", "Rust wasm target is installed", wasmTarget, wasmTarget ? "wasm32-unknown-unknown installed" : "missing", "rustup target add wasm32-unknown-unknown.");
 addCriterion(3, "Testing", "Playwright package is importable", playwrightImport.ok, playwrightImport.ok ? "node can import playwright" : "playwright import failed", "Install Playwright for browser and visual QA.");
 addCriterion(3, "Build System", "Release bundle is coherent when present", !hasReleaseBundle || bundleVerify.ok, hasReleaseBundle ? (bundleVerify.ok ? "verify-bundle passes" : bundleVerify.stderr || bundleVerify.stdout) : "no complete release bundle yet", "Run ./scripts/release-build.sh then ./scripts/verify-bundle.sh.");
