@@ -201,11 +201,12 @@ pub fn http_mcp_universal_install_command(endpoint: &str) -> Option<String> {
         matches!(
             c,
             ';' | '&' | '|' | '`' | '$' | '(' | ')' | '<' | '>' | '\n' | '\r' | '\'' | '\\'
+                | '"' | ' ' | '\t'
         )
     }) {
         return None;
     }
-    Some(format!("npx add-mcp {endpoint}"))
+    Some(format!("npx add-mcp {}", parsed.as_str()))
 }
 
 fn generic_mcp_remote_command(endpoint: &str) -> Option<String> {
@@ -832,6 +833,20 @@ mod tests {
         assert_eq!(
             http_mcp_universal_install_command("https://api.example.com/mcp"),
             Some("npx add-mcp https://api.example.com/mcp".into())
+        );
+    }
+
+    #[test]
+    fn http_mcp_universal_install_command_rejects_shell_metacharacters() {
+        assert_eq!(http_mcp_universal_install_command("https://evil.com/mcp;rm"), None);
+        assert_eq!(
+            http_mcp_universal_install_command("https://evil.com/mcp\"injection"),
+            None
+        );
+        assert_eq!(http_mcp_universal_install_command("https://evil.com/ mcp"), None);
+        assert_eq!(
+            http_mcp_universal_install_command("https://evil.com/\tmcp"),
+            None
         );
     }
 }

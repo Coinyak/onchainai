@@ -2,9 +2,11 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { displayInstallCommand } from "./display-install-core.mjs";
 import {
+  isValidHttpMcpUrl,
   ONCHAINAI_CLAUDE_CODE_CMD,
   ONCHAINAI_MCP_HTTP_URL,
   ONCHAINAI_MCP_UNIVERSAL_CMD,
+  universalMcpInstallCommand,
 } from "./mcp-deeplinks-core.mjs";
 
 test("client-tab Claude command stays client-specific", () => {
@@ -21,4 +23,16 @@ test("card command universalizes while client-tab constant remains", () => {
   });
   assert.equal(card, ONCHAINAI_MCP_UNIVERSAL_CMD);
   assert.notEqual(card, ONCHAINAI_CLAUDE_CODE_CMD);
+});
+
+test("universalMcpInstallCommand normalizes URL via URL parser", () => {
+  assert.equal(
+    universalMcpInstallCommand("https://www.onchain-ai.xyz/mcp/"),
+    "npx add-mcp https://www.onchain-ai.xyz/mcp/",
+  );
+});
+
+test("isValidHttpMcpUrl accepts OnchainAI endpoint", () => {
+  assert.equal(isValidHttpMcpUrl(ONCHAINAI_MCP_HTTP_URL), true);
+  assert.equal(universalMcpInstallCommand(ONCHAINAI_MCP_HTTP_URL), ONCHAINAI_MCP_UNIVERSAL_CMD);
 });

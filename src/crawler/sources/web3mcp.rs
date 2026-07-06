@@ -84,7 +84,10 @@ fn derive_install_command(
 ) -> Option<String> {
     if let Some(cfg) = config {
         if let Some(url) = &cfg.url {
-            return crate::public_install_guide::http_mcp_universal_install_command(url);
+            if let Some(cmd) = crate::public_install_guide::http_mcp_universal_install_command(url)
+            {
+                return Some(cmd);
+            }
         }
         if let Some(command) = &cfg.command {
             let mut parts = vec![command.clone()];
@@ -375,6 +378,17 @@ mod tests {
         assert_eq!(
             derive_install_command(&Some(cfg_remote), "remote"),
             Some("npx add-mcp https://mcp.example/sse".into())
+        );
+
+        let cfg_bad_url_with_command = ServerConfig {
+            command: Some("npx".into()),
+            args: vec!["@org/server".into()],
+            env: HashMap::new(),
+            url: Some("https://evil.com/mcp;rm".into()),
+        };
+        assert_eq!(
+            derive_install_command(&Some(cfg_bad_url_with_command), "remote"),
+            Some("npx @org/server".into())
         );
     }
 }

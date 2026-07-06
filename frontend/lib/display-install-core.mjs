@@ -1,10 +1,12 @@
 /** @typedef {{ safe_copy_command?: string | null; install_command?: string | null; type?: string; mcp_endpoint?: string | null }} InstallSurfaceTool */
 
-import { universalMcpInstallCommand } from "./mcp-deeplinks-core.mjs";
+import {
+  isValidHttpMcpUrl,
+  universalMcpInstallCommand,
+} from "./mcp-deeplinks-core.mjs";
 
-export { universalMcpInstallCommand };
+export { universalMcpInstallCommand, isValidHttpMcpUrl };
 
-const SHELL_METACHAR_RE = /[;&|`$()<>\n\r'\\]/;
 const HTTP_URL_RE = /https?:\/\/[^\s'"]+/g;
 const CLIENT_MCP_CMD_RE =
   /^(?:claude\s+mcp\s+add|codex\s+mcp\s+add|cursor\s+mcp\s+add|npx\s+mcp-remote)\b/i;
@@ -18,20 +20,6 @@ export function isClientSpecificMcpCommand(cmd) {
 }
 
 /**
- * @param {string} url
- */
-export function isValidHttpMcpUrl(url) {
-  const trimmed = url.trim();
-  if (!trimmed || SHELL_METACHAR_RE.test(trimmed)) return false;
-  try {
-    const parsed = new URL(trimmed);
-    return ["http:", "https:"].includes(parsed.protocol) && Boolean(parsed.host);
-  } catch {
-    return false;
-  }
-}
-
-/**
  * @param {string} cmd
  */
 export function httpUrlFromMcpInstallCommand(cmd) {
@@ -41,12 +29,12 @@ export function httpUrlFromMcpInstallCommand(cmd) {
   const matches = trimmed.match(HTTP_URL_RE);
   if (matches?.length) {
     const candidate = matches[matches.length - 1];
-    if (isValidHttpMcpUrl(candidate)) return candidate;
+    if (isValidHttpMcpUrl(candidate)) return new URL(candidate).href;
   }
 
   for (const token of trimmed.split(/\s+/).reverse()) {
     if (token.startsWith("http://") || token.startsWith("https://")) {
-      if (isValidHttpMcpUrl(token)) return token;
+      if (isValidHttpMcpUrl(token)) return new URL(token).href;
       continue;
     }
     if (
@@ -56,7 +44,7 @@ export function httpUrlFromMcpInstallCommand(cmd) {
       token !== "add-mcp"
     ) {
       const hostUrl = `https://${token}`;
-      if (isValidHttpMcpUrl(hostUrl)) return hostUrl;
+      if (isValidHttpMcpUrl(hostUrl)) return new URL(hostUrl).href;
     }
   }
 
@@ -76,9 +64,17 @@ function isMcpCatalogTool(tool) {
  */
 function resolveHttpMcpEndpoint(tool, raw) {
   if (tool.mcp_endpoint && isValidHttpMcpUrl(tool.mcp_endpoint)) {
-    return tool.mcp_endpoint.trim();
+    return new URL(tool.mcp_endpoint.trim()).href;
   }
   return httpUrlFromMcpInstallCommand(raw);
+}
+
+/**
+ * @param {string | null | undefined} endpointUrl
+ */
+function toUniversalInstallCommand(endpointUrl) {
+  if (!endpointUrl) return null;
+  return universalMcpInstallCommand(endpointUrl);
 }
 
 /**
@@ -96,16 +92,15 @@ export function displayInstallCommand(tool) {
   const raw = safe || install;
 
   if (raw && isMcpCatalogTool(tool) && isClientSpecificMcpCommand(raw)) {
-    const endpointUrl = resolveHttpMcpEndpoint(tool, raw);
-    if (endpointUrl) {
-      return universalMcpInstallCommand(endpointUrl);
-    }
+    const universal = toUniversalInstallCommand(resolveHttpMcpEndpoint(tool, raw));
+    if (universal) return universal;
   }
 
   if (raw) return raw;
 
-  if (tool.type !== "skill" && tool.mcp_endpoint && isValidHttpMcpUrl(tool.mcp_endpoint)) {
-    return universalMcpInstallCommand(tool.mcp_endpoint);
+  if (tool.type !== "skill" && tool.mcp_endpoint) {
+    const universal = toUniversalInstallCommand(resolveHttpMcpEndpoint(tool, ""));
+    if (universal) return universal;
   }
 
   return "";

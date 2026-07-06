@@ -4,6 +4,7 @@ import {
   displayInstallCommand,
   httpUrlFromMcpInstallCommand,
   isClientSpecificMcpCommand,
+  isValidHttpMcpUrl,
   universalMcpInstallCommand,
 } from "./display-install-core.mjs";
 
@@ -105,4 +106,34 @@ test("isClientSpecificMcpCommand detects legacy and client CLIs", () => {
   assert.equal(isClientSpecificMcpCommand("npx mcp-remote https://x/mcp"), true);
   assert.equal(isClientSpecificMcpCommand("npx add-mcp https://x/mcp"), false);
   assert.equal(isClientSpecificMcpCommand("npx @scope/pkg"), false);
+});
+
+test("isValidHttpMcpUrl rejects shell metacharacters and embedded whitespace", () => {
+  assert.equal(isValidHttpMcpUrl("https://api.example.com/mcp"), true);
+  assert.equal(isValidHttpMcpUrl("https://api.example.com/mcp;rm"), false);
+  assert.equal(isValidHttpMcpUrl('https://api.example.com/mcp"'), false);
+  assert.equal(isValidHttpMcpUrl("https://api.example.com/ mcp"), false);
+  assert.equal(isValidHttpMcpUrl("https://api.example.com/\tmcp"), false);
+});
+
+test("universalMcpInstallCommand returns null for invalid URLs", () => {
+  assert.equal(universalMcpInstallCommand("https://evil.com/mcp;rm"), null);
+  assert.equal(universalMcpInstallCommand("not-a-url"), null);
+});
+
+test("client-specific command with invalid URL falls back to raw install", () => {
+  const legacy = "claude mcp add foo https://evil.com/mcp;rm";
+  const cmd = displayInstallCommand({
+    type: "mcp",
+    install_command: legacy,
+  });
+  assert.equal(cmd, legacy);
+});
+
+test("invalid mcp_endpoint does not emit universal command", () => {
+  const cmd = displayInstallCommand({
+    type: "mcp",
+    mcp_endpoint: "https://evil.com/mcp;rm",
+  });
+  assert.equal(cmd, "");
 });

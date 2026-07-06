@@ -13,14 +13,11 @@ WHERE slug = 'onchainai';
 
 UPDATE tools
 SET install_command = 'npx add-mcp ' || trim(mcp_endpoint),
-    safe_copy_command = CASE
-        WHEN install_risk_level IN ('low', 'medium')
-        THEN 'npx add-mcp ' || trim(mcp_endpoint)
-        ELSE safe_copy_command
-    END,
+    safe_copy_command = 'npx add-mcp ' || trim(mcp_endpoint),
     updated_at = now()
 WHERE mcp_endpoint ~ '^https?://'
   AND trim(mcp_endpoint) <> ''
+  AND install_risk_level IN ('low', 'medium')
   AND (
     install_command ILIKE 'npx mcp-remote%'
     OR install_command ILIKE 'claude mcp add%'
