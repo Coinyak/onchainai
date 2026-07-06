@@ -97,18 +97,12 @@ const SLUG_NPM_OVERRIDES: &[(&str, &str)] = &[("tinyplace", "@tinyhumansai/tinyp
 const OWNER_REPO_DEFAULTS: &[(&str, &str, &str)] =
     &[("x402-foundation", "x402", "https://x402.org")];
 
-fn github_repo_name(slug: &str, display_name: &str) -> String {
+fn github_repo_name(slug: &str, _display_name: &str) -> String {
     SLUG_REPO_OVERRIDES
         .iter()
         .find(|(s, _)| *s == slug)
         .map(|(_, repo)| repo.to_string())
-        .unwrap_or_else(|| {
-            if display_name.contains('.') && !display_name.contains(' ') {
-                display_name.to_string()
-            } else {
-                slug.to_string()
-            }
-        })
+        .unwrap_or_else(|| slug.to_string())
 }
 
 fn infer_repo_url(hit: &SearchHit) -> Option<String> {

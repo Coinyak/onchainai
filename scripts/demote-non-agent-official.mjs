@@ -33,12 +33,29 @@ const args = process.argv.slice(2);
 const APPLY = args.includes("--apply");
 const BULK_APPLY = args.includes("--i-understand-bulk");
 const EXPORT = args.includes("--export");
-const limitIdx = args.indexOf("--limit");
-const LIMIT = limitIdx >= 0 ? Number(args[limitIdx + 1]) || DEFAULT_LIMIT : DEFAULT_LIMIT;
-const slugIdx = args.indexOf("--slug");
-const SLUG = slugIdx >= 0 ? args[slugIdx + 1] : null;
-const reasonIdx = args.indexOf("--reason");
-const REASON = reasonIdx >= 0 ? args[reasonIdx + 1] : "";
+
+function optionValue(flag) {
+  const idx = args.indexOf(flag);
+  if (idx < 0) return null;
+  const value = args[idx + 1];
+  if (!value || value.startsWith("--")) {
+    console.error(`missing value for ${flag}`);
+    process.exit(2);
+  }
+  return value;
+}
+
+const limitValue = optionValue("--limit");
+const LIMIT =
+  limitValue === null
+    ? DEFAULT_LIMIT
+    : Number.parseInt(limitValue, 10);
+if (!Number.isInteger(LIMIT) || LIMIT <= 0) {
+  console.error("--limit must be a positive integer");
+  process.exit(2);
+}
+const SLUG = optionValue("--slug");
+const REASON = optionValue("--reason") ?? "";
 
 function pgSslOption(env, databaseUrl) {
   const mode = (env.PGSSLMODE || "").toLowerCase();
@@ -159,13 +176,14 @@ async function main() {
   for (const tool of rows) {
     stats.scanned++;
     const classification = classify(tool, { probeAgentSurface: Boolean(SLUG) });
+    const willDemote = classification.decision === "demote_official";
     const report = {
       slug: tool.slug,
       name: tool.name,
       current_status: tool.status,
       decision: classification.decision,
-      before_status: "official",
-      after_status: "community",
+      before_status: tool.status,
+      after_status: willDemote ? "community" : tool.status,
       reason: classification.reason,
       official_team: tool.official_team,
       stars: tool.stars,

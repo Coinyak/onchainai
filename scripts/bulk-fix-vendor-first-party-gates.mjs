@@ -11,19 +11,11 @@ import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
 import { loadEnv } from "./seed-tool-lib.mjs";
 import { loadFirstPartyOrgs } from "./vendor-orgs-lib.mjs";
+import { AGENT_SURFACE_SQL } from "./agent-surface-lib.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
 const FIRST_PARTY_ORGS = Object.keys(loadFirstPartyOrgs()).map((o) => o.toLowerCase());
-
-const AGENT_SURFACE_SQL = `
-  (
-    lower(slug) ~ '(agent|mcp|skill|x402|wallet|claw|router|openclaw|pay|sdk)'
-    OR lower(name) ~ '(agent|mcp|skill|x402|wallet|claw|router|openclaw)'
-    OR type IN ('mcp', 'skill', 'x402', 'cli', 'sdk')
-    OR function IN ('ai-agent', 'payments', 'wallet', 'identity', 'social', 'data', 'oracle', 'dev-tool')
-  )
-`;
 
 const SELECT_SQL = `
 SELECT slug, name, status, approval_status, relevance_status, repo_url, stars

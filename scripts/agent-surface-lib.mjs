@@ -49,6 +49,9 @@ export const DEMOTE_ALLOWLIST = [
   "walletconnect-skills",
   "pay-skills",
   "tinyagents",
+
+  // MCP SDK — agent surface, not infra library
+  "modelcontextprotocol-sdk",
 ];
 
 /** SQL boolean — true when row matches agent surface (Postgres). */

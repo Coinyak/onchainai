@@ -39,9 +39,10 @@
     "ton-triage-skill",
     "walletconnect-skills",
     "pay-skills",
-    "tinyagents"
+    "tinyagents",
+    "modelcontextprotocol-sdk"
   ],
-  "slug_count": 367,
+  "slug_count": 366,
   "slugs": [
     "aave-sdk",
     "aave-v3-aptos-ts-sdk",
@@ -259,7 +260,6 @@
     "metamask-extension",
     "metamask-mobile",
     "mithril",
-    "modelcontextprotocol-sdk",
     "modular-contracts",
     "mollusk",
     "monorepo-external",
