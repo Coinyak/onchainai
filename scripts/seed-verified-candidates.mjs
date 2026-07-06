@@ -53,18 +53,20 @@ const TOOLS = [
   }),
   tool({
     slug: "gelato-gasless-sdk",
-    homepage: "https://www.gelato.cloud",
+    homepage: "https://gelato.cloud",
+    npm_package: "@gelatodigital/gasless",
     crypto_relevance_reasons: [
       "automation/relay",
-      "operator-curated: org site alignment for Gelato gasless SDK",
+      "operator-curated: gelatodigital org + scoped npm + gelato.cloud identity cluster",
     ],
   }),
   tool({
     slug: "socket-v2-sdk",
     homepage: "https://socket.tech",
+    npm_package: "@socketdottech/socket-v2-sdk",
     crypto_relevance_reasons: [
       "bridge/cross-chain",
-      "operator-curated: org site alignment for Socket V2 SDK",
+      "operator-curated: SocketDotTech org + scoped npm + socket.tech identity cluster",
     ],
   }),
   tool({
@@ -81,33 +83,37 @@ const TOOLS = [
   tool({
     slug: "envio-hyperindex",
     homepage: "https://envio.dev",
+    npm_package: "@envio-dev/hypersync-client",
     crypto_relevance_reasons: [
       "indexer/data",
-      "operator-curated: domain alignment for Envio HyperIndex",
+      "operator-curated: enviodev org + @envio-dev scope + envio.dev identity cluster",
     ],
   }),
   tool({
     slug: "moralis-web3-sdk",
     homepage: "https://moralis.io",
+    npm_package: "@moralisweb3/common-evm-utils",
     crypto_relevance_reasons: [
       "Web3 API",
-      "operator-curated: domain alignment for Moralis SDK",
+      "operator-curated: MoralisWeb3 org + @moralisweb3 scope + moralis.io identity cluster",
     ],
   }),
   tool({
     slug: "chaingate",
     homepage: "https://chaingate.dev",
+    npm_package: "@drakensoftware/chaingate",
     crypto_relevance_reasons: [
       "wallet/dev tooling",
-      "operator-curated: product homepage for chaingate npm package",
+      "operator-curated: drakensoftware scoped npm (homepage cluster pending)",
     ],
   }),
   tool({
     slug: "chaingate-react",
     homepage: "https://chaingate.dev",
+    npm_package: "@drakensoftware/chaingate-react",
     crypto_relevance_reasons: [
       "wallet/dev tooling",
-      "operator-curated: product homepage for chaingate-react npm package",
+      "operator-curated: drakensoftware scoped npm (homepage cluster pending)",
     ],
   }),
 ];
