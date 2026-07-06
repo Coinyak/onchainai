@@ -40,12 +40,7 @@ export function typeBadgeLabel(toolType: string): string {
   return toolType.toUpperCase();
 }
 
-export function displayInstallCommand(tool: {
-  safe_copy_command?: string | null;
-  install_command?: string | null;
-}): string {
-  return tool.safe_copy_command?.trim() || tool.install_command?.trim() || "";
-}
+export { displayInstallCommand } from "./display-install-core.mjs";
 
 export function formatGithubStars(count: number): string {
   return `GitHub · ${count.toLocaleString("en-US")} stars`;

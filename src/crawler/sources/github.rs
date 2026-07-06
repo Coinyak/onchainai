@@ -481,8 +481,7 @@ pub async fn self_register(pool: &sqlx::PgPool) {
     let repo_url = "https://github.com/Coinyak/onchainai";
     let homepage = "https://www.onchain-ai.xyz";
     let mcp_endpoint = "https://www.onchain-ai.xyz/mcp";
-    let install_command =
-        "claude mcp add --transport http onchainai https://www.onchain-ai.xyz/mcp";
+    let install_command = "npx add-mcp https://www.onchain-ai.xyz/mcp";
     let result = sqlx::query(
         r#"
         INSERT INTO tools (

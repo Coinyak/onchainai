@@ -4,7 +4,11 @@ export const ONCHAINAI_MCP_SERVER_NAME = "onchainai";
 
 export const ONCHAINAI_MCP_HTTP_URL = `${SITE_ORIGIN}/mcp`;
 
-export const ONCHAINAI_MCP_UNIVERSAL_CMD = `npx add-mcp ${ONCHAINAI_MCP_HTTP_URL}`;
+export function universalMcpInstallCommand(httpUrl: string): string {
+  return `npx add-mcp ${httpUrl.trim()}`;
+}
+
+export const ONCHAINAI_MCP_UNIVERSAL_CMD = universalMcpInstallCommand(ONCHAINAI_MCP_HTTP_URL);
 
 /** Production /mcp responds 405 Allow: POST — streamable HTTP transport (2026-07-03 curl). */
 export const ONCHAINAI_CLAUDE_CODE_CMD = `claude mcp add --transport http ${ONCHAINAI_MCP_SERVER_NAME} ${ONCHAINAI_MCP_HTTP_URL}`;

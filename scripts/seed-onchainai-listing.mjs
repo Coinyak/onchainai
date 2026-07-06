@@ -17,8 +17,7 @@ const require = createRequire(import.meta.url);
 const MCP_ENDPOINT = "https://www.onchain-ai.xyz/mcp";
 const HOMEPAGE = "https://www.onchain-ai.xyz";
 const REPO = "https://github.com/Coinyak/onchainai";
-const INSTALL =
-  "claude mcp add --transport http onchainai https://www.onchain-ai.xyz/mcp";
+const INSTALL = "npx add-mcp https://www.onchain-ai.xyz/mcp";
 
 const UPSERT_SQL = `
 INSERT INTO tools (

@@ -14,10 +14,16 @@ import {
 } from "@/lib/blueprint-export";
 import { CodingClientLogo } from "@/components/tools/CodingClientLogo";
 import {
+  shouldAutoRegenSharePrompt,
+  shouldShowStaleShareBanner,
+} from "@/lib/blueprint-share-regen-core.mjs";
+import {
   blueprintCanvasFingerprint,
   loadSharePromptDraft,
   saveSharePromptDraft,
 } from "@/lib/blueprint-share-storage";
+
+const CANVAS_AUTO_REGEN_MS = 500;
 
 type ShareTab = "prompt" | "image";
 type CaptureTarget = "viewport" | "full" | null;
@@ -66,6 +72,7 @@ export function BlueprintShareDock({
   const isDirty = promptText !== baselineMarkdown;
   const isCanvasStale =
     open && hasNodes && baselineFingerprint !== "" && canvasFingerprint !== baselineFingerprint;
+  const showStaleBanner = shouldShowStaleShareBanner(isCanvasStale, isDirty);
 
   const applyFreshPrompt = useCallback(
     (platformOverride?: BlueprintExportPlatform) => {
@@ -128,12 +135,52 @@ export function BlueprintShareDock({
   }, []);
 
   const wasOpenRef = useRef(false);
+  const autoRegenTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   useEffect(() => {
     if (open && !wasOpenRef.current) {
       ensurePromptOnOpen();
     }
     wasOpenRef.current = open;
   }, [open, ensurePromptOnOpen]);
+
+  useEffect(() => {
+    if (
+      !shouldAutoRegenSharePrompt({
+        open,
+        hasNodes,
+        loading,
+        baselineFingerprint,
+        canvasFingerprint,
+        isDirty,
+      })
+    ) {
+      return;
+    }
+
+    if (autoRegenTimerRef.current) {
+      clearTimeout(autoRegenTimerRef.current);
+    }
+
+    autoRegenTimerRef.current = setTimeout(() => {
+      applyFreshPrompt();
+    }, CANVAS_AUTO_REGEN_MS);
+
+    return () => {
+      if (autoRegenTimerRef.current) {
+        clearTimeout(autoRegenTimerRef.current);
+        autoRegenTimerRef.current = null;
+      }
+    };
+  }, [
+    open,
+    hasNodes,
+    loading,
+    baselineFingerprint,
+    canvasFingerprint,
+    isDirty,
+    applyFreshPrompt,
+  ]);
 
   useEffect(() => {
     if (!open) return;
@@ -278,9 +325,10 @@ export function BlueprintShareDock({
                 </p>
               ) : (
                 <>
-                  {isCanvasStale ? (
+                  {showStaleBanner ? (
                     <p className="blueprint-share-stale" role="status">
-                      Blueprint changed — Regenerate to refresh the prompt.
+                      Blueprint changed — Regenerate to refresh the prompt (your edits will be
+                      replaced).
                     </p>
                   ) : null}
                   <p className="blueprint-share-hint">

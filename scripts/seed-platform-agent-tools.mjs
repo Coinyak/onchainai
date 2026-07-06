@@ -71,7 +71,7 @@ const TOOLS = [
     repo_url: "https://github.com/github/github-mcp-server",
     homepage: "https://github.com/github/github-mcp-server",
     npm_package: null,
-    install_command: "npx mcp-remote https://api.githubcopilot.com/mcp/",
+    install_command: "npx add-mcp https://api.githubcopilot.com/mcp/",
     mcp_endpoint: "https://api.githubcopilot.com/mcp/",
     chains: [],
     stars: 31154,

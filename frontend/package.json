@@ -8,7 +8,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "node --test lib/return-to.test.mjs lib/blueprint-flow.test.mjs lib/blueprint-step.test.mjs"
+    "test": "node --test lib/return-to.test.mjs lib/blueprint-flow.test.mjs lib/blueprint-step.test.mjs lib/display-install.test.mjs lib/blueprint-share-regen.test.mjs lib/blueprint-share-storage.test.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
