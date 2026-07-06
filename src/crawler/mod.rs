@@ -755,6 +755,28 @@ mod tests {
         connect_test_pool(false).await
     }
 
+    fn db_test_env_configured() -> bool {
+        let _ = dotenvy::dotenv();
+        ["SUPABASE_URL_TEST", "DATABASE_URL", "DATABASE_URL_TEST"]
+            .iter()
+            .any(|key| {
+                std::env::var(key)
+                    .ok()
+                    .is_some_and(|url| !url.trim().is_empty())
+            })
+    }
+
+    /// Skip when no DB env vars are set; fail when vars are set but connection fails.
+    async fn test_pool_required_if_configured() -> Option<sqlx::PgPool> {
+        if !db_test_env_configured() {
+            eprintln!(
+                "SKIP: SUPABASE_URL_TEST, DATABASE_URL, or DATABASE_URL_TEST must be set for crawler DB integration test"
+            );
+            return None;
+        }
+        connect_test_pool(true).await
+    }
+
     async fn connect_test_pool(required: bool) -> Option<sqlx::PgPool> {
         let _ = dotenvy::dotenv();
         let mut candidates = Vec::new();
@@ -904,7 +926,7 @@ mod tests {
             "circlefin-skills"
         );
 
-        let Some(pool) = test_pool().await else {
+        let Some(pool) = test_pool_required_if_configured().await else {
             return;
         };
 

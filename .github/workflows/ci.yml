@@ -23,7 +23,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: dtolnay/rust-toolchain@master
+      - uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88
         with:
           toolchain: 1.90
           components: rustfmt, clippy
@@ -42,14 +42,16 @@ jobs:
   agent-harness:
     name: agent-harness
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
-      - uses: dtolnay/rust-toolchain@master
+      - uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88
         with:
           toolchain: 1.90
           targets: wasm32-unknown-unknown
+
+      - uses: Swatinem/rust-cache@v2
 
       - uses: actions/setup-node@v4
         with:
@@ -64,7 +66,9 @@ jobs:
         run: npm ci
 
       - name: Install Playwright
-        run: cd frontend && npm install --no-save playwright && npx playwright install --with-deps chromium
+        run: |
+          npm install --no-save playwright@1.52.0
+          npx playwright install --with-deps chromium
 
       - name: Agent harness contract
         run: ./scripts/agent-harness-check.sh
@@ -140,7 +144,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: dtolnay/rust-toolchain@master
+      - uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88
         with:
           toolchain: 1.90
 
@@ -169,7 +173,9 @@ jobs:
           ./scripts/ui-staleness-check.sh --worktree
 
       - name: Install Playwright
-        run: npm install --no-save playwright && npx playwright install --with-deps chromium
+        run: |
+          npm install --no-save playwright@1.52.0
+          npx playwright install --with-deps chromium
 
       - name: Start server and smoke
         run: |
