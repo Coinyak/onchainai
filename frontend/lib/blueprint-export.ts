@@ -92,7 +92,7 @@ export function buildOrderSection(exportNodes: ExportNode[]): string {
   }
   if (stepped.length === 0) return "";
 
-  stepped.sort((a, b) => a.step - b.step);
+  stepped.sort((a, b) => a.step - b.step || a.node.id.localeCompare(b.node.id));
   return stepped
     .map(({ node, step }) => `- ${step}. ${nodeFlowLabel(node)} (${node.kind})`)
     .join("\n");

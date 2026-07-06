@@ -708,19 +708,24 @@ fn parse_export_nodes(nodes: &Value) -> Vec<ExportNode> {
                         .iter()
                         .filter_map(|s| s.as_i64().map(|v| v as i32))
                         .filter(|s| *s >= 1)
+                        .map(|s| s.min(NODE_MAX_STEP))
                         .take(NODE_MAX_STEPS_PER_NODE)
                         .collect()
                 })
                 .unwrap_or_default();
             // Fall back to legacy `step` field
-            let steps = if steps.is_empty() {
+            let mut steps = if steps.is_empty() {
                 item.get("step")
                     .and_then(|v| v.as_i64())
-                    .map(|v| vec![v as i32])
+                    .map(|v| vec![v.min(NODE_MAX_STEP as i64) as i32])
                     .unwrap_or_default()
             } else {
                 steps
             };
+            // Dedupe and sort so steps.first() is always the minimum
+            steps.sort();
+            steps.dedup();
+            steps.truncate(NODE_MAX_STEPS_PER_NODE);
 
             Some(ExportNode {
                 id,
