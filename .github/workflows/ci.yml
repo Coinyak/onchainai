@@ -12,6 +12,11 @@ on:
   pull_request:
     branches: [main]
 
+# paths-filter reads PR file lists via the API on pull_request events.
+permissions:
+  contents: read
+  pull-requests: read
+
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -93,24 +98,14 @@ jobs:
         with:
           filters: |
             ui:
-              - 'src/components/**'
-              - 'src/pages/**'
-              - 'src/models/**'
-              - 'src/lib.rs'
-              - 'src/app.rs'
-              - 'src/filter_query.rs'
-              - 'src/client_storage.rs'
-              - 'src/config.rs'
-              - 'src/chains.rs'
-              - 'src/trust_verification.rs'
-              - 'src/install_safety.rs'
-              - 'src/workbench.rs'
+              - 'frontend/**'
               - 'public/chains/**'
-              - 'src/auth/session.rs'
-              - 'src/auth/siwx_client.rs'
-              - 'src/server/functions.rs'
-              - 'src/server/secret_redaction.rs'
-              - 'style/**'
+              - 'src/config.rs'
+              - 'src/install_safety.rs'
+              - 'src/public_install_guide.rs'
+              - 'src/models/**'
+              - 'scripts/ui-watch-paths.inc.sh'
+              - 'scripts/sync-ui-watch-paths.mjs'
 
   ui-coherence:
     name: ui-coherence
@@ -144,6 +139,8 @@ jobs:
       SIWX_DOMAIN: localhost:3000
       JWT_SECRET: ci-jwt-secret-at-least-32-bytes-long
       PORT: "3000"
+      API_PORT: "3001"
+      API_PROXY_TARGET: http://127.0.0.1:3001
       RUST_LOG: info
     steps:
       - uses: actions/checkout@v4
@@ -154,11 +151,6 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
-      - name: WASM target + cargo-leptos
-        run: |
-          rustup target add wasm32-unknown-unknown
-          cargo install cargo-leptos --version 0.3.6 --locked
-
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
@@ -166,41 +158,35 @@ jobs:
       - name: Make scripts executable
         run: chmod +x scripts/*.sh
 
-      - name: Coherent release build
-        run: cargo leptos build --release
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
 
-      - name: Bundle symlinks and verify
-        run: |
-          ln -sf onchainai.wasm target/site/pkg/onchainai_bg.wasm
-          touch target/release/onchainai style/output.css
-          ./scripts/verify-bundle.sh
-          ./scripts/ui-staleness-check.sh --worktree
+      - name: Coherent API + Next.js release build
+        run: ./scripts/release-build.sh
+
+      - name: UI bundle staleness check
+        run: ./scripts/ui-staleness-check.sh --worktree
 
       - name: Install Playwright
         run: |
           npm install --no-save playwright@1.52.0
           npx playwright install --with-deps chromium
 
-      - name: Start server and smoke
+      - name: Start stack, smoke, and browser gate
         run: |
-          ./target/release/onchainai > /tmp/onchainai-ci.log 2>&1 &
-          echo $! > /tmp/onchainai-ci.pid
-          for i in $(seq 1 90); do
-            if curl -sf http://127.0.0.1:3000/ >/dev/null; then
-              break
-            fi
-            sleep 2
-          done
-          curl -sf http://127.0.0.1:3000/ >/dev/null || (tail -50 /tmp/onchainai-ci.log && exit 1)
-          ./scripts/smoke-test.sh http://127.0.0.1:3000
-          node scripts/ui-browser-gate.mjs http://127.0.0.1:3000
+          ./scripts/restart-dev.sh --no-build
+          export ONCHAINAI_SMOKE_API_BASE="http://127.0.0.1:${API_PORT}"
+          node scripts/ui-browser-gate.mjs "http://127.0.0.1:${PORT}"
 
-      - name: Stop server
+      - name: Stop servers
         if: always()
         run: |
-          if [[ -f /tmp/onchainai-ci.pid ]]; then
-            kill "$(cat /tmp/onchainai-ci.pid)" 2>/dev/null || true
-          fi
+          for f in target/api-dev.pid target/next-dev.pid; do
+            if [[ -f "$f" ]]; then
+              kill "$(cat "$f")" 2>/dev/null || true
+            fi
+          done
 
   ci-success:
     name: ci-success
