@@ -246,7 +246,20 @@ mod tests {
     }
     #[cfg(feature = "ssr")]
     #[test]
-    fn append_tool_filters_chain_soft_allows_empty_chains() {
+    fn append_tool_filters_chain_soft_allows_empty_chains_for_single_token() {
+        let mut query = sqlx::QueryBuilder::new("SELECT * FROM tools WHERE true");
+        let filters = ToolFilters {
+            chain_soft: vec!["bitcoin".into()],
+            ..Default::default()
+        };
+        append_tool_filters(&mut query, &filters);
+        let sql = query.sql();
+        assert!(sql.contains("coalesce(array_length(chains, 1), 0) = 0"));
+    }
+
+    #[cfg(feature = "ssr")]
+    #[test]
+    fn append_tool_filters_chain_soft_multi_token_skips_empty_chains() {
         let mut query = sqlx::QueryBuilder::new("SELECT * FROM tools WHERE true");
         let filters = ToolFilters {
             chain_soft: vec!["bitcoin".into(), "solana".into()],
@@ -254,10 +267,8 @@ mod tests {
         };
         append_tool_filters(&mut query, &filters);
         let sql = query.sql();
-        // Soft chain: must include OR coalesce(...= 0) to allow empty chains
-        assert!(sql.contains("coalesce(array_length(chains, 1), 0) = 0"));
-        // Must not use hard @> without the OR empty-chains escape
-        assert!(sql.contains("OR"));
+        assert!(!sql.contains("coalesce(array_length(chains, 1), 0) = 0"));
+        assert!(sql.contains("chains @>"));
     }
 
     #[test]

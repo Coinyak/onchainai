@@ -42,7 +42,7 @@ pub fn resolved_builder_code(
 }
 
 pub fn records_referral_event(tool: &Tool) -> bool {
-    tool.referral_enabled || tool.pricing == "x402"
+    tool.referral_enabled
 }
 
 #[derive(Debug, Clone)]
@@ -132,11 +132,13 @@ pub async fn record_mcp_install_guide_attribution(
     platform: &str,
     defaults: Option<&ReferralSiteDefaults>,
 ) {
+    // Per-call session so MCP dedup does not collapse all agents into "anonymous".
+    let session_id = Uuid::new_v4().to_string();
     let input = InstallGuideAttributionInput {
         tool,
         platform,
         source: "mcp_install_guide",
-        attribution_session: None,
+        attribution_session: Some(session_id.as_str()),
         site_defaults: defaults,
     };
     if let Err(error) = record_install_guide_attribution(pool, input).await {
@@ -226,7 +228,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn records_referral_event_for_x402_or_enabled() {
+    fn records_referral_event_requires_referral_enabled() {
         let review = crate::models::tool::default_review_fields();
         let mut row = crate::models::Tool {
             id: Uuid::new_v4(),
@@ -289,7 +291,7 @@ mod tests {
         assert!(records_referral_event(&row));
         row.referral_enabled = false;
         row.pricing = "x402".into();
-        assert!(records_referral_event(&row));
+        assert!(!records_referral_event(&row));
     }
 
     #[test]

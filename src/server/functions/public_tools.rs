@@ -361,10 +361,9 @@ pub(crate) fn append_tool_filters<'qb>(
         query.push(" AND chains @> ").push_bind(&filters.chain);
     }
     if !filters.chain_soft.is_empty() {
-        // Soft chain match from query text: tool must contain the chain token
-        // OR have empty chains (many crawled tools have chains: [] but still
-        // support the chain). This prevents excluding the majority of the
-        // catalog when a user mentions a chain in natural language.
+        // Soft chain from NL query: single token may match empty `chains` too;
+        // multi-token queries require an explicit chain hit (no empty escape).
+        let allow_empty_chains = filters.chain_soft.len() == 1;
         query.push(" AND (");
         for (index, chain) in filters.chain_soft.iter().enumerate() {
             if index > 0 {
@@ -373,7 +372,10 @@ pub(crate) fn append_tool_filters<'qb>(
             query
                 .push("chains @> ARRAY[")
                 .push_bind(chain)
-                .push("]::text[] OR coalesce(array_length(chains, 1), 0) = 0");
+                .push("]::text[]");
+            if allow_empty_chains {
+                query.push(" OR coalesce(array_length(chains, 1), 0) = 0");
+            }
         }
         query.push(")");
     }

@@ -122,8 +122,7 @@ pub fn build_stale_trust_badge(
 
     let effective_last = last_probe_at.or(tool.x402_last_checked_at);
     let stale = is_probe_stale(effective_last, now);
-    let live = probe_status_is_live(latest_status.as_deref())
-        || (!stale && tool.x402_endpoint_verified && latest_status.is_none());
+    let live = probe_status_is_live(latest_status.as_deref());
 
     Some(StaleTrustBadge {
         last_probe_at: effective_last,
@@ -299,6 +298,19 @@ mod tests {
         assert!(!is_probe_stale(Some(fresh), now));
         assert!(is_probe_stale(Some(old), now));
         assert!(is_probe_stale(None, now));
+    }
+
+    #[test]
+    fn stale_badge_does_not_infer_live_without_probe_history() {
+        let tool = sample_x402_tool();
+        let badge = build_stale_trust_badge(
+            &tool,
+            Some(Utc::now() - Duration::hours(1)),
+            None,
+            Utc::now(),
+        )
+        .expect("badge");
+        assert!(!badge.live);
     }
 
     #[test]

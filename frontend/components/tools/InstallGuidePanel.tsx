@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { recordInstallGuideAttribution, type PublicTool } from "@/lib/api";
 import { getAttributionSession } from "@/lib/attribution-session";
 import { ConnectGuideBlocks } from "@/components/connect/ConnectGuideBlocks";
@@ -36,8 +36,8 @@ export function InstallGuidePanel({
     [tool, client],
   );
 
-  useEffect(() => {
-    if (tool.pricing !== "x402" && !tool.referral_enabled) return;
+  const recordAttribution = useCallback(() => {
+    if (!tool.referral_enabled) return;
     const session = getAttributionSession();
     void recordInstallGuideAttribution(tool.slug, {
       platform: client,
@@ -45,7 +45,7 @@ export function InstallGuidePanel({
     }).catch(() => {
       /* best-effort attribution — never block install UI */
     });
-  }, [tool.slug, tool.pricing, tool.referral_enabled, client]);
+  }, [tool.slug, tool.referral_enabled, client]);
 
   const blocks = useMemo(() => {
     const raw = guide.connect_blocks ?? [];
@@ -119,13 +119,20 @@ export function InstallGuidePanel({
           <button
             type="button"
             className="install-reveal-btn"
-            onClick={() => setCopyRevealed(true)}
+            onClick={() => {
+              setCopyRevealed(true);
+              recordAttribution();
+            }}
           >
             Reveal copy action
           </button>
         </>
       ) : (
-        <ConnectGuideBlocks blocks={blocks} moreHref="/connect" />
+        <ConnectGuideBlocks
+          blocks={blocks}
+          moreHref="/connect"
+          onCopyIntent={recordAttribution}
+        />
       )}
       <InstallGuideMeta guide={guide} />
     </section>

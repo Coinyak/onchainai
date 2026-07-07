@@ -9,9 +9,10 @@ import { copyLabelAria } from "@/lib/install-guide";
 interface ConnectGuideBlocksProps {
   blocks: ConnectGuideBlock[];
   moreHref?: string;
+  onCopyIntent?: () => void;
 }
 
-export function ConnectGuideBlocks({ blocks, moreHref }: ConnectGuideBlocksProps) {
+export function ConnectGuideBlocks({ blocks, moreHref, onCopyIntent }: ConnectGuideBlocksProps) {
   return (
     <div className="connect-guide-blocks">
       {blocks.map((block, index) => (
@@ -19,6 +20,7 @@ export function ConnectGuideBlocks({ blocks, moreHref }: ConnectGuideBlocksProps
           key={`${block.title ?? "block"}-${index}`}
           block={block}
           moreHref={moreHref}
+          onCopyIntent={onCopyIntent}
         />
       ))}
     </div>
@@ -28,9 +30,11 @@ export function ConnectGuideBlocks({ blocks, moreHref }: ConnectGuideBlocksProps
 function ConnectGuideBlockView({
   block,
   moreHref,
+  onCopyIntent,
 }: {
   block: ConnectGuideBlock;
   moreHref?: string;
+  onCopyIntent?: () => void;
 }) {
   const copyAria = copyLabelAria(block.copyLabel);
 
@@ -74,7 +78,7 @@ function ConnectGuideBlockView({
               showPrefix={block.showShellPrefix ?? false}
               showCopy={false}
             />
-            <CopyButton text={block.copyText} label={copyAria} />
+            <CopyButton text={block.copyText} label={copyAria} onCopied={onCopyIntent} />
           </div>
         </div>
       ) : block.title === "More clients" && moreHref ? (

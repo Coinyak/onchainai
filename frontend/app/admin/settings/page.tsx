@@ -38,9 +38,12 @@ function SettingsForm({ initial }: { initial: SiteSettings }) {
         allow_free_registration: initial.allow_free_registration,
         require_tool_approval: initial.require_tool_approval,
         allow_x402_registration: allowX402Registration,
-        default_referral_bps: defaultReferralBps.trim()
-          ? Number.parseInt(defaultReferralBps.trim(), 10)
-          : null,
+        default_referral_bps: (() => {
+          const trimmed = defaultReferralBps.trim();
+          if (!trimmed) return null;
+          const parsed = Number.parseInt(trimmed, 10);
+          return Number.isFinite(parsed) ? parsed : null;
+        })(),
         default_referral_payout_address: defaultReferralPayout.trim() || null,
         x402_builder_code: x402BuilderCode.trim() || null,
         mcp_premium_enabled: mcpPremiumEnabled,
