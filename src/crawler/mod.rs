@@ -261,6 +261,7 @@ pub(crate) fn default_source_registry_url(source_name: &str) -> &'static str {
         "mcp-registry" => "https://registry.modelcontextprotocol.io/v0/servers",
         "vendor_orgs" => "https://api.github.com/orgs",
         "bazaar" => "https://api.cdp.coinbase.com/platform/v2/x402/discovery/resources",
+        "pypi" => "https://pypi.org/",
         _ => "https://www.onchain-ai.xyz",
     }
 }
@@ -1222,6 +1223,10 @@ mod tests {
         assert_eq!(
             default_source_registry_url("bazaar"),
             "https://api.cdp.coinbase.com/platform/v2/x402/discovery/resources"
+        );
+        assert_eq!(
+            default_source_registry_url("pypi"),
+            "https://pypi.org/"
         );
     }
 
