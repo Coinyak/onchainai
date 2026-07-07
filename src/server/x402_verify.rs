@@ -515,14 +515,12 @@ pub struct ToolProbeRun {
     pub failures: i32,
 }
 
-pub async fn run_on_demand_tool_probe(
+async fn probe_tool_and_record_history(
     pool: &PgPool,
     tool_id: Uuid,
     endpoint: &str,
     x402_price: Option<&str>,
-    current_endpoint_verified: bool,
-    current_failures: i32,
-) -> Result<ToolProbeRun, sqlx::Error> {
+) -> Result<(ProbeOutcome, String, Option<String>, DateTime<Utc>, i32), sqlx::Error> {
     let started = std::time::Instant::now();
     let outcome = probe_x402_endpoint(endpoint).await;
     let latency_ms = started.elapsed().as_millis().min(i32::MAX as u128) as i32;
@@ -536,6 +534,50 @@ pub async fn run_on_demand_tool_probe(
         latency_ms,
     )
     .await;
+    Ok((
+        outcome,
+        history_status.to_string(),
+        actual_price,
+        Utc::now(),
+        latency_ms,
+    ))
+}
+
+/// K2 paid probe: on-demand outcome only — no catalog flags, probe history, or L4 side effects.
+pub async fn run_k2_on_demand_probe(
+    _pool: &PgPool,
+    _tool_id: Uuid,
+    endpoint: &str,
+    x402_price: Option<&str>,
+) -> Result<ToolProbeRun, sqlx::Error> {
+    let started = std::time::Instant::now();
+    let outcome = probe_x402_endpoint(endpoint).await;
+    let latency_ms = started.elapsed().as_millis().min(i32::MAX as u128) as i32;
+    let (history_status, actual_price) = probe_history_status(&outcome, x402_price);
+    let (endpoint_verified, price_verified, failures) =
+        apply_outcome_to_flags(&outcome, x402_price, false, 0);
+    Ok(ToolProbeRun {
+        outcome,
+        history_status: history_status.to_string(),
+        actual_price,
+        probed_at: Utc::now(),
+        latency_ms,
+        endpoint_verified,
+        price_verified,
+        failures,
+    })
+}
+
+pub async fn run_on_demand_tool_probe(
+    pool: &PgPool,
+    tool_id: Uuid,
+    endpoint: &str,
+    x402_price: Option<&str>,
+    current_endpoint_verified: bool,
+    current_failures: i32,
+) -> Result<ToolProbeRun, sqlx::Error> {
+    let (outcome, history_status, actual_price, probed_at, latency_ms) =
+        probe_tool_and_record_history(pool, tool_id, endpoint, x402_price).await?;
 
     let (endpoint_verified, price_verified, failures) = apply_outcome_to_flags(
         &outcome,
@@ -544,7 +586,6 @@ pub async fn run_on_demand_tool_probe(
         current_failures,
     );
 
-    let probed_at = Utc::now();
     sqlx::query(
         r#"
         UPDATE tools
@@ -570,7 +611,7 @@ pub async fn run_on_demand_tool_probe(
 
     Ok(ToolProbeRun {
         outcome,
-        history_status: history_status.to_string(),
+        history_status,
         actual_price,
         probed_at,
         latency_ms,
@@ -902,6 +943,15 @@ mod tests {
             })
             .collect();
         assert!(!l4_consecutive_failure_days_met(&gap, today));
+    }
+
+    #[test]
+    fn k2_snapshot_flags_ignore_prior_catalog_verification() {
+        let dead = ProbeOutcome::NotPaymentRequired;
+        let (catalog_ev, _, _) = apply_outcome_to_flags(&dead, None, true, 0);
+        assert!(catalog_ev, "catalog flag can stay true after one failure");
+        let (k2_ev, _, _) = apply_outcome_to_flags(&dead, None, false, 0);
+        assert!(!k2_ev, "K2 snapshot must reflect this probe only");
     }
 
     #[test]

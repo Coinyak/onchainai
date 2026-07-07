@@ -8,7 +8,7 @@ use uuid::Uuid;
 use crate::models::Tool;
 use crate::server::queries::APPROVED_TOOL_BY_SLUG_SQL;
 use crate::server::trust_probe_meta::ProbeReceipt;
-use crate::server::x402_verify::run_on_demand_tool_probe;
+use crate::server::x402_verify::run_k2_on_demand_probe;
 
 #[derive(Debug, Serialize)]
 pub struct EndpointHealthReport {
@@ -59,16 +59,11 @@ pub async fn check_endpoint_health(
         .filter(|url| !url.trim().is_empty())
         .ok_or(PremiumDataError::MissingEndpoint)?;
 
-    let run = run_on_demand_tool_probe(
-        pool,
-        tool.id,
-        endpoint,
-        tool.x402_price.as_deref(),
-        tool.x402_endpoint_verified,
-        tool.x402_check_failures,
-    )
-    .await
-    .map_err(PremiumDataError::Database)?;
+    let run = run_k2_on_demand_probe(pool, tool.id, endpoint, tool.x402_price.as_deref())
+        .await
+        .map_err(PremiumDataError::Database)?;
+
+    let on_demand_live = run.history_status == "live";
 
     let probe_receipt = crate::server::trust_probe_meta::build_probe_receipt(
         &tool,
@@ -110,7 +105,7 @@ pub async fn check_endpoint_health(
     Ok(EndpointHealthReport {
         slug: tool.slug.clone(),
         tool_id: tool.id,
-        live: run.endpoint_verified,
+        live: on_demand_live,
         endpoint_verified: run.endpoint_verified,
         price_verified: run.price_verified,
         last_probe_at: Some(run.probed_at),
@@ -171,4 +166,5 @@ mod tests {
         let pct: f64 = (7.0 / 10.0) * 100.0;
         assert!((pct - 70.0).abs() < f64::EPSILON);
     }
+
 }
