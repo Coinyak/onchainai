@@ -119,10 +119,7 @@ export function InstallGuidePanel({
           <button
             type="button"
             className="install-reveal-btn"
-            onClick={() => {
-              setCopyRevealed(true);
-              recordAttribution();
-            }}
+            onClick={() => setCopyRevealed(true)}
           >
             Reveal copy action
           </button>
