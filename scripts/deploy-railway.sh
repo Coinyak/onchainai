@@ -152,8 +152,9 @@ sync_vars() {
   fi
   if [[ -n "${X402_PREMIUM_PRICE_USD:-}" ]]; then
     # Guard: bash `source .env` expands $0 to the script path if the value
-    # is not escaped. Catch corrupted values before they reach Railway.
-    if [[ "${X402_PREMIUM_PRICE_USD}" == *deploy-railway.sh* || "${X402_PREMIUM_PRICE_USD}" != *\$* && "${X402_PREMIUM_PRICE_USD}" != *0.0* ]]; then
+    # is not escaped. Only reject clearly corrupted values (script path leak);
+    # pass through any other value (numeric or $-prefixed) as-is.
+    if [[ "${X402_PREMIUM_PRICE_USD}" == *deploy-railway.sh* ]]; then
       echo "WARNING: X402_PREMIUM_PRICE_USD looks corrupted ('${X402_PREMIUM_PRICE_USD}')" >&2
       echo "  .env should use X402_PREMIUM_PRICE_USD=\\\$0.001 (escaped dollar sign)" >&2
       echo "  Falling back to default \$0.001" >&2
