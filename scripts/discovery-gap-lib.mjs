@@ -55,6 +55,22 @@ export async function fetchPublicToolDetail(slug) {
 }
 
 export async function catalogProbePublic(tool) {
+  // Slug-direct: if the tool is already in the public catalog under its slug,
+  // recall should count it without relying on FTS/search ranking.
+  const directSlug = tool.match?.slug || tool.slug;
+  if (directSlug) {
+    const detail = await fetchPublicToolDetail(directSlug);
+    if (detail && rowMatchesTool(detail, tool)) {
+      return {
+        found: true,
+        slug: detail.slug,
+        source: detail.source,
+        query: null,
+        matched_via: "slug-direct",
+      };
+    }
+  }
+
   const queries = [
     ...(tool.match?.search_queries || []),
     tool.slug,

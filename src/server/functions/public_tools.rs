@@ -54,6 +54,20 @@ pub(crate) async fn fetch_tool_by_slug(
 /// Maximum length for a tool slug accepted at server boundaries.
 const MAX_SLUG_LEN: usize = 128;
 
+/// True when `s` is a single token that looks like a tool slug (`^[a-z0-9][a-z0-9-]*$`).
+pub fn looks_like_tool_slug(s: &str) -> bool {
+    let s = s.trim();
+    if s.is_empty() {
+        return false;
+    }
+    let mut chars = s.chars();
+    let first = chars.next().expect("non-empty");
+    if !first.is_ascii_lowercase() && !first.is_ascii_digit() {
+        return false;
+    }
+    chars.all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+}
+
 /// Validate an externally-supplied slug at the server boundary: non-empty,
 /// bounded length, allowed charset (URL-safe slug characters only).
 fn validate_slug(slug: &str) -> Result<(), FnError> {
@@ -576,7 +590,7 @@ pub(crate) async fn fetch_search_by_intent(
     pool: &sqlx::PgPool,
     intent: &crate::server::tool_search::ResolvedSearchIntent,
 ) -> Result<Vec<Tool>, FnError> {
-    use crate::server::tool_search::ToolSearchMatch;
+    use crate::server::tool_search::{meaningful_token_count, ToolSearchMatch};
 
     let filters = intent_to_tool_filters(intent);
     validate_tool_filters(&filters)?;
@@ -610,13 +624,24 @@ pub(crate) async fn fetch_search_by_intent(
     }
     q.push(" LIMIT 50");
 
-    let tools = q
+    let mut tools = q
         .build_query_as::<Tool>()
         .fetch_all(pool)
         .await
         .map_err(|e| FnError::new(format!("search failed: {e}")))?;
 
-    Ok(sanitize_tools_for_public_response(tools))
+    tools = sanitize_tools_for_public_response(tools);
+
+    // Exact slug match: prepend when query is a single slug-like token (e.g. "x402-foundation").
+    if has_fts && meaningful_token_count(search_text) == 1 && looks_like_tool_slug(search_text) {
+        if let Some(slug_tool) = fetch_tool_by_slug(pool, search_text).await? {
+            if !tools.iter().any(|t| t.id == slug_tool.id) {
+                tools.insert(0, slug_tool);
+            }
+        }
+    }
+
+    Ok(tools)
 }
 
 /// Tools browser page size (must match `tools_browser::TOOL_PAGE_SIZE`).

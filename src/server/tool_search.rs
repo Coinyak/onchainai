@@ -3,31 +3,51 @@
 use crate::discovery::parse_search_intent;
 use sqlx::PgPool;
 
-/// Document vector used for public tool text search (name weighted above description).
+/// Expands to the FTS document vector SQL expression (for use inside `concat!`).
+macro_rules! tool_search_vector {
+    () => {
+        "(setweight(to_tsvector('english', coalesce(name, '')), 'A') \
+ || setweight(to_tsvector('english', coalesce(description, '')), 'B') \
+ || setweight(to_tsvector('simple', coalesce(slug, '')), 'A') \
+ || setweight(to_tsvector('simple', coalesce(repo_url, '')), 'C'))"
+    };
+}
+
+/// Document vector used for public tool text search (name/slug weighted above description/repo).
+/// Slug and repo_url use the `simple` config so tokens like `x402` are not stemmed.
 /// Parentheses are required before `@@` in match predicates (`@@` binds tighter than `||`).
-pub const TOOL_SEARCH_VECTOR: &str =
-    "(setweight(to_tsvector('english', coalesce(name, '')), 'A') || setweight(to_tsvector('english', coalesce(description, '')), 'B'))";
+pub const TOOL_SEARCH_VECTOR: &str = tool_search_vector!();
 
 /// AND match — every non-stop-word token must appear (Postgres `plainto_tsquery`).
 pub const FTS_AND_MATCH: &str =
-    "(setweight(to_tsvector('english', coalesce(name, '')), 'A') || setweight(to_tsvector('english', coalesce(description, '')), 'B')) @@ plainto_tsquery('english', $1)";
+    concat!(tool_search_vector!(), " @@ plainto_tsquery('english', $1)");
 
 /// Prefix match — sanitized tokens with `:*` suffix (used when AND returns zero rows).
-pub const FTS_PREFIX_MATCH: &str =
-    "(setweight(to_tsvector('english', coalesce(name, '')), 'A') || setweight(to_tsvector('english', coalesce(description, '')), 'B')) @@ to_tsquery('english', $1)";
+pub const FTS_PREFIX_MATCH: &str = concat!(tool_search_vector!(), " @@ to_tsquery('english', $1)");
 
 /// OR fallback — any token may match (used only when AND and Prefix return zero rows).
-pub const FTS_OR_MATCH: &str =
-    "(setweight(to_tsvector('english', coalesce(name, '')), 'A') || setweight(to_tsvector('english', coalesce(description, '')), 'B')) @@ to_tsquery('english', replace(plainto_tsquery('english', $1)::text, ' & ', ' | '))";
+pub const FTS_OR_MATCH: &str = concat!(
+    tool_search_vector!(),
+    " @@ to_tsquery('english', replace(plainto_tsquery('english', $1)::text, ' & ', ' | '))"
+);
 
-pub const TS_RANK_AND: &str =
-    "ts_rank_cd((setweight(to_tsvector('english', coalesce(name, '')), 'A') || setweight(to_tsvector('english', coalesce(description, '')), 'B')), plainto_tsquery('english', $1))";
+pub const TS_RANK_AND: &str = concat!(
+    "ts_rank_cd(",
+    tool_search_vector!(),
+    ", plainto_tsquery('english', $1))"
+);
 
-pub const TS_RANK_PREFIX: &str =
-    "ts_rank_cd((setweight(to_tsvector('english', coalesce(name, '')), 'A') || setweight(to_tsvector('english', coalesce(description, '')), 'B')), to_tsquery('english', $1))";
+pub const TS_RANK_PREFIX: &str = concat!(
+    "ts_rank_cd(",
+    tool_search_vector!(),
+    ", to_tsquery('english', $1))"
+);
 
-pub const TS_RANK_OR: &str =
-    "ts_rank_cd((setweight(to_tsvector('english', coalesce(name, '')), 'A') || setweight(to_tsvector('english', coalesce(description, '')), 'B')), to_tsquery('english', replace(plainto_tsquery('english', $1)::text, ' & ', ' | ')))";
+pub const TS_RANK_OR: &str = concat!(
+    "ts_rank_cd(",
+    tool_search_vector!(),
+    ", to_tsquery('english', replace(plainto_tsquery('english', $1)::text, ' & ', ' | ')))"
+);
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ResolvedSearchIntent {
@@ -276,10 +296,19 @@ mod tests {
         assert!(TOOL_SEARCH_VECTOR.contains("setweight"));
         assert!(TOOL_SEARCH_VECTOR.starts_with('('));
         assert!(FTS_AND_MATCH.starts_with('('));
+        assert!(FTS_AND_MATCH.contains("slug"));
+        assert!(FTS_AND_MATCH.contains("repo_url"));
+        assert!(FTS_AND_MATCH.contains("'simple'"));
         assert!(
             FTS_AND_MATCH.find("@@").unwrap() > FTS_AND_MATCH.find("||").unwrap(),
             "@@ must apply to the full vector, not only the description arm"
         );
+    }
+
+    #[test]
+    fn fts_vector_includes_slug_and_repo_fields() {
+        assert!(TOOL_SEARCH_VECTOR.contains("slug"));
+        assert!(TOOL_SEARCH_VECTOR.contains("repo_url"));
     }
 
     #[test]
@@ -341,9 +370,16 @@ mod tests {
     }
 
     #[test]
-    fn resolve_search_intent_maps_type_only_query() {
+    fn resolve_search_intent_single_token_mcp_stays_fts() {
         let intent = resolve_search_intent("mcp", None, None);
-        assert_eq!(intent.query, "");
-        assert_eq!(intent.tool_type.as_deref(), Some("mcp"));
+        assert_eq!(intent.query, "mcp");
+        assert_eq!(intent.tool_type, None);
+    }
+
+    #[test]
+    fn resolve_search_intent_single_token_x402_stays_fts() {
+        let intent = resolve_search_intent("x402", None, None);
+        assert_eq!(intent.query, "x402");
+        assert_eq!(intent.tool_type, None);
     }
 }

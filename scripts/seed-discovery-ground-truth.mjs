@@ -73,7 +73,7 @@ const TOOLS = [
     slug: "x402",
     name: "X402",
     description:
-      "Search and call paid API services using the x402 payment protocol (HTTP 402). Discover bazaar endpoints, browse payment requirements, and make x402-paid requests from agent skills.",
+      "Search and call paid API services using the x402 payment protocol (HTTP 402). Official x402 Foundation reference implementation (x402-foundation) for HTTP 402 micropayments. Discover bazaar endpoints, browse payment requirements, and make x402-paid requests from agent skills.",
     function: "payments",
     type: "skill",
     actor: "ai-agent",
