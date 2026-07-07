@@ -56,10 +56,10 @@ pub(crate) type McpToolSummary = PublicToolSummary;
 
 #[derive(Serialize)]
 pub(crate) struct McpSearchPage {
-    tools: Vec<McpToolSummary>,
+    pub(crate) tools: Vec<McpToolSummary>,
     next_cursor: Option<String>,
     has_more: bool,
-    total_count: i64,
+    pub(crate) total_count: i64,
     limit: i64,
     sort: &'static str,
 }

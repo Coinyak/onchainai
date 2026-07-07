@@ -229,6 +229,10 @@ fn tool_definitions(authenticated: bool) -> Vec<Value> {
         check_endpoint_health_definition(),
         compare_tools_definition(),
         export_toolkit_definition(),
+        recommend_verified_tool_definition(),
+        gap_audit_definition(),
+        get_price_history_definition(),
+        get_x402_trends_definition(),
     ];
     if authenticated {
         tools.push(save_to_toolkit_definition());
@@ -437,6 +441,85 @@ fn export_toolkit_definition() -> Value {
     })
 }
 
+fn recommend_verified_tool_definition() -> Value {
+    json!({
+        "name": "recommend_verified_tool",
+        "description": "Premium: returns a single verified live x402 tool for a task. Probes top candidates on-demand for liveness and price honesty, then returns the best one with rejection reasons for the rest. Requires x402 micropayment per call (HTTP 402 + PAYMENT-REQUIRED header). Use free search_tools first to check if candidates exist.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "intent": {
+                    "type": "string",
+                    "description": "Natural-language task intent (e.g. 'bridge USDC to Base', 'get Ethereum price data via x402')"
+                },
+                "chain": {
+                    "type": "string",
+                    "description": "Optional chain filter (e.g. base, ethereum, solana)"
+                },
+                "function": {
+                    "type": "string",
+                    "description": "Optional OnchainAI function filter (bridge, swap, wallet, payments, lending, staking, trading, nft, data, dev-tool, identity, governance, social, ai-agent)"
+                }
+            },
+            "required": ["intent"]
+        }
+    })
+}
+
+fn gap_audit_definition() -> Value {
+    json!({
+        "name": "gap_audit",
+        "description": "Premium: decomposes a task intent into subgoals and maps each to OnchainAI catalog tools, surfacing gaps where no tools exist. Returns a subgoal table with covered (candidate slugs) or gap (manual research needed) status. Requires x402 micropayment per call (HTTP 402 + PAYMENT-REQUIRED header). Use free search_tools for simple lookups.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "intent": {
+                    "type": "string",
+                    "description": "Natural-language task intent (e.g. 'bridge BTC to Base then swap to USDC and stake')"
+                }
+            },
+            "required": ["intent"]
+        }
+    })
+}
+
+fn get_price_history_definition() -> Value {
+    json!({
+        "name": "get_price_history",
+        "description": "Free discovery: x402 endpoint price and liveness history for a specific tool. Returns probe records (status, actual price, latency) over the specified time window. Use get_tool_detail for current x402 flags.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "slug": {
+                    "type": "string",
+                    "description": "Tool slug from search_tools — must be an x402-listed tool"
+                },
+                "days": {
+                    "type": "integer",
+                    "description": "Number of days of history (default 30, max 90)"
+                }
+            },
+            "required": ["slug"]
+        }
+    })
+}
+
+fn get_x402_trends_definition() -> Value {
+    json!({
+        "name": "get_x402_trends",
+        "description": "Free discovery: aggregated x402 ecosystem trends — live rate, probe counts, and latest prices for all x402 tools.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "days": {
+                    "type": "integer",
+                    "description": "Number of days to aggregate (default 30, max 90)"
+                }
+            }
+        }
+    })
+}
+
 fn get_install_guide_definition() -> Value {
     json!({
         "name": "get_install_guide",
@@ -552,6 +635,10 @@ async fn dispatch_tool_call(
         "export_toolkit" => call_export_toolkit(pool, args)
             .await
             .map(DispatchOutcome::Text),
+        "recommend_verified_tool" => call_recommend_verified_tool(pool, args, headers).await,
+        "gap_audit" => call_gap_audit(pool, args, headers).await,
+        "get_price_history" => call_get_price_history(pool, args, headers).await,
+        "get_x402_trends" => call_get_x402_trends(pool, args, headers).await,
         "save_to_toolkit" => call_save_to_toolkit(pool, args, agent)
             .await
             .map(DispatchOutcome::Text),
@@ -625,6 +712,168 @@ async fn call_check_endpoint_health(
     let response = payment_success_response(body.clone(), &settlement)
         .unwrap_or_else(|_| (StatusCode::OK, Json(body)).into_response());
     Ok(DispatchOutcome::Http(response))
+}
+
+/// Product A — `recommend_verified_tool`: Axis-B premium (same gate as export_toolkit).
+/// Extracts candidates via free search, probes top N on-demand, returns the best verified tool.
+async fn call_recommend_verified_tool(
+    pool: &PgPool,
+    args: &Value,
+    _headers: &HeaderMap,
+) -> Result<DispatchOutcome, (i32, String)> {
+    use crate::server::mcp_search::{mcp_search_tools, McpSearchSort};
+    use crate::server::product_a::{
+        cache_get, cache_key, cache_set, recommend_verified_tool, validate_intent, ProductAError,
+    };
+
+    let intent_raw = required_str(args, "intent", "intent required")?;
+    let intent = validate_intent(intent_raw).map_err(|e| (-32602, e.message().to_string()))?;
+    let chain = optional_string(args, "chain");
+    let function = optional_string(args, "function");
+
+    // Payment gate runs in tools_call() before dispatch; cache hits reuse prior paid work.
+    let now = chrono::Utc::now();
+    let ckey = cache_key(&intent, chain.as_deref(), function.as_deref());
+    if let Some(cached) = cache_get(&ckey, now) {
+        let body = json!(cached);
+        return Ok(DispatchOutcome::Text(
+            serde_json::to_string(&body).map_err(|e| (-32000, format!("serialize error: {e}")))?,
+        ));
+    }
+
+    // Step 1: free search to extract candidates (reuse mcp_search_tools).
+    let search_page = mcp_search_tools(
+        pool,
+        &intent,
+        function.clone(),
+        chain.clone(),
+        McpSearchSort::Trust,
+        10,
+        0,
+    )
+    .await?;
+
+    let candidate_slugs: Vec<String> = search_page.tools.iter().map(|t| t.slug.clone()).collect();
+
+    if candidate_slugs.is_empty() {
+        let response = crate::server::product_a::ProductAResponse {
+            verified_tool: None,
+            rejected: vec![],
+            disclaimer: crate::server::product_a::PRODUCT_A_DISCLAIMER,
+            probed_at: now,
+            cached: None,
+        };
+        cache_set(ckey, response.clone(), now);
+        let body = json!(response);
+        return Ok(DispatchOutcome::Text(
+            serde_json::to_string(&body).map_err(|e| (-32000, format!("serialize error: {e}")))?,
+        ));
+    }
+
+    // Step 2-7: rank, probe, select, explain_rejection.
+    let result = recommend_verified_tool(pool, &candidate_slugs)
+        .await
+        .map_err(|e| match e {
+            ProductAError::InvalidIntent => (-32602, e.message().to_string()),
+            ProductAError::NoCandidates => (-32602, e.message().to_string()),
+            ProductAError::Database(err) => (-32000, format!("database error: {err}")),
+        })?;
+
+    cache_set(ckey, result.clone(), now);
+    let body = json!(result);
+    Ok(DispatchOutcome::Text(
+        serde_json::to_string(&body).map_err(|e| (-32000, format!("serialize error: {e}")))?,
+    ))
+}
+
+/// S0 gap_audit — Axis-B premium (same gate as export_toolkit).
+/// Decomposes intent into subgoals, maps each to catalog, surfaces gaps.
+async fn call_gap_audit(
+    pool: &PgPool,
+    args: &Value,
+    _headers: &HeaderMap,
+) -> Result<DispatchOutcome, (i32, String)> {
+    use crate::server::gap_audit::{
+        gap_cache_get, gap_cache_key, gap_cache_set, run_gap_audit, validate_gap_audit_intent,
+        GapAuditError,
+    };
+
+    let intent_raw = required_str(args, "intent", "intent required")?;
+    let intent =
+        validate_gap_audit_intent(intent_raw).map_err(|e| (-32602, e.message().to_string()))?;
+
+    // Payment gate runs in tools_call() before dispatch; cache hits reuse prior paid work.
+    let now = chrono::Utc::now();
+    let ckey = gap_cache_key(&intent);
+    if let Some(cached) = gap_cache_get(&ckey, now) {
+        let body = json!(cached);
+        return Ok(DispatchOutcome::Text(
+            serde_json::to_string(&body).map_err(|e| (-32000, format!("serialize error: {e}")))?,
+        ));
+    }
+
+    match run_gap_audit(pool, &intent).await {
+        Ok(result) => {
+            gap_cache_set(ckey, result.clone(), now);
+            let body = json!(result);
+            Ok(DispatchOutcome::Text(
+                serde_json::to_string(&body)
+                    .map_err(|e| (-32000, format!("serialize error: {e}")))?,
+            ))
+        }
+        Err(GapAuditError::InvalidIntent) => {
+            Err((-32602, GapAuditError::InvalidIntent.message().to_string()))
+        }
+        Err(GapAuditError::Database(msg)) => Err((-32000, format!("database error: {msg}"))),
+    }
+}
+
+/// M3 get_price_history — free discovery/metadata (OD-FTG §2).
+async fn call_get_price_history(
+    pool: &PgPool,
+    args: &Value,
+    _headers: &HeaderMap,
+) -> Result<DispatchOutcome, (i32, String)> {
+    use crate::server::m3_analytics::{get_price_history, AnalyticsError};
+
+    let slug = required_str(args, "slug", "slug required")?;
+    let days = args.get("days").and_then(|v| v.as_i64());
+
+    match get_price_history(pool, slug, days).await {
+        Ok(result) => {
+            let body = json!(result);
+            Ok(DispatchOutcome::Text(
+                serde_json::to_string(&body)
+                    .map_err(|e| (-32000, format!("serialize error: {e}")))?,
+            ))
+        }
+        Err(AnalyticsError::NotFound) => Err((-32602, "tool not found".into())),
+        Err(AnalyticsError::NotX402) => Err((-32602, "tool is not an x402 listing".into())),
+        Err(AnalyticsError::Database(e)) => Err((-32000, format!("database error: {e}"))),
+    }
+}
+
+/// M3 get_x402_trends — free discovery/metadata (OD-FTG §2).
+async fn call_get_x402_trends(
+    pool: &PgPool,
+    args: &Value,
+    _headers: &HeaderMap,
+) -> Result<DispatchOutcome, (i32, String)> {
+    use crate::server::m3_analytics::{get_x402_trends, AnalyticsError};
+
+    let days = args.get("days").and_then(|v| v.as_i64());
+
+    match get_x402_trends(pool, days).await {
+        Ok(result) => {
+            let body = json!(result);
+            Ok(DispatchOutcome::Text(
+                serde_json::to_string(&body)
+                    .map_err(|e| (-32000, format!("serialize error: {e}")))?,
+            ))
+        }
+        Err(AnalyticsError::Database(e)) => Err((-32000, format!("database error: {e}"))),
+        Err(e) => Err((-32000, e.message().to_string())),
+    }
 }
 
 async fn call_compare_tools(pool: &PgPool, args: &Value) -> Result<String, (i32, String)> {
@@ -750,8 +999,13 @@ async fn call_get_tool_detail(pool: &PgPool, args: &Value) -> Result<String, (i3
     let trust_probe = crate::server::trust_probe_meta::stale_trust_badge_for_tool(pool, &tool)
         .await
         .map_err(|e| (-32000, format!("trust probe meta failed: {e}")))?;
+    let official_links =
+        crate::server::review_persistence::list_public_official_links(pool, tool.id)
+            .await
+            .map_err(|e| (-32000, format!("official links failed: {e}")))?;
     let payload = PublicToolWithTrustProbe {
         tool: PublicTool::from(tool),
+        official_links,
         trust_probe,
     };
     serialize_tool_payload(&payload)
@@ -908,7 +1162,7 @@ mod tests {
         assert_eq!(value["docs"], "https://www.onchain-ai.xyz/connect");
         assert_eq!(value["transport"], "streamable-http");
         let tools = value["tools"].as_array().unwrap();
-        assert_eq!(tools.len(), 8);
+        assert_eq!(tools.len(), 12);
         assert!(tools
             .iter()
             .all(|t| t["name"].is_string() && t["description"].is_string()));
@@ -919,12 +1173,16 @@ mod tests {
         let rt = tokio::runtime::Runtime::new().unwrap();
         let value = rt.block_on(tools_list(false)).unwrap();
         let tools = value["tools"].as_array().unwrap();
-        assert_eq!(tools.len(), 8);
+        assert_eq!(tools.len(), 12);
         for name in [
             "check_endpoint_health",
             "get_dashboard_snapshot",
             "compare_tools",
             "export_toolkit",
+            "recommend_verified_tool",
+            "gap_audit",
+            "get_price_history",
+            "get_x402_trends",
         ] {
             assert!(
                 tools.iter().any(|tool| tool["name"].as_str() == Some(name)),
@@ -938,7 +1196,7 @@ mod tests {
         let rt = tokio::runtime::Runtime::new().unwrap();
         let value = rt.block_on(tools_list(true)).unwrap();
         let tools = value["tools"].as_array().unwrap();
-        assert_eq!(tools.len(), 11);
+        assert_eq!(tools.len(), 15);
         for name in ["save_to_toolkit", "save_stack_to_blueprint", "link_status"] {
             assert!(
                 tools.iter().any(|tool| tool["name"].as_str() == Some(name)),

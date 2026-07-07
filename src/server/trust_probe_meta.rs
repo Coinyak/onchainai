@@ -7,7 +7,7 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 use crate::models::tool::PublicTool;
-use crate::models::Tool;
+use crate::models::{Tool, ToolOfficialLink};
 use crate::server::x402_verify::{price_matches_advertised, ProbeOutcome};
 
 /// MCP/REST tool detail — PublicTool fields at root plus optional W8 trust_probe meta.
@@ -15,6 +15,8 @@ use crate::server::x402_verify::{price_matches_advertised, ProbeOutcome};
 pub struct PublicToolWithTrustProbe {
     #[serde(flatten)]
     pub tool: PublicTool,
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    pub official_links: Vec<ToolOfficialLink>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub trust_probe: Option<StaleTrustBadge>,
 }

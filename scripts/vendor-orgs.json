@@ -8,6 +8,7 @@
     { "github": "anthropics", "team": "Anthropic", "crawl": false },
     { "github": "base", "team": "Base", "crawl": true, "npm_scopes": ["@base-org"] },
     { "github": "base-org", "team": "Base", "crawl": false },
+    { "github": "bnb-chain", "team": "BNB Chain", "crawl": true },
     { "github": "bob-collective", "team": "BOB", "crawl": true },
     { "github": "BlockRunAI", "team": "BlockRun", "crawl": true },
     { "github": "chainstacklabs", "team": "Chainstack", "crawl": false },
