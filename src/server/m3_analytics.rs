@@ -63,8 +63,15 @@ pub struct PriceHistoryResponse {
 }
 
 const PRICE_HISTORY_DISCLAIMER: &str =
-    "Price history from x402 probe records at time T. Actual prices are from 402 handshake \
+    "Price history from x402 probe records at time T. Returns up to 500 most recent probes; \
+     total_count and live_count cover the full window. Actual prices are from 402 handshake \
      responses — advertised prices may differ. Not financial advice.";
+
+#[derive(Debug, sqlx::FromRow)]
+struct ProbeWindowCounts {
+    total_count: i64,
+    live_count: i64,
+}
 
 pub async fn get_price_history(
     pool: &PgPool,
@@ -95,6 +102,22 @@ pub async fn get_price_history(
 
     let days = clamp_days(days);
 
+    let counts = sqlx::query_as::<_, ProbeWindowCounts>(
+        r#"
+        SELECT
+            COUNT(*)::bigint AS total_count,
+            COUNT(*) FILTER (WHERE status = 'live')::bigint AS live_count
+        FROM x402_probe_history
+        WHERE tool_id = $1
+          AND probed_at >= now() - make_interval(days => $2)
+        "#,
+    )
+    .bind(tool.id)
+    .bind(days)
+    .fetch_one(pool)
+    .await
+    .map_err(AnalyticsError::Database)?;
+
     let history = sqlx::query_as::<_, PriceHistoryPoint>(
         r#"
         SELECT probed_at, status, actual_price, latency_ms
@@ -111,16 +134,13 @@ pub async fn get_price_history(
     .await
     .map_err(AnalyticsError::Database)?;
 
-    let total_count = history.len() as i64;
-    let live_count = history.iter().filter(|h| h.status == "live").count() as i64;
-
     Ok(PriceHistoryResponse {
         slug: tool.slug.clone(),
         tool_id: tool.id,
         days: i64::from(days),
         history,
-        live_count,
-        total_count,
+        live_count: counts.live_count,
+        total_count: counts.total_count,
         disclaimer: PRICE_HISTORY_DISCLAIMER,
     })
 }
@@ -224,5 +244,11 @@ mod tests {
         assert_eq!(clamp_days(Some(0)), 1);
         assert_eq!(clamp_days(Some(100)), 90);
         assert_eq!(clamp_days(Some(7)), 7);
+    }
+
+    #[test]
+    fn price_history_disclaimer_documents_capped_history() {
+        assert!(PRICE_HISTORY_DISCLAIMER.contains("500"));
+        assert!(PRICE_HISTORY_DISCLAIMER.contains("total_count"));
     }
 }

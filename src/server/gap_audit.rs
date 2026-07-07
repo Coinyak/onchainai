@@ -283,6 +283,30 @@ static GAP_CACHE: Mutex<Option<HashMap<String, (GapAuditResponse, DateTime<Utc>)
     Mutex::new(None);
 
 const CACHE_TTL_SECS: i64 = 60;
+const CACHE_MAX_ENTRIES: usize = 100;
+
+fn cache_entry_millis(at: &DateTime<Utc>) -> i64 {
+    at.timestamp_millis()
+}
+
+fn trim_gap_cache(
+    cache: &mut HashMap<String, (GapAuditResponse, DateTime<Utc>)>,
+    now: DateTime<Utc>,
+) {
+    let now_ms = cache_entry_millis(&now);
+    let ttl_ms = CACHE_TTL_SECS * 1000;
+    cache.retain(|_, (_, at)| now_ms - cache_entry_millis(at) <= ttl_ms);
+    while cache.len() > CACHE_MAX_ENTRIES {
+        let Some(oldest_key) = cache
+            .iter()
+            .min_by_key(|(key, (_, at))| (cache_entry_millis(at), key.clone()))
+            .map(|(key, _)| key.clone())
+        else {
+            break;
+        };
+        cache.remove(&oldest_key);
+    }
+}
 
 pub fn gap_cache_key(intent: &str) -> String {
     format!("gap|{intent}")
@@ -292,7 +316,7 @@ pub fn gap_cache_get(key: &str, now: DateTime<Utc>) -> Option<GapAuditResponse> 
     let guard = GAP_CACHE.lock().ok()?;
     let cache = guard.as_ref()?;
     let (response, cached_at) = cache.get(key)?;
-    if now.timestamp() - cached_at.timestamp() > CACHE_TTL_SECS {
+    if now.timestamp_millis() - cached_at.timestamp_millis() > CACHE_TTL_SECS * 1000 {
         return None;
     }
     let mut cached = response.clone();
@@ -306,10 +330,9 @@ pub fn gap_cache_set(key: String, response: GapAuditResponse, now: DateTime<Utc>
             *guard = Some(HashMap::new());
         }
         if let Some(cache) = guard.as_mut() {
-            if cache.len() > 100 {
-                cache.retain(|_, (_, at)| now.timestamp() - at.timestamp() <= CACHE_TTL_SECS);
-            }
+            trim_gap_cache(cache, now);
             cache.insert(key, (response, now));
+            trim_gap_cache(cache, now);
         }
     }
 }
@@ -390,6 +413,29 @@ mod tests {
         };
         gap_cache_set(key.into(), response, now);
         assert!(gap_cache_get(key, now).is_some());
+    }
+
+    #[test]
+    fn gap_cache_enforces_max_entries() {
+        let now = Utc::now();
+        let response = GapAuditResponse {
+            intent: "test".into(),
+            subgoals: vec![],
+            gap_count: 0,
+            covered_count: 0,
+            disclaimer: GAP_AUDIT_DISCLAIMER,
+            audited_at: now,
+            cached: None,
+        };
+        for i in 0..105 {
+            let ts = now + chrono::Duration::milliseconds(i);
+            gap_cache_set(format!("gap|cap-{i}"), response.clone(), ts);
+        }
+        let probe_at = now + chrono::Duration::seconds(1);
+        assert!(gap_cache_get("gap|cap-0", probe_at).is_none());
+        assert!(gap_cache_get("gap|cap-4", probe_at).is_none());
+        assert!(gap_cache_get("gap|cap-5", probe_at).is_some());
+        assert!(gap_cache_get("gap|cap-104", probe_at).is_some());
     }
 
     #[test]
