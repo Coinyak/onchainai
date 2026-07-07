@@ -237,6 +237,27 @@ const FUNCTION_RULES: &[(&str, &[&str])] = &[
     ),
 ];
 
+/// Normalize raw chain strings to canonical catalog ids.
+///
+/// Maps every chain through `chains::canonical_chain_id`, drops noise and
+/// unrecognized values, and deduplicates. This ensures DB `chains[]` always
+/// contains canonical ids so SQL `chains @>` filters work regardless of
+/// which synonym the source used (e.g. `bnb` → `bsc`, `fantom` → `sonic`).
+fn canonicalize_chains(raw: &[String]) -> Vec<String> {
+    use std::collections::HashSet;
+
+    let mut seen: HashSet<&str> = HashSet::new();
+    let mut out = Vec::new();
+    for entry in raw {
+        if let Some(canonical) = crate::chains::canonical_chain_id(entry) {
+            if seen.insert(canonical) {
+                out.push(canonical.to_string());
+            }
+        }
+    }
+    out
+}
+
 /// Classify the `function` axis from text. Default: `dev-tool`.
 ///
 /// Iterates rules in declared order; first keyword match wins. Matching is
@@ -392,6 +413,8 @@ pub fn normalize(
     let now = chrono::Utc::now();
     let mut review = crate::models::tool::default_review_fields();
 
+    let canonical_chains = canonicalize_chains(&raw.chains);
+
     let relevance = assess_relevance(&RelevanceInput {
         name: &raw.name,
         description: raw.description.as_deref(),
@@ -400,7 +423,7 @@ pub fn normalize(
         homepage: raw.homepage.as_deref(),
         npm_package: raw.npm_package.as_deref(),
         mcp_endpoint: raw.mcp_endpoint.as_deref(),
-        chains: &raw.chains,
+        chains: &canonical_chains,
         source: &raw.source,
         keywords: &raw.keywords,
     });
@@ -431,7 +454,7 @@ pub fn normalize(
         npm_package: raw.npm_package.clone(),
         install_command: raw.install_command.clone(),
         mcp_endpoint: raw.mcp_endpoint.clone(),
-        chains: raw.chains.clone(),
+        chains: canonicalize_chains(&raw.chains),
         // Crawled tools start as `community`; admin can promote to
         // `verified`/`official`. `self_register` overrides this to `official`.
         status: "community".to_string(),
