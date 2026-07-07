@@ -86,7 +86,7 @@ Index appears after CDP Facilitator **settle** on a paid route with Bazaar disco
 
 ## OKX AI Agent Marketplace — https://okx.ai/agents
 
-> Registration is wallet-login SPA only (no curl). **W7 pending:** confirm OKX x402 facilitator ↔ CDP Facilitator compatibility before listing paid K2. If incompatible, submit **discovery-only** (free MCP tools) per Plan B — see `docs/superpowers/specs/2026-07-07-okx-x402-infra-waves.md` §3.4.
+> Registration is wallet-login SPA only (no curl). **W7 partial (2026-07-07):** public OKX Onchain OS Payments uses an own **Broker** (not CDP Facilitator); confirm `okx.ai/agents` A2MCP settle path after wallet login. If incompatible, submit **discovery-only** (free MCP tools) per Plan B — see `docs/superpowers/specs/2026-07-07-okx-x402-infra-waves.md` §3.4.
 
 | Field | Value |
 |-------|-------|

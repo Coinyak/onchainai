@@ -189,7 +189,7 @@ W5는 W1/W3/W4/W2 어디에도 기술적으로 의존하지 않는 독립 수정
 1. **OKX 수취 지갑 주소** — ✅ `0x2af05c1661da38a2919dc27b4c8b71cb91c30017` (K2 `X402_PAY_TO_ADDRESS`·레퍼럴 payout과 동일; OKX Provider 등록 폼에도 동일 주소 사용).
 2. **OKX 가입·월렛 연결·Provider 등록·서비스 리스트** — 월렛/신원/서명 수반 수동 웹 플로우. agent 대리 불가.
 3. **`export_toolkit` 유료/무료 결정(OD-FTG-4 제안)** — ≤10 slug = 무료, 대량/webhook = 유료. OKX 등재 전 결정.
-4. **OKX dev docs 접근(W7)** — 30분 팩트체크. 브라우저 세션 제공 또는 오너 직접 확인. Wave 1부터 병렬.
+4. **OKX dev docs 접근(W7)** — 🟡 부분 확인(2026-07-07): 공개 [Onchain OS Payments](https://web3.okx.com/onchainos/dev-docs/payments/overview)는 x402·EIP-3009 기반이지만 **자체 Broker**가 정산(RPC/gas/제출) — CDP Facilitator 직결과 동일하지 않을 가능성 높음. `okx.ai/agents` A2MCP 등재 폼의 facilitator 호환은 **월렛 로그인 후** 오너 30분 팩트체크 잔여. 비호환 시 Plan B(discovery-only) 우선.
 5. **Bazaar 선별 승인 루브릭(16점 중 12+)**: 402 핸드셰이크(필수 4) + 가격 일치 ±10%(필수 3) + stars/npm + registry 교차등재 + install_risk — 1차 5건 → 48h 관찰 → 15건 canary. `OPERATOR_GUIDE`에 반영 권장.
 6. **수취 지갑 실측** — ✅ `0x2af05…0017` = prod `X402_PAY_TO_ADDRESS` + `site_settings.default_referral_payout_address` (2026-07-07 반영).
 
