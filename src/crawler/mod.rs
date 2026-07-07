@@ -1224,10 +1224,7 @@ mod tests {
             default_source_registry_url("bazaar"),
             "https://api.cdp.coinbase.com/platform/v2/x402/discovery/resources"
         );
-        assert_eq!(
-            default_source_registry_url("pypi"),
-            "https://pypi.org/"
-        );
+        assert_eq!(default_source_registry_url("pypi"), "https://pypi.org/");
     }
 
     #[test]
