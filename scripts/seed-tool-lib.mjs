@@ -104,7 +104,7 @@ ON CONFLICT (slug) DO UPDATE SET
 RETURNING slug, (xmax = 0) AS inserted;
 `;
 
-function pgSslOption(env, databaseUrl) {
+export function pgSslOption(env, databaseUrl) {
   const mode = (env.PGSSLMODE || "").toLowerCase();
   const wantsSsl =
     mode === "require" ||
@@ -113,6 +113,40 @@ function pgSslOption(env, databaseUrl) {
   if (!wantsSsl) return undefined;
   if (env.PG_INSECURE_SSL === "1") return { rejectUnauthorized: false };
   return true;
+}
+
+/** When true, operator seeds may clear quarantine and re-approve rejected gates. */
+export function forceGateFix(env) {
+  return env.SEED_FORCE_GATE_FIX === "1";
+}
+
+export async function connectPg(env) {
+  const DATABASE_URL = env.DATABASE_URL || "";
+  if (!DATABASE_URL) {
+    console.error("DATABASE_URL missing");
+    process.exit(2);
+  }
+  const require = createRequire(import.meta.url);
+  const pg = require(resolve(ROOT, "scripts/ops/node_modules/pg"));
+  const ssl = pgSslOption(env, DATABASE_URL);
+  const client = new pg.Client({
+    connectionString: DATABASE_URL,
+    ...(ssl !== undefined ? { ssl } : {}),
+  });
+  await client.connect();
+  return client;
+}
+
+export async function runInTransaction(client, fn) {
+  await client.query("BEGIN");
+  try {
+    const result = await fn();
+    await client.query("COMMIT");
+    return result;
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw error;
+  }
 }
 
 export async function runSeed(tools, scriptName) {

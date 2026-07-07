@@ -28,6 +28,21 @@ pub fn parse_github_org(repo_url: &str) -> Option<String> {
     Some(org.to_string())
 }
 
+/// Extract `github.com/{org}/{repo}` repo segment (without `.git`).
+pub fn parse_github_repo_name(repo_url: &str) -> Option<String> {
+    let parsed = url::Url::parse(repo_url).ok()?;
+    if parsed.host_str()? != "github.com" {
+        return None;
+    }
+    let mut segments = parsed.path_segments()?;
+    let _org = segments.next()?;
+    let repo = segments.next()?;
+    if repo.is_empty() {
+        return None;
+    }
+    Some(repo.trim_end_matches(".git").to_string())
+}
+
 /// Extract scoped npm package namespace (`@scope/pkg` -> `scope`).
 pub fn parse_npm_scope(npm_package: &str) -> Option<String> {
     let trimmed = npm_package.trim();
@@ -66,9 +81,14 @@ pub fn identity_cluster_aligned(repo_url: &str, homepage: &str, npm_package: &st
         return false;
     };
 
-    identity_tokens_related(&github_org, &npm_scope)
-        && (identity_tokens_related(&github_org, &domain_label)
-            || identity_tokens_related(&npm_scope, &domain_label))
+    if !identity_tokens_related(&github_org, &npm_scope) {
+        return false;
+    }
+
+    identity_tokens_related(&github_org, &domain_label)
+        || identity_tokens_related(&npm_scope, &domain_label)
+        || parse_github_repo_name(repo_url)
+            .is_some_and(|repo| identity_tokens_related(&repo, &domain_label))
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
@@ -342,6 +362,11 @@ mod tests {
             "https://github.com/bob-collective/bob",
             "https://gobob.xyz",
             "@gobob/gateway-cli"
+        ));
+        assert!(identity_cluster_aligned(
+            "https://github.com/drakensoftware/chaingate",
+            "https://chaingate.dev",
+            "@drakensoftware/chaingate"
         ));
     }
 

@@ -103,9 +103,17 @@ pub(crate) fn has_agent_surface(repo: &OrgRepo) -> bool {
         repo.description.as_deref().unwrap_or("")
     )
     .to_lowercase();
-    ["mcp", "agent", "skill", "cli"]
-        .iter()
-        .any(|kw| corpus.contains(kw))
+    [
+        "mcp",
+        "agent",
+        "skill",
+        "cli",
+        "x402",
+        "payment protocol",
+        "payments protocol",
+    ]
+    .iter()
+    .any(|kw| corpus.contains(kw))
 }
 
 /// GitHub org repo list item (`GET /orgs/{org}/repos`).
@@ -687,6 +695,24 @@ mod tests {
             })
             .collect();
         assert_eq!(filter_org_repos(&repos, now).len(), MAX_REPOS_PER_ORG);
+    }
+
+    #[test]
+    fn vendor_orgs_agent_surface_gate_includes_x402_reference_repo() {
+        let repo = OrgRepo {
+            id: 1,
+            name: "x402".into(),
+            full_name: "x402-foundation/x402".into(),
+            description: Some("A payments protocol for the internet. Built on HTTP.".into()),
+            html_url: "https://github.com/x402-foundation/x402".into(),
+            fork: false,
+            archived: false,
+            stargazers_count: 6255,
+            pushed_at: Some("2026-07-06T09:17:39Z".into()),
+            topics: vec![],
+            language: Some("TypeScript".into()),
+        };
+        assert!(has_agent_surface(&repo));
     }
 
     #[test]
