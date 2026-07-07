@@ -686,4 +686,30 @@ mod tests {
     fn categories_join_prefixes_first_predicate_with_table_alias() {
         assert!(CATEGORIES_WITH_COUNTS_SQL.contains("AND t.approval_status = 'approved'"));
     }
+
+    /// Migration 037 recreates idx_tools_search to mirror `tool_search::TOOL_SEARCH_VECTOR`.
+    #[test]
+    fn tools_search_migration_matches_application_vector() {
+        use crate::server::tool_search::TOOL_SEARCH_VECTOR;
+
+        let migration = include_str!("../../migrations/037_tools_search_vector_index.sql");
+        for fragment in [
+            "DROP INDEX IF EXISTS idx_tools_search",
+            "CREATE INDEX idx_tools_search",
+            "coalesce(slug, '')",
+            "coalesce(repo_url, '')",
+            "setweight(to_tsvector('english'",
+        ] {
+            assert!(
+                migration.contains(fragment),
+                "migration 037 missing {fragment}"
+            );
+        }
+        for fragment in ["slug", "repo_url", "setweight"] {
+            assert!(
+                TOOL_SEARCH_VECTOR.contains(fragment),
+                "application vector missing {fragment}"
+            );
+        }
+    }
 }
