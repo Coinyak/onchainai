@@ -40,7 +40,7 @@ async function fetchNpmHomepage(pkg) {
 function classifyIssues(tool, links) {
   const issues = [];
   const gh = parseGithubRepo(tool.repo_url);
-  const firstParty = gh && FIRST_PARTY_ORGS[gh.org];
+  const firstParty = gh && FIRST_PARTY_ORGS[gh.org.toLowerCase()];
   if (tool.homepage && tool.homepage === tool.repo_url && gh) {
     issues.push("homepage_equals_github_repo");
   }
@@ -146,9 +146,13 @@ async function main() {
       ORDER BY slug
     `);
 
-    const { rows: allLinks } = await client.query(`
-      SELECT tool_id, display_label, url FROM tool_official_links
-    `);
+    const toolIds = tools.map((t) => t.id);
+    const { rows: allLinks } = toolIds.length
+      ? await client.query(
+          `SELECT tool_id, display_label, url FROM tool_official_links WHERE tool_id = ANY($1::uuid[])`,
+          [toolIds],
+        )
+      : { rows: [] };
     const linksByTool = new Map();
     for (const l of allLinks) {
       const arr = linksByTool.get(l.tool_id) || [];

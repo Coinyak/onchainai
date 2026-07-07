@@ -41,7 +41,24 @@ const env = {
 };
 
 const args = process.argv.slice(2);
-const LIMIT = Number(args[args.indexOf("--limit") + 1]) || 200;
+
+function parseLimitArg(argv) {
+  const idx = argv.indexOf("--limit");
+  if (idx === -1) return 200;
+  const raw = argv[idx + 1];
+  if (raw === undefined || raw.startsWith("-")) {
+    console.error("Usage: node scripts/audit-homepage-gaps.mjs [--limit N] [--check-github]");
+    process.exit(1);
+  }
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n <= 0) {
+    console.error(`Invalid --limit value: ${raw}`);
+    process.exit(1);
+  }
+  return n;
+}
+
+const LIMIT = parseLimitArg(args);
 const CHECK_GITHUB = args.includes("--check-github");
 const GITHUB_TOKEN = env.GITHUB_API_TOKEN || "";
 
@@ -85,10 +102,19 @@ async function githubStatus(org, repo) {
     "User-Agent": "onchainai-homepage-audit",
   };
   if (GITHUB_TOKEN) headers.Authorization = `Bearer ${GITHUB_TOKEN}`;
-  const res = await fetch(`https://api.github.com/repos/${org}/${repo}`, {
-    headers,
-  });
-  return res.status;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 10_000);
+  try {
+    const res = await fetch(`https://api.github.com/repos/${org}/${repo}`, {
+      headers,
+      signal: controller.signal,
+    });
+    return res.status;
+  } catch {
+    return 0;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 function classifyRow(tool) {
@@ -183,8 +209,15 @@ async function main() {
     for (const row of flagged) {
       if (!row.github) continue;
       const [org, repo] = row.github.split("/");
-      row.github_http = await githubStatus(org, repo);
-      if (row.github_http === 404) row.issues.push("github_repo_404");
+      try {
+        row.github_http = await githubStatus(org, repo);
+        if (row.github_http === 404) row.issues.push("github_repo_404");
+        else if (row.github_http === 403) row.issues.push("github_rate_limited");
+        else if (row.github_http === 0) row.issues.push("github_check_failed");
+      } catch {
+        row.github_http = 0;
+        row.issues.push("github_check_failed");
+      }
       await new Promise((r) => setTimeout(r, 120));
     }
   }
