@@ -341,6 +341,14 @@ fn filters_include_x402(filters: &ToolFilters) -> bool {
         || filters.pricing.iter().any(|value| value == "x402")
 }
 
+/// Canonicalize chain filter values so URL params using aliases (e.g.
+/// `?chain=bnb`, `?chain=fantom`) match DB rows stored with canonical ids
+/// (`bsc`, `sonic`). Deduplicates after normalization.
+#[cfg(feature = "ssr")]
+fn canonicalize_chain_filters(values: &[String]) -> Vec<String> {
+    crate::chains::canonicalize_chain_values(values)
+}
+
 #[cfg(feature = "ssr")]
 pub(crate) fn append_tool_filters<'qb>(
     query: &mut sqlx::QueryBuilder<'qb, sqlx::Postgres>,
@@ -356,23 +364,25 @@ pub(crate) fn append_tool_filters<'qb>(
     if filters_include_x402(filters) {
         append_x402_catalog_predicate(query);
     }
-    if !filters.chain.is_empty() {
+    let canonical_chain = canonicalize_chain_filters(&filters.chain);
+    if !canonical_chain.is_empty() {
         // Hard intersection: tool must support every selected chain.
-        query.push(" AND chains @> ").push_bind(&filters.chain);
+        // Bind canonical ids as a single text[] array.
+        query.push(" AND chains @> ").push_bind(canonical_chain);
     }
-    if !filters.chain_soft.is_empty() {
+    let canonical_chain_soft = canonicalize_chain_filters(&filters.chain_soft);
+    if !canonical_chain_soft.is_empty() {
         // Soft chain from NL query: single token may match empty `chains` too;
         // multi-token queries require an explicit chain hit (no empty escape).
-        let allow_empty_chains = filters.chain_soft.len() == 1;
+        let allow_empty_chains = canonical_chain_soft.len() == 1;
         query.push(" AND (");
-        for (index, chain) in filters.chain_soft.iter().enumerate() {
+        for (index, chain) in canonical_chain_soft.iter().enumerate() {
             if index > 0 {
                 query.push(" OR ");
             }
-            query
-                .push("chains @> ARRAY[")
-                .push_bind(chain)
-                .push("]::text[]");
+            // Bind each chain as a 1-element text[] so push_bind owns the data.
+            query.push("chains @> ARRAY[").push_bind(chain.clone());
+            query.push("]::text[]");
             if allow_empty_chains {
                 query.push(" OR coalesce(array_length(chains, 1), 0) = 0");
             }

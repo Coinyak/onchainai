@@ -328,12 +328,14 @@ async fn submit_listing(
         npm_package: None,
         mcp_endpoint: None,
         install_command: None,
-        chains: probe
-            .details
-            .as_ref()
-            .and_then(|d| d.network.clone())
-            .into_iter()
-            .collect(),
+        chains: crate::chains::canonicalize_chain_values(
+            &probe
+                .details
+                .as_ref()
+                .and_then(|d| d.network.clone())
+                .into_iter()
+                .collect::<Vec<_>>(),
+        ),
         category_suggestion: None,
         official_team_claim: false,
         verification_note: None,
@@ -385,7 +387,8 @@ async fn submit_listing(
 
     // Live 402: auto-publish. The handshake itself is the review (spec §L1).
     let price = display_price(&details);
-    let chains: Vec<String> = details.network.clone().into_iter().collect();
+    let raw_chains: Vec<String> = details.network.clone().into_iter().collect();
+    let chains = crate::chains::canonicalize_chain_values(&raw_chains);
     let mut tx = state
         .pool
         .begin()

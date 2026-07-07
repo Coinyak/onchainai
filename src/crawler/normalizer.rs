@@ -392,6 +392,8 @@ pub fn normalize(
     let now = chrono::Utc::now();
     let mut review = crate::models::tool::default_review_fields();
 
+    let canonical_chains = crate::chains::canonicalize_chain_values(&raw.chains);
+
     let relevance = assess_relevance(&RelevanceInput {
         name: &raw.name,
         description: raw.description.as_deref(),
@@ -400,7 +402,7 @@ pub fn normalize(
         homepage: raw.homepage.as_deref(),
         npm_package: raw.npm_package.as_deref(),
         mcp_endpoint: raw.mcp_endpoint.as_deref(),
-        chains: &raw.chains,
+        chains: &canonical_chains,
         source: &raw.source,
         keywords: &raw.keywords,
     });
@@ -431,7 +433,7 @@ pub fn normalize(
         npm_package: raw.npm_package.clone(),
         install_command: raw.install_command.clone(),
         mcp_endpoint: raw.mcp_endpoint.clone(),
-        chains: raw.chains.clone(),
+        chains: canonical_chains,
         // Crawled tools start as `community`; admin can promote to
         // `verified`/`official`. `self_register` overrides this to `official`.
         status: "community".to_string(),

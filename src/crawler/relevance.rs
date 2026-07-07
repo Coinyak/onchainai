@@ -131,96 +131,114 @@ impl RelevanceScore {
     }
 }
 
-/// Chains recognized by OnchainAI. This is the single source of truth —
-/// npm/pypi crawlers import this list instead of maintaining their own.
+/// Chain tokens that are common English words and prone to false positives
+/// when matched as bare tokens in the corpus. For these, require a phrase
+/// match (e.g. "ton blockchain", "gram network") instead of bare-token
+/// matching.
 ///
-/// A chain in this list is a strong onchain signal. When it appears in
-/// `chains` (author-declared), it gets chain-support points. When it also
-/// appears in the scoring corpus (name/description/keywords), it gets
-/// strong-signal points. Both paths use the same list so no chain is
-/// silently disadvantaged.
-pub const SUPPORTED_CHAINS: &[&str] = &[
-    "ethereum",
-    "bitcoin",
-    "solana",
-    "base",
-    "polygon",
-    "arbitrum",
-    "optimism",
-    "avalanche",
-    "bnb",
-    "bnb-chain",
-    "bsc",
-    "binance",
-    "binance-smart-chain",
-    "cosmos",
-    "near",
-    "sui",
-    "aptos",
-    "cardano",
-    "tron",
-    "algorand",
-    "starknet",
-    "zksync",
-    "linea",
-    "scroll",
-    "mantle",
-    "fantom",
-    "celo",
-    "stellar",
-    "tezos",
+/// `chains[]` (author-declared) is unaffected — explicit chain declarations
+/// are always trusted. This only governs corpus text scanning and
+/// keyword-based chain extraction (npm/pypi `is_chain_keyword`).
+const AMBIGUOUS_CHAIN_TOKENS: &[&str] = &[
+    "ton",    // common word (metric ton, tone)
+    "gram",   // common unit
+    "near",   // common preposition
+    "sei",    // Japanese word
+    "ink",    // common word
+    "flare",  // common word
+    "stable", // common adjective
+    "stacks", // common word
+    "move",   // common verb (Movement chain)
 ];
 
-/// Check whether a keyword is a recognized chain name.
+/// Phrases that disambiguate ambiguous chain tokens. If any of these
+/// phrases appear in the corpus, the chain signal is awarded.
+fn ambiguous_chain_phrases(token: &str) -> &'static [&'static str] {
+    match token {
+        "ton" => &[
+            "ton blockchain",
+            "ton network",
+            "the open network",
+            "toncoin",
+            "gram token",
+        ],
+        "gram" => &["gram token", "gram blockchain", "gram network", "toncoin"],
+        "near" => &[
+            "near protocol",
+            "near blockchain",
+            "near network",
+            "near chain",
+        ],
+        "sei" => &["sei network", "sei blockchain", "sei chain", "sei-mainnet"],
+        "ink" => &["ink chain", "inkchain", "ink-mainnet", "ink blockchain"],
+        "flare" => &[
+            "flare network",
+            "flare blockchain",
+            "flare chain",
+            "flare-mainnet",
+        ],
+        "stable" => &["stable chain", "stable-mainnet", "stable blockchain"],
+        "stacks" => &["stacks blockchain", "stacks chain", "blockstack", "stx"],
+        "move" => &[
+            "movement",
+            "move chain",
+            "movement-mainnet",
+            "movement-labs",
+        ],
+        _ => &[],
+    }
+}
+
+/// Check if a chain token is ambiguous and, if so, require a phrase match.
+fn chain_token_matches(context: &RelevanceContext<'_>, token: &str) -> bool {
+    if AMBIGUOUS_CHAIN_TOKENS.contains(&token) {
+        // For ambiguous tokens, require a disambiguating phrase.
+        ambiguous_chain_phrases(token)
+            .iter()
+            .any(|phrase| context.matches(phrase))
+    } else {
+        context.matches(token)
+    }
+}
+
+/// Check whether a keyword is a recognized chain name **and** safe to
+/// extract from registry keywords.
 ///
-/// Uses [`SUPPORTED_CHAINS`] as the single source of truth so npm/pypi
-/// crawlers share the same list as the relevance scorer.
+/// Delegates to [`crate::chains::canonical_chain_id`] for chain recognition,
+/// but excludes ambiguous tokens (ton, gram, near, etc.) that are common
+/// English words. A package tagging `keywords: ["ton"]` might mean "a ton
+/// of features" — we don't want that in `chains[]`.
+///
+/// For ambiguous tokens, the caller should rely on explicit `chains[]`
+/// declarations (user submissions) or phrase-matched corpus signals
+/// ([`add_canonical_chain_signals`]) instead.
 pub fn is_chain_keyword(keyword: &str) -> bool {
-    SUPPORTED_CHAINS.contains(&keyword)
+    if AMBIGUOUS_CHAIN_TOKENS.contains(&keyword) {
+        return false;
+    }
+    crate::chains::canonical_chain_id(keyword).is_some()
+}
+
+/// Tiered points for a chain, based on its canonical catalog id.
+///
+/// Flagship L1s get 18, major L1s get 16, everything else gets 14.
+/// Both `add_chain_support` (author-declared `chains[]`) and corpus text
+/// matching use this so a chain scores the same regardless of which
+/// synonym name the author used.
+fn chain_tier_points(canonical_id: &str) -> i32 {
+    match canonical_id {
+        "bitcoin" | "ethereum" | "base" => 18,
+        "solana" | "bsc" | "cosmos" | "near" | "sui" | "aptos" | "tron" | "hyperliquid" => 16,
+        _ => 14,
+    }
 }
 
 /// Strong onchain/crypto signals — each match adds meaningful score.
 ///
-/// Chain signals: every chain in [`SUPPORTED_CHAINS`] gets a strong-signal
-/// entry here so that a chain appearing in the corpus (name/description/
-/// keywords) scores as a strong signal, consistent with the chain-support
-/// points from `add_chain_support`. No chain is left out.
+/// Chain signals are handled separately by [`add_chain_support`] and
+/// [`add_canonical_chain_signals`] which use `chains::canonical_chain_id`
+/// for synonym normalization. Only non-chain strong signals are listed here.
 const STRONG_SIGNALS: &[(&str, i32, &str)] = &[
-    // Tier 1 — flagship L1s (18 pts)
-    ("bitcoin", 18, "mentions Bitcoin"),
-    ("ethereum", 18, "mentions Ethereum"),
-    ("base", 18, "mentions Base"),
-    ("base chain", 18, "mentions Base"),
-    ("base network", 18, "mentions Base"),
-    // Tier 2 — major L1s (16 pts)
-    ("solana", 16, "mentions Solana"),
-    ("bnb", 16, "mentions BNB Chain"),
-    ("binance", 16, "mentions Binance"),
-    ("bsc", 16, "mentions BSC"),
-    ("binance-smart-chain", 16, "mentions BNB Chain"),
-    ("bnb-chain", 16, "mentions BNB Chain"),
-    ("cosmos", 16, "mentions Cosmos"),
-    ("near", 16, "mentions Near"),
-    ("sui", 16, "mentions Sui"),
-    ("aptos", 16, "mentions Aptos"),
-    // Tier 3 — L2s and mid L1s (14 pts)
-    ("polygon", 14, "mentions Polygon"),
-    ("arbitrum", 14, "mentions Arbitrum"),
-    ("optimism", 14, "mentions Optimism"),
-    ("avalanche", 14, "mentions Avalanche"),
-    ("cardano", 14, "mentions Cardano"),
-    ("tron", 14, "mentions Tron"),
-    ("algorand", 14, "mentions Algorand"),
-    ("starknet", 14, "mentions Starknet"),
-    ("zksync", 14, "mentions zkSync"),
-    ("linea", 14, "mentions Linea"),
-    ("scroll", 14, "mentions Scroll"),
-    ("mantle", 14, "mentions Mantle"),
-    ("fantom", 14, "mentions Fantom"),
-    ("celo", 14, "mentions Celo"),
-    ("stellar", 14, "mentions Stellar"),
-    ("tezos", 14, "mentions Tezos"),
-    // DeFi / tooling signals
     ("defi", 16, "DeFi keyword"),
     ("uniswap", 16, "DeFi protocol (Uniswap)"),
     ("aave", 16, "DeFi protocol (Aave)"),
@@ -365,6 +383,7 @@ pub fn assess_relevance(input: &RelevanceInput<'_>) -> RelevanceAssessment {
 
     add_signal_matches(&context, &mut scoring, STRONG_SIGNALS);
     add_signal_matches(&context, &mut scoring, MEDIUM_SIGNALS);
+    add_canonical_chain_signals(&context, &mut scoring);
     add_chain_support(&context, &mut scoring);
     add_package_name_signal(&context, &mut scoring);
     add_repo_url_signal(&context, &mut scoring);
@@ -395,49 +414,56 @@ fn add_signal_matches(
     }
 }
 
-fn add_chain_support(context: &RelevanceContext<'_>, scoring: &mut RelevanceScore) {
-    let chains = normalized_chains(context.input.chains);
-    for chain in &chains {
-        // Chain-support points scale with chain tier, consistent with
-        // STRONG_SIGNALS. This avoids a flat 14 pts that under-credits
-        // flagship chains and over-credits minor ones.
-        let pts = chain_signal_points(chain);
-        scoring.add_points(pts, &format!("supports chain: {chain}"));
+/// Score chain signals from the corpus text (name/description/keywords).
+///
+/// Scans the corpus for every catalog chain id and alias, resolves each
+/// match to its canonical id, and awards tiered points. Deduplicates by
+/// canonical id so `bnb` + `bsc` in the same text = one chain signal,
+/// not two.
+///
+/// Ambiguous tokens (ton, gram, near, etc.) require a disambiguating phrase
+/// to avoid false positives from common English words.
+fn add_canonical_chain_signals(context: &RelevanceContext<'_>, scoring: &mut RelevanceScore) {
+    use std::collections::HashSet;
+
+    let mut seen_canonical: HashSet<&str> = HashSet::new();
+    for entry in crate::chains::CHAIN_CATALOG {
+        // Check the canonical id itself (with ambiguous-token guard).
+        if chain_token_matches(context, entry.id) {
+            if seen_canonical.insert(entry.id) {
+                let pts = chain_tier_points(entry.id);
+                scoring.add_points(pts, &format!("mentions {}", entry.label));
+            }
+            continue;
+        }
+        // Check aliases — if matched, resolve to the canonical id.
+        for alias in entry.aliases {
+            if chain_token_matches(context, alias) {
+                if seen_canonical.insert(entry.id) {
+                    let pts = chain_tier_points(entry.id);
+                    scoring.add_points(pts, &format!("mentions {}", entry.label));
+                }
+                break;
+            }
+        }
     }
-    if chains.len() >= 2 && has_wallet_reason(scoring) {
+}
+
+fn add_chain_support(context: &RelevanceContext<'_>, scoring: &mut RelevanceScore) {
+    use std::collections::HashSet;
+
+    let mut seen_canonical: HashSet<&str> = HashSet::new();
+    for raw in context.input.chains {
+        if let Some(canonical) = crate::chains::canonical_chain_id(raw) {
+            if seen_canonical.insert(canonical) {
+                let pts = chain_tier_points(canonical);
+                scoring.add_points(pts, &format!("supports chain: {canonical}"));
+            }
+        }
+    }
+    if seen_canonical.len() >= 2 && has_wallet_reason(scoring) {
         scoring.add_points(12, "wallet tooling with multi-chain support");
     }
-}
-
-/// Points for a chain when it appears in the `chains` array (author-declared).
-///
-/// Matches the STRONG_SIGNALS tier: flagship L1s get 18, major L1s get 16,
-/// L2s/mid L1s get 14. This keeps chain-support points consistent with
-/// corpus-match points so a chain scores the same whether it appears in
-/// `chains` or in the text.
-fn chain_signal_points(chain: &str) -> i32 {
-    match chain {
-        "bitcoin" | "ethereum" => 18,
-        "solana"
-        | "bnb"
-        | "binance"
-        | "bsc"
-        | "binance-smart-chain"
-        | "bnb-chain"
-        | "cosmos"
-        | "near"
-        | "sui"
-        | "aptos" => 16,
-        _ => 14,
-    }
-}
-
-fn normalized_chains(chains: &[String]) -> Vec<String> {
-    chains
-        .iter()
-        .map(|chain| chain.to_lowercase())
-        .filter(|chain| !chain.is_empty())
-        .collect()
 }
 
 fn has_wallet_reason(scoring: &RelevanceScore) -> bool {
@@ -911,15 +937,158 @@ mod tests {
     }
 
     #[test]
-    fn supported_chain_list_is_comprehensive() {
-        // Every chain in SUPPORTED_CHAINS should also appear in STRONG_SIGNALS
-        // so that chain-support and corpus matching are consistent.
-        for chain in SUPPORTED_CHAINS {
-            let found = STRONG_SIGNALS.iter().any(|(kw, _, _)| kw == chain);
-            assert!(
-                found,
-                "chain '{chain}' is in SUPPORTED_CHAINS but missing from STRONG_SIGNALS"
+    fn chain_synonyms_resolve_to_same_canonical_id() {
+        // BNB Chain synonyms all resolve to "bsc" in the chain catalog.
+        for raw in &["bnb", "bsc", "binance", "binance-smart-chain", "bnb-chain"] {
+            assert_eq!(
+                crate::chains::canonical_chain_id(raw),
+                Some("bsc"),
+                "{raw} should resolve to bsc"
             );
         }
+        // Fantom rebranded to Sonic.
+        for raw in &["fantom", "ftm", "sonic"] {
+            assert_eq!(
+                crate::chains::canonical_chain_id(raw),
+                Some("sonic"),
+                "{raw} should resolve to sonic"
+            );
+        }
+        // TON token rebranded to Gram; chain stays TON.
+        for raw in &["ton", "gram", "toncoin"] {
+            assert_eq!(
+                crate::chains::canonical_chain_id(raw),
+                Some("ton"),
+                "{raw} should resolve to ton"
+            );
+        }
+    }
+
+    #[test]
+    fn chain_synonyms_dont_double_score() {
+        // A tool mentioning both "bnb" and "bsc" should score the same as
+        // mentioning only one — they're the same chain.
+        let both = RelevanceInput {
+            name: "test",
+            description: Some("bnb bsc tool"),
+            tool_type: "sdk",
+            repo_url: Some("https://github.com/example/test"),
+            homepage: None,
+            npm_package: None,
+            mcp_endpoint: None,
+            chains: &["bnb".into(), "bsc".into()],
+            source: "pypi",
+            keywords: &[],
+        };
+        let one = RelevanceInput {
+            name: "test",
+            description: Some("bnb tool"),
+            tool_type: "sdk",
+            repo_url: Some("https://github.com/example/test"),
+            homepage: None,
+            npm_package: None,
+            mcp_endpoint: None,
+            chains: &["bnb".into()],
+            source: "pypi",
+            keywords: &[],
+        };
+        let score_both = assess_relevance(&both).score;
+        let score_one = assess_relevance(&one).score;
+        assert_eq!(
+            score_both, score_one,
+            "bnb+bsc should not double-score (both={score_both}, one={score_one})"
+        );
+    }
+
+    #[test]
+    fn ambiguous_token_ton_does_not_match_bare_word() {
+        // "ton" as a bare word (e.g. "a ton of features") should NOT
+        // trigger a TON chain signal.
+        let bare = RelevanceInput {
+            name: "heavy-loader",
+            description: Some("Process a ton of data files efficiently"),
+            tool_type: "cli",
+            repo_url: Some("https://github.com/example/loader"),
+            homepage: None,
+            npm_package: None,
+            mcp_endpoint: None,
+            chains: &[],
+            source: "github",
+            keywords: &[],
+        };
+        let assessment = assess_relevance(&bare);
+        assert!(
+            !assessment.reasons.iter().any(|r| r.contains("TON")),
+            "bare 'ton' should not trigger TON chain signal: {assessment:?}"
+        );
+    }
+
+    #[test]
+    fn ambiguous_token_ton_matches_with_phrase_context() {
+        // "ton blockchain" or "toncoin" should trigger TON chain signal.
+        let with_context = RelevanceInput {
+            name: "ton-wallet",
+            description: Some("Wallet for the TON blockchain ecosystem"),
+            tool_type: "mcp",
+            repo_url: Some("https://github.com/example/ton-wallet"),
+            homepage: None,
+            npm_package: None,
+            mcp_endpoint: None,
+            chains: &[],
+            source: "github",
+            keywords: &[],
+        };
+        let assessment = assess_relevance(&with_context);
+        assert!(
+            assessment.reasons.iter().any(|r| r.contains("TON")),
+            "'TON blockchain' should trigger TON chain signal: {assessment:?}"
+        );
+    }
+
+    #[test]
+    fn ambiguous_token_near_does_not_match_bare_word() {
+        // "near" as a preposition should NOT trigger NEAR chain signal.
+        let bare = RelevanceInput {
+            name: "quick-cache",
+            description: Some("Fast cache for data stored near the client"),
+            tool_type: "sdk",
+            repo_url: Some("https://github.com/example/cache"),
+            homepage: None,
+            npm_package: None,
+            mcp_endpoint: None,
+            chains: &[],
+            source: "github",
+            keywords: &[],
+        };
+        let assessment = assess_relevance(&bare);
+        assert!(
+            !assessment.reasons.iter().any(|r| r.contains("NEAR")),
+            "bare 'near' should not trigger NEAR chain signal: {assessment:?}"
+        );
+    }
+
+    #[test]
+    fn explicit_chain_declaration_overrides_ambiguity() {
+        // Even ambiguous tokens in `chains[]` (author-declared) are trusted.
+        let inp = RelevanceInput {
+            name: "gram-bridge",
+            description: Some("Bridge tool for GRAM token"),
+            tool_type: "cli",
+            repo_url: Some("https://github.com/example/gram-bridge"),
+            homepage: None,
+            npm_package: None,
+            mcp_endpoint: None,
+            chains: &["ton".into()],
+            source: "github",
+            keywords: &[],
+        };
+        let assessment = assess_relevance(&inp);
+        assert!(
+            assessment
+                .reasons
+                .iter()
+                .any(|r| r.contains("supports chain: ton")),
+            "explicit chains[] should always be trusted: {assessment:?}"
+        );
     }
 }

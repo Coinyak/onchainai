@@ -113,7 +113,7 @@ pub const CHAIN_CATALOG: &[ChainMeta] = &[
         id: "sonic",
         label: "Sonic",
         logo: "/chains/sonic.svg",
-        aliases: &["sonic-mainnet"],
+        aliases: &["sonic-mainnet", "fantom", "ftm", "fantom-mainnet"],
         pinned: false,
     },
     ChainMeta {
@@ -207,13 +207,7 @@ pub const CHAIN_CATALOG: &[ChainMeta] = &[
         aliases: &["celo-mainnet"],
         pinned: false,
     },
-    ChainMeta {
-        id: "fantom",
-        label: "Fantom",
-        logo: "/chains/fantom.svg",
-        aliases: &["ftm", "fantom-mainnet"],
-        pinned: false,
-    },
+    // Fantom rebranded to Sonic (2025); `fantom`/`ftm` are aliases of `sonic`.
     ChainMeta {
         id: "blast",
         label: "Blast",
@@ -358,7 +352,14 @@ pub const CHAIN_CATALOG: &[ChainMeta] = &[
         id: "ton",
         label: "TON",
         logo: "/chains/ton.svg",
-        aliases: &["the-open-network", "ton-mainnet"],
+        // Toncoin token rebranded to Gram (June 2026); chain name stays TON.
+        aliases: &[
+            "the-open-network",
+            "ton-mainnet",
+            "gram",
+            "gram-token",
+            "toncoin",
+        ],
         pinned: false,
     },
     ChainMeta {
@@ -630,6 +631,74 @@ pub fn resolve_chain(db_value: &str) -> Option<&'static ChainMeta> {
 pub fn chain_by_id(id: &str) -> Option<&'static ChainMeta> {
     let normalized = normalize_chain_key(id);
     CHAIN_CATALOG.iter().find(|entry| entry.id == normalized)
+}
+
+/// Resolve any raw chain string (id, alias, or variant) to its canonical
+/// catalog id. Returns `None` for noise or unrecognized values.
+///
+/// This is the single entry point for chain synonym normalization —
+/// relevance scoring, crawler chain extraction, and UI filter matching
+/// all use this to map `bnb` / `bsc` / `binance` → `bsc`, `fantom` / `ftm`
+/// → `sonic`, `gram` → `ton`, etc.
+pub fn canonical_chain_id(raw: &str) -> Option<&'static str> {
+    resolve_chain(raw).map(|meta| meta.id)
+}
+
+/// Map `eip155:<chainId>` network strings (x402/Bazaar) to catalog slugs.
+fn chain_slug_from_eip155_network(network: &str) -> Option<&'static str> {
+    const MAINNET_CHAIN_MAP: &[(u32, &str)] = &[
+        (8453, "base"),
+        (1, "ethereum"),
+        (137, "polygon"),
+        (42161, "arbitrum"),
+        (10, "optimism"),
+        (43114, "avalanche"),
+        (56, "bsc"),
+        (196, "x-layer"),
+    ];
+    let rest = network.trim().strip_prefix("eip155:")?;
+    let chain_id: u32 = rest.parse().ok()?;
+    MAINNET_CHAIN_MAP
+        .iter()
+        .find(|(id, _)| *id == chain_id)
+        .map(|(_, slug)| *slug)
+}
+
+/// Normalize a single chain token (catalog alias, slug, or `eip155:` network).
+pub fn normalize_chain_token(raw: &str) -> Option<String> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    if let Some(id) = canonical_chain_id(trimmed) {
+        return Some(id.to_string());
+    }
+    if let Some(slug) = chain_slug_from_eip155_network(trimmed) {
+        return Some(slug.to_string());
+    }
+    let key = normalize_chain_key(trimmed);
+    if key.is_empty() || is_chain_noise(&key) {
+        return None;
+    }
+    Some(key)
+}
+
+/// Normalize raw chain strings to canonical catalog ids where possible.
+///
+/// Maps synonyms (`bnb` → `bsc`, `fantom` → `sonic`), `eip155:` networks, deduplicates,
+/// and keeps unrecognized normalized tokens so new chains are not dropped.
+pub fn canonicalize_chain_values(raw: &[String]) -> Vec<String> {
+    use std::collections::HashSet;
+
+    let mut seen: HashSet<String> = HashSet::new();
+    let mut out = Vec::new();
+    for entry in raw {
+        let canonical = normalize_chain_token(entry).unwrap_or_else(|| entry.clone());
+        if seen.insert(canonical.clone()) {
+            out.push(canonical);
+        }
+    }
+    out
 }
 
 /// Whether a selected `?chain=` value is active for a catalog entry (id or alias).
@@ -922,6 +991,15 @@ mod tests {
             ("build-on-bitcoin", "bob"),
             ("ETH Mainnet", "ethereum"),
             ("Solana Mainnet", "solana"),
+            // Fantom rebranded to Sonic (2025)
+            ("fantom", "sonic"),
+            ("ftm", "sonic"),
+            ("Fantom Mainnet", "sonic"),
+            // TON token rebranded to Gram (2026); chain stays TON
+            ("gram", "ton"),
+            ("gram-token", "ton"),
+            ("toncoin", "ton"),
+            ("the-open-network", "ton"),
         ];
         for (raw, expected) in cases {
             assert_eq!(
@@ -954,7 +1032,7 @@ mod tests {
             );
             assert!(is_chain_noise(noise), "noise value not flagged: {noise}");
         }
-        for known in ["fantom", "litecoin", "celo", "gnosis", "blast", "okx"] {
+        for known in ["sonic", "litecoin", "celo", "gnosis", "blast", "okx"] {
             assert!(
                 resolve_chain(known).is_some(),
                 "catalog chain should resolve: {known}"
@@ -1003,6 +1081,64 @@ mod tests {
     }
 
     #[test]
+    fn canonical_chain_id_resolves_synonyms() {
+        // BNB Chain synonyms all map to canonical "bsc"
+        for raw in &[
+            "bnb",
+            "bsc",
+            "binance",
+            "binance-smart-chain",
+            "bnb-chain",
+            "BNB Chain",
+        ] {
+            assert_eq!(
+                canonical_chain_id(raw),
+                Some("bsc"),
+                "canonical_chain_id({raw}) should be bsc"
+            );
+        }
+        // Fantom → Sonic rebrand
+        for raw in &["fantom", "ftm", "sonic", "fantom-mainnet", "sonic-mainnet"] {
+            assert_eq!(
+                canonical_chain_id(raw),
+                Some("sonic"),
+                "canonical_chain_id({raw}) should be sonic"
+            );
+        }
+        // TON token → Gram rebrand (chain stays TON)
+        for raw in &["ton", "gram", "gram-token", "toncoin", "the-open-network"] {
+            assert_eq!(
+                canonical_chain_id(raw),
+                Some("ton"),
+                "canonical_chain_id({raw}) should be ton"
+            );
+        }
+        // Noise returns None
+        assert_eq!(canonical_chain_id("multi-chain"), None);
+        assert_eq!(canonical_chain_id("all"), None);
+    }
+
+    #[test]
+    fn canonicalize_chain_values_maps_synonyms_and_dedupes() {
+        let raw = vec![
+            "bnb".into(),
+            "bsc".into(),
+            "Fantom".into(),
+            "eip155:8453".into(),
+        ];
+        let out = canonicalize_chain_values(&raw);
+        assert_eq!(out, vec!["bsc", "sonic", "base"]);
+    }
+
+    #[test]
+    fn normalize_chain_token_handles_eip155_network() {
+        assert_eq!(
+            normalize_chain_token("eip155:8453"),
+            Some("base".to_string())
+        );
+    }
+
+    #[test]
     fn strip_ordering_pinned_first_then_by_count() {
         let counts = vec![
             ("ethereum".into(), 50),
@@ -1028,7 +1164,7 @@ mod tests {
     #[test]
     fn strip_primary_visible_leaves_overflow_for_expand_control() {
         assert_eq!(STRIP_PRIMARY_VISIBLE, 20);
-        assert_eq!(CHAIN_CATALOG.len(), 74);
+        assert_eq!(CHAIN_CATALOG.len(), 73);
 
         let counts: Vec<(String, i64)> = CHAIN_CATALOG
             .iter()

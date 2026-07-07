@@ -586,6 +586,12 @@ mod tests {
     }
 
     #[test]
+    fn parse_submission_chains_canonicalizes_aliases() {
+        let chains = parse_submission_chains("bnb, fantom, ethereum");
+        assert_eq!(chains, vec!["bsc", "sonic", "ethereum"]);
+    }
+
+    #[test]
     fn validate_submit_tool_accepts_minimally_plausible_crypto_tool() {
         assert!(validate_submit_tool_input(&sample_submit_input()).is_ok());
     }

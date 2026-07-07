@@ -51,12 +51,14 @@ pub(crate) fn is_dev_loopback_http_url(raw: &str) -> bool {
 
 /// Parse comma-separated chain list from submission form.
 pub(crate) fn parse_submission_chains(raw: &str) -> Vec<String> {
-    raw.split([',', '\n'])
+    let parsed: Vec<String> = raw
+        .split([',', '\n'])
         .map(str::trim)
         .filter(|s| !s.is_empty())
         .map(str::to_string)
         .take(20)
-        .collect()
+        .collect();
+    crate::chains::canonicalize_chain_values(&parsed)
 }
 
 /// Intake gate: minimally plausible submission (relevance gates public approval, not intake).

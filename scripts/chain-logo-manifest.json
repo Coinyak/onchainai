@@ -189,13 +189,6 @@
       "markers": ["#35D07F", "#FBCC5C"]
     },
     {
-      "id": "fantom",
-      "label": "Fantom",
-      "kind": "wrap",
-      "source": "fantom_official.svg",
-      "markers": ["#1969FF", "path"]
-    },
-    {
       "id": "gnosis",
       "label": "Gnosis",
       "kind": "wrap",
