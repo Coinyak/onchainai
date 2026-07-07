@@ -166,5 +166,4 @@ mod tests {
         let pct: f64 = (7.0 / 10.0) * 100.0;
         assert!((pct - 70.0).abs() < f64::EPSILON);
     }
-
 }
