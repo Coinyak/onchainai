@@ -18,11 +18,19 @@ import {
 
 const APPLY = process.env.SEED_ENV === "prod-curate";
 
-async function fetchNpmHomepage(pkg) {
+/** npm scoped packages: keep leading @, encode only the scope/name slash. */
+function npmRegistryPackagePath(pkg) {
   const name = pkg.startsWith("@") ? pkg : pkg.split("/")[0];
+  if (name.startsWith("@") && name.includes("/")) {
+    return name.replace("/", "%2F");
+  }
+  return encodeURIComponent(name);
+}
+
+async function fetchNpmHomepage(pkg) {
   try {
     const res = await fetch(
-      `https://registry.npmjs.org/${encodeURIComponent(name)}`,
+      `https://registry.npmjs.org/${npmRegistryPackagePath(pkg)}`,
       { headers: { Accept: "application/json" } },
     );
     if (!res.ok) return null;
