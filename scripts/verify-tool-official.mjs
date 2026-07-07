@@ -55,6 +55,53 @@ const PLATFORM_KEYWORDS = [
   "x-api", "twitter-api", "xdevplatform",
 ];
 
+// Repo name / slug patterns that are NOT developer tools (docs, specs, demos,
+// examples, infra automation, org profile repos, audits, etc.).
+// A repo matching any of these is blocked from official/verified elevation
+// even when it belongs to a first-party org.
+const NON_TOOL_PATTERNS = [
+  /^\.github$/i,
+  /^(docs|documentation|documentation-en|documentation-zh|doc-|safe-docs|uniswap-docs|graphprotocol-docs|ton-blockchain-docs|wormhole-docs)/i,
+  /(website|esp-website|ethereum-org-website|zkvm-website|steel-website|ton-blockchain-github-io)$/i,
+  /^(consensus-specs|execution-specs|execution-apis|cryptography-specs|devp2p|walletconnect-specs|teps)$/i,
+  /^(program-examples|crypto-primitives-examples|query-examples|graphprotocol-examples|haskell-nix-example|layerzero-solana-frontend-examples)/i,
+  /^(demo-|.*-demo$|demos$|onramp-demo|onramp-v2-mobile-demo|wirex-wallets-demo|buy-sell-opensea-sdk-demo)/i,
+  /^(example-|.*-examples$)/i,
+  /^(ansible-role-)/i,
+  /(helm-charts?)$/i,
+  /^(eth-phishing-detect|phishing-detect)$/i,
+  /(audits?|security-audits|wormhole-audits)$/i,
+  /(essential-cardano-content)$/i,
+  /^(errorprone-checks)$/i,
+  /^(docs-template)$/i,
+  /^(safe-apps-list)$/i,
+  /^(safe-transaction-service)$/i,
+  /^(sun-network)$/i,
+  /^(x402-chat|x402\.chat)$/i,
+  /^(pay-skills)$/i,
+  /^(base-contracts|contract-deployments|uerc20-factory|uniroute-public|v4-hooks-public|uniswapx-parameterization-api)$/i,
+  /^(lz-address-book)$/i,
+  /^(ouroboros-leios-formal-spec)$/i,
+  /^(adnl-tunnel)$/i,
+  /^(account-policies)$/i,
+  /^(action-is-release|action-publish-release)$/i,
+  /^(contributor-docs)$/i,
+];
+
+/**
+ * Return true if the repo URL or slug matches a non-tool pattern.
+ * Used to block official/verified elevation of docs, specs, demos, examples,
+ * infra automation, and org-profile repos.
+ */
+function isNonToolRepo(repoUrl, slug) {
+  const gh = repoUrl ? parseGithubRepo(repoUrl) : null;
+  const repoName = gh?.repo || "";
+  // Test repo name and slug individually against each pattern.
+  return NON_TOOL_PATTERNS.some(
+    (p) => p.test(repoName) || (slug && p.test(slug)),
+  );
+}
+
 function parseEnvFile(path) {
   const out = {};
   let text;
@@ -407,6 +454,15 @@ function decide(tool, evidence) {
   if (gates.length)
     return { decision: "refuse", reason: `public gate failed: ${gates.join(", ")}` };
 
+  // Block elevation of non-tool repos (docs, specs, demos, examples, infra
+  // automation, org-profile repos, audits, etc.) even from first-party orgs.
+  if (isNonToolRepo(tool.repo_url, tool.slug)) {
+    return {
+      decision: "community",
+      reason: "non-tool repo (docs/specs/demo/example/infra/profile/audit)",
+    };
+  }
+
   const orgKey = normalize(evidence.repo_org_login || evidence.github_org);
   const firstPartyEntry = Object.entries(FIRST_PARTY_ORGS).find(
     ([org]) => normalize(org) === orgKey,
@@ -511,6 +567,10 @@ async function processTool(db, tool) {
 
 function isScanCandidate(tool) {
   if (tool.install_risk_level === "critical" || tool.install_risk_level === "high") {
+    return false;
+  }
+  // Exclude non-tool repos from scan candidates.
+  if (isNonToolRepo(tool.repo_url, tool.slug)) {
     return false;
   }
   const gh = tool.repo_url ? parseGithubRepo(tool.repo_url) : null;
