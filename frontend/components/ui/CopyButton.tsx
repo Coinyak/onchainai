@@ -18,7 +18,11 @@ export function CopyButton({ text, label = "Copy", onCopied }: CopyButtonProps) 
     try {
       await navigator.clipboard.writeText(text);
       setCopied(true);
-      onCopied?.();
+      try {
+        onCopied?.();
+      } catch {
+        /* side-effect failures must not break copy UX */
+      }
       setTimeout(() => setCopied(false), 2000);
     } catch {
       /* ignore */
