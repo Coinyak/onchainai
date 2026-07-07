@@ -131,13 +131,91 @@ impl RelevanceScore {
     }
 }
 
-/// Check whether a keyword is a recognized chain name.
+/// Chain tokens that are common English words and prone to false positives
+/// when matched as bare tokens in the corpus. For these, require a phrase
+/// match (e.g. "ton blockchain", "gram network") instead of bare-token
+/// matching.
 ///
-/// Delegates to [`crate::chains::canonical_chain_id`] so the chain catalog
-/// (`CHAIN_CATALOG` with 73 chains + all aliases) is the single source of
-/// truth. This means `bnb`, `bsc`, `binance`, `binance-smart-chain` all
-/// resolve to the same chain, and `fantom`/`ftm` resolve to `sonic`, etc.
+/// `chains[]` (author-declared) is unaffected — explicit chain declarations
+/// are always trusted. This only governs corpus text scanning and
+/// keyword-based chain extraction (npm/pypi `is_chain_keyword`).
+const AMBIGUOUS_CHAIN_TOKENS: &[&str] = &[
+    "ton",    // common word (metric ton, tone)
+    "gram",   // common unit
+    "near",   // common preposition
+    "sei",    // Japanese word
+    "ink",    // common word
+    "flare",  // common word
+    "stable", // common adjective
+    "stacks", // common word
+    "move",   // common verb (Movement chain)
+];
+
+/// Phrases that disambiguate ambiguous chain tokens. If any of these
+/// phrases appear in the corpus, the chain signal is awarded.
+fn ambiguous_chain_phrases(token: &str) -> &'static [&'static str] {
+    match token {
+        "ton" => &[
+            "ton blockchain",
+            "ton network",
+            "the open network",
+            "toncoin",
+            "gram token",
+        ],
+        "gram" => &["gram token", "gram blockchain", "gram network", "toncoin"],
+        "near" => &[
+            "near protocol",
+            "near blockchain",
+            "near network",
+            "near chain",
+        ],
+        "sei" => &["sei network", "sei blockchain", "sei chain", "sei-mainnet"],
+        "ink" => &["ink chain", "inkchain", "ink-mainnet", "ink blockchain"],
+        "flare" => &[
+            "flare network",
+            "flare blockchain",
+            "flare chain",
+            "flare-mainnet",
+        ],
+        "stable" => &["stable chain", "stable-mainnet", "stable blockchain"],
+        "stacks" => &["stacks blockchain", "stacks chain", "blockstack", "stx"],
+        "move" => &[
+            "movement",
+            "move chain",
+            "movement-mainnet",
+            "movement-labs",
+        ],
+        _ => &[],
+    }
+}
+
+/// Check if a chain token is ambiguous and, if so, require a phrase match.
+fn chain_token_matches(context: &RelevanceContext<'_>, token: &str) -> bool {
+    if AMBIGUOUS_CHAIN_TOKENS.contains(&token) {
+        // For ambiguous tokens, require a disambiguating phrase.
+        ambiguous_chain_phrases(token)
+            .iter()
+            .any(|phrase| context.matches(phrase))
+    } else {
+        context.matches(token)
+    }
+}
+
+/// Check whether a keyword is a recognized chain name **and** safe to
+/// extract from registry keywords.
+///
+/// Delegates to [`crate::chains::canonical_chain_id`] for chain recognition,
+/// but excludes ambiguous tokens (ton, gram, near, etc.) that are common
+/// English words. A package tagging `keywords: ["ton"]` might mean "a ton
+/// of features" — we don't want that in `chains[]`.
+///
+/// For ambiguous tokens, the caller should rely on explicit `chains[]`
+/// declarations (user submissions) or phrase-matched corpus signals
+/// ([`add_canonical_chain_signals`]) instead.
 pub fn is_chain_keyword(keyword: &str) -> bool {
+    if AMBIGUOUS_CHAIN_TOKENS.contains(&keyword) {
+        return false;
+    }
     crate::chains::canonical_chain_id(keyword).is_some()
 }
 
@@ -333,75 +411,6 @@ fn add_signal_matches(
         if context.matches(keyword) {
             scoring.add_points(*points, reason);
         }
-    }
-}
-
-/// Chain tokens that are common English words and prone to false positives
-/// when matched as bare tokens in the corpus. For these, require a phrase
-/// match (e.g. "ton blockchain", "gram network") instead of bare-token
-/// matching.
-///
-/// `chains[]` (author-declared) is unaffected — explicit chain declarations
-/// are always trusted. This only governs corpus text scanning.
-const AMBIGUOUS_CHAIN_TOKENS: &[&str] = &[
-    "ton",    // common word (metric ton, tone)
-    "gram",   // common unit
-    "near",   // common preposition
-    "sei",    // Japanese word
-    "ink",    // common word
-    "flare",  // common word
-    "stable", // common adjective
-    "stacks", // common word
-    "move",   // common verb (Movement chain)
-];
-
-/// Phrases that disambiguate ambiguous chain tokens. If any of these
-/// phrases appear in the corpus, the chain signal is awarded.
-fn ambiguous_chain_phrases(token: &str) -> &'static [&'static str] {
-    match token {
-        "ton" => &[
-            "ton blockchain",
-            "ton network",
-            "the open network",
-            "toncoin",
-            "gram token",
-        ],
-        "gram" => &["gram token", "gram blockchain", "gram network", "toncoin"],
-        "near" => &[
-            "near protocol",
-            "near blockchain",
-            "near network",
-            "near chain",
-        ],
-        "sei" => &["sei network", "sei blockchain", "sei chain", "sei-mainnet"],
-        "ink" => &["ink chain", "inkchain", "ink-mainnet", "ink blockchain"],
-        "flare" => &[
-            "flare network",
-            "flare blockchain",
-            "flare chain",
-            "flare-mainnet",
-        ],
-        "stable" => &["stable chain", "stable-mainnet", "stable blockchain"],
-        "stacks" => &["stacks blockchain", "stacks chain", "blockstack", "stx"],
-        "move" => &[
-            "movement",
-            "move chain",
-            "movement-mainnet",
-            "movement-labs",
-        ],
-        _ => &[],
-    }
-}
-
-/// Check if a chain token is ambiguous and, if so, require a phrase match.
-fn chain_token_matches(context: &RelevanceContext<'_>, token: &str) -> bool {
-    if AMBIGUOUS_CHAIN_TOKENS.contains(&token) {
-        // For ambiguous tokens, require a disambiguating phrase.
-        ambiguous_chain_phrases(token)
-            .iter()
-            .any(|phrase| context.matches(phrase))
-    } else {
-        context.matches(token)
     }
 }
 

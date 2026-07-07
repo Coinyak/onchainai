@@ -239,20 +239,22 @@ const FUNCTION_RULES: &[(&str, &[&str])] = &[
 
 /// Normalize raw chain strings to canonical catalog ids.
 ///
-/// Maps every chain through `chains::canonical_chain_id`, drops noise and
-/// unrecognized values, and deduplicates. This ensures DB `chains[]` always
-/// contains canonical ids so SQL `chains @>` filters work regardless of
-/// which synonym the source used (e.g. `bnb` → `bsc`, `fantom` → `sonic`).
+/// Maps every recognized chain through `chains::canonical_chain_id`,
+/// deduplicates, and keeps unrecognized chains as-is (so new chains not yet
+/// in the catalog are not silently dropped). This ensures DB `chains[]`
+/// uses canonical ids where possible so SQL `chains @>` filters work
+/// regardless of which synonym the source used (e.g. `bnb` → `bsc`).
 fn canonicalize_chains(raw: &[String]) -> Vec<String> {
     use std::collections::HashSet;
 
-    let mut seen: HashSet<&str> = HashSet::new();
+    let mut seen: HashSet<String> = HashSet::new();
     let mut out = Vec::new();
     for entry in raw {
-        if let Some(canonical) = crate::chains::canonical_chain_id(entry) {
-            if seen.insert(canonical) {
-                out.push(canonical.to_string());
-            }
+        let canonical = crate::chains::canonical_chain_id(entry)
+            .map(|id| id.to_string())
+            .unwrap_or_else(|| entry.clone());
+        if seen.insert(canonical.clone()) {
+            out.push(canonical);
         }
     }
     out
