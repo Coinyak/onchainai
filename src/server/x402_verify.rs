@@ -758,6 +758,15 @@ pub async fn start_scheduler(pool: PgPool) -> anyhow::Result<()> {
     let job_pool = pool.clone();
     let client = probe_client();
 
+    if std::env::var("X402_VERIFY_RUN_ON_START").is_ok() {
+        let boot_pool = pool.clone();
+        let boot_client = client.clone();
+        tokio::spawn(async move {
+            tracing::info!("x402 verification run-on-start");
+            run_scheduled_verification(&boot_pool, &boot_client).await;
+        });
+    }
+
     let job = Job::new_async(cron.as_str(), move |_uuid, _l| {
         let pool = job_pool.clone();
         let client = client.clone();
