@@ -107,7 +107,7 @@ async function l4Ready() {
 function canaryObserve() {
   const r = spawnSync("node", ["scripts/wave2-canary-observe.mjs"], {
     cwd: ROOT,
-    env: { ...process.env, PG_INSECURE_SSL: "1" },
+    env: { ...process.env },
     encoding: "utf8",
   });
   return r.status === 0;

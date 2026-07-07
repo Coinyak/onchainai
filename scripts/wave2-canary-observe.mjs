@@ -66,10 +66,21 @@ function loadDotEnv() {
 }
 
 function parseArgs() {
-  const slugs =
-    process.argv.includes("--slugs")
-      ? process.argv[process.argv.indexOf("--slugs") + 1]?.split(",").map((s) => s.trim()).filter(Boolean)
-      : ["exa", "token-price"];
+  const argv = process.argv.slice(2);
+  const slugsIdx = argv.indexOf("--slugs");
+  if (slugsIdx === -1) {
+    return { slugs: ["exa", "token-price"] };
+  }
+  const raw = argv[slugsIdx + 1];
+  if (!raw || raw.startsWith("-")) {
+    console.error("usage: node scripts/wave2-canary-observe.mjs [--slugs slug1,slug2]");
+    process.exit(2);
+  }
+  const slugs = raw.split(",").map((s) => s.trim()).filter(Boolean);
+  if (slugs.length < 1) {
+    console.error("usage: --slugs requires at least one slug");
+    process.exit(2);
+  }
   return { slugs };
 }
 
@@ -90,10 +101,9 @@ async function fetchX402Slugs() {
 }
 
 function rubricDryRun(slug) {
-  const env = { ...process.env, PG_INSECURE_SSL: "1" };
   const r = spawnSync("node", ["scripts/bazaar-approve-rubric.mjs", slug], {
     cwd: ROOT,
-    env,
+    env: { ...process.env },
     encoding: "utf8",
   });
   const out = (r.stdout || "") + (r.stderr || "");

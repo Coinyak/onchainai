@@ -752,13 +752,20 @@ pub fn x402_verify_cron_expr() -> String {
     std::env::var("X402_VERIFY_CRON").unwrap_or_else(|_| DEFAULT_X402_VERIFY_CRON.to_string())
 }
 
+fn env_flag_enabled(key: &str) -> bool {
+    matches!(
+        std::env::var(key).as_deref(),
+        Ok("1") | Ok("true") | Ok("TRUE")
+    )
+}
+
 pub async fn start_scheduler(pool: PgPool) -> anyhow::Result<()> {
     let cron = x402_verify_cron_expr();
     let scheduler = JobScheduler::new().await?;
     let job_pool = pool.clone();
     let client = probe_client();
 
-    if std::env::var("X402_VERIFY_RUN_ON_START").is_ok() {
+    if env_flag_enabled("X402_VERIFY_RUN_ON_START") {
         let boot_pool = pool.clone();
         let boot_client = client.clone();
         tokio::spawn(async move {

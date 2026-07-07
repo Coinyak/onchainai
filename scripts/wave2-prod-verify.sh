@@ -61,11 +61,35 @@ PROBE_SLUG="${ONCHAINAI_W8_PROBE_SLUG:-goldrush-x402}"
 L4_MIN_PROBE_ROWS="${ONCHAINAI_L4_MIN_PROBE_ROWS:-1}"
 L4_MIN_CHECKED_TOOLS="${ONCHAINAI_L4_MIN_CHECKED_TOOLS:-1}"
 
+# Load KEY=VALUE lines only — never execute .env as shell code.
+load_dotenv_file() {
+  local file="$1"
+  [[ -f "$file" ]] || return 0
+  local line key val
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    line="${line%%#*}"
+    line="${line#"${line%%[![:space:]]*}"}"
+    line="${line%"${line##*[![:space:]]}"}"
+    [[ -z "$line" || "$line" != *"="* ]] && continue
+    key="${line%%=*}"
+    val="${line#*=}"
+    key="${key#"${key%%[![:space:]]*}"}"
+    key="${key%"${key##*[![:space:]]}"}"
+    val="${val#"${val%%[![:space:]]*}"}"
+    val="${val%"${val##*[![:space:]]}"}"
+    if [[ "$val" == \"*\" && "$val" == *\" ]]; then
+      val="${val:1:-1}"
+    elif [[ "$val" == \'*\' && "$val" == *\' ]]; then
+      val="${val:1:-1}"
+    fi
+    if [[ -n "$key" && -z "${!key:-}" ]]; then
+      export "$key=$val"
+    fi
+  done <"$file"
+}
+
 if [[ -f "${ROOT}/.env" && -z "${DATABASE_URL:-}" ]]; then
-  set -a
-  # shellcheck disable=SC1091
-  source "${ROOT}/.env"
-  set +a
+  load_dotenv_file "${ROOT}/.env"
 fi
 
 RUN_W3=true
