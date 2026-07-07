@@ -346,23 +346,7 @@ fn filters_include_x402(filters: &ToolFilters) -> bool {
 /// (`bsc`, `sonic`). Deduplicates after normalization.
 #[cfg(feature = "ssr")]
 fn canonicalize_chain_filters(values: &[String]) -> Vec<String> {
-    use std::collections::HashSet;
-
-    let mut seen: HashSet<&str> = HashSet::new();
-    let mut out = Vec::new();
-    for value in values {
-        if let Some(canonical) = crate::chains::canonical_chain_id(value) {
-            if seen.insert(canonical) {
-                out.push(canonical.to_string());
-            }
-        } else {
-            // Unknown chain — keep as-is so non-catalog chains still filter.
-            if seen.insert(value.as_str()) {
-                out.push(value.clone());
-            }
-        }
-    }
-    out
+    crate::chains::canonicalize_chain_values(values)
 }
 
 #[cfg(feature = "ssr")]

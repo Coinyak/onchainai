@@ -237,29 +237,6 @@ const FUNCTION_RULES: &[(&str, &[&str])] = &[
     ),
 ];
 
-/// Normalize raw chain strings to canonical catalog ids.
-///
-/// Maps every recognized chain through `chains::canonical_chain_id`,
-/// deduplicates, and keeps unrecognized chains as-is (so new chains not yet
-/// in the catalog are not silently dropped). This ensures DB `chains[]`
-/// uses canonical ids where possible so SQL `chains @>` filters work
-/// regardless of which synonym the source used (e.g. `bnb` → `bsc`).
-fn canonicalize_chains(raw: &[String]) -> Vec<String> {
-    use std::collections::HashSet;
-
-    let mut seen: HashSet<String> = HashSet::new();
-    let mut out = Vec::new();
-    for entry in raw {
-        let canonical = crate::chains::canonical_chain_id(entry)
-            .map(|id| id.to_string())
-            .unwrap_or_else(|| entry.clone());
-        if seen.insert(canonical.clone()) {
-            out.push(canonical);
-        }
-    }
-    out
-}
-
 /// Classify the `function` axis from text. Default: `dev-tool`.
 ///
 /// Iterates rules in declared order; first keyword match wins. Matching is
@@ -415,7 +392,7 @@ pub fn normalize(
     let now = chrono::Utc::now();
     let mut review = crate::models::tool::default_review_fields();
 
-    let canonical_chains = canonicalize_chains(&raw.chains);
+    let canonical_chains = crate::chains::canonicalize_chain_values(&raw.chains);
 
     let relevance = assess_relevance(&RelevanceInput {
         name: &raw.name,
@@ -456,7 +433,7 @@ pub fn normalize(
         npm_package: raw.npm_package.clone(),
         install_command: raw.install_command.clone(),
         mcp_endpoint: raw.mcp_endpoint.clone(),
-        chains: canonicalize_chains(&raw.chains),
+        chains: canonical_chains,
         // Crawled tools start as `community`; admin can promote to
         // `verified`/`official`. `self_register` overrides this to `official`.
         status: "community".to_string(),

@@ -72,8 +72,29 @@ async function main() {
     console.error("pg module not found (scripts/ops/node_modules/pg)");
     process.exit(1);
   }
+  if (!apply) {
+    console.log(
+      JSON.stringify(
+        {
+          mode: "dry-run",
+          planned: {
+            mcp_premium_enabled: true,
+            mcp_premium_pay_to_address: payTo,
+            mcp_premium_price: PREMIUM_PRICE,
+            mcp_premium_network: PREMIUM_NETWORK,
+            mcp_premium_display_price: PREMIUM_DISPLAY,
+          },
+        },
+        null,
+        2,
+      ),
+    );
+    console.log("\nDry-run only. Re-run with --apply to write (requires DATABASE_URL).");
+    return;
+  }
+
   if (!process.env.DATABASE_URL) {
-    console.error("DATABASE_URL required");
+    console.error("DATABASE_URL required for --apply");
     process.exit(1);
   }
 
@@ -103,13 +124,7 @@ async function main() {
     mcp_premium_display_price: PREMIUM_DISPLAY,
   };
 
-  console.log(JSON.stringify({ mode: apply ? "apply" : "dry-run", before: row, planned }, null, 2));
-
-  if (!apply) {
-    console.log("\nDry-run only. Re-run with --apply to write.");
-    await client.end();
-    return;
-  }
+  console.log(JSON.stringify({ mode: "apply", before: row, planned }, null, 2));
 
   const after = await client.query(
     `UPDATE site_settings SET

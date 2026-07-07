@@ -644,6 +644,63 @@ pub fn canonical_chain_id(raw: &str) -> Option<&'static str> {
     resolve_chain(raw).map(|meta| meta.id)
 }
 
+/// Map `eip155:<chainId>` network strings (x402/Bazaar) to catalog slugs.
+fn chain_slug_from_eip155_network(network: &str) -> Option<&'static str> {
+    const MAINNET_CHAIN_MAP: &[(u32, &str)] = &[
+        (8453, "base"),
+        (1, "ethereum"),
+        (137, "polygon"),
+        (42161, "arbitrum"),
+        (10, "optimism"),
+        (43114, "avalanche"),
+        (56, "bsc"),
+        (196, "x-layer"),
+    ];
+    let rest = network.trim().strip_prefix("eip155:")?;
+    let chain_id: u32 = rest.parse().ok()?;
+    MAINNET_CHAIN_MAP
+        .iter()
+        .find(|(id, _)| *id == chain_id)
+        .map(|(_, slug)| *slug)
+}
+
+/// Normalize a single chain token (catalog alias, slug, or `eip155:` network).
+pub fn normalize_chain_token(raw: &str) -> Option<String> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    if let Some(id) = canonical_chain_id(trimmed) {
+        return Some(id.to_string());
+    }
+    if let Some(slug) = chain_slug_from_eip155_network(trimmed) {
+        return Some(slug.to_string());
+    }
+    let key = normalize_chain_key(trimmed);
+    if key.is_empty() || is_chain_noise(&key) {
+        return None;
+    }
+    Some(key)
+}
+
+/// Normalize raw chain strings to canonical catalog ids where possible.
+///
+/// Maps synonyms (`bnb` → `bsc`, `fantom` → `sonic`), `eip155:` networks, deduplicates,
+/// and keeps unrecognized normalized tokens so new chains are not dropped.
+pub fn canonicalize_chain_values(raw: &[String]) -> Vec<String> {
+    use std::collections::HashSet;
+
+    let mut seen: HashSet<String> = HashSet::new();
+    let mut out = Vec::new();
+    for entry in raw {
+        let canonical = normalize_chain_token(entry).unwrap_or_else(|| entry.clone());
+        if seen.insert(canonical.clone()) {
+            out.push(canonical);
+        }
+    }
+    out
+}
+
 /// Whether a selected `?chain=` value is active for a catalog entry (id or alias).
 pub fn chain_filter_active(entry: &ChainMeta, active: &[String]) -> bool {
     active
@@ -1059,6 +1116,26 @@ mod tests {
         // Noise returns None
         assert_eq!(canonical_chain_id("multi-chain"), None);
         assert_eq!(canonical_chain_id("all"), None);
+    }
+
+    #[test]
+    fn canonicalize_chain_values_maps_synonyms_and_dedupes() {
+        let raw = vec![
+            "bnb".into(),
+            "bsc".into(),
+            "Fantom".into(),
+            "eip155:8453".into(),
+        ];
+        let out = canonicalize_chain_values(&raw);
+        assert_eq!(out, vec!["bsc", "sonic", "base"]);
+    }
+
+    #[test]
+    fn normalize_chain_token_handles_eip155_network() {
+        assert_eq!(
+            normalize_chain_token("eip155:8453"),
+            Some("base".to_string())
+        );
     }
 
     #[test]
