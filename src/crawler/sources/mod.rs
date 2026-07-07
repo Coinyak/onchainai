@@ -11,6 +11,7 @@ pub mod cryptoskill;
 pub mod github;
 pub mod mcp_registry;
 pub mod npm;
+pub mod pypi;
 pub mod vendor_orgs;
 pub mod web3mcp;
 
@@ -82,6 +83,7 @@ pub fn default_crawlers() -> Vec<Arc<dyn SourceCrawler>> {
         Arc::new(mcp_registry::OfficialMcpRegistryCrawler),
         Arc::new(vendor_orgs::VendorOrgsCrawler),
         Arc::new(bazaar::BazaarCrawler),
+        Arc::new(pypi::PyPiCrawler),
     ]
 }
 

@@ -5,8 +5,16 @@
 use crate::models::SiteSettings;
 
 /// Default GitHub topic keywords when `site_settings.search_keywords` is empty.
-pub const DEFAULT_SEARCH_KEYWORDS: &[&str] =
-    &["mcp-server", "crypto-mcp", "web3-mcp", "blockchain-mcp"];
+pub const DEFAULT_SEARCH_KEYWORDS: &[&str] = &[
+    "mcp-server",
+    "crypto-mcp",
+    "web3-mcp",
+    "blockchain-mcp",
+    "ai-agent",
+    "agent-sdk",
+    "bnb",
+    "onchain-agent",
+];
 
 /// Runtime crawler configuration from the `site_settings` singleton.
 #[derive(Debug, Clone, PartialEq, Eq)]
