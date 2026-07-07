@@ -486,7 +486,7 @@ fn gap_audit_definition() -> Value {
 fn get_price_history_definition() -> Value {
     json!({
         "name": "get_price_history",
-        "description": "Premium: x402 endpoint price and liveness history for a specific tool. Returns probe records (status, actual price, latency) over the specified time window. Requires x402 micropayment per call (HTTP 402 + PAYMENT-REQUIRED header). Use free get_tool_detail for current x402 flags.",
+        "description": "Free discovery: x402 endpoint price and liveness history for a specific tool. Returns probe records (status, actual price, latency) over the specified time window. Use get_tool_detail for current x402 flags.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -507,7 +507,7 @@ fn get_price_history_definition() -> Value {
 fn get_x402_trends_definition() -> Value {
     json!({
         "name": "get_x402_trends",
-        "description": "Premium: aggregated x402 ecosystem trends — live rate, probe counts, and latest prices for all x402 tools. Requires x402 micropayment per call (HTTP 402 + PAYMENT-REQUIRED header).",
+        "description": "Free discovery: aggregated x402 ecosystem trends — live rate, probe counts, and latest prices for all x402 tools.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -719,7 +719,7 @@ async fn call_check_endpoint_health(
 async fn call_recommend_verified_tool(
     pool: &PgPool,
     args: &Value,
-    headers: &HeaderMap,
+    _headers: &HeaderMap,
 ) -> Result<DispatchOutcome, (i32, String)> {
     use crate::server::mcp_search::{mcp_search_tools, McpSearchSort};
     use crate::server::product_a::{
@@ -731,7 +731,7 @@ async fn call_recommend_verified_tool(
     let chain = optional_string(args, "chain");
     let function = optional_string(args, "function");
 
-    // Check cache first (60s TTL).
+    // Payment gate runs in tools_call() before dispatch; cache hits reuse prior paid work.
     let now = chrono::Utc::now();
     let ckey = cache_key(&intent, chain.as_deref(), function.as_deref());
     if let Some(cached) = cache_get(&ckey, now) {
@@ -739,24 +739,6 @@ async fn call_recommend_verified_tool(
         return Ok(DispatchOutcome::Text(
             serde_json::to_string(&body).map_err(|e| (-32000, format!("serialize error: {e}")))?,
         ));
-    }
-
-    // Axis-B premium gate (same as export_toolkit).
-    let config = match crate::server::mcp_x402::load_mcp_premium_config(pool).await {
-        Ok(config) => config,
-        Err(e) => return Err((-32603, format!("settings load failed: {e}"))),
-    };
-    if config.is_active() {
-        match crate::server::mcp_x402::require_axis_b_payment(
-            &config,
-            "recommend_verified_tool",
-            headers,
-        )
-        .await
-        {
-            Ok(_settlement) => {}
-            Err(response) => return Ok(DispatchOutcome::Http(response)),
-        }
     }
 
     // Step 1: free search to extract candidates (reuse mcp_search_tools).
@@ -809,17 +791,18 @@ async fn call_recommend_verified_tool(
 async fn call_gap_audit(
     pool: &PgPool,
     args: &Value,
-    headers: &HeaderMap,
+    _headers: &HeaderMap,
 ) -> Result<DispatchOutcome, (i32, String)> {
     use crate::server::gap_audit::{
         gap_cache_get, gap_cache_key, gap_cache_set, run_gap_audit, validate_gap_audit_intent,
-        GapAuditError, GapAuditResponse, GAP_AUDIT_DISCLAIMER,
+        GapAuditError,
     };
 
     let intent_raw = required_str(args, "intent", "intent required")?;
     let intent =
         validate_gap_audit_intent(intent_raw).map_err(|e| (-32602, e.message().to_string()))?;
 
+    // Payment gate runs in tools_call() before dispatch; cache hits reuse prior paid work.
     let now = chrono::Utc::now();
     let ckey = gap_cache_key(&intent);
     if let Some(cached) = gap_cache_get(&ckey, now) {
@@ -827,18 +810,6 @@ async fn call_gap_audit(
         return Ok(DispatchOutcome::Text(
             serde_json::to_string(&body).map_err(|e| (-32000, format!("serialize error: {e}")))?,
         ));
-    }
-
-    // Axis-B premium gate.
-    let config = match crate::server::mcp_x402::load_mcp_premium_config(pool).await {
-        Ok(config) => config,
-        Err(e) => return Err((-32603, format!("settings load failed: {e}"))),
-    };
-    if config.is_active() {
-        match crate::server::mcp_x402::require_axis_b_payment(&config, "gap_audit", headers).await {
-            Ok(_settlement) => {}
-            Err(response) => return Ok(DispatchOutcome::Http(response)),
-        }
     }
 
     match run_gap_audit(pool, &intent).await {

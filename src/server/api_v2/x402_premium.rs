@@ -113,12 +113,7 @@ async fn post_recommend_verified_tool(
         payload.function.as_deref(),
     );
 
-    // Check cache (60s TTL).
-    if let Some(cached) = cache_get(&ckey, now) {
-        return (axum::http::StatusCode::OK, Json(json!(cached))).into_response();
-    }
-
-    // Axis-B premium gate.
+    // Axis-B premium gate before cache — avoid serving paid probe results without payment.
     let config = match load_mcp_premium_config(&state.pool).await {
         Ok(config) => config,
         Err(e) => {
@@ -134,6 +129,10 @@ async fn post_recommend_verified_tool(
             Ok(_settlement) => {}
             Err(response) => return response,
         }
+    }
+
+    if let Some(cached) = cache_get(&ckey, now) {
+        return (axum::http::StatusCode::OK, Json(json!(cached))).into_response();
     }
 
     // Extract candidates via free search.
@@ -210,10 +209,6 @@ async fn post_gap_audit(
     let now = chrono::Utc::now();
     let ckey = gap_cache_key(&intent);
 
-    if let Some(cached) = gap_cache_get(&ckey, now) {
-        return (axum::http::StatusCode::OK, Json(json!(cached))).into_response();
-    }
-
     let config = match load_mcp_premium_config(&state.pool).await {
         Ok(config) => config,
         Err(e) => {
@@ -229,6 +224,10 @@ async fn post_gap_audit(
             Ok(_settlement) => {}
             Err(response) => return response,
         }
+    }
+
+    if let Some(cached) = gap_cache_get(&ckey, now) {
+        return (axum::http::StatusCode::OK, Json(json!(cached))).into_response();
     }
 
     match run_gap_audit(&state.pool, &intent).await {
@@ -249,7 +248,7 @@ async fn post_gap_audit(
     }
 }
 
-/// M3 price history REST endpoint — Axis-B premium.
+/// M3 price history REST endpoint — free discovery/metadata (OD-FTG §2).
 #[derive(serde::Deserialize)]
 struct DaysQuery {
     days: Option<i64>,
@@ -258,56 +257,19 @@ struct DaysQuery {
 async fn get_price_history_route(
     State(state): State<AppState>,
     Path(slug): Path<String>,
-    headers: HeaderMap,
     Query(q): Query<DaysQuery>,
 ) -> Response {
-    // Axis-B premium gate.
-    let config = match load_mcp_premium_config(&state.pool).await {
-        Ok(config) => config,
-        Err(e) => {
-            return (
-                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({ "error": format!("settings load failed: {e}") })),
-            )
-                .into_response()
-        }
-    };
-    if config.is_active() {
-        match require_axis_b_payment(&config, "get_price_history", &headers).await {
-            Ok(_settlement) => {}
-            Err(response) => return response,
-        }
-    }
-
     match get_price_history(&state.pool, &slug, q.days).await {
         Ok(result) => (axum::http::StatusCode::OK, Json(json!(result))).into_response(),
         Err(e) => (e.status_code(), Json(json!({ "error": e.message() }))).into_response(),
     }
 }
 
-/// M3 x402 trends REST endpoint — Axis-B premium.
+/// M3 x402 trends REST endpoint — free discovery/metadata (OD-FTG §2).
 async fn get_x402_trends_route(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Query(q): Query<DaysQuery>,
 ) -> Response {
-    let config = match load_mcp_premium_config(&state.pool).await {
-        Ok(config) => config,
-        Err(e) => {
-            return (
-                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({ "error": format!("settings load failed: {e}") })),
-            )
-                .into_response()
-        }
-    };
-    if config.is_active() {
-        match require_axis_b_payment(&config, "get_x402_trends", &headers).await {
-            Ok(_settlement) => {}
-            Err(response) => return response,
-        }
-    }
-
     match get_x402_trends(&state.pool, q.days).await {
         Ok(result) => (axum::http::StatusCode::OK, Json(json!(result))).into_response(),
         Err(e) => (e.status_code(), Json(json!({ "error": e.message() }))).into_response(),
