@@ -160,7 +160,7 @@ fn version_to_raw(version: &PackageVersion, source_pkg: &SearchPackage) -> RawTo
 
     let chains: Vec<String> = keywords
         .iter()
-        .filter(|k| is_chain_keyword(k))
+        .filter(|k| crate::crawler::relevance::is_chain_keyword(k))
         .cloned()
         .collect();
 
@@ -176,38 +176,9 @@ fn version_to_raw(version: &PackageVersion, source_pkg: &SearchPackage) -> RawTo
         source: SOURCE_NAME.to_string(),
         source_url,
         license: version.license.clone(),
+        keywords,
         ..Default::default()
     }
-}
-
-/// Heuristic chain keyword filter.
-fn is_chain_keyword(keyword: &str) -> bool {
-    let chains = [
-        "ethereum",
-        "bitcoin",
-        "solana",
-        "base",
-        "polygon",
-        "arbitrum",
-        "optimism",
-        "avalanche",
-        "bnb",
-        "cosmos",
-        "near",
-        "sui",
-        "aptos",
-        "cardano",
-        "tron",
-        "algorand",
-        "starknet",
-        "zksync",
-        "linea",
-        "scroll",
-        "mantle",
-        "fantom",
-        "celo",
-    ];
-    chains.contains(&keyword)
 }
 
 /// Search for one keyword and return raw tools.

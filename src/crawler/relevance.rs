@@ -27,6 +27,11 @@ pub struct RelevanceInput<'a> {
     pub mcp_endpoint: Option<&'a str>,
     pub chains: &'a [String],
     pub source: &'a str,
+    /// Author-declared keywords from package registry metadata (npm, PyPI).
+    /// These are explicit intent signals — stronger than free-text scraping
+    /// because the author consciously tagged the package. Included in the
+    /// scoring corpus so keyword-based signal matching works.
+    pub keywords: &'a [String],
 }
 
 #[derive(Debug)]
@@ -126,17 +131,96 @@ impl RelevanceScore {
     }
 }
 
+/// Chains recognized by OnchainAI. This is the single source of truth —
+/// npm/pypi crawlers import this list instead of maintaining their own.
+///
+/// A chain in this list is a strong onchain signal. When it appears in
+/// `chains` (author-declared), it gets chain-support points. When it also
+/// appears in the scoring corpus (name/description/keywords), it gets
+/// strong-signal points. Both paths use the same list so no chain is
+/// silently disadvantaged.
+pub const SUPPORTED_CHAINS: &[&str] = &[
+    "ethereum",
+    "bitcoin",
+    "solana",
+    "base",
+    "polygon",
+    "arbitrum",
+    "optimism",
+    "avalanche",
+    "bnb",
+    "bnb-chain",
+    "bsc",
+    "binance",
+    "binance-smart-chain",
+    "cosmos",
+    "near",
+    "sui",
+    "aptos",
+    "cardano",
+    "tron",
+    "algorand",
+    "starknet",
+    "zksync",
+    "linea",
+    "scroll",
+    "mantle",
+    "fantom",
+    "celo",
+    "stellar",
+    "tezos",
+];
+
+/// Check whether a keyword is a recognized chain name.
+///
+/// Uses [`SUPPORTED_CHAINS`] as the single source of truth so npm/pypi
+/// crawlers share the same list as the relevance scorer.
+pub fn is_chain_keyword(keyword: &str) -> bool {
+    SUPPORTED_CHAINS.contains(&keyword)
+}
+
 /// Strong onchain/crypto signals — each match adds meaningful score.
+///
+/// Chain signals: every chain in [`SUPPORTED_CHAINS`] gets a strong-signal
+/// entry here so that a chain appearing in the corpus (name/description/
+/// keywords) scores as a strong signal, consistent with the chain-support
+/// points from `add_chain_support`. No chain is left out.
 const STRONG_SIGNALS: &[(&str, i32, &str)] = &[
+    // Tier 1 — flagship L1s (18 pts)
     ("bitcoin", 18, "mentions Bitcoin"),
     ("ethereum", 18, "mentions Ethereum"),
+    ("base", 18, "mentions Base"),
+    ("base chain", 18, "mentions Base"),
+    ("base network", 18, "mentions Base"),
+    // Tier 2 — major L1s (16 pts)
     ("solana", 16, "mentions Solana"),
+    ("bnb", 16, "mentions BNB Chain"),
+    ("binance", 16, "mentions Binance"),
+    ("bsc", 16, "mentions BSC"),
+    ("binance-smart-chain", 16, "mentions BNB Chain"),
+    ("bnb-chain", 16, "mentions BNB Chain"),
+    ("cosmos", 16, "mentions Cosmos"),
+    ("near", 16, "mentions Near"),
+    ("sui", 16, "mentions Sui"),
+    ("aptos", 16, "mentions Aptos"),
+    // Tier 3 — L2s and mid L1s (14 pts)
     ("polygon", 14, "mentions Polygon"),
     ("arbitrum", 14, "mentions Arbitrum"),
     ("optimism", 14, "mentions Optimism"),
-    ("base chain", 18, "mentions Base"),
-    ("base network", 18, "mentions Base"),
     ("avalanche", 14, "mentions Avalanche"),
+    ("cardano", 14, "mentions Cardano"),
+    ("tron", 14, "mentions Tron"),
+    ("algorand", 14, "mentions Algorand"),
+    ("starknet", 14, "mentions Starknet"),
+    ("zksync", 14, "mentions zkSync"),
+    ("linea", 14, "mentions Linea"),
+    ("scroll", 14, "mentions Scroll"),
+    ("mantle", 14, "mentions Mantle"),
+    ("fantom", 14, "mentions Fantom"),
+    ("celo", 14, "mentions Celo"),
+    ("stellar", 14, "mentions Stellar"),
+    ("tezos", 14, "mentions Tezos"),
+    // DeFi / tooling signals
     ("defi", 16, "DeFi keyword"),
     ("uniswap", 16, "DeFi protocol (Uniswap)"),
     ("aave", 16, "DeFi protocol (Aave)"),
@@ -225,6 +309,11 @@ fn corpus(input: &RelevanceInput<'_>) -> String {
     if let Some(p) = input.npm_package {
         parts.push(p.to_lowercase());
     }
+    // Author-declared keywords are explicit intent signals — include them
+    // so signal matching can score on the full metadata surface.
+    for kw in input.keywords {
+        parts.push(kw.to_lowercase());
+    }
     parts.join(" ")
 }
 
@@ -309,10 +398,37 @@ fn add_signal_matches(
 fn add_chain_support(context: &RelevanceContext<'_>, scoring: &mut RelevanceScore) {
     let chains = normalized_chains(context.input.chains);
     for chain in &chains {
-        scoring.add_points(14, &format!("supports chain: {chain}"));
+        // Chain-support points scale with chain tier, consistent with
+        // STRONG_SIGNALS. This avoids a flat 14 pts that under-credits
+        // flagship chains and over-credits minor ones.
+        let pts = chain_signal_points(chain);
+        scoring.add_points(pts, &format!("supports chain: {chain}"));
     }
     if chains.len() >= 2 && has_wallet_reason(scoring) {
         scoring.add_points(12, "wallet tooling with multi-chain support");
+    }
+}
+
+/// Points for a chain when it appears in the `chains` array (author-declared).
+///
+/// Matches the STRONG_SIGNALS tier: flagship L1s get 18, major L1s get 16,
+/// L2s/mid L1s get 14. This keeps chain-support points consistent with
+/// corpus-match points so a chain scores the same whether it appears in
+/// `chains` or in the text.
+fn chain_signal_points(chain: &str) -> i32 {
+    match chain {
+        "bitcoin" | "ethereum" => 18,
+        "solana"
+        | "bnb"
+        | "binance"
+        | "bsc"
+        | "binance-smart-chain"
+        | "bnb-chain"
+        | "cosmos"
+        | "near"
+        | "sui"
+        | "aptos" => 16,
+        _ => 14,
     }
 }
 
@@ -479,6 +595,7 @@ mod tests {
                 mcp_endpoint: None,
                 chains: self.chains,
                 source: "github",
+                keywords: &[],
             }
         }
     }
@@ -672,5 +789,137 @@ mod tests {
         assert!(with_repo.score > without_repo.score);
         assert!(with_repo.reasons.iter().any(|r| r.contains("Ethereum")));
         assert!(!without_repo.reasons.iter().any(|r| r.contains("Ethereum")));
+    }
+
+    #[test]
+    fn accepted_bnb_agent_sdk_with_keywords() {
+        // Simulates the bnbagent PyPI package: keywords declare bnb, web3,
+        // blockchain, ethereum, x402 but the description is short.
+        // Before the fix, keywords were excluded from the corpus and the
+        // score was too low for acceptance.
+        let inp = RelevanceInput {
+            name: "bnbagent",
+            description: Some("Modular Python SDK for on-chain AI agents on BNB Chain"),
+            tool_type: "sdk",
+            repo_url: Some("https://github.com/bnb-chain/bnbagent-sdk"),
+            homepage: Some("https://github.com/bnb-chain/bnbagent-sdk"),
+            npm_package: None,
+            mcp_endpoint: None,
+            chains: &["bnb".into(), "bsc".into(), "ethereum".into()],
+            source: "pypi",
+            keywords: &[
+                "agent".into(),
+                "binance-smart-chain".into(),
+                "blockchain".into(),
+                "bsc".into(),
+                "erc-8004".into(),
+                "erc-8183".into(),
+                "ethereum".into(),
+                "modular".into(),
+                "sdk".into(),
+                "web3".into(),
+            ],
+        };
+        let assessment = assess_relevance(&inp);
+        assert_eq!(
+            assessment.status, "accepted",
+            "bnbagent should be accepted, got {} (score {})",
+            assessment.status, assessment.score
+        );
+        assert!(assessment.score >= 70);
+        assert!(assessment
+            .reasons
+            .iter()
+            .any(|r| r.contains("BNB") || r.contains("Binance") || r.contains("BSC")));
+    }
+
+    #[test]
+    fn accepted_bnbagent_studio_cli_with_keywords() {
+        // Simulates bnbagent-studio: a CLI with x402 and bnb keywords.
+        let inp = RelevanceInput {
+            name: "bnbagent-studio",
+            description: Some(
+                "The bag CLI to scaffold and deploy a bnbagent-sdk seller agent on BNB Chain",
+            ),
+            tool_type: "cli",
+            repo_url: Some("https://github.com/bnb-chain/bnbagent-studio"),
+            homepage: Some("https://github.com/bnb-chain/bnbagent-studio"),
+            npm_package: None,
+            mcp_endpoint: None,
+            chains: &["bnb".into()],
+            source: "pypi",
+            keywords: &[
+                "agent".into(),
+                "blockchain".into(),
+                "bnb".into(),
+                "cli".into(),
+                "erc-8004".into(),
+                "erc-8183".into(),
+                "x402".into(),
+            ],
+        };
+        let assessment = assess_relevance(&inp);
+        assert_eq!(
+            assessment.status, "accepted",
+            "bnbagent-studio should be accepted, got {} (score {})",
+            assessment.status, assessment.score
+        );
+        assert!(assessment.score >= 70);
+    }
+
+    #[test]
+    fn keywords_in_corpus_boost_score_vs_without() {
+        // Same tool, but one has keywords in the metadata and the other doesn't.
+        let without_keywords = RelevanceInput {
+            name: "bnbagent",
+            description: Some("Modular Python SDK for on-chain AI agents on BNB Chain"),
+            tool_type: "sdk",
+            repo_url: Some("https://github.com/bnb-chain/bnbagent-sdk"),
+            homepage: None,
+            npm_package: None,
+            mcp_endpoint: None,
+            chains: &["bnb".into()],
+            source: "pypi",
+            keywords: &[],
+        };
+        let with_keywords = RelevanceInput {
+            name: "bnbagent",
+            description: Some("Modular Python SDK for on-chain AI agents on BNB Chain"),
+            tool_type: "sdk",
+            repo_url: Some("https://github.com/bnb-chain/bnbagent-sdk"),
+            homepage: None,
+            npm_package: None,
+            mcp_endpoint: None,
+            chains: &["bnb".into()],
+            source: "pypi",
+            keywords: &[
+                "blockchain".into(),
+                "bsc".into(),
+                "ethereum".into(),
+                "web3".into(),
+                "x402".into(),
+            ],
+        };
+        let without = assess_relevance(&without_keywords);
+        let with_kw = assess_relevance(&with_keywords);
+        assert!(
+            with_kw.score > without.score,
+            "keywords should boost score: with={} vs without={}",
+            with_kw.score,
+            without.score
+        );
+    }
+
+    #[test]
+    fn supported_chain_list_is_comprehensive() {
+        // Every chain in SUPPORTED_CHAINS should also appear in STRONG_SIGNALS
+        // so that chain-support and corpus matching are consistent.
+        for chain in SUPPORTED_CHAINS {
+            let found = STRONG_SIGNALS.iter().any(|(kw, _, _)| kw == chain);
+            assert!(
+                found,
+                "chain '{chain}' is in SUPPORTED_CHAINS but missing from STRONG_SIGNALS"
+            );
+        }
     }
 }

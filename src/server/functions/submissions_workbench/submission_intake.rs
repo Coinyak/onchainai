@@ -171,6 +171,7 @@ pub(crate) fn scan_submission(input: &SubmitToolInput) -> SubmissionScanResult {
         mcp_endpoint: input.mcp_endpoint.as_deref().map(str::trim),
         chains: &chains,
         source: "user_submission",
+        keywords: &[],
     });
     let install = assess_install(
         input.install_command.as_deref().map(str::trim),
