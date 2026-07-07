@@ -22,14 +22,25 @@ mod tests {
     }
 
     #[test]
-    fn intent_to_tool_filters_maps_type_only_query() {
+    fn intent_to_tool_filters_single_token_mcp_stays_fts() {
         use crate::server::tool_search::resolve_search_intent;
 
         let intent = resolve_search_intent("mcp", None, None);
         let filters = intent_to_tool_filters(&intent);
-        assert_eq!(filters.tool_type, vec!["mcp"]);
+        assert!(filters.tool_type.is_empty());
+        assert_eq!(intent.query, "mcp");
         assert!(filters.function.is_empty());
         assert!(filters.chain.is_empty());
+    }
+
+    #[test]
+    fn intent_to_tool_filters_multi_token_mcp_maps_type_axis() {
+        use crate::server::tool_search::resolve_search_intent;
+
+        let intent = resolve_search_intent("mcp wallet", None, None);
+        let filters = intent_to_tool_filters(&intent);
+        assert_eq!(filters.tool_type, vec!["mcp"]);
+        assert_eq!(intent.query, "wallet");
     }
 
     #[test]
@@ -102,6 +113,19 @@ mod tests {
         assert_eq!(clamp_browser_page_param(0), 1);
         assert_eq!(clamp_browser_page_param(2), 2);
         assert_eq!(clamp_browser_page_param(99), 10);
+    }
+
+    #[test]
+    fn single_token_slug_query_includes_exact_match() {
+        assert!(looks_like_tool_slug("x402-foundation"));
+        assert!(looks_like_tool_slug("uniswap-v3"));
+        assert!(looks_like_tool_slug("bridge-mcp"));
+        assert!(!looks_like_tool_slug(""));
+        assert!(!looks_like_tool_slug("   "));
+        assert!(!looks_like_tool_slug("x402 foundation"));
+        assert!(!looks_like_tool_slug("X402-foundation"));
+        assert!(!looks_like_tool_slug("-bad"));
+        assert!(!looks_like_tool_slug("has_underscore"));
     }
 
     #[test]

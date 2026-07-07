@@ -104,6 +104,8 @@ pub fn parse_search_intent(query: &str) -> SearchIntent {
         .filter(|word| !word.is_empty())
         .collect();
 
+    let is_single_token = words.len() == 1;
+
     let mut skip_next = false;
     for (idx, token) in words.iter().enumerate() {
         if skip_next {
@@ -126,19 +128,21 @@ pub fn parse_search_intent(query: &str) -> SearchIntent {
             skip_next = true;
             continue;
         }
-        if let Some(chain) = chain_id(token) {
-            intent.chain.get_or_insert_with(|| chain.to_string());
-            continue;
-        }
-        if let Some(tool_type) = type_id(token) {
-            intent
-                .tool_type
-                .get_or_insert_with(|| tool_type.to_string());
-            continue;
-        }
-        if let Some(function) = function_id(token) {
-            intent.function.get_or_insert_with(|| function.to_string());
-            continue;
+        if !is_single_token {
+            if let Some(chain) = chain_id(token) {
+                intent.chain.get_or_insert_with(|| chain.to_string());
+                continue;
+            }
+            if let Some(tool_type) = type_id(token) {
+                intent
+                    .tool_type
+                    .get_or_insert_with(|| tool_type.to_string());
+                continue;
+            }
+            if let Some(function) = function_id(token) {
+                intent.function.get_or_insert_with(|| function.to_string());
+                continue;
+            }
         }
         query_terms.push(token.clone());
     }
@@ -327,6 +331,20 @@ mod tests {
             search_intent_href("/tools", &intent),
             "/tools?type=x402&install_risk=low"
         );
+    }
+
+    #[test]
+    fn search_intent_single_token_x402_stays_fts() {
+        let intent = parse_search_intent("x402");
+        assert_eq!(intent.query_terms, "x402");
+        assert_eq!(intent.tool_type.as_deref(), None);
+    }
+
+    #[test]
+    fn search_intent_multi_token_x402_stays_axis() {
+        let intent = parse_search_intent("low risk x402");
+        assert_eq!(intent.tool_type.as_deref(), Some("x402"));
+        assert_eq!(intent.install_risk.as_deref(), Some("low"));
     }
 
     #[test]

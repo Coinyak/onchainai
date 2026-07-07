@@ -19,6 +19,16 @@ pub const PUBLIC_TOOL_WHERE: &str = public_tool_where!();
 /// Alias kept during migration — all public queries should use this constant.
 pub const TOOLS_APPROVED_WHERE: &str = PUBLIC_TOOL_WHERE;
 
+/// Full-text document vector for public tool search (must match `tool_search::TOOL_SEARCH_VECTOR`).
+macro_rules! tool_search_vector {
+    () => {
+        "(setweight(to_tsvector('english', coalesce(name, '')), 'A') \
+ || setweight(to_tsvector('english', coalesce(description, '')), 'B') \
+ || setweight(to_tsvector('english', coalesce(slug, '')), 'A') \
+ || setweight(to_tsvector('english', coalesce(repo_url, '')), 'C'))"
+    };
+}
+
 pub const RECENT_APPROVED_TOOLS_SQL: &str = concat!(
     "SELECT * FROM tools WHERE ",
     public_tool_where!(),
@@ -67,12 +77,16 @@ pub const SEARCH_APPROVED_TOOLS_SQL: &str = concat!(
         WHERE "#,
     public_tool_where!(),
     r#"
-          AND to_tsvector('english', coalesce(name, '') || ' ' || coalesce(description, ''))
+          AND "#,
+    tool_search_vector!(),
+    r#"
             @@ plainto_tsquery('english', $1)
           AND ($2::text IS NULL OR function = $2)
           AND ($3::text IS NULL OR $3 = ANY(chains))
         ORDER BY ts_rank_cd(
-            to_tsvector('english', coalesce(name, '') || ' ' || coalesce(description, '')),
+            "#,
+    tool_search_vector!(),
+    r#",
             plainto_tsquery('english', $1)
         ) DESC, stars DESC, created_at DESC
         LIMIT 50
@@ -86,12 +100,16 @@ pub const SEARCH_APPROVED_TOOLS_OR_SQL: &str = concat!(
         WHERE "#,
     public_tool_where!(),
     r#"
-          AND to_tsvector('english', coalesce(name, '') || ' ' || coalesce(description, ''))
+          AND "#,
+    tool_search_vector!(),
+    r#"
             @@ to_tsquery('english', replace(plainto_tsquery('english', $1)::text, ' & ', ' | '))
           AND ($2::text IS NULL OR function = $2)
           AND ($3::text IS NULL OR $3 = ANY(chains))
         ORDER BY ts_rank_cd(
-            to_tsvector('english', coalesce(name, '') || ' ' || coalesce(description, '')),
+            "#,
+    tool_search_vector!(),
+    r#",
             to_tsquery('english', replace(plainto_tsquery('english', $1)::text, ' & ', ' | '))
         ) DESC, stars DESC, created_at DESC
         LIMIT 50
@@ -104,7 +122,9 @@ pub const MCP_SEARCH_TOOLS_COUNT_SQL: &str = concat!(
         WHERE "#,
     public_tool_where!(),
     r#"
-          AND to_tsvector('english', coalesce(name, '') || ' ' || coalesce(description, ''))
+          AND "#,
+    tool_search_vector!(),
+    r#"
               @@ plainto_tsquery('english', $1)
           AND ($2::text IS NULL OR function = $2)
           AND ($3::text IS NULL OR $3 = ANY(chains))
@@ -117,7 +137,9 @@ pub const MCP_SEARCH_TOOLS_COUNT_OR_SQL: &str = concat!(
         WHERE "#,
     public_tool_where!(),
     r#"
-          AND to_tsvector('english', coalesce(name, '') || ' ' || coalesce(description, ''))
+          AND "#,
+    tool_search_vector!(),
+    r#"
               @@ to_tsquery('english', replace(plainto_tsquery('english', $1)::text, ' & ', ' | '))
           AND ($2::text IS NULL OR function = $2)
           AND ($3::text IS NULL OR $3 = ANY(chains))
@@ -130,7 +152,9 @@ pub const MCP_SEARCH_TOOLS_BASE_SQL: &str = concat!(
         WHERE "#,
     public_tool_where!(),
     r#"
-          AND to_tsvector('english', coalesce(name, '') || ' ' || coalesce(description, ''))
+          AND "#,
+    tool_search_vector!(),
+    r#"
               @@ plainto_tsquery('english', $1)
     "#
 );
@@ -141,12 +165,16 @@ pub const MCP_SEARCH_TOOLS_RELEVANCE_SQL: &str = concat!(
         WHERE "#,
     public_tool_where!(),
     r#"
-          AND to_tsvector('english', coalesce(name, '') || ' ' || coalesce(description, ''))
+          AND "#,
+    tool_search_vector!(),
+    r#"
             @@ plainto_tsquery('english', $1)
           AND ($2::text IS NULL OR function = $2)
           AND ($3::text IS NULL OR $3 = ANY(chains))
         ORDER BY ts_rank_cd(
-            to_tsvector('english', coalesce(name, '') || ' ' || coalesce(description, '')),
+            "#,
+    tool_search_vector!(),
+    r#",
             plainto_tsquery('english', $1)
         ) DESC, stars DESC, updated_at DESC
         LIMIT $4 OFFSET $5
@@ -159,12 +187,16 @@ pub const MCP_SEARCH_TOOLS_RELEVANCE_OR_SQL: &str = concat!(
         WHERE "#,
     public_tool_where!(),
     r#"
-          AND to_tsvector('english', coalesce(name, '') || ' ' || coalesce(description, ''))
+          AND "#,
+    tool_search_vector!(),
+    r#"
             @@ to_tsquery('english', replace(plainto_tsquery('english', $1)::text, ' & ', ' | '))
           AND ($2::text IS NULL OR function = $2)
           AND ($3::text IS NULL OR $3 = ANY(chains))
         ORDER BY ts_rank_cd(
-            to_tsvector('english', coalesce(name, '') || ' ' || coalesce(description, '')),
+            "#,
+    tool_search_vector!(),
+    r#",
             to_tsquery('english', replace(plainto_tsquery('english', $1)::text, ' & ', ' | '))
         ) DESC, stars DESC, updated_at DESC
         LIMIT $4 OFFSET $5
@@ -177,7 +209,9 @@ pub const MCP_SEARCH_TOOLS_TRUST_SQL: &str = concat!(
         WHERE "#,
     public_tool_where!(),
     r#"
-          AND to_tsvector('english', coalesce(name, '') || ' ' || coalesce(description, ''))
+          AND "#,
+    tool_search_vector!(),
+    r#"
               @@ plainto_tsquery('english', $1)
           AND ($2::text IS NULL OR function = $2)
           AND ($3::text IS NULL OR $3 = ANY(chains))
@@ -192,7 +226,9 @@ pub const MCP_SEARCH_TOOLS_TRUST_OR_SQL: &str = concat!(
         WHERE "#,
     public_tool_where!(),
     r#"
-          AND to_tsvector('english', coalesce(name, '') || ' ' || coalesce(description, ''))
+          AND "#,
+    tool_search_vector!(),
+    r#"
               @@ to_tsquery('english', replace(plainto_tsquery('english', $1)::text, ' & ', ' | '))
           AND ($2::text IS NULL OR function = $2)
           AND ($3::text IS NULL OR $3 = ANY(chains))
@@ -207,7 +243,9 @@ pub const MCP_SEARCH_TOOLS_STARS_SQL: &str = concat!(
         WHERE "#,
     public_tool_where!(),
     r#"
-          AND to_tsvector('english', coalesce(name, '') || ' ' || coalesce(description, ''))
+          AND "#,
+    tool_search_vector!(),
+    r#"
               @@ plainto_tsquery('english', $1)
           AND ($2::text IS NULL OR function = $2)
           AND ($3::text IS NULL OR $3 = ANY(chains))
@@ -222,7 +260,9 @@ pub const MCP_SEARCH_TOOLS_STARS_OR_SQL: &str = concat!(
         WHERE "#,
     public_tool_where!(),
     r#"
-          AND to_tsvector('english', coalesce(name, '') || ' ' || coalesce(description, ''))
+          AND "#,
+    tool_search_vector!(),
+    r#"
               @@ to_tsquery('english', replace(plainto_tsquery('english', $1)::text, ' & ', ' | '))
           AND ($2::text IS NULL OR function = $2)
           AND ($3::text IS NULL OR $3 = ANY(chains))
@@ -237,7 +277,9 @@ pub const MCP_SEARCH_TOOLS_RECENT_SQL: &str = concat!(
         WHERE "#,
     public_tool_where!(),
     r#"
-          AND to_tsvector('english', coalesce(name, '') || ' ' || coalesce(description, ''))
+          AND "#,
+    tool_search_vector!(),
+    r#"
               @@ plainto_tsquery('english', $1)
           AND ($2::text IS NULL OR function = $2)
           AND ($3::text IS NULL OR $3 = ANY(chains))
@@ -252,7 +294,9 @@ pub const MCP_SEARCH_TOOLS_RECENT_OR_SQL: &str = concat!(
         WHERE "#,
     public_tool_where!(),
     r#"
-          AND to_tsvector('english', coalesce(name, '') || ' ' || coalesce(description, ''))
+          AND "#,
+    tool_search_vector!(),
+    r#"
               @@ to_tsquery('english', replace(plainto_tsquery('english', $1)::text, ' & ', ' | '))
           AND ($2::text IS NULL OR function = $2)
           AND ($3::text IS NULL OR $3 = ANY(chains))
@@ -641,5 +685,31 @@ mod tests {
     #[test]
     fn categories_join_prefixes_first_predicate_with_table_alias() {
         assert!(CATEGORIES_WITH_COUNTS_SQL.contains("AND t.approval_status = 'approved'"));
+    }
+
+    /// Migration 037 recreates idx_tools_search to mirror `tool_search::TOOL_SEARCH_VECTOR`.
+    #[test]
+    fn tools_search_migration_matches_application_vector() {
+        use crate::server::tool_search::TOOL_SEARCH_VECTOR;
+
+        let migration = include_str!("../../migrations/037_tools_search_vector_index.sql");
+        for fragment in [
+            "DROP INDEX IF EXISTS idx_tools_search",
+            "CREATE INDEX idx_tools_search",
+            "coalesce(slug, '')",
+            "coalesce(repo_url, '')",
+            "setweight(to_tsvector('english'",
+        ] {
+            assert!(
+                migration.contains(fragment),
+                "migration 037 missing {fragment}"
+            );
+        }
+        for fragment in ["slug", "repo_url", "setweight"] {
+            assert!(
+                TOOL_SEARCH_VECTOR.contains(fragment),
+                "application vector missing {fragment}"
+            );
+        }
     }
 }
