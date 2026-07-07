@@ -24,6 +24,11 @@ name = "mcp_add_flow_install_guide"
 path = "tests/mcp_add_flow_install_guide.rs"
 required-features = ["ssr", "test-helpers"]
 
+[[test]]
+name = "attribution_endpoint"
+path = "tests/attribution_endpoint.rs"
+required-features = ["ssr", "test-helpers"]
+
 [features]
 default = []
 # Exposes test-only helpers so integration test binaries can call them.

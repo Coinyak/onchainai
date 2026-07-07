@@ -160,6 +160,7 @@ pub fn build_tool_filters(
         pricing: parse_multi(pricing.as_deref()),
         install_risk: parse_multi(install_risk.as_deref()),
         chain: parse_multi(chain.as_deref()),
+        chain_soft: Vec::new(),
     }
 }
 

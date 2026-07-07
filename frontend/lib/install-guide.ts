@@ -220,7 +220,11 @@ function docsLinksForTool(tool: PublicTool): GuideLink[] {
 function x402NoticeForTool(tool: PublicTool): string | null {
   if (tool.pricing !== "x402" && !tool.x402_price && !tool.referral_enabled) return null;
   const price = tool.x402_price?.trim() || "the provider's x402 price";
-  return `Calls may request x402 payment (${price}). OnchainAI discloses payment metadata only and does not connect wallets or process payments.`;
+  const verification =
+    tool.payment_verified && tool.x402_endpoint_verified && tool.price_verified
+      ? "Payment details are operator verified."
+      : "Payment details are not operator verified yet.";
+  return `Calls may request x402 payment (${price}). OnchainAI discloses payment metadata only and does not connect wallets or process payments. ${verification}`;
 }
 
 function referralDisclosureForTool(tool: PublicTool): string | null {

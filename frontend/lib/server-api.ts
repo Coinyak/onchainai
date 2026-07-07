@@ -2,6 +2,7 @@ import type {
   CategoryRow,
   CategoryWithCount,
   PublicDashboardSnapshot,
+  PublicToolDetail,
   SessionUser,
   Tool,
   ToolFilters,
@@ -77,8 +78,8 @@ function normalizeCategory(row: CategoryRow): CategoryWithCount {
   return { category: row[0], count: row[1] };
 }
 
-export async function getToolBySlugServer(slug: string): Promise<Tool> {
-  return serverApiFetch<Tool>(`/api/v2/tools/${encodeURIComponent(slug)}`);
+export async function getToolBySlugServer(slug: string): Promise<PublicToolDetail> {
+  return serverApiFetch<PublicToolDetail>(`/api/v2/tools/${encodeURIComponent(slug)}`);
 }
 
 export async function getToolCommentCountServer(slug: string): Promise<number> {

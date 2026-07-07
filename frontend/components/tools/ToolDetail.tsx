@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ExternalLink, Star, MessageCircle } from "lucide-react";
-import type { PublicTool, TrustFact } from "@/lib/api";
+import type { PublicTool, StaleTrustBadge, TrustFact } from "@/lib/api";
+import { TrustProbeBadge } from "@/components/tools/TrustProbeBadge";
 import { ToolLogo } from "@/components/tools/ToolLogo";
 import { Badge } from "@/components/ui/Badge";
 import { InstallSection } from "@/components/tools/InstallSection";
@@ -17,6 +18,7 @@ import { timeAgo, statusBadgeLabel, formatGithubStars } from "@/lib/format";
 
 interface ToolDetailProps {
   tool: PublicTool;
+  trustProbe?: StaleTrustBadge | null;
   trustFacts?: TrustFact[];
   compact?: boolean;
   commentCount?: number;
@@ -35,12 +37,14 @@ function statusVariant(status: string): "verified" | "official" | "community" {
 
 function DetailMainContent({
   tool,
+  trustProbe,
   trustFacts,
   compact,
   addMode,
   compareReturnHref,
 }: {
   tool: PublicTool;
+  trustProbe?: StaleTrustBadge | null;
   trustFacts?: TrustFact[];
   compact: boolean;
   addMode: boolean;
@@ -70,6 +74,7 @@ function DetailMainContent({
           </Link>
         )}
         <InstallGuidePanel tool={tool} compact={compact} showProgress={compact} />
+        {trustProbe && <TrustProbeBadge trustProbe={trustProbe} />}
         <TrustFacts
           tool={tool}
           facts={trustFacts}
@@ -111,6 +116,7 @@ function DetailMainContent({
         </section>
       )}
       {toolHasInstallPath(tool) && <InstallSection tool={tool} compact={compact} />}
+      {trustProbe && <TrustProbeBadge trustProbe={trustProbe} />}
       <div className="detail-compare-row">
         <Link href={compareHref([tool.slug])} className="detail-compare-link">
           Compare this tool
@@ -144,6 +150,7 @@ function DetailMainContent({
 
 export function ToolDetail({
   tool,
+  trustProbe,
   trustFacts,
   compact = false,
   commentCount = 0,
@@ -251,6 +258,7 @@ export function ToolDetail({
           <div className="detail-main min-w-0">
             <DetailMainContent
               tool={tool}
+              trustProbe={trustProbe}
               trustFacts={trustFacts}
               compact={compact}
               addMode={addMode}
@@ -262,6 +270,7 @@ export function ToolDetail({
       ) : (
         <DetailMainContent
           tool={tool}
+          trustProbe={trustProbe}
           trustFacts={trustFacts}
           compact={compact}
           addMode={addMode}

@@ -1,4 +1,4 @@
-import type { Tool } from "@/lib/api";
+import type { PublicTool } from "@/lib/api";
 import { SITE_ORIGIN } from "@/lib/site";
 
 /** Safe for dangerouslySetInnerHTML in application/ld+json script tags. */
@@ -6,7 +6,7 @@ export function serializeJsonLd(payload: Record<string, unknown>): string {
   return JSON.stringify(payload).replace(/</g, "\\u003c");
 }
 
-export function buildSoftwareApplicationJsonLd(tool: Tool): Record<string, unknown> {
+export function buildSoftwareApplicationJsonLd(tool: PublicTool): Record<string, unknown> {
   const pageUrl = `${SITE_ORIGIN}/tools/${tool.slug}`;
   const image = tool.logo_url?.startsWith("http")
     ? tool.logo_url

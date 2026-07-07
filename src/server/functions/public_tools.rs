@@ -226,6 +226,11 @@ pub struct ToolFilters {
     pub install_risk: Vec<String>,
     #[serde(default)]
     pub chain: Vec<String>,
+    /// Soft chain filters from parsed query text (not explicit API params).
+    /// Matches tools where `chains` contains the token OR `chains` is empty,
+    /// since many crawled tools have `chains: []` but still support the chain.
+    #[serde(default, skip)]
+    pub chain_soft: Vec<String>,
 }
 
 fn merge_optional_filter(values: &mut Vec<String>, value: Option<&str>) {
@@ -245,6 +250,7 @@ pub fn intent_to_tool_filters(
     merge_optional_filter(&mut filters.chain, intent.chain.as_deref());
     merge_optional_filter(&mut filters.tool_type, intent.tool_type.as_deref());
     merge_optional_filter(&mut filters.install_risk, intent.install_risk.as_deref());
+    filters.chain_soft = intent.chain_soft.clone();
     filters
 }
 
@@ -258,6 +264,13 @@ pub fn merge_search_intent_into_filters(
     merge_optional_filter(&mut merged.chain, intent.chain.as_deref());
     merge_optional_filter(&mut merged.tool_type, intent.tool_type.as_deref());
     merge_optional_filter(&mut merged.install_risk, intent.install_risk.as_deref());
+    // Only populate chain_soft from intent when no explicit chain filter was
+    // set via URL params (explicit chain wins as hard filter).
+    if merged.chain.is_empty() {
+        merged.chain_soft = intent.chain_soft.clone();
+    } else {
+        merged.chain_soft.clear();
+    }
     merged
 }
 
@@ -344,8 +357,27 @@ pub(crate) fn append_tool_filters<'qb>(
         append_x402_catalog_predicate(query);
     }
     if !filters.chain.is_empty() {
-        // Intersection: tool must support every selected chain.
+        // Hard intersection: tool must support every selected chain.
         query.push(" AND chains @> ").push_bind(&filters.chain);
+    }
+    if !filters.chain_soft.is_empty() {
+        // Soft chain from NL query: single token may match empty `chains` too;
+        // multi-token queries require an explicit chain hit (no empty escape).
+        let allow_empty_chains = filters.chain_soft.len() == 1;
+        query.push(" AND (");
+        for (index, chain) in filters.chain_soft.iter().enumerate() {
+            if index > 0 {
+                query.push(" OR ");
+            }
+            query
+                .push("chains @> ARRAY[")
+                .push_bind(chain)
+                .push("]::text[]");
+            if allow_empty_chains {
+                query.push(" OR coalesce(array_length(chains, 1), 0) = 0");
+            }
+        }
+        query.push(")");
     }
 }
 
@@ -443,12 +475,13 @@ fn push_list_order_offset_limit<'qb>(
 ) {
     match sort {
         "new" => {
-            query.push(" ORDER BY created_at DESC");
+            query.push(" ORDER BY created_at DESC, metadata_quality DESC, stars DESC");
         }
         "comments" => {
             query.push(
                 " ORDER BY \
                  (SELECT COUNT(*)::bigint FROM comments cm WHERE cm.tool_id = tools.id) DESC, \
+                 metadata_quality DESC, \
                  created_at DESC",
             );
         }
@@ -459,7 +492,7 @@ fn push_list_order_offset_limit<'qb>(
             if let Some((text, match_mode)) = search {
                 push_fts_rank_order_clause(query, text, match_mode);
             } else {
-                query.push(" ORDER BY stars DESC, created_at DESC");
+                query.push(" ORDER BY metadata_quality DESC, stars DESC, created_at DESC");
             }
         }
     }
@@ -467,8 +500,8 @@ fn push_list_order_offset_limit<'qb>(
     query.push(" LIMIT ").push_bind(limit);
 }
 
-/// Shared `ORDER BY ts_rank_cd(...) DESC, stars DESC, created_at DESC` clause,
-/// falling back to `stars DESC, created_at DESC` if the query has no bindable terms.
+/// Shared `ORDER BY ts_rank_cd(...) DESC, metadata_quality DESC, stars DESC, created_at DESC` clause,
+/// falling back to `metadata_quality DESC, stars DESC, created_at DESC` if the query has no bindable terms.
 #[cfg(feature = "ssr")]
 fn push_fts_rank_order_clause<'qb>(
     query: &mut sqlx::QueryBuilder<'qb, sqlx::Postgres>,
@@ -478,7 +511,7 @@ fn push_fts_rank_order_clause<'qb>(
     use crate::server::tool_search::{fts_query_bind, ToolSearchMatch, TOOL_SEARCH_VECTOR};
 
     let Some(bind_value) = fts_query_bind(match_mode, search_text) else {
-        query.push(" ORDER BY stars DESC, created_at DESC");
+        query.push(" ORDER BY metadata_quality DESC, stars DESC, created_at DESC");
         return;
     };
     query.push(" ORDER BY ts_rank_cd(");
@@ -501,7 +534,7 @@ fn push_fts_rank_order_clause<'qb>(
             query.push(")::text, ' & ', ' | '))");
         }
     }
-    query.push(") DESC, stars DESC, created_at DESC");
+    query.push(") DESC, metadata_quality DESC, stars DESC, created_at DESC");
 }
 
 /// Count approved tools with optional multi-axis filters and optional FTS `search_q`.
@@ -569,7 +602,16 @@ pub(crate) async fn fetch_list_tools(
     } else {
         ToolSearchMatch::And
     };
-    let mut q = sqlx::QueryBuilder::new(LIST_APPROVED_TOOLS_SQL);
+    let mut q = sqlx::QueryBuilder::new(
+        "SELECT *, \
+         ((CASE WHEN repo_url IS NOT NULL THEN 1 ELSE 0 END) \
+         + (CASE WHEN stars > 0 THEN 1 ELSE 0 END) \
+         + (CASE WHEN coalesce(array_length(chains, 1), 0) > 0 THEN 1 ELSE 0 END) \
+         + (CASE WHEN install_command IS NOT NULL THEN 1 ELSE 0 END) \
+         + (CASE WHEN last_commit_at IS NOT NULL THEN 1 ELSE 0 END))::int AS metadata_quality \
+         FROM tools WHERE ",
+    );
+    q.push(PUBLIC_TOOL_WHERE);
     push_list_query_filter(&mut q, query, match_mode);
     append_tool_filters(&mut q, filters);
     let search_for_order = search_text.map(|text| (text, match_mode));
@@ -602,7 +644,15 @@ pub(crate) async fn fetch_search_by_intent(
         ToolSearchMatch::And
     };
 
-    let mut q = sqlx::QueryBuilder::new("SELECT * FROM tools WHERE ");
+    let mut q = sqlx::QueryBuilder::new(
+        "SELECT *, \
+         ((CASE WHEN repo_url IS NOT NULL THEN 1 ELSE 0 END) \
+         + (CASE WHEN stars > 0 THEN 1 ELSE 0 END) \
+         + (CASE WHEN coalesce(array_length(chains, 1), 0) > 0 THEN 1 ELSE 0 END) \
+         + (CASE WHEN install_command IS NOT NULL THEN 1 ELSE 0 END) \
+         + (CASE WHEN last_commit_at IS NOT NULL THEN 1 ELSE 0 END))::int AS metadata_quality \
+         FROM tools WHERE ",
+    );
     q.push(PUBLIC_TOOL_WHERE);
     if has_fts {
         push_list_query_filter(&mut q, Some(search_text), match_mode);
@@ -617,7 +667,7 @@ pub(crate) async fn fetch_search_by_intent(
         // first instead of falling back to a pure stars/date sort.
         let raw_query = intent.raw_query.trim();
         if raw_query.is_empty() {
-            q.push(" ORDER BY stars DESC, created_at DESC");
+            q.push(" ORDER BY metadata_quality DESC, stars DESC, created_at DESC");
         } else {
             push_fts_rank_order_clause(&mut q, raw_query, ToolSearchMatch::And);
         }
@@ -879,6 +929,8 @@ pub struct ToolComparisonView {
     pub official_links: Vec<ToolOfficialLink>,
     pub trust_facts: Vec<TrustFact>,
     pub viewer_bookmarked: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub trust_probe: Option<crate::server::trust_probe_meta::StaleTrustBadge>,
 }
 
 /// Request for bundled browser data load.

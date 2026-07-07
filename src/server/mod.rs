@@ -24,12 +24,16 @@ pub mod queries;
 #[cfg(feature = "ssr")]
 pub mod rate_limit;
 #[cfg(feature = "ssr")]
+pub mod referral_attribution;
+#[cfg(feature = "ssr")]
 pub mod review_persistence;
 pub mod secret_redaction;
 #[cfg(feature = "ssr")]
 pub mod tool_categories;
 #[cfg(feature = "ssr")]
 pub mod tool_search;
+#[cfg(feature = "ssr")]
+pub mod trust_probe_meta;
 #[cfg(feature = "ssr")]
 pub mod x402_payment;
 #[cfg(feature = "ssr")]

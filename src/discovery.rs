@@ -7,6 +7,11 @@ pub struct SearchIntent {
     pub chain: Option<String>,
     pub tool_type: Option<String>,
     pub install_risk: Option<String>,
+    /// Chains parsed from the *query text* (not explicit API params). Used as
+    /// a soft filter: match tools where `chains` contains the token OR is empty
+    /// (since many crawled tools have `chains: []` but still support the chain).
+    /// Explicit `chain` API params stay hard filters (`chains @>` intersection).
+    pub chain_soft: Vec<String>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -78,6 +83,12 @@ fn function_id(token: &str) -> Option<&'static str> {
         "payment" | "payments" => Some("payments"),
         "agent" | "agents" => Some("ai-agent"),
         "data" | "indexing" | "indexer" => Some("data"),
+        "lending" | "lend" | "borrow" => Some("lending"),
+        "staking" | "stake" | "yield" | "restake" => Some("staking"),
+        "wallet" | "custody" => Some("wallet"),
+        "nft" => Some("nft"),
+        "governance" | "dao" | "vote" => Some("governance"),
+        "social" => Some("social"),
         _ => None,
     }
 }
@@ -130,7 +141,10 @@ pub fn parse_search_intent(query: &str) -> SearchIntent {
         }
         if !is_single_token {
             if let Some(chain) = chain_id(token) {
-                intent.chain.get_or_insert_with(|| chain.to_string());
+                // Query-text chains are soft-only so tools with `chains: []`
+                // stay in recall. Hard `chain` filters come from explicit API
+                // params via `resolve_search_intent`, not NL parsing.
+                intent.chain_soft.push(chain.to_string());
                 continue;
             }
             if let Some(tool_type) = type_id(token) {
@@ -287,19 +301,24 @@ mod tests {
     #[test]
     fn search_intent_maps_high_confidence_tokens() {
         let intent = parse_search_intent("base wallet mcp");
-        assert_eq!(intent.chain.as_deref(), Some("base"));
+        assert!(intent.chain.is_none());
+        assert_eq!(intent.chain_soft, vec!["base"]);
         assert_eq!(intent.tool_type.as_deref(), Some("mcp"));
-        assert_eq!(intent.query_terms, "wallet");
+        // "wallet" is now recognized as a function token, so query_terms is empty.
+        assert_eq!(intent.function.as_deref(), Some("wallet"));
+        assert_eq!(intent.query_terms, "");
 
         let href = search_intent_href("/tools", &intent);
-        assert_eq!(href, "/tools?chain=base&type=mcp&q=wallet");
+        assert_eq!(href, "/tools?function=wallet&type=mcp");
     }
 
     #[test]
     fn search_intent_strips_tool_type_tokens_from_query() {
         let intent = parse_search_intent("mcp wallet");
         assert_eq!(intent.tool_type.as_deref(), Some("mcp"));
-        assert_eq!(intent.query_terms, "wallet");
+        // "wallet" is now a function token, consumed from query_terms.
+        assert_eq!(intent.function.as_deref(), Some("wallet"));
+        assert_eq!(intent.query_terms, "");
 
         let intent_api = parse_search_intent("api bridge tool");
         assert_eq!(intent_api.tool_type.as_deref(), Some("api"));
@@ -318,7 +337,8 @@ mod tests {
     fn search_intent_swap_base_maps_chain_and_function_without_fts() {
         let intent = parse_search_intent("swap base");
         assert_eq!(intent.function.as_deref(), Some("swap"));
-        assert_eq!(intent.chain.as_deref(), Some("base"));
+        assert!(intent.chain.is_none());
+        assert_eq!(intent.chain_soft, vec!["base"]);
         assert_eq!(intent.query_terms, "");
     }
 
@@ -345,6 +365,50 @@ mod tests {
         let intent = parse_search_intent("low risk x402");
         assert_eq!(intent.tool_type.as_deref(), Some("x402"));
         assert_eq!(intent.install_risk.as_deref(), Some("low"));
+    }
+
+    #[test]
+    fn search_intent_maps_lending_staking_wallet_nft_governance_social() {
+        let intent = parse_search_intent("lending tool");
+        assert_eq!(intent.function.as_deref(), Some("lending"));
+        assert_eq!(intent.query_terms, "tool");
+
+        let intent = parse_search_intent("staking yield tool");
+        assert_eq!(intent.function.as_deref(), Some("staking"));
+        assert_eq!(intent.query_terms, "tool");
+
+        let intent = parse_search_intent("wallet mcp");
+        assert_eq!(intent.function.as_deref(), Some("wallet"));
+        assert_eq!(intent.tool_type.as_deref(), Some("mcp"));
+
+        let intent = parse_search_intent("nft marketplace");
+        assert_eq!(intent.function.as_deref(), Some("nft"));
+        assert_eq!(intent.query_terms, "marketplace");
+
+        let intent = parse_search_intent("dao governance vote");
+        assert_eq!(intent.function.as_deref(), Some("governance"));
+        // "dao" and "vote" are both function tokens for governance, consumed.
+        assert_eq!(intent.query_terms, "");
+
+        let intent = parse_search_intent("social lens");
+        assert_eq!(intent.function.as_deref(), Some("social"));
+        assert_eq!(intent.query_terms, "lens");
+    }
+
+    #[test]
+    fn search_intent_chain_soft_collects_all_chains_from_query() {
+        let intent = parse_search_intent("bridge bitcoin solana ethereum");
+        assert!(intent.chain.is_none());
+        assert_eq!(intent.chain_soft, vec!["bitcoin", "solana", "ethereum"]);
+        assert_eq!(intent.function.as_deref(), Some("bridge"));
+        assert_eq!(intent.query_terms, "");
+    }
+
+    #[test]
+    fn search_intent_chain_soft_single_chain_also_populated() {
+        let intent = parse_search_intent("swap base");
+        assert!(intent.chain.is_none());
+        assert_eq!(intent.chain_soft, vec!["base"]);
     }
 
     #[test]

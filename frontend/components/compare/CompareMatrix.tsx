@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { Star, X } from "lucide-react";
-import type { PublicTool } from "@/lib/api";
+import type { ToolComparisonView } from "@/lib/api";
 import { ToolLogo } from "@/components/tools/ToolLogo";
 import { ChainLogo } from "@/components/tools/ChainLogo";
+import { TrustProbeBadge } from "@/components/tools/TrustProbeBadge";
 import { chainTagsForTool } from "@/lib/chains";
 import {
   COMPARE_ROWS,
@@ -17,22 +18,23 @@ import {
 import { CompareAddToolTypeahead } from "@/components/compare/CompareAddToolTypeahead";
 
 interface CompareMatrixProps {
-  tools: PublicTool[];
+  entries: ToolComparisonView[];
   onRemove: (slug: string) => void;
   onAdd: (slug: string) => void;
 }
 
 function MatrixCell({
-  tool,
+  entry,
   rowKey,
   diff,
   sharedChains,
 }: {
-  tool: PublicTool;
+  entry: ToolComparisonView;
   rowKey: CompareRowKey;
   diff: boolean;
   sharedChains: Set<string>;
 }) {
+  const tool = entry.tool;
   const className = `compare-matrix-cell${diff ? " compare-matrix-cell-diff" : ""}`;
 
   if (rowKey === "stars") {
@@ -73,9 +75,22 @@ function MatrixCell({
   return <td className={className}>{compareCellText(tool, rowKey)}</td>;
 }
 
-export function CompareMatrix({ tools, onRemove, onAdd }: CompareMatrixProps) {
+function ProbeMatrixCell({ entry }: { entry: ToolComparisonView }) {
+  if (!entry.trust_probe) {
+    return <td className="compare-matrix-cell">—</td>;
+  }
+  return (
+    <td className="compare-matrix-cell compare-matrix-probe-cell">
+      <TrustProbeBadge trustProbe={entry.trust_probe} variant="compact" />
+    </td>
+  );
+}
+
+export function CompareMatrix({ entries, onRemove, onAdd }: CompareMatrixProps) {
+  const tools = entries.map((entry) => entry.tool);
   const intersection = sharedChainIds(tools);
   const canAdd = tools.length < MAX_COMPARE_TOOLS;
+  const showProbeRow = entries.some((entry) => entry.trust_probe);
 
   return (
     <div className="compare-matrix-wrap" data-testid="compare-matrix">
@@ -85,29 +100,29 @@ export function CompareMatrix({ tools, onRemove, onAdd }: CompareMatrixProps) {
             <th scope="col" className="compare-matrix-corner">
               Attribute
             </th>
-            {tools.map((tool) => (
-              <th key={tool.slug} scope="col" className="compare-matrix-tool-col">
+            {entries.map((entry) => (
+              <th key={entry.tool.slug} scope="col" className="compare-matrix-tool-col">
                 <div className="compare-matrix-tool-header">
                   <div className="compare-matrix-tool-identity">
                     <ToolLogo
-                      name={tool.name}
-                      logoUrl={tool.logo_url}
-                      logoMonogram={tool.logo_monogram}
-                      status={tool.status}
+                      name={entry.tool.name}
+                      logoUrl={entry.tool.logo_url}
+                      logoMonogram={entry.tool.logo_monogram}
+                      status={entry.tool.status}
                       size={36}
                     />
                     <div>
-                      <Link href={`/tools/${tool.slug}`} className="compare-matrix-tool-name">
-                        {tool.name}
+                      <Link href={`/tools/${entry.tool.slug}`} className="compare-matrix-tool-name">
+                        {entry.tool.name}
                       </Link>
                     </div>
                   </div>
                   <button
                     type="button"
                     className="compare-matrix-remove"
-                    aria-label={`Remove ${tool.name} from comparison`}
-                    data-testid={`compare-remove-${tool.slug}`}
-                    onClick={() => onRemove(tool.slug)}
+                    aria-label={`Remove ${entry.tool.name} from comparison`}
+                    data-testid={`compare-remove-${entry.tool.slug}`}
+                    onClick={() => onRemove(entry.tool.slug)}
                   >
                     <X size={18} aria-hidden />
                   </button>
@@ -132,10 +147,10 @@ export function CompareMatrix({ tools, onRemove, onAdd }: CompareMatrixProps) {
                 <th scope="row" className="compare-matrix-row-label">
                   {row.label}
                 </th>
-                {tools.map((tool) => (
+                {entries.map((entry) => (
                   <MatrixCell
-                    key={`${row.key}-${tool.slug}`}
-                    tool={tool}
+                    key={`${row.key}-${entry.tool.slug}`}
+                    entry={entry}
                     rowKey={row.key}
                     diff={diff}
                     sharedChains={intersection}
@@ -145,6 +160,17 @@ export function CompareMatrix({ tools, onRemove, onAdd }: CompareMatrixProps) {
               </tr>
             );
           })}
+          {showProbeRow && (
+            <tr data-testid="compare-matrix-probe-row">
+              <th scope="row" className="compare-matrix-row-label">
+                x402 probe
+              </th>
+              {entries.map((entry) => (
+                <ProbeMatrixCell key={`probe-${entry.tool.slug}`} entry={entry} />
+              ))}
+              {canAdd && <td className="compare-matrix-add-spacer" aria-hidden />}
+            </tr>
+          )}
         </tbody>
       </table>
     </div>

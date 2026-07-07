@@ -3,13 +3,13 @@
 import { useEffect, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import type { PublicTool } from "@/lib/api";
+import type { PublicToolDetail } from "@/lib/api";
 import { ToolDetail } from "@/components/tools/ToolDetail";
 import { PreviewPanelContent } from "@/components/tools/PreviewPanelContent";
 import { PreviewActionBar } from "@/components/tools/PreviewActionBar";
 
 interface PreviewPanelProps {
-  tool: PublicTool;
+  tool: PublicToolDetail;
   closeHref: string;
   fullPageHref: string;
   commentCount?: number;
@@ -70,6 +70,7 @@ export function PreviewPanel({
             </header>
             <ToolDetail
               tool={tool}
+              trustProbe={tool.trust_probe ?? null}
               compact
               commentCount={commentCount}
               addMode={addMode}
@@ -81,6 +82,7 @@ export function PreviewPanel({
           <PreviewPanelContent
             key={tool.slug}
             tool={tool}
+            trustProbe={tool.trust_probe ?? null}
             closeHref={closeHref}
             fullPageHref={fullPageHref}
             commentCount={commentCount}

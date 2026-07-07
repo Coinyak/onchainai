@@ -3,6 +3,7 @@
 import Link from "next/link";
 import type { ToolComparisonView } from "@/lib/api";
 import { InstallGuidePanel } from "@/components/tools/InstallGuidePanel";
+import { TrustProbeBadge } from "@/components/tools/TrustProbeBadge";
 import { AddMcpAction } from "@/components/tools/AddMcpAction";
 import { ToolLogo } from "@/components/tools/ToolLogo";
 import { toolHasInstallPath } from "@/lib/install-guide";
@@ -40,6 +41,7 @@ export function CompareInstallSections({ entries, slugs }: CompareInstallSection
               </span>
             </summary>
             <div className="compare-install-body">
+              {entry.trust_probe && <TrustProbeBadge trustProbe={entry.trust_probe} />}
               <InstallGuidePanel tool={tool} compact />
               <div className="compare-card-actions">
                 <Link href={`/tools/${tool.slug}`}>Open details</Link>

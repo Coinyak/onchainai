@@ -19,16 +19,27 @@ use crate::server::queries::{
     APPROVED_TOOLS_BY_SLUGS_SQL, BOOKMARKED_SLUGS_SQL, RECENT_APPROVED_TOOLS_SQL,
     TOOL_COMMENT_COUNT_BY_SLUG_SQL, USER_TOOLKIT_SQL,
 };
+use crate::server::rate_limit::{check_attribution_ip_rate_limit, client_ip_from_connect};
+use crate::server::referral_attribution::{
+    fetch_site_referral_defaults, record_install_guide_attribution, validate_attribution_platform,
+    InstallGuideAttributionInput, InstallGuideAttributionOutcome, InstallGuideAttributionRequest,
+};
 use crate::server::review_persistence::list_public_official_links;
+use crate::server::trust_probe_meta::{
+    build_stale_trust_badge, load_latest_probes_by_tool_ids, stale_trust_badge_for_tool,
+    PublicToolWithTrustProbe,
+};
 use crate::trust_verification::verify_tool_trust;
 use crate::AppState;
 use axum::{
-    extract::{Path, Query, State},
+    extract::{ConnectInfo, Path, Query, State},
     http::HeaderMap,
     routing::{get, post, put},
     Json, Router,
 };
+use chrono::Utc;
 use serde::Deserialize;
+use std::net::SocketAddr;
 
 use super::auth::{optional_user_from, require_user_from};
 use super::error::ApiError;
@@ -52,6 +63,10 @@ pub fn router(state: AppState) -> Router {
             get(get_tool_comment_count),
         )
         .route("/api/v2/tools/{slug}", get(get_tool_by_slug))
+        .route(
+            "/api/v2/tools/{slug}/attribution",
+            post(record_web_install_guide_attribution),
+        )
         .with_state(state)
 }
 
@@ -149,15 +164,61 @@ async fn search_tools(
     Ok(Json(tools_to_public_summaries(tools)))
 }
 
+async fn record_web_install_guide_attribution(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    Path(slug): Path<String>,
+    Json(payload): Json<InstallGuideAttributionRequest>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let client_ip = client_ip_from_connect(&headers, addr);
+    if let Err(limit) = check_attribution_ip_rate_limit(&client_ip) {
+        return Err(ApiError::TooManyRequests(limit.to_string()));
+    }
+    if let Err(msg) = validate_attribution_platform(&payload.platform) {
+        return Err(ApiError::BadRequest(msg.to_string()));
+    }
+
+    let tool = fetch_tool_by_slug(&state.pool, &slug)
+        .await
+        .map_err(ApiError::from_server_fn)?
+        .ok_or_else(|| ApiError::NotFound(format!("tool not found: {slug}")))?;
+
+    let site_defaults = fetch_site_referral_defaults(&state.pool).await;
+    let outcome = record_install_guide_attribution(
+        &state.pool,
+        InstallGuideAttributionInput {
+            tool: &tool,
+            platform: payload.platform.trim(),
+            source: "web_install_guide",
+            attribution_session: payload.attribution_session.as_deref(),
+            site_defaults: site_defaults.as_ref(),
+        },
+    )
+    .await
+    .map_err(|e| ApiError::Internal(format!("failed to record attribution: {e}")))?;
+
+    let recorded = matches!(outcome, InstallGuideAttributionOutcome::Recorded);
+    Ok(Json(
+        serde_json::json!({ "ok": true, "recorded": recorded }),
+    ))
+}
+
 async fn get_tool_by_slug(
     State(state): State<AppState>,
     Path(slug): Path<String>,
-) -> Result<Json<PublicTool>, ApiError> {
-    fetch_tool_by_slug(&state.pool, &slug)
+) -> Result<Json<PublicToolWithTrustProbe>, ApiError> {
+    let tool = fetch_tool_by_slug(&state.pool, &slug)
         .await
         .map_err(ApiError::from_server_fn)?
-        .ok_or_else(|| ApiError::NotFound(format!("tool not found: {slug}")))
-        .map(|tool| Json(PublicTool::from(tool)))
+        .ok_or_else(|| ApiError::NotFound(format!("tool not found: {slug}")))?;
+    let trust_probe = stale_trust_badge_for_tool(&state.pool, &tool)
+        .await
+        .map_err(|e| ApiError::Internal(format!("trust probe meta failed: {e}")))?;
+    Ok(Json(PublicToolWithTrustProbe {
+        tool: PublicTool::from(tool),
+        trust_probe,
+    }))
 }
 
 async fn count_tools(
@@ -376,6 +437,12 @@ async fn compare_tools(
         std::collections::HashSet::new()
     };
 
+    let tool_ids: Vec<_> = tools.iter().map(|tool| tool.id).collect();
+    let latest_probes = load_latest_probes_by_tool_ids(&state.pool, &tool_ids)
+        .await
+        .map_err(|e| ApiError::Internal(format!("trust probe meta failed: {e}")))?;
+    let now = Utc::now();
+
     let tool_map: std::collections::HashMap<String, Tool> =
         tools.into_iter().map(|t| (t.slug.clone(), t)).collect();
 
@@ -389,11 +456,19 @@ async fn compare_tools(
             .map_err(ApiError::from_server_fn)?;
         let trust = verify_tool_trust(tool, &official_links);
         let viewer_bookmarked = bookmarked_slugs.contains(&tool.slug);
+        let latest = latest_probes.get(&tool.id);
+        let trust_probe = build_stale_trust_badge(
+            tool,
+            latest.map(|row| row.probed_at),
+            latest.map(|row| row.status.clone()),
+            now,
+        );
         rows.push(ToolComparisonView {
             tool: PublicTool::from(tool.clone()),
             official_links,
             trust_facts: trust.trust_facts,
             viewer_bookmarked,
+            trust_probe,
         });
     }
 

@@ -6,9 +6,10 @@ import { Check, Clipboard } from "lucide-react";
 interface CopyButtonProps {
   text: string;
   label?: string;
+  onCopied?: () => void;
 }
 
-export function CopyButton({ text, label = "Copy" }: CopyButtonProps) {
+export function CopyButton({ text, label = "Copy", onCopied }: CopyButtonProps) {
   const [copied, setCopied] = useState(false);
 
   async function handleCopy(e: React.MouseEvent) {
@@ -17,6 +18,11 @@ export function CopyButton({ text, label = "Copy" }: CopyButtonProps) {
     try {
       await navigator.clipboard.writeText(text);
       setCopied(true);
+      try {
+        onCopied?.();
+      } catch {
+        /* side-effect failures must not break copy UX */
+      }
       setTimeout(() => setCopied(false), 2000);
     } catch {
       /* ignore */

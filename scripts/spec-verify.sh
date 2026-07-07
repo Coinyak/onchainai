@@ -199,6 +199,10 @@ exists FTG-D-doc "x402 정본 스펙" docs/X402_OPEN_LISTING_SPEC.md
 ftg_compare_free FTG-D "compare paid wording absent (policy docs)" \
   docs/X402_OPEN_LISTING_SPEC.md \
   docs/superpowers/specs/2026-07-04-free-tier-guardian-spec.md
+# Code-level OD-FTG guard: the Rust premium set must not contain compare_tools.
+# (FTG-D above scans docs only; this catches the actual constant so the harness
+# fails without needing cargo test.)
+absent FTG-D2 "PREMIUM_MCP_TOOLS excludes compare_tools (code)" 'pub const PREMIUM_MCP_TOOLS.*&\[.*compare_tools' src/server/mcp_x402.rs
 absent FTG-A "MCP discovery 402 게이트 없음" 'paymentRequired|require_x402_payment|x402_gate' src/server/mcp.rs
 present FTG-E "README 무료 MCP 선언" 'free.*read-only|read-only.*free' README.md
 curl_has FTG-B "compare API 비인증 200" "$PROD_URL/api/v2/tools/compare?slugs=aave,uniswap" '\[|\{'

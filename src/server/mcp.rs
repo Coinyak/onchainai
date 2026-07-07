@@ -475,8 +475,9 @@ async fn tools_call(
         Ok(req) => req,
         Err(err) => return ToolsCallOutcome::Err(err),
     };
-    // Axis B premium (compare_tools / export_toolkit): operator-toggled x402 via
-    // site_settings. Default disabled, so these stay free until explicitly enabled.
+    // Axis B premium (export_toolkit only): operator-toggled x402 via site_settings.
+    // compare_tools is Free Forever (OD-FTG) and intentionally NOT in PREMIUM_MCP_TOOLS.
+    // Default disabled, so export_toolkit stays free until explicitly enabled.
     // Same facilitator verify+settle gate as K2 check_endpoint_health.
     if crate::server::mcp_x402::is_premium_mcp_tool(&request.name) {
         let config = match crate::server::mcp_x402::load_mcp_premium_config(pool).await {
@@ -601,6 +602,9 @@ async fn call_check_endpoint_health(
         }
         Err(PremiumDataError::NotX402) => {
             return Err((-32602, "tool is not an x402 endpoint listing".into()));
+        }
+        Err(PremiumDataError::MissingEndpoint) => {
+            return Err((-32602, "tool has no x402 endpoint URL".into()));
         }
         Err(PremiumDataError::InvalidSlug) => {
             return Err((-32602, "slug is required".into()));
@@ -738,12 +742,19 @@ async fn call_search_tools(pool: &PgPool, args: &Value) -> Result<String, (i32, 
 
 async fn call_get_tool_detail(pool: &PgPool, args: &Value) -> Result<String, (i32, String)> {
     use crate::models::tool::PublicTool;
+    use crate::server::trust_probe_meta::PublicToolWithTrustProbe;
     let slug = required_str(args, "slug", "slug required")?;
     let tool = mcp_get_tool(pool, slug)
         .await
         .map_err(|msg| (-32000, msg))?;
-    let public_tool = PublicTool::from(tool);
-    serialize_tool_payload(&public_tool)
+    let trust_probe = crate::server::trust_probe_meta::stale_trust_badge_for_tool(pool, &tool)
+        .await
+        .map_err(|e| (-32000, format!("trust probe meta failed: {e}")))?;
+    let payload = PublicToolWithTrustProbe {
+        tool: PublicTool::from(tool),
+        trust_probe,
+    };
+    serialize_tool_payload(&payload)
 }
 
 async fn call_list_categories(pool: &PgPool) -> Result<String, (i32, String)> {
