@@ -217,7 +217,7 @@ curl -sS -X POST "$API_URL/api/v2/admin/crawler/trigger" \
   -d '{"source":"vendor_orgs"}'
 ```
 
-허용 `source` 값: `npm`, `clawhub`, `cryptoskill`, `web3-mcp-hub`, `github`, `mcp-registry`, `vendor_orgs`, `bazaar`, `sync_stars` (`validate_trigger_crawler_source`).
+허용 `source` 값: `npm`, `clawhub`, `cryptoskill`, `web3-mcp-hub`, `github`, `mcp-registry`, `vendor_orgs`, `bazaar`, `pypi`, `sync_stars` (`validate_trigger_crawler_source`).
 
 **Discovery gap audit (read-only):** `node scripts/discovery-gap-audit.mjs` — ground-truth recall vs public catalog (`fixtures/discovery-ground-truth.json`). `--live-probe` checks ClawHub/GitHub availability for misses.
 

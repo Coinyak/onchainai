@@ -215,8 +215,12 @@ async fn get_tool_by_slug(
     let trust_probe = stale_trust_badge_for_tool(&state.pool, &tool)
         .await
         .map_err(|e| ApiError::Internal(format!("trust probe meta failed: {e}")))?;
+    let official_links = list_public_official_links(&state.pool, tool.id)
+        .await
+        .map_err(ApiError::from_server_fn)?;
     Ok(Json(PublicToolWithTrustProbe {
         tool: PublicTool::from(tool),
+        official_links,
         trust_probe,
     }))
 }

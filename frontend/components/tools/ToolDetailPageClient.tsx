@@ -58,6 +58,7 @@ export function ToolDetailPageClient({ slug }: ToolDetailPageClientProps) {
       </Link>
       <ToolDetail
         tool={tool}
+        officialLinks={tool.official_links}
         trustProbe={tool.trust_probe ?? null}
         commentCount={countQuery.data ?? 0}
       />

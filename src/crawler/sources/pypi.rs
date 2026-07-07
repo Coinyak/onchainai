@@ -32,6 +32,32 @@ const SOURCE_NAME: &str = "pypi";
 ///
 /// PyPI search is JS-challenge-protected, so we maintain a seed list of
 /// known packages. New packages can be added here as they are discovered.
+/// Operator-curated homepage/docs when PyPI `project_urls` are stale or GitHub-only.
+struct PyPiCuratedMeta {
+    homepage: Option<&'static str>,
+    documentation_url: Option<&'static str>,
+    product_url: Option<&'static str>,
+}
+
+const CURATED_PACKAGE_META: &[(&str, PyPiCuratedMeta)] = &[
+    (
+        "bnbagent-studio",
+        PyPiCuratedMeta {
+            homepage: Some("https://www.bnbchain.org/en/bnb-agent-studio"),
+            documentation_url: Some("https://docs.bnbchain.org/developer-kit/bnbchain-studio/"),
+            product_url: None,
+        },
+    ),
+    (
+        "bnbagent",
+        PyPiCuratedMeta {
+            homepage: None,
+            documentation_url: Some("https://docs.bnbchain.org/developer-kit/bnbagent-sdk/"),
+            product_url: Some("https://www.bnbchain.org/en/bnb-agent-studio"),
+        },
+    ),
+];
+
 const SEED_PACKAGES: &[&str] = &[
     "bnbagent-studio",
     "bnbagent-studio-core",
@@ -126,6 +152,19 @@ fn extract_homepage(project_urls: &std::collections::HashMap<String, String>) ->
     None
 }
 
+fn curated_meta_for(package_name: &str) -> Option<&'static PyPiCuratedMeta> {
+    CURATED_PACKAGE_META
+        .iter()
+        .find(|(name, _)| *name == package_name)
+        .map(|(_, meta)| meta)
+}
+
+fn apply_curated_homepage(package_name: &str, homepage: Option<String>) -> Option<String> {
+    curated_meta_for(package_name)
+        .and_then(|meta| meta.homepage.map(str::to_string))
+        .or(homepage)
+}
+
 /// Strip `git+` prefix and `.git` suffix from repository URLs.
 fn clean_git_url(url: &str) -> String {
     let url = url.strip_prefix("git+").unwrap_or(url);
@@ -164,9 +203,12 @@ fn package_to_raw(response: &PackageResponse) -> RawTool {
     let project_urls = info.project_urls.clone().unwrap_or_default();
 
     let repo_url = extract_repo_url(&project_urls);
-    let homepage = extract_homepage(&project_urls)
-        .or_else(|| repo_url.clone())
-        .or_else(|| project_urls.values().next().cloned());
+    let homepage = apply_curated_homepage(
+        &info.name,
+        extract_homepage(&project_urls)
+            .or_else(|| repo_url.clone())
+            .or_else(|| project_urls.values().next().cloned()),
+    );
 
     let description = info.summary.clone().or(info.description.clone());
     let tool_type = infer_tool_type(&info.entry_points);
@@ -260,6 +302,68 @@ pub async fn crawl() -> Result<Vec<RawTool>> {
     crawl_with_client(&client).await
 }
 
+/// Upsert operator-curated docs/product links into `tool_official_links`.
+async fn sync_curated_official_links(pool: &sqlx::PgPool) {
+    for (package_name, meta) in CURATED_PACKAGE_META {
+        let slug = package_name.strip_suffix("-core").unwrap_or(package_name);
+        let tool_id = match sqlx::query_scalar::<_, uuid::Uuid>(
+            "SELECT id FROM tools WHERE slug = $1",
+        )
+        .bind(slug)
+        .fetch_optional(pool)
+        .await
+        {
+            Ok(Some(id)) => id,
+            Ok(None) => continue,
+            Err(e) => {
+                tracing::warn!(package = package_name, error = %e, "curated link sync: tool lookup failed");
+                continue;
+            }
+        };
+
+        let mut links: Vec<(&str, &str)> = Vec::new();
+        if let Some(url) = meta.documentation_url {
+            links.push((url, "Documentation"));
+        }
+        if let Some(url) = meta.product_url {
+            links.push((url, "Product"));
+        }
+
+        for (url, label) in links {
+            if let Err(e) = sqlx::query(
+                r#"
+                INSERT INTO tool_official_links (
+                    tool_id, link_type, url, display_label, verification_status,
+                    official_badge_allowed, evidence_strength, discovered_from, verified_at
+                )
+                VALUES ($1, 'website', $2, $3, 'verified', true, 'strong', 'pypi-curate', now())
+                ON CONFLICT (tool_id, link_type, url) DO UPDATE SET
+                    display_label = EXCLUDED.display_label,
+                    verification_status = EXCLUDED.verification_status,
+                    official_badge_allowed = EXCLUDED.official_badge_allowed,
+                    evidence_strength = EXCLUDED.evidence_strength,
+                    discovered_from = EXCLUDED.discovered_from,
+                    verified_at = now(),
+                    updated_at = now()
+                "#,
+            )
+            .bind(tool_id)
+            .bind(url)
+            .bind(label)
+            .execute(pool)
+            .await
+            {
+                tracing::warn!(
+                    package = package_name,
+                    url,
+                    error = %e,
+                    "curated link sync: upsert failed"
+                );
+            }
+        }
+    }
+}
+
 /// Run a full PyPI crawl.
 ///
 /// Results are normalized/upserted and the `sources` table is updated.
@@ -269,6 +373,7 @@ pub async fn run_once(pool: &sqlx::PgPool) {
             tracing::info!(source = SOURCE_NAME, count = raws.len(), "crawl completed");
             crate::crawler::persist_crawl_results(pool, SOURCE_NAME, "https://pypi.org/", raws)
                 .await;
+            sync_curated_official_links(pool).await;
         }
         Err(e) => {
             tracing::error!(source = SOURCE_NAME, error = %e, "crawl failed");
@@ -404,6 +509,10 @@ mod tests {
         let response: PackageResponse = serde_json::from_str(&bnbagent_studio_json()).unwrap();
         let raw = package_to_raw(&response);
         assert_eq!(raw.name, "bnbagent-studio");
+        assert_eq!(
+            raw.homepage.as_deref(),
+            Some("https://www.bnbchain.org/en/bnb-agent-studio")
+        );
         assert_eq!(raw.tool_type, "cli");
         assert_eq!(
             raw.install_command.as_deref(),

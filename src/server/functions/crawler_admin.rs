@@ -138,7 +138,7 @@ pub(crate) async fn list_crawler_sources_inner(
 pub(crate) fn validate_trigger_crawler_source(source: &str) -> Result<(), &'static str> {
     match source {
         "npm" | "clawhub" | "cryptoskill" | "web3-mcp-hub" | "github" | "mcp-registry"
-        | "vendor_orgs" | "bazaar" | "sync_stars" => Ok(()),
+        | "vendor_orgs" | "bazaar" | "pypi" | "sync_stars" => Ok(()),
         _ => Err("unknown crawler source"),
     }
 }

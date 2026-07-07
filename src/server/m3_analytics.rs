@@ -134,7 +134,7 @@ pub struct ToolTrendRow {
     pub total_probes: i64,
     pub live_probes: i64,
     pub live_rate_pct: Option<f64>,
-    pub median_price: Option<String>,
+    pub latest_price: Option<String>,
     pub latest_status: Option<String>,
     pub latest_probe_at: Option<DateTime<Utc>>,
 }
@@ -149,7 +149,7 @@ pub struct X402TrendsResponse {
 
 const TRENDS_DISCLAIMER: &str =
     "Aggregated x402 probe trends at time T. Live rate = live probes / total probes per tool. \
-     Median price is from actual 402 handshake amounts. Not financial advice.";
+     Latest price is the most recent actual 402 handshake amount within the window. Not financial advice.";
 
 pub async fn get_x402_trends(
     pool: &PgPool,
@@ -176,11 +176,12 @@ pub async fn get_x402_trends(
                   AND h2.probed_at >= now() - make_interval(days => $1)
                 ORDER BY h2.probed_at DESC
                 LIMIT 1
-            ) AS median_price,
+            ) AS latest_price,
             (
                 SELECT h3.status
                 FROM x402_probe_history h3
                 WHERE h3.tool_id = t.id
+                  AND h3.probed_at >= now() - make_interval(days => $1)
                 ORDER BY h3.probed_at DESC
                 LIMIT 1
             ) AS latest_status,

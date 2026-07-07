@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { ExternalLink, Star, MessageCircle } from "lucide-react";
-import type { PublicTool, StaleTrustBadge, TrustFact } from "@/lib/api";
+import type { PublicTool, StaleTrustBadge, TrustFact, ToolOfficialLink } from "@/lib/api";
 import { TrustProbeBadge } from "@/components/tools/TrustProbeBadge";
 import { ToolLogo } from "@/components/tools/ToolLogo";
 import { Badge } from "@/components/ui/Badge";
@@ -18,6 +18,7 @@ import { timeAgo, statusBadgeLabel, formatGithubStars } from "@/lib/format";
 
 interface ToolDetailProps {
   tool: PublicTool;
+  officialLinks?: ToolOfficialLink[];
   trustProbe?: StaleTrustBadge | null;
   trustFacts?: TrustFact[];
   compact?: boolean;
@@ -37,6 +38,7 @@ function statusVariant(status: string): "verified" | "official" | "community" {
 
 function DetailMainContent({
   tool,
+  officialLinks,
   trustProbe,
   trustFacts,
   compact,
@@ -44,25 +46,35 @@ function DetailMainContent({
   compareReturnHref,
 }: {
   tool: PublicTool;
+  officialLinks?: ToolOfficialLink[];
   trustProbe?: StaleTrustBadge | null;
   trustFacts?: TrustFact[];
   compact: boolean;
   addMode: boolean;
   compareReturnHref: string;
 }) {
+  const seenUrls = new Set<string>();
+  const pushLink = (label: string, url: string) => {
+    const key = url.trim();
+    if (!key || seenUrls.has(key)) return null;
+    seenUrls.add(key);
+    return { label, url: key };
+  };
+  const curatedLinks = (officialLinks ?? [])
+    .map((link) => pushLink(link.display_label || link.link_type, link.url))
+    .filter(Boolean) as { label: string; url: string }[];
   const links = [
-    tool.repo_url && {
-      label: tool.stars ? formatGithubStars(tool.stars) : "GitHub",
-      url: tool.repo_url,
-    },
-    tool.homepage && { label: "Homepage", url: tool.homepage },
-    tool.npm_package && {
-      label: "npm",
-      url: tool.npm_package.startsWith("http")
-        ? tool.npm_package
-        : `https://www.npmjs.com/package/${tool.npm_package}`,
-    },
-    tool.mcp_endpoint && { label: "MCP", url: tool.mcp_endpoint },
+    tool.repo_url && pushLink(tool.stars ? formatGithubStars(tool.stars) : "GitHub", tool.repo_url),
+    tool.homepage && pushLink("Homepage", tool.homepage),
+    ...curatedLinks,
+    tool.npm_package &&
+      pushLink(
+        "npm",
+        tool.npm_package.startsWith("http")
+          ? tool.npm_package
+          : `https://www.npmjs.com/package/${tool.npm_package}`,
+      ),
+    tool.mcp_endpoint && pushLink("MCP", tool.mcp_endpoint),
   ].filter(Boolean) as { label: string; url: string; extra?: string }[];
 
   if (addMode) {
@@ -150,6 +162,7 @@ function DetailMainContent({
 
 export function ToolDetail({
   tool,
+  officialLinks,
   trustProbe,
   trustFacts,
   compact = false,
@@ -258,6 +271,7 @@ export function ToolDetail({
           <div className="detail-main min-w-0">
             <DetailMainContent
               tool={tool}
+              officialLinks={officialLinks}
               trustProbe={trustProbe}
               trustFacts={trustFacts}
               compact={compact}
@@ -270,6 +284,7 @@ export function ToolDetail({
       ) : (
         <DetailMainContent
           tool={tool}
+          officialLinks={officialLinks}
           trustProbe={trustProbe}
           trustFacts={trustFacts}
           compact={compact}

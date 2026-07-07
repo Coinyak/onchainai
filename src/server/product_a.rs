@@ -96,6 +96,7 @@ pub enum RejectionReason {
     PriceMismatch,
     Stale,
     NotRelevant,
+    NotProbed,
 }
 
 /// Full Product A response.
@@ -283,9 +284,27 @@ pub async fn recommend_verified_tool(
         }
     }
 
-    // Also include non-x402 candidates as NotRelevant.
+    // Classify non-probed tools: x402 tools beyond MAX_CANDIDATES cap get NotProbed,
+    // non-x402 tools get NotRelevant.
+    let probed_ids: std::collections::HashSet<Uuid> = top_n.iter().map(|t| t.id).collect();
     for tool in &tools {
-        if !top_n.iter().any(|t| t.id == tool.id) {
+        if probed_ids.contains(&tool.id) {
+            continue;
+        }
+        let is_x402 = (tool.pricing == "x402" || tool.x402_endpoint.is_some())
+            && tool
+                .x402_endpoint
+                .as_deref()
+                .is_some_and(|e| !e.trim().is_empty());
+        if is_x402 {
+            rejected.push(RejectedCandidate {
+                slug: tool.slug.clone(),
+                name: tool.name.clone(),
+                trust_tier: tool.status.clone(),
+                reason: RejectionReason::NotProbed,
+                detail: format!("not probed — beyond MAX_CANDIDATES cap of {MAX_CANDIDATES}"),
+            });
+        } else {
             rejected.push(RejectedCandidate {
                 slug: tool.slug.clone(),
                 name: tool.name.clone(),

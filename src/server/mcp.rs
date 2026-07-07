@@ -857,30 +857,16 @@ async fn call_gap_audit(
     }
 }
 
-/// M3 get_price_history — Axis-B premium.
+/// M3 get_price_history — free discovery/metadata (OD-FTG §2).
 async fn call_get_price_history(
     pool: &PgPool,
     args: &Value,
-    headers: &HeaderMap,
+    _headers: &HeaderMap,
 ) -> Result<DispatchOutcome, (i32, String)> {
     use crate::server::m3_analytics::{get_price_history, AnalyticsError};
 
     let slug = required_str(args, "slug", "slug required")?;
     let days = args.get("days").and_then(|v| v.as_i64());
-
-    // Axis-B premium gate.
-    let config = match crate::server::mcp_x402::load_mcp_premium_config(pool).await {
-        Ok(config) => config,
-        Err(e) => return Err((-32603, format!("settings load failed: {e}"))),
-    };
-    if config.is_active() {
-        match crate::server::mcp_x402::require_axis_b_payment(&config, "get_price_history", headers)
-            .await
-        {
-            Ok(_settlement) => {}
-            Err(response) => return Ok(DispatchOutcome::Http(response)),
-        }
-    }
 
     match get_price_history(pool, slug, days).await {
         Ok(result) => {
@@ -896,29 +882,15 @@ async fn call_get_price_history(
     }
 }
 
-/// M3 get_x402_trends — Axis-B premium.
+/// M3 get_x402_trends — free discovery/metadata (OD-FTG §2).
 async fn call_get_x402_trends(
     pool: &PgPool,
     args: &Value,
-    headers: &HeaderMap,
+    _headers: &HeaderMap,
 ) -> Result<DispatchOutcome, (i32, String)> {
     use crate::server::m3_analytics::{get_x402_trends, AnalyticsError};
 
     let days = args.get("days").and_then(|v| v.as_i64());
-
-    // Axis-B premium gate.
-    let config = match crate::server::mcp_x402::load_mcp_premium_config(pool).await {
-        Ok(config) => config,
-        Err(e) => return Err((-32603, format!("settings load failed: {e}"))),
-    };
-    if config.is_active() {
-        match crate::server::mcp_x402::require_axis_b_payment(&config, "get_x402_trends", headers)
-            .await
-        {
-            Ok(_settlement) => {}
-            Err(response) => return Ok(DispatchOutcome::Http(response)),
-        }
-    }
 
     match get_x402_trends(pool, days).await {
         Ok(result) => {
@@ -1056,8 +1028,13 @@ async fn call_get_tool_detail(pool: &PgPool, args: &Value) -> Result<String, (i3
     let trust_probe = crate::server::trust_probe_meta::stale_trust_badge_for_tool(pool, &tool)
         .await
         .map_err(|e| (-32000, format!("trust probe meta failed: {e}")))?;
+    let official_links =
+        crate::server::review_persistence::list_public_official_links(pool, tool.id)
+            .await
+            .map_err(|e| (-32000, format!("official links failed: {e}")))?;
     let payload = PublicToolWithTrustProbe {
         tool: PublicTool::from(tool),
+        official_links,
         trust_probe,
     };
     serialize_tool_payload(&payload)

@@ -994,6 +994,7 @@ mod tests {
         assert!(validate_trigger_crawler_source("mcp-registry").is_ok());
         assert!(validate_trigger_crawler_source("vendor_orgs").is_ok());
         assert!(validate_trigger_crawler_source("bazaar").is_ok());
+        assert!(validate_trigger_crawler_source("pypi").is_ok());
         assert!(validate_trigger_crawler_source("sync_stars").is_ok());
     }
 

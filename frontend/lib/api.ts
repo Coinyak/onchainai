@@ -158,6 +158,7 @@ export interface StaleTrustBadge {
 
 /** Tool detail from GET /api/v2/tools/{slug} — PublicTool fields + optional trust_probe. */
 export type PublicToolDetail = PublicTool & {
+  official_links?: ToolOfficialLink[];
   trust_probe?: StaleTrustBadge | null;
 };
 
@@ -358,6 +359,7 @@ export interface ToolOfficialLink {
   tool_id: string;
   url: string;
   link_type: string;
+  display_label: string;
   verification_status: string;
   evidence_strength: string;
   official_badge_allowed: boolean;
