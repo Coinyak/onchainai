@@ -604,7 +604,7 @@ pub async fn persist_crawl_results_gated(
 /// invoked from a background `tokio::spawn` at the call site.
 pub async fn trigger_source(pool: &sqlx::PgPool, source: &str) {
     use crate::crawler::sources::{
-        bazaar, clawhub, cryptoskill, github, mcp_registry, npm, vendor_orgs, web3mcp,
+        bazaar, clawhub, cryptoskill, github, mcp_registry, npm, pypi, vendor_orgs, web3mcp,
     };
 
     match source {
@@ -616,6 +616,7 @@ pub async fn trigger_source(pool: &sqlx::PgPool, source: &str) {
         "mcp-registry" => mcp_registry::run_once(pool).await,
         "vendor_orgs" => vendor_orgs::run_once(pool).await,
         "bazaar" => bazaar::run_once(pool).await,
+        "pypi" => pypi::run_once(pool).await,
         "sync_stars" => github::sync_stars(pool).await,
         other => tracing::warn!(source = other, "unknown crawler source trigger"),
     }
