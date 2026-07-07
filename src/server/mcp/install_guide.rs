@@ -274,14 +274,14 @@ mod tests {
         tool.referral_enabled = true;
         let defaults = ReferralSiteDefaults {
             bps: Some(250),
-            payout_address: Some("0x96262be63aa687563789225c2fe898c27a3b0ae4".into()),
+            payout_address: Some("0x2af05c1661da38a2919dc27b4c8b71cb91c30017".into()),
             builder_code: Some("bc_ljttbnhv".into()),
         };
         let referral = referral_metadata_for_tool(&tool, Some(&defaults)).expect("referral");
         assert_eq!(referral.bps, Some(250));
         assert_eq!(
             referral.payout_address.as_deref(),
-            Some("0x96262be63aa687563789225c2fe898c27a3b0ae4")
+            Some("0x2af05c1661da38a2919dc27b4c8b71cb91c30017")
         );
         assert_eq!(referral.builder_code.as_deref(), Some("bc_ljttbnhv"));
     }
