@@ -15,6 +15,7 @@ macro_rules! tool_search_vector {
 
 /// Document vector used for public tool text search (name/slug weighted above description/repo).
 /// All vector arms use the `english` config so document lexemes match `plainto_tsquery('english', ...)`.
+/// GIN index `idx_tools_search` must mirror this expression — see `migrations/037_tools_search_vector_index.sql`.
 /// Parentheses are required before `@@` in match predicates (`@@` binds tighter than `||`).
 pub const TOOL_SEARCH_VECTOR: &str = tool_search_vector!();
 
