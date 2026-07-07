@@ -24,8 +24,8 @@ macro_rules! tool_search_vector {
     () => {
         "(setweight(to_tsvector('english', coalesce(name, '')), 'A') \
  || setweight(to_tsvector('english', coalesce(description, '')), 'B') \
- || setweight(to_tsvector('simple', coalesce(slug, '')), 'A') \
- || setweight(to_tsvector('simple', coalesce(repo_url, '')), 'C'))"
+ || setweight(to_tsvector('english', coalesce(slug, '')), 'A') \
+ || setweight(to_tsvector('english', coalesce(repo_url, '')), 'C'))"
     };
 }
 

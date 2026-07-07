@@ -8,13 +8,13 @@ macro_rules! tool_search_vector {
     () => {
         "(setweight(to_tsvector('english', coalesce(name, '')), 'A') \
  || setweight(to_tsvector('english', coalesce(description, '')), 'B') \
- || setweight(to_tsvector('simple', coalesce(slug, '')), 'A') \
- || setweight(to_tsvector('simple', coalesce(repo_url, '')), 'C'))"
+ || setweight(to_tsvector('english', coalesce(slug, '')), 'A') \
+ || setweight(to_tsvector('english', coalesce(repo_url, '')), 'C'))"
     };
 }
 
 /// Document vector used for public tool text search (name/slug weighted above description/repo).
-/// Slug and repo_url use the `simple` config so tokens like `x402` are not stemmed.
+/// All vector arms use the `english` config so document lexemes match `plainto_tsquery('english', ...)`.
 /// Parentheses are required before `@@` in match predicates (`@@` binds tighter than `||`).
 pub const TOOL_SEARCH_VECTOR: &str = tool_search_vector!();
 
@@ -298,7 +298,15 @@ mod tests {
         assert!(FTS_AND_MATCH.starts_with('('));
         assert!(FTS_AND_MATCH.contains("slug"));
         assert!(FTS_AND_MATCH.contains("repo_url"));
-        assert!(FTS_AND_MATCH.contains("'simple'"));
+        assert!(
+            !FTS_AND_MATCH.contains("'simple'"),
+            "vector arms must use english to match tsquery config"
+        );
+        assert_eq!(
+            FTS_AND_MATCH.matches("'english'").count(),
+            5,
+            "name, description, slug, repo_url vectors plus plainto_tsquery"
+        );
         assert!(
             FTS_AND_MATCH.find("@@").unwrap() > FTS_AND_MATCH.find("||").unwrap(),
             "@@ must apply to the full vector, not only the description arm"
