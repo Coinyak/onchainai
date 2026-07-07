@@ -148,8 +148,8 @@ fn parse_keywords(raw: &str) -> Vec<String> {
 fn infer_tool_type(entry_points: &Option<serde_json::Value>) -> String {
     if let Some(ep) = entry_points {
         if let Some(obj) = ep.as_object() {
-            if let Some(console_scripts) = obj.get("console_scripts") {
-                if console_scripts.is_object() && !console_scripts.as_object().unwrap().is_empty() {
+            if let Some(console_scripts) = obj.get("console_scripts").and_then(|v| v.as_object()) {
+                if !console_scripts.is_empty() {
                     return "cli".to_string();
                 }
             }
