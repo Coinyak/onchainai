@@ -83,3 +83,19 @@ Index appears after CDP Facilitator **settle** on a paid route with Bazaar disco
 
 - Slack: http://slack.x402.org — intro in #general: discovery directory, no custody
 - GitHub: https://github.com/x402-foundation/x402 — ecosystem PR when list location confirmed
+
+## OKX AI Agent Marketplace — https://okx.ai/agents
+
+> Registration is wallet-login SPA only (no curl). **W7 pending:** confirm OKX x402 facilitator ↔ CDP Facilitator compatibility before listing paid K2. If incompatible, submit **discovery-only** (free MCP tools) per Plan B — see `docs/superpowers/specs/2026-07-07-okx-x402-infra-waves.md` §3.4.
+
+| Field | Value |
+|-------|-------|
+| Provider | OnchainAI |
+| Service | OnchainAI Trust Probe (x402 endpoint liveness) |
+| Endpoint | `https://www.onchain-ai.xyz/mcp` (POST JSON-RPC, streamable-http) |
+| Payment model | A2MCP / x402 (HTTP 402) |
+| Paid tool | `check_endpoint_health` ($0.001/call, USDC) |
+| Payout wallet | **Owner TBD (§6)** — OKX Provider–dedicated self-custody wallet recommended (do not reuse `site_settings` payout) |
+| Free tools (same endpoint) | `search_tools`, `get_tool_detail`, `get_install_guide`, `list_categories`, `get_dashboard_snapshot`, `compare_tools` |
+| Repo | https://github.com/Coinyak/onchainai |
+| Registry cross-list | `io.github.Coinyak/onchainai` v0.2.0 (`server.json`) |

@@ -18,7 +18,7 @@ async fn main() -> anyhow::Result<()> {
         .nth(1)
         .unwrap_or_else(|| {
             eprintln!("usage: crawler-once <source>");
-            eprintln!("sources: npm, clawhub, cryptoskill, web3-mcp-hub, github, mcp-registry, vendor_orgs, bazaar, sync_stars");
+            eprintln!("sources: npm, clawhub, cryptoskill, web3-mcp-hub, github, mcp-registry, vendor_orgs, bazaar, pypi, sync_stars");
             std::process::exit(1);
         });
 

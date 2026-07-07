@@ -9,6 +9,7 @@
 //! - official MCP Registry: every 12h, offset 15min (`0 15 */12 * * *`)
 //! - vendor orgs: daily at 03:45 UTC (`0 45 3 * * *`)
 //! - Bazaar x402 discovery: every 6h at :20 (`0 20 */6 * * *`)
+//! - PyPI: every 6h at :25 (`0 25 */6 * * *`)
 //! - GitHub star sync: every 30min (`0 */30 * * * *`)
 //!
 //! The actual source crawl logic is added in a later milestone; this module
@@ -31,6 +32,7 @@ const GITHUB_CRON: &str = "0 30 * * * *";
 const MCP_REGISTRY_CRON: &str = "0 15 */12 * * *";
 const VENDOR_ORGS_CRON: &str = "0 45 3 * * *";
 const BAZAAR_CRON: &str = "0 20 */6 * * *";
+const PYPI_CRON: &str = "0 25 */6 * * *";
 const STAR_SYNC_CRON: &str = "0 */30 * * * *";
 
 pub(crate) const CRAWLER_JOB_SPECS: &[CrawlerJobSpec] = &[
@@ -65,6 +67,10 @@ pub(crate) const CRAWLER_JOB_SPECS: &[CrawlerJobSpec] = &[
     CrawlerJobSpec {
         source: "bazaar",
         cron: BAZAAR_CRON,
+    },
+    CrawlerJobSpec {
+        source: "pypi",
+        cron: PYPI_CRON,
     },
     CrawlerJobSpec {
         source: "sync_stars",
@@ -171,6 +177,17 @@ pub async fn start(pool: sqlx::PgPool) -> Result<()> {
     })?;
     scheduler.add(bazaar_job).await?;
 
+    // PyPI: every 6h at :25 UTC (offset from Bazaar).
+    let pypi_pool = pool.clone();
+    let pypi_job = Job::new_async(PYPI_CRON, move |_uuid, _l| {
+        let pool = pypi_pool.clone();
+        Box::pin(async move {
+            tracing::info!("scheduled crawl: pypi");
+            crate::crawler::sources::pypi::run_once(&pool).await;
+        })
+    })?;
+    scheduler.add(pypi_job).await?;
+
     // GitHub star sync: every 30min.
     let star_pool = pool.clone();
     let star_job = Job::new_async(STAR_SYNC_CRON, move |_uuid, _l| {
@@ -211,5 +228,8 @@ mod tests {
         assert!(CRAWLER_JOB_SPECS
             .iter()
             .any(|spec| { spec.source == "bazaar" && spec.cron == BAZAAR_CRON }));
+        assert!(CRAWLER_JOB_SPECS
+            .iter()
+            .any(|spec| { spec.source == "pypi" && spec.cron == PYPI_CRON }));
     }
 }
