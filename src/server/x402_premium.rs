@@ -7,6 +7,8 @@ use uuid::Uuid;
 
 use crate::models::Tool;
 use crate::server::queries::APPROVED_TOOL_BY_SLUG_SQL;
+use crate::server::trust_probe_meta::ProbeReceipt;
+use crate::server::x402_verify::run_k2_on_demand_probe;
 
 #[derive(Debug, Serialize)]
 pub struct EndpointHealthReport {
@@ -21,11 +23,12 @@ pub struct EndpointHealthReport {
     pub live_samples_30d: i64,
     pub latest_probe_status: Option<String>,
     pub x402_endpoint: Option<String>,
+    pub probe_receipt: ProbeReceipt,
     pub disclaimer: &'static str,
 }
 
 const HEALTH_DISCLAIMER: &str =
-    "Probe-based trust signal from OnchainAI scheduled checks — not a payment guarantee.";
+    "On-demand probe at payment time — liveness and advertised x402 fee match only; not execution cost, safety, or payment guarantee.";
 
 pub async fn check_endpoint_health(
     pool: &PgPool,
@@ -49,6 +52,26 @@ pub async fn check_endpoint_health(
     if tool.pricing != "x402" && tool.x402_endpoint.is_none() {
         return Err(PremiumDataError::NotX402);
     }
+
+    let endpoint = tool
+        .x402_endpoint
+        .as_deref()
+        .filter(|url| !url.trim().is_empty())
+        .ok_or(PremiumDataError::MissingEndpoint)?;
+
+    let run = run_k2_on_demand_probe(pool, tool.id, endpoint, tool.x402_price.as_deref())
+        .await
+        .map_err(PremiumDataError::Database)?;
+
+    let on_demand_live = run.history_status == "live";
+
+    let probe_receipt = crate::server::trust_probe_meta::build_probe_receipt(
+        &tool,
+        endpoint,
+        run.probed_at,
+        &run.outcome,
+        tool.x402_price.as_deref(),
+    );
 
     let stats = sqlx::query_as::<_, ProbeStatsRow>(
         r#"
@@ -79,20 +102,19 @@ pub async fn check_endpoint_health(
         None
     };
 
-    let last_probe_at = stats.last_probe_at.or(tool.x402_last_checked_at);
-
     Ok(EndpointHealthReport {
         slug: tool.slug.clone(),
         tool_id: tool.id,
-        live: tool.x402_endpoint_verified,
-        endpoint_verified: tool.x402_endpoint_verified,
-        price_verified: tool.price_verified,
-        last_probe_at,
+        live: on_demand_live,
+        endpoint_verified: run.endpoint_verified,
+        price_verified: run.price_verified,
+        last_probe_at: Some(run.probed_at),
         uptime_30d_pct: uptime,
         probe_samples_30d: stats.total,
         live_samples_30d: stats.live_count,
-        latest_probe_status: stats.latest_status,
+        latest_probe_status: Some(run.history_status),
         x402_endpoint: tool.x402_endpoint.clone(),
+        probe_receipt,
         disclaimer: HEALTH_DISCLAIMER,
     })
 }
@@ -110,6 +132,7 @@ pub enum PremiumDataError {
     InvalidSlug,
     NotFound,
     NotX402,
+    MissingEndpoint,
     Database(sqlx::Error),
 }
 
@@ -117,7 +140,7 @@ impl PremiumDataError {
     pub fn status_code(&self) -> axum::http::StatusCode {
         use axum::http::StatusCode;
         match self {
-            Self::InvalidSlug | Self::NotX402 => StatusCode::BAD_REQUEST,
+            Self::InvalidSlug | Self::NotX402 | Self::MissingEndpoint => StatusCode::BAD_REQUEST,
             Self::NotFound => StatusCode::NOT_FOUND,
             Self::Database(_) => StatusCode::INTERNAL_SERVER_ERROR,
         }
@@ -128,6 +151,7 @@ impl PremiumDataError {
             Self::InvalidSlug => "slug is required",
             Self::NotFound => "tool not found",
             Self::NotX402 => "tool is not an x402 endpoint listing",
+            Self::MissingEndpoint => "tool has no x402 endpoint URL",
             Self::Database(_) => "failed to load endpoint health data",
         }
     }

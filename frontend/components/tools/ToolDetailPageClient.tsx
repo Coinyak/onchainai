@@ -56,7 +56,11 @@ export function ToolDetailPageClient({ slug }: ToolDetailPageClientProps) {
       <Link href={backHref} className="back-link no-underline text-primary mb-6 inline-block">
         ← All Tools
       </Link>
-      <ToolDetail tool={tool} commentCount={countQuery.data ?? 0} />
+      <ToolDetail
+        tool={tool}
+        trustProbe={tool.trust_probe ?? null}
+        commentCount={countQuery.data ?? 0}
+      />
       <div className="detail-page-tail">
         <ToolListingActions tool={tool} />
         <RelatedToolsSection slug={slug} />

@@ -6,6 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { getAdminToolWorkbench, getReviewQueue } from "@/lib/api";
 import { AdminReviewDecisionPanel } from "@/components/admin/AdminReviewDecisionPanel";
+import { AdminToolReferralPanel } from "@/components/admin/AdminToolReferralPanel";
 import { ToolLogo } from "@/components/tools/ToolLogo";
 
 function AdminToolsContent() {
@@ -93,6 +94,11 @@ function AdminToolsContent() {
               queueQuery.refetch();
             }}
           />
+          <AdminToolReferralPanel
+            key={workbenchQuery.data.tool.updated_at}
+            tool={workbenchQuery.data.tool}
+            onSaved={() => workbenchQuery.refetch()}
+          />
         </article>
       )}
 
@@ -121,6 +127,11 @@ function AdminToolsContent() {
                   slug={item.tool.slug}
                   tool={item.tool}
                   onReviewed={() => queueQuery.refetch()}
+                />
+                <AdminToolReferralPanel
+                  key={item.tool.updated_at}
+                  tool={item.tool}
+                  onSaved={() => queueQuery.refetch()}
                 />
               </div>
             )}

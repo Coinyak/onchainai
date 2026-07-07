@@ -57,6 +57,9 @@ pub struct ResolvedSearchIntent {
     pub chain: Option<String>,
     pub tool_type: Option<String>,
     pub install_risk: Option<String>,
+    /// Chains parsed from *query text* (not explicit API params). Used as
+    /// soft filters downstream so tools with `chains: []` are not excluded.
+    pub chain_soft: Vec<String>,
     /// Untouched input text, kept even when `query` is emptied by axis-token
     /// extraction (e.g. "base mcp" -> chain=base, tool_type=mcp, query="").
     /// Used to rank literal name matches (like a tool named "Base MCP")
@@ -174,6 +177,7 @@ pub fn resolve_search_intent(
         chain: chain.or(intent.chain),
         tool_type: intent.tool_type,
         install_risk: intent.install_risk,
+        chain_soft: intent.chain_soft,
         raw_query: query.trim().to_string(),
     }
 }
@@ -356,7 +360,8 @@ mod tests {
     fn resolve_search_intent_extracts_bridge_and_base() {
         let intent = resolve_search_intent("bridge USDC to Base", None, None);
         assert_eq!(intent.function.as_deref(), Some("bridge"));
-        assert_eq!(intent.chain.as_deref(), Some("base"));
+        assert!(intent.chain.is_none());
+        assert_eq!(intent.chain_soft, vec!["base"]);
         assert!(!intent.query.is_empty());
     }
 
@@ -364,7 +369,8 @@ mod tests {
     fn resolve_search_intent_honors_explicit_params_and_strips_query_tokens() {
         let intent =
             resolve_search_intent("mcp wallet", Some("swap".into()), Some("solana".into()));
-        assert_eq!(intent.query, "wallet");
+        // "wallet" is now a function token, consumed from query_terms.
+        assert_eq!(intent.query, "");
         assert_eq!(intent.function.as_deref(), Some("swap"));
         assert_eq!(intent.chain.as_deref(), Some("solana"));
         assert_eq!(intent.tool_type.as_deref(), Some("mcp"));
@@ -375,7 +381,8 @@ mod tests {
         let intent = resolve_search_intent("mcp base", None, None);
         assert_eq!(intent.query, "");
         assert!(intent.function.is_none());
-        assert_eq!(intent.chain.as_deref(), Some("base"));
+        assert!(intent.chain.is_none());
+        assert_eq!(intent.chain_soft, vec!["base"]);
     }
 
     #[test]

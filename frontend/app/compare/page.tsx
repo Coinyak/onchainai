@@ -61,6 +61,7 @@ function CompareContent() {
           official_links: [],
           trust_facts: [],
           viewer_bookmarked: false,
+          trust_probe: singleToolQuery.data.trust_probe ?? null,
         },
       ];
     }
@@ -138,7 +139,7 @@ function CompareContent() {
           Add at least one more tool to compare attributes.
         </p>
       )}
-      <CompareMatrix tools={tools} onRemove={removeSlug} onAdd={addSlug} />
+      <CompareMatrix entries={entries} onRemove={removeSlug} onAdd={addSlug} />
       {entries.length >= MIN_COMPARE_TOOLS && (
         <CompareInstallSections entries={entries} slugs={slugs} />
       )}

@@ -18,7 +18,9 @@ use crate::server::x402_payment::{
 };
 
 /// MCP tools that may require OnchainAI's own x402 payment when premium is enabled.
-pub const PREMIUM_MCP_TOOLS: &[&str] = &["compare_tools", "export_toolkit"];
+/// Only `export_toolkit` remains Axis-B premium. `compare_tools` is Free Forever per
+/// the Free Tier Guardian founder decision (OD-FTG, 2026-07-04-free-tier-guardian-spec.md).
+pub const PREMIUM_MCP_TOOLS: &[&str] = &["export_toolkit"];
 
 pub fn is_premium_mcp_tool(name: &str) -> bool {
     PREMIUM_MCP_TOOLS.contains(&name)
@@ -148,10 +150,24 @@ mod tests {
 
     #[test]
     fn premium_tool_names_are_stable() {
-        assert!(is_premium_mcp_tool("compare_tools"));
         assert!(is_premium_mcp_tool("export_toolkit"));
         assert!(!is_premium_mcp_tool("search_tools"));
         assert!(!is_premium_mcp_tool("check_endpoint_health"));
+    }
+
+    /// Code-level OD-FTG guard: compare_tools must never re-enter the premium set.
+    /// Mirrors the doc-only FTG-D guard in scripts/spec-verify.sh so cargo test
+    /// also fails on regression, not just the harness doc scan.
+    #[test]
+    fn compare_tools_is_free_forever_odftg() {
+        assert!(
+            !is_premium_mcp_tool("compare_tools"),
+            "compare_tools must stay free (OD-FTG); re-adding it to PREMIUM_MCP_TOOLS is a regression"
+        );
+        assert!(
+            !PREMIUM_MCP_TOOLS.contains(&"compare_tools"),
+            "PREMIUM_MCP_TOOLS must not contain compare_tools (OD-FTG)"
+        );
     }
 
     #[test]

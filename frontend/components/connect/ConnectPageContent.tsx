@@ -1,6 +1,7 @@
 "use client";
 
 import { AgentLinkSection } from "@/components/connect/AgentLinkSection";
+import { K2ProbeReceiptSection } from "@/components/connect/K2ProbeReceiptSection";
 import { CodingClientLogo } from "@/components/tools/CodingClientLogo";
 import { ConnectGuideBlocks } from "@/components/connect/ConnectGuideBlocks";
 import { HighlightedCommand } from "@/components/tools/HighlightedCommand";
@@ -194,6 +195,8 @@ export function ConnectPageContent() {
           </p>
         </div>
       </section>
+
+      <K2ProbeReceiptSection />
 
       <AgentLinkSection />
     </div>

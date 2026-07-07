@@ -6,7 +6,9 @@ use crate::models::Tool;
 use crate::server::functions::{build_toolkit_payload, ToolComparisonView, ToolkitToolView};
 use crate::server::queries::{APPROVED_TOOLS_BY_SLUGS_SQL, PUBLIC_TOOL_WHERE};
 use crate::server::review_persistence::list_public_official_links;
+use crate::server::trust_probe_meta::{build_stale_trust_badge, load_latest_probes_by_tool_ids};
 use crate::trust_verification::verify_tool_trust;
+use chrono::Utc;
 use sqlx::PgPool;
 
 const MAX_EXPORT_SLUGS: usize = 25;
@@ -23,9 +25,19 @@ pub async fn mcp_compare_tools(pool: &PgPool, slugs_raw: &str) -> Result<String,
         .await
         .map_err(|e| format!("db error: {e}"))?;
 
+    let tools = tools
+        .into_iter()
+        .map(sanitize_tool_for_public_response)
+        .collect::<Vec<_>>();
+    let tool_ids: Vec<_> = tools.iter().map(|tool| tool.id).collect();
+    let latest_probes = load_latest_probes_by_tool_ids(pool, &tool_ids)
+        .await
+        .map_err(|e| format!("trust probe meta failed: {e}"))?;
+    let now = Utc::now();
+
     let tool_map: std::collections::HashMap<String, Tool> = tools
         .into_iter()
-        .map(|tool| (tool.slug.clone(), sanitize_tool_for_public_response(tool)))
+        .map(|tool| (tool.slug.clone(), tool))
         .collect();
 
     let mut rows = Vec::new();
@@ -37,11 +49,19 @@ pub async fn mcp_compare_tools(pool: &PgPool, slugs_raw: &str) -> Result<String,
             .await
             .map_err(|e| format!("official links failed: {e}"))?;
         let trust = verify_tool_trust(tool, &official_links);
+        let latest = latest_probes.get(&tool.id);
+        let trust_probe = build_stale_trust_badge(
+            tool,
+            latest.map(|row| row.probed_at),
+            latest.map(|row| row.status.clone()),
+            now,
+        );
         rows.push(ToolComparisonView {
             tool: PublicTool::from(tool.clone()),
             official_links,
             trust_facts: trust.trust_facts,
             viewer_bookmarked: false,
+            trust_probe,
         });
     }
 

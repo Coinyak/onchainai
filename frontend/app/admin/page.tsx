@@ -2,13 +2,17 @@
 
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
-import { getAdminStats } from "@/lib/api";
+import { getAdminStats, getReferralDashboardStats } from "@/lib/api";
 import { timeAgo } from "@/lib/format";
 
 export default function AdminDashboardPage() {
   const statsQuery = useQuery({
     queryKey: ["admin-stats"],
     queryFn: getAdminStats,
+  });
+  const referralStatsQuery = useQuery({
+    queryKey: ["referral-stats"],
+    queryFn: getReferralDashboardStats,
   });
 
   if (statsQuery.isLoading) {
@@ -34,6 +38,34 @@ export default function AdminDashboardPage() {
         <StatCard label="Low relevance" value={data.low_relevance} href="/admin/tools?queue=low_relevance" />
         <StatCard label="Public tools" value={data.public_tools} href="/tools" />
       </div>
+
+      {referralStatsQuery.data && (
+        <section className="mb-8">
+          <h2 className="text-h2 mb-4">x402 attribution</h2>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <StatCard
+              label="x402 tools"
+              value={referralStatsQuery.data.x402_tools}
+              href="/tools?pricing=x402"
+            />
+            <StatCard
+              label="Referral enabled"
+              value={referralStatsQuery.data.referral_enabled_tools}
+              href="/admin/tools"
+            />
+            <StatCard
+              label="Attribution events"
+              value={referralStatsQuery.data.attribution_events}
+              href="/admin/settings"
+            />
+            <StatCard
+              label="Reported settlements"
+              value={referralStatsQuery.data.reported_settlements}
+              href="/admin/settings"
+            />
+          </div>
+        </section>
+      )}
 
       <section>
         <h2 className="text-h2 mb-4">Crawler status</h2>
