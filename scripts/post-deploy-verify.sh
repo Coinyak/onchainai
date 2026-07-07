@@ -8,6 +8,7 @@
 #   ./scripts/post-deploy-verify.sh
 #   ./scripts/post-deploy-verify.sh https://www.onchain-ai.xyz
 #   ./scripts/post-deploy-verify.sh --k2
+#   ./scripts/post-deploy-verify.sh --wave2
 #   RAILWAY_API_URL=https://onchainai-production.up.railway.app ./scripts/post-deploy-verify.sh --k2
 set -euo pipefail
 
@@ -16,9 +17,11 @@ cd "$ROOT"
 
 PROD_URL="https://www.onchain-ai.xyz"
 RUN_K2=false
+RUN_WAVE2=false
 for arg in "$@"; do
   case "$arg" in
     --k2) RUN_K2=true ;;
+    --wave2) RUN_WAVE2=true ;;
     -*) echo "Unknown flag: $arg" >&2; exit 1 ;;
     *) PROD_URL="$arg" ;;
   esac
@@ -36,6 +39,11 @@ echo "=== Production API smoke (curl) ==="
 if [[ "$RUN_K2" == "true" ]]; then
   echo "=== K2 prod smoke (discovery free + check_endpoint_health 402) ==="
   RAILWAY_API_URL="${API_URL}" ./scripts/k2-prod-smoke.sh
+fi
+
+if [[ "$RUN_WAVE2" == "true" ]]; then
+  echo "=== Wave 2 prod verify (W3 + W8; L4 SQL when DATABASE_URL set) ==="
+  RAILWAY_API_URL="${API_URL}" ONCHAINAI_FRONTEND_URL="${PROD_URL}" ./scripts/wave2-prod-verify.sh
 fi
 
 if command -v node >/dev/null 2>&1; then
