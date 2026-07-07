@@ -5,6 +5,7 @@
 //   node scripts/bazaar-approve-rubric.mjs <slug>
 //   node scripts/bazaar-approve-rubric.mjs --pending-bazaar [--limit N]
 //   node scripts/bazaar-approve-rubric.mjs <slug> --apply --i-understand-canary
+//   node scripts/bazaar-approve-rubric.mjs --self-test
 //
 // See docs/OPERATOR_GUIDE.md §5.5 and docs/superpowers/specs/2026-07-07-okx-x402-infra-waves.md §6.
 
@@ -220,11 +221,95 @@ function extractDigits(value) {
   return out;
 }
 
+/** Strip trailing "(0x…)" asset hints Bazaar stores in x402_price. */
+function advertisedAmountDigits(value) {
+  const head = String(value || "").split("(")[0];
+  return extractDigits(head);
+}
+
 function priceWithinTolerance(probed, advertised, pct = 0.1) {
   const p = Number(extractDigits(probed));
-  const a = Number(extractDigits(advertised));
+  const a = Number(advertisedAmountDigits(advertised));
   if (!Number.isFinite(p) || !Number.isFinite(a) || a === 0) return false;
   return Math.abs(p - a) / a <= pct;
+}
+
+/** Extract payable amount from one x402 accept object (v1 + v2 field names). */
+function extractAmountFromAccept(accept) {
+  if (!accept || typeof accept !== "object") return null;
+  for (const key of [
+    "maxAmountRequired",
+    "maxAmount",
+    "amount",
+    "price",
+    "value",
+    "max_amount_required",
+    "max_amount",
+  ]) {
+    const raw = accept[key];
+    if (raw == null) continue;
+    const text = String(raw).trim();
+    if (text) return text;
+  }
+  return null;
+}
+
+/** Collect accept entries from common x402 402 JSON shapes. */
+function collectAccepts(parsed) {
+  const out = [];
+  if (Array.isArray(parsed?.accepts)) out.push(...parsed.accepts);
+  const pr = parsed?.paymentRequirements;
+  if (Array.isArray(pr)) out.push(...pr);
+  else if (pr && typeof pr === "object") out.push(pr);
+  return out.filter((a) => a && typeof a === "object");
+}
+
+/** Prefer Base mainnet (eip155:8453) when multiple accepts are present. */
+function pickAccept(accepts) {
+  if (!accepts.length) return null;
+  for (const accept of accepts) {
+    const net = String(accept.network || "").toLowerCase();
+    if (net.includes("8453") || net.includes("base")) return accept;
+  }
+  return accepts[0];
+}
+
+function parse402Payload(body) {
+  let parsed;
+  try {
+    parsed = JSON.parse(body);
+  } catch {
+    return { ok: false, reason: "402 body not JSON" };
+  }
+  const accepts = collectAccepts(parsed);
+  if (!accepts.length) {
+    return { ok: false, reason: "402 missing accepts[]" };
+  }
+  const accept = pickAccept(accepts);
+  const amount = extractAmountFromAccept(accept);
+  if (!amount) {
+    return { ok: false, reason: "402 accept missing amount fields" };
+  }
+  return { ok: true, amount, asset: accept.asset || null };
+}
+
+async function fetchWithTimeout(url, init, ms = 8000) {
+  return fetch(url, { ...init, redirect: "manual", signal: AbortSignal.timeout(ms) });
+}
+
+async function probeX402Once(url, method) {
+  try {
+    const res = await fetchWithTimeout(url, { method });
+    const body = await res.text();
+    return { status: res.status, body, headers: res.headers };
+  } catch (err) {
+    return {
+      status: 0,
+      body: "",
+      headers: new Headers(),
+      error: err?.message || String(err),
+    };
+  }
 }
 
 async function probeX402(url) {
@@ -242,27 +327,73 @@ async function probeX402(url) {
   }
 
   const started = Date.now();
-  let res = await fetch(endpoint, { method: "POST", redirect: "manual", signal: AbortSignal.timeout(5000) });
-  if (res.status !== 402) {
-    res = await fetch(endpoint, { method: "GET", redirect: "manual", signal: AbortSignal.timeout(5000) });
+  const attempts = [];
+  let currentUrl = endpoint;
+
+  for (let hop = 0; hop < 2; hop++) {
+    let probe = await probeX402Once(currentUrl, "POST");
+    attempts.push({ method: "POST", status: probe.status, url: currentUrl });
+    if (probe.status !== 402) {
+      probe = await probeX402Once(currentUrl, "GET");
+      attempts.push({ method: "GET", status: probe.status, url: currentUrl });
+    }
+
+    if ([301, 302, 307, 308].includes(probe.status)) {
+      const location = probe.headers.get("location");
+      if (!location) break;
+      try {
+        currentUrl = new URL(location, currentUrl).toString();
+        continue;
+      } catch {
+        break;
+      }
+    }
+
+    const latencyMs = Date.now() - started;
+    if (probe.status === 0) {
+      return {
+        ok: false,
+        reason: `request failed: ${probe.error || "timeout"}`,
+        latencyMs,
+        autoReject: false,
+      };
+    }
+    if (probe.status !== 402) {
+      const last = attempts[attempts.length - 1];
+      return {
+        ok: false,
+        reason: `expected 402, got ${last?.status ?? probe.status}`,
+        latencyMs,
+        autoReject: false,
+      };
+    }
+
+    const parsed = parse402Payload(probe.body);
+    if (!parsed.ok) {
+      return { ok: false, reason: parsed.reason, latencyMs, autoReject: false };
+    }
+    return { ok: true, amount: parsed.amount, asset: parsed.asset, latencyMs };
   }
+
   const latencyMs = Date.now() - started;
-  if (res.status !== 402) {
-    return { ok: false, reason: `expected 402, got ${res.status}`, latencyMs, autoReject: false };
-  }
-  const body = await res.text();
-  let parsed;
+  return { ok: false, reason: "redirect loop or unresolved endpoint", latencyMs, autoReject: false };
+}
+
+async function npmWeeklyDownloads(packageName) {
+  const name = (packageName || "").trim();
+  if (!name) return null;
   try {
-    parsed = JSON.parse(body);
+    const res = await fetch(
+      `https://api.npmjs.org/downloads/point/last-week/${encodeURIComponent(name)}`,
+      { signal: AbortSignal.timeout(5000) },
+    );
+    if (!res.ok) return null;
+    const data = await res.json();
+    const n = Number(data?.downloads);
+    return Number.isFinite(n) ? n : null;
   } catch {
-    return { ok: false, reason: "402 body not JSON", latencyMs, autoReject: false };
+    return null;
   }
-  const accept = parsed?.accepts?.[0];
-  if (!accept) {
-    return { ok: false, reason: "402 missing accepts[]", latencyMs, autoReject: false };
-  }
-  const amount = accept.maxAmountRequired || accept.maxAmount || null;
-  return { ok: true, amount, asset: accept.asset || null, latencyMs };
 }
 
 function trustTierScore(status) {
@@ -325,8 +456,14 @@ async function scoreTool(tool, backend) {
   }
 
   const stars = Number(tool.stars) || 0;
-  const popularity = stars >= 50 ? 2 : 0;
-  breakdown.push({ item: "stars_or_npm", points: popularity, note: `stars=${stars}` });
+  const npmWeekly = await npmWeeklyDownloads(tool.npm_package);
+  const popularity =
+    stars >= 50 || (npmWeekly != null && npmWeekly >= 100) ? 2 : 0;
+  const popNote =
+    npmWeekly != null
+      ? `stars=${stars}, npm_weekly=${npmWeekly}`
+      : `stars=${stars}`;
+  breakdown.push({ item: "stars_or_npm", points: popularity, note: popNote });
 
   const reg = registryScore(tool);
   breakdown.push({ item: "registry_crosslist", points: reg });
@@ -377,7 +514,42 @@ async function scoreTool(tool, backend) {
   };
 }
 
+function runSelfTest() {
+  const samples = [
+    [{ amount: "1000", asset: "0xusdc" }, "1000"],
+    [{ maxAmountRequired: "2500" }, "2500"],
+    [{ maxAmount: "99" }, "99"],
+    [{ price: "42" }, "42"],
+  ];
+  for (const [accept, want] of samples) {
+    const got = extractAmountFromAccept(accept);
+    if (got !== want) {
+      console.error(`self-test extractAmountFromAccept: want ${want}, got ${got}`);
+      process.exit(1);
+    }
+  }
+  const v2 = parse402Payload(
+    JSON.stringify({
+      x402Version: 2,
+      accepts: [{ scheme: "exact", network: "eip155:8453", amount: "7000", asset: "0x1" }],
+    }),
+  );
+  if (!v2.ok || v2.amount !== "7000") {
+    console.error("self-test parse402Payload v2 failed");
+    process.exit(1);
+  }
+  if (!priceWithinTolerance("7000", "7000 (0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913)")) {
+    console.error("self-test priceWithinTolerance failed");
+    process.exit(1);
+  }
+  console.error("BAZAAR_RUBRIC_SELF_TEST PASS");
+}
+
 async function main() {
+  if (args.includes("--self-test")) {
+    runSelfTest();
+    return;
+  }
   if (APPLY && (!CANARY_ACK || slugs.length !== 1)) {
     console.error("Apply requires exactly one <slug> and --i-understand-canary (no bulk).");
     process.exit(2);
@@ -394,7 +566,21 @@ async function main() {
       : await Promise.all(slugs.map((s) => backend.fetchTool(s)));
 
     for (const tool of targets.filter(Boolean)) {
-      const report = await scoreTool(tool, backend);
+      let report;
+      try {
+        report = await scoreTool(tool, backend);
+      } catch (err) {
+        report = {
+          slug: tool.slug,
+          pass: false,
+          total: 0,
+          max: 16,
+          requiredPass: false,
+          rejections: [`score error: ${err?.message || err}`],
+          breakdown: [],
+          probe: { error: err?.message || String(err) },
+        };
+      }
       console.log(JSON.stringify(report));
 
       if (APPLY && report.pass) {
