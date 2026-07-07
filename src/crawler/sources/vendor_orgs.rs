@@ -149,6 +149,73 @@ pub(crate) fn effective_tool_name(org: &str, repo_name: &str) -> String {
     }
 }
 
+/// Repo name patterns that are NOT developer tools. These are excluded from
+/// the vendor-org crawl even when they belong to a first-party org, so the
+/// admin queue and verify-tool-official harness never see them as candidates.
+const NON_TOOL_REPO_PATTERNS: &[&str] = &[
+    "docs",
+    "documentation",
+    "documentation-en",
+    "documentation-zh",
+    "doc.",
+    "consensus-specs",
+    "execution-specs",
+    "execution-apis",
+    "cryptography-specs",
+    "devp2p",
+    "walletconnect-specs",
+    "teps",
+    "program-examples",
+    "crypto-primitives-examples",
+    "query-examples",
+    "haskell-nix-example",
+    "example-",
+    "demo-",
+    "-demo",
+    "demos",
+    "ansible-role-",
+    "helm-charts",
+    "eth-phishing-detect",
+    "phishing-detect",
+    "audits",
+    "security-audits",
+    "essential-cardano-content",
+    "errorprone-checks",
+    "docs-template",
+    "safe-apps-list",
+    "safe-transaction-service",
+    "sun-network",
+    "x402.chat",
+    "pay-skills",
+    "contract-deployments",
+    "account-policies",
+    "action-is-release",
+    "action-publish-release",
+    "contributor-docs",
+    "ouroboros-leios-formal-spec",
+    "adnl-tunnel",
+    "lz-address-book",
+    ".github",
+    "esp-website",
+    "ethereum-org-website",
+    "zkvm-website",
+    "steel-website",
+    "ton-blockchain.github.io",
+];
+
+/// Return true if the repo name matches a known non-tool pattern (docs, specs,
+/// demos, examples, infra automation, org-profile repos, audits, etc.).
+pub(crate) fn is_non_tool_repo(repo_name: &str) -> bool {
+    let name_lower = repo_name.to_lowercase();
+    NON_TOOL_REPO_PATTERNS.iter().any(|pattern| {
+        let p = pattern.to_lowercase();
+        name_lower == p
+            || name_lower.starts_with(&p)
+            || name_lower.ends_with(&p)
+            || (p == ".github" && name_lower == ".github")
+    })
+}
+
 /// Filter org repos per §4.6: no fork/archived, min stars, recency, top 25 by push.
 pub(crate) fn filter_org_repos(repos: &[OrgRepo], now: DateTime<Utc>) -> Vec<&OrgRepo> {
     let cutoff = now - chrono::Duration::days(RECENCY_DAYS);
@@ -161,6 +228,7 @@ pub(crate) fn filter_org_repos(repos: &[OrgRepo], now: DateTime<Utc>) -> Vec<&Or
                 .and_then(|s| parse_datetime(s))
                 .is_some_and(|pushed| pushed >= cutoff)
         })
+        .filter(|repo| !is_non_tool_repo(&repo.name))
         .filter(|repo| has_agent_surface(repo))
         .collect();
 
@@ -616,6 +684,91 @@ mod tests {
         assert!(!names.contains(&"archived-lib"));
         assert!(!names.contains(&"low-star"));
         assert!(!names.contains(&"stale-repo"));
+    }
+
+    #[test]
+    fn vendor_orgs_is_non_tool_repo_identifies_non_tools() {
+        assert!(is_non_tool_repo("docs"));
+        assert!(is_non_tool_repo("documentation"));
+        assert!(is_non_tool_repo("documentation-en"));
+        assert!(is_non_tool_repo("doc.linea"));
+        assert!(is_non_tool_repo("consensus-specs"));
+        assert!(is_non_tool_repo("execution-specs"));
+        assert!(is_non_tool_repo("execution-apis"));
+        assert!(is_non_tool_repo("devp2p"));
+        assert!(is_non_tool_repo("program-examples"));
+        assert!(is_non_tool_repo("demo-basic-connect"));
+        assert!(is_non_tool_repo("onramp-v2-mobile-demo"));
+        assert!(is_non_tool_repo("ansible-role-besu"));
+        assert!(is_non_tool_repo("ethereum-helm-charts"));
+        assert!(is_non_tool_repo("eth-phishing-detect"));
+        assert!(is_non_tool_repo("wormhole-audits"));
+        assert!(is_non_tool_repo("safe-apps-list"));
+        assert!(is_non_tool_repo("safe-transaction-service"));
+        assert!(is_non_tool_repo("sun-network"));
+        assert!(is_non_tool_repo("x402.chat"));
+        assert!(is_non_tool_repo("pay-skills"));
+        assert!(is_non_tool_repo("contract-deployments"));
+        assert!(is_non_tool_repo("account-policies"));
+        assert!(is_non_tool_repo("action-is-release"));
+        assert!(is_non_tool_repo("contributor-docs"));
+        assert!(is_non_tool_repo("esp-website"));
+        assert!(is_non_tool_repo("ethereum-org-website"));
+        assert!(is_non_tool_repo("zkvm-website"));
+        assert!(is_non_tool_repo(".github"));
+        assert!(is_non_tool_repo("TEPs"));
+        assert!(is_non_tool_repo("lz-address-book"));
+    }
+
+    #[test]
+    fn vendor_orgs_is_non_tool_repo_preserves_real_tools() {
+        assert!(!is_non_tool_repo("aave-sdk"));
+        assert!(!is_non_tool_repo("go-ethereum"));
+        assert!(!is_non_tool_repo("metamask-extension"));
+        assert!(!is_non_tool_repo("agentkit"));
+        assert!(!is_non_tool_repo("onchainkit"));
+        assert!(!is_non_tool_repo("wallet-cli"));
+        assert!(!is_non_tool_repo("layerzero-v2"));
+        assert!(!is_non_tool_repo("mesh-sdk-go"));
+        assert!(!is_non_tool_repo("safe-cli-nodejs"));
+        assert!(!is_non_tool_repo("snap-bitcoin-wallet"));
+    }
+
+    #[test]
+    fn vendor_orgs_filter_excludes_non_tool_repos() {
+        let now = Utc::now();
+        let repos: Vec<OrgRepo> = vec![
+            OrgRepo {
+                id: 1,
+                name: "consensus-specs".into(),
+                full_name: "ethereum/consensus-specs".into(),
+                description: Some("Ethereum PoS consensus specifications".into()),
+                html_url: "https://github.com/ethereum/consensus-specs".into(),
+                fork: false,
+                archived: false,
+                stargazers_count: 3000,
+                pushed_at: Some("2026-06-15T00:00:00Z".into()),
+                topics: vec!["mcp-server".into()],
+                language: Some("Python".into()),
+            },
+            OrgRepo {
+                id: 2,
+                name: "agent-sdk".into(),
+                full_name: "WalletConnect/agent-sdk".into(),
+                description: Some("WalletConnect agent SDK for AI agents".into()),
+                html_url: "https://github.com/WalletConnect/agent-sdk".into(),
+                fork: false,
+                archived: false,
+                stargazers_count: 500,
+                pushed_at: Some("2026-06-20T00:00:00Z".into()),
+                topics: vec!["agent".into()],
+                language: Some("TypeScript".into()),
+            },
+        ];
+        let kept = filter_org_repos(&repos, now);
+        let names: Vec<_> = kept.iter().map(|r| r.name.as_str()).collect();
+        assert!(names.contains(&"agent-sdk"));
+        assert!(!names.contains(&"consensus-specs"));
     }
 
     #[test]
