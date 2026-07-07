@@ -175,7 +175,7 @@ Copy-paste payloads: `docs/listings/directory-forms.md`.
 | awesome-crypto-mcp-servers | [hive-intel/awesome-crypto-mcp-servers#209](https://github.com/hive-intel/awesome-crypto-mcp-servers/pull/209) | Open |
 | Self catalog | [onchain-ai.xyz/tools/onchainai](https://www.onchain-ai.xyz/tools/onchainai) | Seeded (official) |
 | Smithery / mcp.so / PulseMCP / Glama | See `docs/listings/directory-forms.md` | Operator submit |
-| OKX AI Agent Marketplace | [okx.ai/agents](https://okx.ai/agents) — A2MCP/x402 | Operator register (W7 pending; if facilitator incompatible → discovery-only Plan B) |
+| OKX AI Agent Marketplace | [okx.ai/agents](https://okx.ai/agents) — ASP #4609 | Submitted 2026-07-08 — Trust Probe $0.003 + Toolkit Export $0.01 USDT; review ~2 business days |
 | x402 Bazaar (seller) | CDP Facilitator settle — no registration form | After `check_endpoint_health` prod settle |
 | Base Builder Code | [dashboard.base.org](https://dashboard.base.org) | Operator register app + domain |
 
