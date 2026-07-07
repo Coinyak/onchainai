@@ -151,8 +151,16 @@ sync_vars() {
     vars+=("X402_NETWORK=${X402_NETWORK}")
   fi
   if [[ -n "${X402_PREMIUM_PRICE_USD:-}" ]]; then
-    # Quote so literal "$0.001" is not expanded by bash or the Railway CLI.
-    vars+=('X402_PREMIUM_PRICE_USD='"${X402_PREMIUM_PRICE_USD}")
+    # Guard: bash `source .env` expands $0 to the script path if the value
+    # is not escaped. Catch corrupted values before they reach Railway.
+    if [[ "${X402_PREMIUM_PRICE_USD}" == *deploy-railway.sh* || "${X402_PREMIUM_PRICE_USD}" != *\$* && "${X402_PREMIUM_PRICE_USD}" != *0.0* ]]; then
+      echo "WARNING: X402_PREMIUM_PRICE_USD looks corrupted ('${X402_PREMIUM_PRICE_USD}')" >&2
+      echo "  .env should use X402_PREMIUM_PRICE_USD=\\\$0.001 (escaped dollar sign)" >&2
+      echo "  Falling back to default \$0.001" >&2
+      vars+=('X402_PREMIUM_PRICE_USD=$0.001')
+    else
+      vars+=('X402_PREMIUM_PRICE_USD='"${X402_PREMIUM_PRICE_USD}")
+    fi
   fi
   if [[ -n "${CDP_API_KEY_NAME:-}" ]]; then
     vars+=("CDP_API_KEY_NAME=${CDP_API_KEY_NAME}")

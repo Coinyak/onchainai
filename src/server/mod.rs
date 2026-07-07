@@ -8,6 +8,10 @@ pub mod agent_sync;
 #[cfg(feature = "ssr")]
 pub mod api_v2;
 #[cfg(feature = "ssr")]
+pub mod gap_audit;
+#[cfg(feature = "ssr")]
+pub mod m3_analytics;
+#[cfg(feature = "ssr")]
 pub mod mcp;
 #[cfg(feature = "ssr")]
 pub mod mcp_premium_tools;
@@ -19,6 +23,8 @@ pub mod mcp_x402;
 pub mod operator_harness;
 #[cfg(feature = "ssr")]
 pub mod operator_review_transition;
+#[cfg(feature = "ssr")]
+pub mod product_a;
 #[cfg(feature = "ssr")]
 pub mod queries;
 #[cfg(feature = "ssr")]

@@ -18,9 +18,17 @@ use crate::server::x402_payment::{
 };
 
 /// MCP tools that may require OnchainAI's own x402 payment when premium is enabled.
-/// Only `export_toolkit` remains Axis-B premium. `compare_tools` is Free Forever per
-/// the Free Tier Guardian founder decision (OD-FTG, 2026-07-04-free-tier-guardian-spec.md).
-pub const PREMIUM_MCP_TOOLS: &[&str] = &["export_toolkit"];
+/// `compare_tools` is Free Forever per the Free Tier Guardian founder decision
+/// (OD-FTG, 2026-07-04-free-tier-guardian-spec.md). Product A (`recommend_verified_tool`),
+/// S0 (`gap_audit`), and M3 analytics (`get_price_history`, `get_x402_trends`) are
+/// Axis-B premium — same gate as `export_toolkit` (operator-toggled via site_settings).
+pub const PREMIUM_MCP_TOOLS: &[&str] = &[
+    "export_toolkit",
+    "recommend_verified_tool",
+    "gap_audit",
+    "get_price_history",
+    "get_x402_trends",
+];
 
 pub fn is_premium_mcp_tool(name: &str) -> bool {
     PREMIUM_MCP_TOOLS.contains(&name)
@@ -151,6 +159,10 @@ mod tests {
     #[test]
     fn premium_tool_names_are_stable() {
         assert!(is_premium_mcp_tool("export_toolkit"));
+        assert!(is_premium_mcp_tool("recommend_verified_tool"));
+        assert!(is_premium_mcp_tool("gap_audit"));
+        assert!(is_premium_mcp_tool("get_price_history"));
+        assert!(is_premium_mcp_tool("get_x402_trends"));
         assert!(!is_premium_mcp_tool("search_tools"));
         assert!(!is_premium_mcp_tool("check_endpoint_health"));
     }
