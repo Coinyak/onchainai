@@ -254,6 +254,23 @@ function extractAmountFromAccept(accept) {
   return null;
 }
 
+/** Mainnet chain IDs aligned with `MAINNET_CHAIN_MAP` in `src/crawler/sources/bazaar.rs`. */
+const MAINNET_CHAIN_IDS = new Set([8453, 1, 137, 42161, 10, 43114]);
+
+/** Parse `eip155:<chainId>` from a CDP `accepts[].network` value. */
+function parseChainIdFromNetwork(network) {
+  const raw = String(network || "").trim();
+  const rest = raw.toLowerCase().startsWith("eip155:") ? raw.slice(7) : null;
+  if (rest == null) return null;
+  const id = Number.parseInt(rest, 10);
+  return Number.isFinite(id) ? id : null;
+}
+
+function isMainnetAccept(accept) {
+  const chainId = parseChainIdFromNetwork(accept?.network);
+  return chainId != null && MAINNET_CHAIN_IDS.has(chainId);
+}
+
 /** Collect accept entries from common x402 402 JSON shapes. */
 function collectAccepts(parsed) {
   const out = [];
@@ -264,14 +281,36 @@ function collectAccepts(parsed) {
   return out.filter((a) => a && typeof a === "object");
 }
 
-/** Prefer Base mainnet (eip155:8453) when multiple accepts are present. */
+/** Prefer a supported mainnet accept (Base first) when multiple accepts are present. */
 function pickAccept(accepts) {
   if (!accepts.length) return null;
-  for (const accept of accepts) {
-    const net = String(accept.network || "").toLowerCase();
-    if (net.includes("8453") || net.includes("base")) return accept;
+  const mainnet = accepts.filter(isMainnetAccept);
+  if (mainnet.length) {
+    const base = mainnet.find((a) => parseChainIdFromNetwork(a.network) === 8453);
+    return base ?? mainnet[0];
   }
   return accepts[0];
+}
+
+function validateProbeEndpointUrl(url) {
+  const endpoint = url.trim();
+  if (!endpoint.startsWith("https://")) {
+    return { ok: false, reason: "only https endpoints allowed", autoReject: true };
+  }
+  try {
+    const u = new URL(endpoint);
+    if (["localhost", "127.0.0.1"].includes(u.hostname)) {
+      return { ok: false, reason: "blocked host", autoReject: true };
+    }
+  } catch {
+    return { ok: false, reason: "invalid url", autoReject: true };
+  }
+  return { ok: true, url: endpoint };
+}
+
+function formatProbeAttempts(attempts) {
+  if (!attempts.length) return "";
+  return attempts.map((a) => `${a.method} ${a.status} ${a.url}`).join("; ");
 }
 
 function parse402Payload(body) {
@@ -312,34 +351,74 @@ async function probeX402Once(url, method) {
   }
 }
 
-async function probeX402(url) {
-  const endpoint = url.trim();
-  if (!endpoint.startsWith("https://")) {
-    return { ok: false, reason: "only https endpoints allowed", autoReject: true };
+async function probeX402AtUrl(currentUrl, attempts, started) {
+  let probe = await probeX402Once(currentUrl, "POST");
+  attempts.push({ method: "POST", status: probe.status, url: currentUrl });
+  if (probe.status !== 402) {
+    const getProbe = await probeX402Once(currentUrl, "GET");
+    attempts.push({ method: "GET", status: getProbe.status, url: currentUrl });
+    if (getProbe.status === 402) probe = getProbe;
+    else if (probe.status !== 402) probe = getProbe;
   }
-  try {
-    const u = new URL(endpoint);
-    if (["localhost", "127.0.0.1"].includes(u.hostname)) {
-      return { ok: false, reason: "blocked host", autoReject: true };
+
+  const latencyMs = Date.now() - started;
+  if (probe.status === 0) {
+    return {
+      ok: false,
+      reason: `request failed: ${probe.error || "timeout"} (${formatProbeAttempts(attempts)})`,
+      latencyMs,
+      autoReject: false,
+    };
+  }
+  if ([301, 302, 307, 308].includes(probe.status)) {
+    return { ok: false, redirect: true, probe, latencyMs, autoReject: false };
+  }
+  if (probe.status !== 402) {
+    return {
+      ok: false,
+      reason: `expected 402, got ${probe.status} (${formatProbeAttempts(attempts)})`,
+      latencyMs,
+      autoReject: false,
+    };
+  }
+
+  let parsed = parse402Payload(probe.body);
+  const usedPost = attempts.some((a) => a.method === "POST" && a.status === 402);
+  const hasGet402 = attempts.some((a) => a.method === "GET" && a.status === 402);
+  if (!parsed.ok && usedPost && !hasGet402) {
+    const getProbe = await probeX402Once(currentUrl, "GET");
+    attempts.push({ method: "GET", status: getProbe.status, url: currentUrl });
+    if (getProbe.status === 402) {
+      parsed = parse402Payload(getProbe.body);
     }
-  } catch {
-    return { ok: false, reason: "invalid url", autoReject: true };
   }
+  if (!parsed.ok) {
+    return {
+      ok: false,
+      reason: `${parsed.reason} (${formatProbeAttempts(attempts)})`,
+      latencyMs,
+      autoReject: false,
+    };
+  }
+  return { ok: true, amount: parsed.amount, asset: parsed.asset, latencyMs };
+}
+
+async function probeX402(url) {
+  const validated = validateProbeEndpointUrl(url);
+  if (!validated.ok) return validated;
 
   const started = Date.now();
   const attempts = [];
-  let currentUrl = endpoint;
+  let currentUrl = validated.url;
 
   for (let hop = 0; hop < 2; hop++) {
-    let probe = await probeX402Once(currentUrl, "POST");
-    attempts.push({ method: "POST", status: probe.status, url: currentUrl });
-    if (probe.status !== 402) {
-      probe = await probeX402Once(currentUrl, "GET");
-      attempts.push({ method: "GET", status: probe.status, url: currentUrl });
-    }
+    const guard = validateProbeEndpointUrl(currentUrl);
+    if (!guard.ok) return guard;
 
-    if ([301, 302, 307, 308].includes(probe.status)) {
-      const location = probe.headers.get("location");
+    const result = await probeX402AtUrl(currentUrl, attempts, started);
+    if (result.ok) return result;
+    if (result.redirect) {
+      const location = result.probe.headers.get("location");
       if (!location) break;
       try {
         currentUrl = new URL(location, currentUrl).toString();
@@ -348,35 +427,16 @@ async function probeX402(url) {
         break;
       }
     }
-
-    const latencyMs = Date.now() - started;
-    if (probe.status === 0) {
-      return {
-        ok: false,
-        reason: `request failed: ${probe.error || "timeout"}`,
-        latencyMs,
-        autoReject: false,
-      };
-    }
-    if (probe.status !== 402) {
-      const last = attempts[attempts.length - 1];
-      return {
-        ok: false,
-        reason: `expected 402, got ${last?.status ?? probe.status}`,
-        latencyMs,
-        autoReject: false,
-      };
-    }
-
-    const parsed = parse402Payload(probe.body);
-    if (!parsed.ok) {
-      return { ok: false, reason: parsed.reason, latencyMs, autoReject: false };
-    }
-    return { ok: true, amount: parsed.amount, asset: parsed.asset, latencyMs };
+    return result;
   }
 
   const latencyMs = Date.now() - started;
-  return { ok: false, reason: "redirect loop or unresolved endpoint", latencyMs, autoReject: false };
+  return {
+    ok: false,
+    reason: `redirect loop or unresolved endpoint (${formatProbeAttempts(attempts)})`,
+    latencyMs,
+    autoReject: false,
+  };
 }
 
 async function npmWeeklyDownloads(packageName) {
@@ -540,6 +600,18 @@ function runSelfTest() {
   }
   if (!priceWithinTolerance("7000", "7000 (0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913)")) {
     console.error("self-test priceWithinTolerance failed");
+    process.exit(1);
+  }
+  const sepoliaFirst = pickAccept([
+    { network: "eip155:84532", amount: "999" },
+    { network: "eip155:8453", amount: "7000" },
+  ]);
+  if (extractAmountFromAccept(sepoliaFirst) !== "7000") {
+    console.error("self-test pickAccept mainnet over sepolia failed");
+    process.exit(1);
+  }
+  if (parseChainIdFromNetwork("eip155:84532") !== 84532) {
+    console.error("self-test parseChainIdFromNetwork failed");
     process.exit(1);
   }
   console.error("BAZAAR_RUBRIC_SELF_TEST PASS");
