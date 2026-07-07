@@ -100,16 +100,36 @@ async function fetchX402Slugs() {
   return new Set(items.map((t) => t.slug));
 }
 
+function parseRubricReport(stdout) {
+  const lines = (stdout || "").trim().split(/\r?\n/).filter(Boolean);
+  for (let i = lines.length - 1; i >= 0; i--) {
+    try {
+      const parsed = JSON.parse(lines[i]);
+      if (parsed && typeof parsed === "object" && "pass" in parsed) {
+        return parsed;
+      }
+    } catch {
+      // keep scanning
+    }
+  }
+  return null;
+}
+
 function rubricDryRun(slug) {
   const r = spawnSync("node", ["scripts/bazaar-approve-rubric.mjs", slug], {
     cwd: ROOT,
     env: { ...process.env },
     encoding: "utf8",
   });
-  const out = (r.stdout || "") + (r.stderr || "");
-  const pass = out.includes('"pass":true') || out.includes('"pass": true');
-  const score = out.match(/"score":\s*(\d+)/)?.[1] ?? "?";
-  return { pass, score, exit: r.status, snippet: out.slice(0, 400) };
+  const report = parseRubricReport(r.stdout);
+  const pass = r.status === 0 && report?.pass === true;
+  const score = report?.score ?? "?";
+  return {
+    pass,
+    score,
+    exit: r.status,
+    snippet: ((r.stdout || "") + (r.stderr || "")).slice(0, 400),
+  };
 }
 
 async function dbCanaryRows(slugs) {
@@ -121,25 +141,28 @@ async function dbCanaryRows(slugs) {
     connectionString: process.env.DATABASE_URL,
     ...(ssl !== undefined ? { ssl } : {}),
   });
-  await client.connect();
-  const { rows } = await client.query(
-    `SELECT slug, approval_status, relevance_status, referral_enabled,
-            quarantined_at IS NOT NULL AS quarantined,
-            x402_last_checked_at
-     FROM tools WHERE slug = ANY($1::text[])`,
-    [slugs],
-  );
-  const probeRows = await client.query(
-    `SELECT t.slug, h.status, h.probed_at
-     FROM x402_probe_history h
-     JOIN tools t ON t.id = h.tool_id
-     WHERE t.slug = ANY($1::text[])
-     ORDER BY h.probed_at DESC
-     LIMIT 20`,
-    [slugs],
-  );
-  await client.end();
-  return { tools: rows, probes: probeRows.rows };
+  try {
+    await client.connect();
+    const { rows } = await client.query(
+      `SELECT slug, approval_status, relevance_status, referral_enabled,
+              quarantined_at IS NOT NULL AS quarantined,
+              x402_last_checked_at
+       FROM tools WHERE slug = ANY($1::text[])`,
+      [slugs],
+    );
+    const probeRows = await client.query(
+      `SELECT t.slug, h.status, h.probed_at
+       FROM x402_probe_history h
+       JOIN tools t ON t.id = h.tool_id
+       WHERE t.slug = ANY($1::text[])
+       ORDER BY h.probed_at DESC
+       LIMIT 20`,
+      [slugs],
+    );
+    return { tools: rows, probes: probeRows.rows };
+  } finally {
+    await client.end().catch(() => {});
+  }
 }
 
 async function main() {
@@ -156,10 +179,20 @@ async function main() {
   }
 
   const db = await dbCanaryRows(slugs);
-  if (db?.tools) {
-    for (const row of db.tools) {
-      const check = report.checks.find((c) => c.slug === row.slug);
+  if (process.env.DATABASE_URL && db?.error) {
+    report.db_note = db.error;
+    fail++;
+  } else if (db?.tools) {
+    const bySlug = new Map(db.tools.map((row) => [row.slug, row]));
+    for (const slug of slugs) {
+      const row = bySlug.get(slug);
+      const check = report.checks.find((c) => c.slug === slug);
       if (!check) continue;
+      if (!row) {
+        check.db_missing = true;
+        fail++;
+        continue;
+      }
       Object.assign(check, {
         approval_status: row.approval_status,
         relevance_status: row.relevance_status,
@@ -171,8 +204,6 @@ async function main() {
       if (row.approval_status !== "approved" || row.relevance_status !== "accepted") fail++;
     }
     report.recent_probes = db.probes;
-  } else if (db?.error) {
-    report.db_note = db.error;
   }
 
   for (const slug of slugs) {

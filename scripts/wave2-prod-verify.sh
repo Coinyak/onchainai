@@ -155,9 +155,11 @@ min_checked = int(os.environ.get("ONCHAINAI_L4_MIN_CHECKED_TOOLS", "1"))
 try:
     import psycopg2
 except ImportError:
-    import subprocess
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "psycopg2-binary"])
-    import psycopg2
+    print(
+        "L4 VERIFY FAIL: psycopg2 not installed — pip install psycopg2-binary",
+        file=sys.stderr,
+    )
+    sys.exit(1)
 
 public_where = """
 approval_status = 'approved'
@@ -460,32 +462,32 @@ if [[ "$RUN_W8" == "true" ]]; then
   echo "=== Wave 2 prod verify (W8): ${MCP_URL} ==="
 
   echo "--- W8-1: get_tool_detail trust_probe (${DETAIL_SLUG}) ---"
-mcp_tools_call "get_tool_detail" "{\"slug\":\"${DETAIL_SLUG}\"}"
-if [[ "$_MCP_HTTP_CODE" != "200" ]]; then
-  head -40 "$_MCP_BODY" >&2
+  mcp_tools_call "get_tool_detail" "{\"slug\":\"${DETAIL_SLUG}\"}"
+  if [[ "$_MCP_HTTP_CODE" != "200" ]]; then
+    head -40 "$_MCP_BODY" >&2
+    mcp_cleanup
+    w8_fail "get_tool_detail expected HTTP 200, got ${_MCP_HTTP_CODE}"
+  fi
+  detail_text="$(mcp_result_text)" || {
+    mcp_cleanup
+    w8_fail "get_tool_detail JSON-RPC error"
+  }
+  assert_trust_probe_json "get_tool_detail" "$detail_text"
   mcp_cleanup
-  w8_fail "get_tool_detail expected HTTP 200, got ${_MCP_HTTP_CODE}"
-fi
-detail_text="$(mcp_result_text)" || {
-  mcp_cleanup
-  w8_fail "get_tool_detail JSON-RPC error"
-}
-assert_trust_probe_json "get_tool_detail" "$detail_text"
-mcp_cleanup
 
-echo "--- W8-2: compare_tools trust_probe (${COMPARE_SLUGS}) ---"
-compare_args="$(compare_slugs_json_array)"
-mcp_tools_call "compare_tools" "$compare_args"
-if [[ "$_MCP_HTTP_CODE" != "200" ]]; then
-  head -40 "$_MCP_BODY" >&2
-  mcp_cleanup
-  w8_fail "compare_tools expected HTTP 200, got ${_MCP_HTTP_CODE}"
-fi
-compare_text="$(mcp_result_text)" || {
-  mcp_cleanup
-  w8_fail "compare_tools JSON-RPC error"
-}
-printf '%s' "$compare_text" | python3 -c "
+  echo "--- W8-2: compare_tools trust_probe (${COMPARE_SLUGS}) ---"
+  compare_args="$(compare_slugs_json_array)"
+  mcp_tools_call "compare_tools" "$compare_args"
+  if [[ "$_MCP_HTTP_CODE" != "200" ]]; then
+    head -40 "$_MCP_BODY" >&2
+    mcp_cleanup
+    w8_fail "compare_tools expected HTTP 200, got ${_MCP_HTTP_CODE}"
+  fi
+  compare_text="$(mcp_result_text)" || {
+    mcp_cleanup
+    w8_fail "compare_tools JSON-RPC error"
+  }
+  printf '%s' "$compare_text" | python3 -c "
 import json, sys
 required = {'last_probe_at', 'live', 'stale', 'skip_cost', 'k2_conversion_reason'}
 rows = json.load(sys.stdin)
@@ -504,44 +506,44 @@ for row in rows:
         raise SystemExit(f'{slug}: skip_cost incomplete')
     print(f'{slug}: trust_probe ok')
 " || w8_fail "compare_tools trust_probe validation failed"
-mcp_cleanup
+  mcp_cleanup
 
-echo "--- W8-3: check_endpoint_health 402 gate (${PROBE_SLUG}, no wallet) ---"
-mcp_tools_call "check_endpoint_health" "{\"slug\":\"${PROBE_SLUG}\"}"
-health_code="$_MCP_HTTP_CODE"
-payment_header=""
-if [[ -f "$_MCP_HEADERS" ]]; then
-  payment_header="$(grep -i '^payment-required:' "$_MCP_HEADERS" | head -1 | sed 's/^[^:]*:[[:space:]]*//' || true)"
-fi
+  echo "--- W8-3: check_endpoint_health 402 gate (${PROBE_SLUG}, no wallet) ---"
+  mcp_tools_call "check_endpoint_health" "{\"slug\":\"${PROBE_SLUG}\"}"
+  health_code="$_MCP_HTTP_CODE"
+  payment_header=""
+  if [[ -f "$_MCP_HEADERS" ]]; then
+    payment_header="$(grep -i '^payment-required:' "$_MCP_HEADERS" | head -1 | sed 's/^[^:]*:[[:space:]]*//' || true)"
+  fi
 
-if [[ "$health_code" == "503" ]]; then
-  head -20 "$_MCP_BODY" >&2
+  if [[ "$health_code" == "503" ]]; then
+    head -20 "$_MCP_BODY" >&2
+    mcp_cleanup
+    w8_fail "check_endpoint_health returned 503 — K2 x402 not configured"
+  fi
+  if [[ "$health_code" != "402" ]]; then
+    head -40 "$_MCP_BODY" >&2
+    mcp_cleanup
+    w8_fail "check_endpoint_health expected HTTP 402, got ${health_code}"
+  fi
+  if [[ -z "$payment_header" ]]; then
+    head -30 "$_MCP_HEADERS" >&2
+    mcp_cleanup
+    w8_fail "check_endpoint_health missing PAYMENT-REQUIRED header"
+  fi
+  if ! grep -q '"accepts"' "$_MCP_BODY"; then
+    head -40 "$_MCP_BODY" >&2
+    mcp_cleanup
+    w8_fail "check_endpoint_health 402 body missing accepts[]"
+  fi
+  if ! grep -q '"x402Version"' "$_MCP_BODY"; then
+    mcp_cleanup
+    w8_fail "check_endpoint_health 402 body missing x402Version"
+  fi
   mcp_cleanup
-  w8_fail "check_endpoint_health returned 503 — K2 x402 not configured"
-fi
-if [[ "$health_code" != "402" ]]; then
-  head -40 "$_MCP_BODY" >&2
-  mcp_cleanup
-  w8_fail "check_endpoint_health expected HTTP 402, got ${health_code}"
-fi
-if [[ -z "$payment_header" ]]; then
-  head -30 "$_MCP_HEADERS" >&2
-  mcp_cleanup
-  w8_fail "check_endpoint_health missing PAYMENT-REQUIRED header"
-fi
-if ! grep -q '"accepts"' "$_MCP_BODY"; then
-  head -40 "$_MCP_BODY" >&2
-  mcp_cleanup
-  w8_fail "check_endpoint_health 402 body missing accepts[]"
-fi
-if ! grep -q '"x402Version"' "$_MCP_BODY"; then
-  mcp_cleanup
-  w8_fail "check_endpoint_health 402 body missing x402Version"
-fi
-mcp_cleanup
 
-echo "--- W8 note: probe_receipt requires paid settle (owner-only) ---"
-echo "  Run: EVM_PRIVATE_KEY=0x... node scripts/x402-premium-e2e.mjs ${PROBE_SLUG} ${API_URL}"
+  echo "--- W8 note: probe_receipt requires paid settle (owner-only) ---"
+  echo "  Run: EVM_PRIVATE_KEY=0x... node scripts/x402-premium-e2e.mjs ${PROBE_SLUG} ${API_URL}"
 
   echo "W8 VERIFY PASS ${MCP_URL} (detail=${DETAIL_SLUG}, compare=${COMPARE_SLUGS}, probe=${PROBE_SLUG})"
 fi

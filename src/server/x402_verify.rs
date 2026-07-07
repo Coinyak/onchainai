@@ -1,6 +1,7 @@
 //! x402 endpoint liveness and price honesty probes (attribution/trust only — no custody).
 
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -21,6 +22,7 @@ const FAILURE_DEMOTE_THRESHOLD: i32 = 3;
 const L4_CONSECUTIVE_FAILURE_DAYS: i64 = 14;
 const DEFAULT_X402_VERIFY_CRON: &str = "0 0 3 * * *";
 const MAX_CONCURRENT_PROBES: usize = 4;
+static SCHEDULED_VERIFY_RUNNING: AtomicBool = AtomicBool::new(false);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ProbeOutcome {
@@ -694,6 +696,21 @@ struct DailyProbeStatusRow {
 }
 
 pub async fn run_scheduled_verification(pool: &PgPool, client: &reqwest::Client) {
+    if SCHEDULED_VERIFY_RUNNING
+        .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+        .is_err()
+    {
+        tracing::info!("x402 scheduled verify: skipped (batch already running)");
+        return;
+    }
+    struct ScheduledVerifyGuard;
+    impl Drop for ScheduledVerifyGuard {
+        fn drop(&mut self) {
+            SCHEDULED_VERIFY_RUNNING.store(false, Ordering::Release);
+        }
+    }
+    let _guard = ScheduledVerifyGuard;
+
     let sql = format!(
         r#"
         SELECT id

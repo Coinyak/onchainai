@@ -22,6 +22,16 @@ import { fileURLToPath } from "node:url";
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
 
+// Keep in sync with wave2-prod-verify.sh L4 SQL / PUBLIC_TOOL_WHERE.
+const PUBLIC_TOOL_WHERE = `
+approval_status = 'approved'
+AND relevance_status = 'accepted'
+AND NOT (crypto_relevance_score = 0
+  AND 'migration-backfill: crypto keyword in name or description' = ANY(crypto_relevance_reasons))
+AND install_risk_level <> 'critical'
+AND quarantined_at IS NULL
+`;
+
 function loadPg() {
   try {
     return require(resolve(ROOT, "scripts/ops/node_modules/pg"));
@@ -75,33 +85,38 @@ async function l4Ready() {
   }
   const client = pgClient();
   if (!client) return { ok: false, reason: "pg module missing — npm install --prefix scripts/ops" };
-  await client.connect();
-  const scheduled = (
-    await client.query(
-      "SELECT COUNT(*)::int AS n FROM x402_probe_history WHERE tool_id IS NOT NULL",
-    )
-  ).rows[0].n;
-  const checked = (
-    await client.query(
-      `SELECT COUNT(*)::int AS n FROM tools
-       WHERE pricing = 'x402' AND x402_endpoint IS NOT NULL AND trim(x402_endpoint) <> ''
-         AND approval_status = 'approved' AND relevance_status = 'accepted'
-         AND quarantined_at IS NULL AND x402_last_checked_at IS NOT NULL`,
-    )
-  ).rows[0].n;
-  const current = (
-    await client.query(
-      "SELECT allow_x402_registration FROM site_settings LIMIT 1",
-    )
-  ).rows[0]?.allow_x402_registration;
-  await client.end();
-  if (scheduled < 1) {
-    return { ok: false, reason: "no scheduled probe_history rows (L4 cron not run yet)", scheduled, checked, current };
+  try {
+    await client.connect();
+    const scheduled = (
+      await client.query(
+        "SELECT COUNT(*)::int AS n FROM x402_probe_history WHERE tool_id IS NOT NULL",
+      )
+    ).rows[0].n;
+    const checked = (
+      await client.query(
+        `SELECT COUNT(*)::int AS n FROM tools
+         WHERE pricing = 'x402'
+           AND x402_endpoint IS NOT NULL
+           AND trim(x402_endpoint) <> ''
+           AND x402_last_checked_at IS NOT NULL
+           AND ${PUBLIC_TOOL_WHERE}`,
+      )
+    ).rows[0].n;
+    const current = (
+      await client.query(
+        "SELECT allow_x402_registration FROM site_settings WHERE id = 1",
+      )
+    ).rows[0]?.allow_x402_registration;
+    if (scheduled < 1) {
+      return { ok: false, reason: "no scheduled probe_history rows (L4 cron not run yet)", scheduled, checked, current };
+    }
+    if (checked < 1) {
+      return { ok: false, reason: "no x402 tools with x402_last_checked_at", scheduled, checked, current };
+    }
+    return { ok: true, scheduled, checked, current };
+  } finally {
+    await client.end().catch(() => {});
   }
-  if (checked < 1) {
-    return { ok: false, reason: "no x402 tools with x402_last_checked_at", scheduled, checked, current };
-  }
-  return { ok: true, scheduled, checked, current };
 }
 
 function canaryObserve() {
@@ -110,23 +125,32 @@ function canaryObserve() {
     env: { ...process.env },
     encoding: "utf8",
   });
-  return r.status === 0;
+  return {
+    ok: r.status === 0,
+    status: r.status,
+    stdout: r.stdout || "",
+    stderr: r.stderr || "",
+  };
 }
 
 async function applyW2() {
   const client = pgClient();
   if (!client) throw new Error("pg module missing");
-  await client.connect();
-  await client.query(
-    "UPDATE site_settings SET allow_x402_registration = true, updated_at = NOW()",
-  );
-  const after = (
-    await client.query(
-      "SELECT allow_x402_registration FROM site_settings LIMIT 1",
-    )
-  ).rows[0].allow_x402_registration;
-  await client.end();
-  return after;
+  try {
+    await client.connect();
+    const { rows } = await client.query(
+      `UPDATE site_settings
+       SET allow_x402_registration = true, updated_at = NOW()
+       WHERE id = 1
+       RETURNING allow_x402_registration`,
+    );
+    if (!rows[0]) {
+      throw new Error("site_settings row id=1 not found");
+    }
+    return rows[0].allow_x402_registration;
+  } finally {
+    await client.end().catch(() => {});
+  }
 }
 
 async function main() {
@@ -136,16 +160,31 @@ async function main() {
 
   const l4 = await l4Ready();
   const canary = canaryObserve();
-  const report = { l4, canary_ok: canary, apply_requested: apply };
+  const report = { l4, canary_ok: canary.ok, apply_requested: apply };
 
   if (!l4.ok) {
     console.log(JSON.stringify({ ...report, action: "blocked", reason: l4.reason }, null, 2));
     console.error(`W2 GUARD BLOCKED: ${l4.reason}`);
     process.exit(1);
   }
-  if (!canary) {
-    console.log(JSON.stringify({ ...report, action: "blocked", reason: "canary observe failed" }, null, 2));
+  if (!canary.ok) {
+    console.log(
+      JSON.stringify(
+        {
+          ...report,
+          action: "blocked",
+          reason: "canary observe failed",
+          canary_status: canary.status,
+          canary_stdout: canary.stdout.slice(0, 2000),
+          canary_stderr: canary.stderr.slice(0, 2000),
+        },
+        null,
+        2,
+      ),
+    );
     console.error("W2 GUARD BLOCKED: canary observe failed");
+    if (canary.stderr) console.error(canary.stderr.slice(0, 2000));
+    if (canary.stdout) console.error(canary.stdout.slice(0, 2000));
     process.exit(1);
   }
 
