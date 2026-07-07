@@ -158,41 +158,6 @@ fn infer_tool_type(entry_points: &Option<serde_json::Value>) -> String {
     "sdk".to_string()
 }
 
-/// Heuristic chain keyword filter (same list as npm crawler).
-fn is_chain_keyword(keyword: &str) -> bool {
-    let chains = [
-        "ethereum",
-        "bitcoin",
-        "solana",
-        "base",
-        "polygon",
-        "arbitrum",
-        "optimism",
-        "avalanche",
-        "bnb",
-        "bnb-chain",
-        "bsc",
-        "binance",
-        "cosmos",
-        "near",
-        "sui",
-        "aptos",
-        "cardano",
-        "tron",
-        "algorand",
-        "starknet",
-        "zksync",
-        "linea",
-        "scroll",
-        "mantle",
-        "fantom",
-        "celo",
-        "stellar",
-        "tezos",
-    ];
-    chains.contains(&keyword)
-}
-
 /// Convert a PyPI package response into a [`RawTool`].
 fn package_to_raw(response: &PackageResponse) -> RawTool {
     let info = &response.info;
@@ -216,7 +181,7 @@ fn package_to_raw(response: &PackageResponse) -> RawTool {
 
     let chains: Vec<String> = keywords
         .iter()
-        .filter(|k| is_chain_keyword(k))
+        .filter(|k| crate::crawler::relevance::is_chain_keyword(k))
         .cloned()
         .collect();
 
@@ -238,6 +203,7 @@ fn package_to_raw(response: &PackageResponse) -> RawTool {
         source: SOURCE_NAME.to_string(),
         source_url,
         license,
+        keywords,
         ..Default::default()
     }
 }

@@ -44,6 +44,9 @@ pub struct RawTool {
     pub relevance_status_override: Option<String>,
     /// Curated vendor label from `vendor-orgs.json` (`team` field); ingest hint only.
     pub official_team: Option<String>,
+    /// Author-declared keywords from package registry metadata (npm, PyPI).
+    /// Fed into the relevance scoring corpus as explicit intent signals.
+    pub keywords: Vec<String>,
 }
 
 impl Default for RawTool {
@@ -68,6 +71,7 @@ impl Default for RawTool {
             x402_endpoint: None,
             relevance_status_override: None,
             official_team: None,
+            keywords: vec![],
         }
     }
 }
@@ -398,6 +402,7 @@ pub fn normalize(
         mcp_endpoint: raw.mcp_endpoint.as_deref(),
         chains: &raw.chains,
         source: &raw.source,
+        keywords: &raw.keywords,
     });
     review.crypto_relevance_score = relevance.score;
     review.crypto_relevance_reasons = relevance.reasons;
