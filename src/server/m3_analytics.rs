@@ -37,8 +37,8 @@ impl AnalyticsError {
     }
 }
 
-fn clamp_days(days: Option<i64>) -> i64 {
-    days.unwrap_or(DEFAULT_DAYS).clamp(1, MAX_DAYS)
+fn clamp_days(days: Option<i64>) -> i32 {
+    days.unwrap_or(DEFAULT_DAYS).clamp(1, MAX_DAYS) as i32
 }
 
 // ─── get_price_history ───
@@ -117,7 +117,7 @@ pub async fn get_price_history(
     Ok(PriceHistoryResponse {
         slug: tool.slug.clone(),
         tool_id: tool.id,
-        days,
+        days: i64::from(days),
         history,
         live_count,
         total_count,
@@ -203,7 +203,7 @@ pub async fn get_x402_trends(
     let total_tools = tools.len() as i64;
 
     Ok(X402TrendsResponse {
-        days,
+        days: i64::from(days),
         tools,
         total_tools,
         disclaimer: TRENDS_DISCLAIMER,
