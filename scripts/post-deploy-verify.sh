@@ -7,13 +7,22 @@
 # Usage:
 #   ./scripts/post-deploy-verify.sh
 #   ./scripts/post-deploy-verify.sh https://www.onchain-ai.xyz
-#   RAILWAY_API_URL=https://onchainai-production.up.railway.app ./scripts/post-deploy-verify.sh
+#   ./scripts/post-deploy-verify.sh --k2
+#   RAILWAY_API_URL=https://onchainai-production.up.railway.app ./scripts/post-deploy-verify.sh --k2
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
-PROD_URL="${1:-https://www.onchain-ai.xyz}"
+PROD_URL="https://www.onchain-ai.xyz"
+RUN_K2=false
+for arg in "$@"; do
+  case "$arg" in
+    --k2) RUN_K2=true ;;
+    -*) echo "Unknown flag: $arg" >&2; exit 1 ;;
+    *) PROD_URL="$arg" ;;
+  esac
+done
 PROD_URL="${PROD_URL%/}"
 API_URL="${RAILWAY_API_URL:-https://onchainai-production.up.railway.app}"
 API_URL="${API_URL%/}"
@@ -23,6 +32,11 @@ echo "=== Production frontend smoke (curl) ==="
 
 echo "=== Production API smoke (curl) ==="
 ./scripts/smoke-test-api.sh "${API_URL}"
+
+if [[ "$RUN_K2" == "true" ]]; then
+  echo "=== K2 prod smoke (discovery free + check_endpoint_health 402) ==="
+  RAILWAY_API_URL="${API_URL}" ./scripts/k2-prod-smoke.sh
+fi
 
 if command -v node >/dev/null 2>&1; then
   if node -e "require.resolve('playwright')" >/dev/null 2>&1; then
