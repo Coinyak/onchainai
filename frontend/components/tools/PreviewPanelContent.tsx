@@ -3,7 +3,8 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Star } from "lucide-react";
-import type { PublicTool } from "@/lib/api";
+import type { PublicTool, StaleTrustBadge } from "@/lib/api";
+import { TrustProbeBadge } from "@/components/tools/TrustProbeBadge";
 import { ToolLogo } from "@/components/tools/ToolLogo";
 import { Badge } from "@/components/ui/Badge";
 import { ChainLogo } from "@/components/tools/ChainLogo";
@@ -18,6 +19,7 @@ const PREVIEW_CHAINS_MAX = 8;
 
 interface PreviewPanelContentProps {
   tool: PublicTool;
+  trustProbe?: StaleTrustBadge | null;
   closeHref: string;
   fullPageHref: string;
   commentCount: number;
@@ -45,6 +47,7 @@ function QuickFact({ label, value }: { label: string; value: string }) {
 
 export function PreviewPanelContent({
   tool,
+  trustProbe,
   closeHref,
   fullPageHref,
   commentCount,
@@ -114,6 +117,7 @@ export function PreviewPanelContent({
         </div>
       )}
 
+      {trustProbe && <TrustProbeBadge trustProbe={trustProbe} variant="compact" />}
       <TrustFacts tool={tool} variant="preview" />
 
       {chains.length > 0 && (

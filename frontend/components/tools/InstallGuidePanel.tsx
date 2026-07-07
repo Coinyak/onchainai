@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import type { PublicTool } from "@/lib/api";
+import { useEffect, useMemo, useState } from "react";
+import { recordInstallGuideAttribution, type PublicTool } from "@/lib/api";
+import { getAttributionSession } from "@/lib/attribution-session";
 import { ConnectGuideBlocks } from "@/components/connect/ConnectGuideBlocks";
 import { CodingClientLogo } from "@/components/tools/CodingClientLogo";
 import { logoIdForToolInstallClient } from "@/lib/coding-clients";
@@ -34,6 +35,17 @@ export function InstallGuidePanel({
     () => buildPublicInstallGuide(tool, tool.slug, client),
     [tool, client],
   );
+
+  useEffect(() => {
+    if (tool.pricing !== "x402" && !tool.referral_enabled) return;
+    const session = getAttributionSession();
+    void recordInstallGuideAttribution(tool.slug, {
+      platform: client,
+      attribution_session: session,
+    }).catch(() => {
+      /* best-effort attribution — never block install UI */
+    });
+  }, [tool.slug, tool.pricing, tool.referral_enabled, client]);
 
   const blocks = useMemo(() => {
     const raw = guide.connect_blocks ?? [];

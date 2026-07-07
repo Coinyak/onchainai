@@ -30,6 +30,8 @@ pub const AGENT_BLUEPRINT_SYNC_PER_MINUTE: u32 = 30;
 pub const AGENT_DEVICE_START_PER_MINUTE: u32 = 10;
 /// x402 self-listing probe previews: at most 10 per minute per user (outbound fetch).
 pub const X402_PROBE_PER_MINUTE: u32 = 10;
+/// Web install-guide attribution: at most 60 per minute per IP.
+pub const ATTRIBUTION_PER_MINUTE: u32 = 60;
 /// General API traffic baseline (see [`crate::build_app`] — burst is 2× this, 5 req/s refill).
 pub const GENERAL_PER_MINUTE: u32 = 60;
 
@@ -51,6 +53,8 @@ static AGENT_DEVICE_START_LIMITER: LazyLock<DefaultKeyedRateLimiter<String>> =
     LazyLock::new(|| RateLimiter::dashmap(agent_device_start_quota()));
 static X402_PROBE_LIMITER: LazyLock<DefaultKeyedRateLimiter<Uuid>> =
     LazyLock::new(|| RateLimiter::dashmap(x402_probe_quota()));
+static ATTRIBUTION_IP_LIMITER: LazyLock<DefaultKeyedRateLimiter<String>> =
+    LazyLock::new(|| RateLimiter::dashmap(attribution_ip_quota()));
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum UserRateLimitAction {
@@ -120,6 +124,10 @@ pub fn x402_probe_quota() -> Quota {
     Quota::per_minute(NonZeroU32::new(X402_PROBE_PER_MINUTE).expect("non-zero x402 probe quota"))
 }
 
+pub fn attribution_ip_quota() -> Quota {
+    Quota::per_minute(NonZeroU32::new(ATTRIBUTION_PER_MINUTE).expect("non-zero attribution quota"))
+}
+
 /// Check a per-user rate limit before mutating state.
 pub fn check_user_rate_limit(
     user_id: Uuid,
@@ -153,6 +161,15 @@ pub fn check_agent_device_start_limit(ip: &str) -> Result<(), RateLimitExceeded>
         .check_key(&ip.to_string())
         .map_err(|_| RateLimitExceeded {
             message: "device flow start limit exceeded; try again later",
+        })
+}
+
+/// Check web install-guide attribution per-IP limit.
+pub fn check_attribution_ip_rate_limit(ip: &str) -> Result<(), RateLimitExceeded> {
+    ATTRIBUTION_IP_LIMITER
+        .check_key(&ip.to_string())
+        .map_err(|_| RateLimitExceeded {
+            message: "attribution rate limit exceeded; try again later",
         })
 }
 

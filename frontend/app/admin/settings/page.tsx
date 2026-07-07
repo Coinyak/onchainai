@@ -17,6 +17,15 @@ function SettingsForm({ initial }: { initial: SiteSettings }) {
     initial.mcp_premium_display_price ?? "",
   );
   const [x402BuilderCode, setX402BuilderCode] = useState(initial.x402_builder_code ?? "");
+  const [allowX402Registration, setAllowX402Registration] = useState(
+    initial.allow_x402_registration,
+  );
+  const [defaultReferralBps, setDefaultReferralBps] = useState(
+    initial.default_referral_bps != null ? String(initial.default_referral_bps) : "",
+  );
+  const [defaultReferralPayout, setDefaultReferralPayout] = useState(
+    initial.default_referral_payout_address ?? "",
+  );
 
   const saveMut = useMutation({
     mutationFn: () =>
@@ -28,9 +37,11 @@ function SettingsForm({ initial }: { initial: SiteSettings }) {
         search_keywords_raw: initial.search_keywords.join(", "),
         allow_free_registration: initial.allow_free_registration,
         require_tool_approval: initial.require_tool_approval,
-        allow_x402_registration: initial.allow_x402_registration,
-        default_referral_bps: initial.default_referral_bps,
-        default_referral_payout_address: initial.default_referral_payout_address,
+        allow_x402_registration: allowX402Registration,
+        default_referral_bps: defaultReferralBps.trim()
+          ? Number.parseInt(defaultReferralBps.trim(), 10)
+          : null,
+        default_referral_payout_address: defaultReferralPayout.trim() || null,
         x402_builder_code: x402BuilderCode.trim() || null,
         mcp_premium_enabled: mcpPremiumEnabled,
         mcp_premium_pay_to_address: mcpPremiumPayTo.trim() || null,
@@ -70,6 +81,46 @@ function SettingsForm({ initial }: { initial: SiteSettings }) {
         <input className="mt-1 w-full min-h-touch px-4 rounded-md border border-border font-mono text-code" value={mcpEndpoint} onChange={(e) => setMcpEndpoint(e.target.value)} />
       </label>
 
+      <fieldset className="space-y-3 rounded-md border border-border p-4" data-testid="x402-site-settings">
+        <legend className="text-body-sm font-medium px-1">x402 site defaults</legend>
+        <p className="text-body-sm text-secondary">
+          Site-level referral defaults apply when per-tool fields are empty. Open listing stays off
+          until you enable registration below.
+        </p>
+        <label className="flex items-center gap-2 min-h-touch">
+          <input
+            type="checkbox"
+            checked={allowX402Registration}
+            onChange={(e) => setAllowX402Registration(e.target.checked)}
+            data-testid="allow-x402-registration"
+          />
+          <span className="text-body-sm">Allow x402 open listing submissions</span>
+        </label>
+        <label className="block">
+          <span className="text-body-sm text-secondary">Default referral bps (0–10000)</span>
+          <input
+            className="mt-1 w-full min-h-touch px-4 rounded-md border border-border"
+            type="number"
+            min={0}
+            max={10000}
+            value={defaultReferralBps}
+            onChange={(e) => setDefaultReferralBps(e.target.value)}
+            placeholder="250"
+            data-testid="default-referral-bps"
+          />
+        </label>
+        <label className="block">
+          <span className="text-body-sm text-secondary">Default referral payout address</span>
+          <input
+            className="mt-1 w-full min-h-touch px-4 rounded-md border border-border font-mono text-code"
+            value={defaultReferralPayout}
+            onChange={(e) => setDefaultReferralPayout(e.target.value)}
+            placeholder="0x..."
+            data-testid="default-referral-payout"
+          />
+        </label>
+      </fieldset>
+
       <label className="block">
         <span className="text-body-sm text-secondary">x402 Builder Code (Base)</span>
         <input
@@ -91,7 +142,7 @@ function SettingsForm({ initial }: { initial: SiteSettings }) {
       <fieldset className="space-y-3 rounded-md border border-border p-4" data-testid="mcp-premium-settings">
         <legend className="text-body-sm font-medium px-1">MCP premium (Axis B x402)</legend>
         <p className="text-body-sm text-secondary">
-          Charge for compare_tools and export_toolkit via HTTP 402 on POST /mcp. Discovery tools stay free.
+          Charge for export_toolkit via HTTP 402 on POST /mcp. compare_tools is Free Forever (OD-FTG) and is never charged. Discovery tools stay free.
         </p>
         <label className="flex items-center gap-2 min-h-touch">
           <input

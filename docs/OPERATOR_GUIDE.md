@@ -221,6 +221,49 @@ curl -sS -X POST "$API_URL/api/v2/admin/crawler/trigger" \
 
 **Discovery gap audit (read-only):** `node scripts/discovery-gap-audit.mjs` — ground-truth recall vs public catalog (`fixtures/discovery-ground-truth.json`). `--live-probe` checks ClawHub/GitHub availability for misses.
 
+### 5.5 Bazaar x402 선별 승인 루브릭 (W1)
+
+`bazaar` 소스는 **항상 `approval_status=pending`** 으로 들어온다. 무분별 bulk approve 금지 — 아래 **16점 루브릭(12점 이상 + 필수 게이트)** 으로 단계적 canary만 승인한다.
+
+**스코어링 (최대 16점, Pass ≥12 + 필수 전부)**
+
+| 항목 | 점수 | 비고 |
+|------|------|------|
+| 402 핸드셰이크 성공 + PaymentRequirements 파싱 | **4 (필수)** | `node scripts/bazaar-approve-rubric.mjs <slug>` 또는 Admin probe |
+| 광고가격(`x402_price`) vs 실측 요금 ±10% 일치 | **3 (필수)** | price_mismatch면 자동 거부 |
+| GitHub stars ≥50 **또는** npm weekly downloads ≥100 | 2 | 둘 다 없으면 0 |
+| 공식 registry / `server.json` 교차등재 | 2 | mcp-registry·Smithery 등 |
+| function/chain 태그 정합 | 2 | 크롤러 정규화 기준 |
+| install_risk ≤ medium **및** trust tier ≥ B | 2 | critical/high면 거부 |
+| 중복·미러 아님 | **1 (필수)** | 동일 endpoint·slug 중복 |
+
+**자동 거부 (점수와 무관)**
+
+- SSRF 의심 URL·비-HTTPS endpoint
+- `referral_enabled=true` (Bazaar 승인 시 항상 `false` 유지)
+- 최근 14일 probe 실패 이력(L4) — `quarantined_at` 설정됨
+
+**Canary 절차 (순서 불변)**
+
+1. **1차 5건** — 루브릭 12+ 통과분만 `approved` + `relevance_status=accepted` + `referral_enabled=false`
+2. **48시간 관찰** — `/x402` 노출·L4 quarantine·402 회귀 없음 확인
+3. **2차 15건** 확대 (총 ~20) — 동일 루브릭·동일 플래그
+4. **롤백**: 오승인 시 `approval_status=pending` revert + `tool_review_events` 감사 기록
+
+```bash
+# 드라이런(기본): 점수·필수 게이트·거부 사유만 JSON 출력
+node scripts/bazaar-approve-rubric.mjs <slug>
+
+# 후보 일괄 스코어 (적용 없음)
+node scripts/bazaar-approve-rubric.mjs --pending-bazaar [--limit N]
+
+# 적용: canary ack + 단일 슬러그만 (bulk는 거부)
+node scripts/bazaar-approve-rubric.mjs <slug> --apply --i-understand-canary
+```
+
+- **W2 전제**: `allow_x402_registration=true` 는 **L4(14일 auto-quarantine) 배포 후** 만. W4 없이 W2 켜면 죽은 endpoint가 공개 카탈로그에 누적된다.
+- 상세 스펙: `docs/superpowers/specs/2026-07-07-okx-x402-infra-waves.md` §4·§6.
+
 ---
 
 ## 요약 3줄

@@ -139,7 +139,7 @@ fn push_fts_rank_order<'qb>(
     match_mode: ToolSearchMatch,
 ) {
     let Some(bind_value) = fts_query_bind(match_mode, search_text) else {
-        query.push(" ORDER BY stars DESC, updated_at DESC");
+        query.push(" ORDER BY metadata_quality DESC, stars DESC, updated_at DESC");
         return;
     };
     query.push(" ORDER BY ts_rank_cd(");
@@ -162,7 +162,7 @@ fn push_fts_rank_order<'qb>(
             query.push(")::text, ' & ', ' | '))");
         }
     }
-    query.push(") DESC, stars DESC, updated_at DESC");
+    query.push(") DESC, metadata_quality DESC, stars DESC, updated_at DESC");
 }
 
 fn push_mcp_sort_order<'qb>(
@@ -179,10 +179,10 @@ fn push_mcp_sort_order<'qb>(
     }
     match sort {
         McpSearchSort::Recent => {
-            query.push(" ORDER BY updated_at DESC, stars DESC");
+            query.push(" ORDER BY updated_at DESC, metadata_quality DESC, stars DESC");
         }
         _ => {
-            query.push(" ORDER BY stars DESC, updated_at DESC");
+            query.push(" ORDER BY metadata_quality DESC, stars DESC, updated_at DESC");
         }
     }
 }
@@ -221,7 +221,15 @@ pub(crate) async fn mcp_search_tools(
     }
     append_tool_filters(&mut count_q, &filters);
 
-    let mut list_q = sqlx::QueryBuilder::new("SELECT * FROM tools WHERE ");
+    let mut list_q = sqlx::QueryBuilder::new(
+        "SELECT *, \
+         ((CASE WHEN repo_url IS NOT NULL THEN 1 ELSE 0 END) \
+         + (CASE WHEN stars > 0 THEN 1 ELSE 0 END) \
+         + (CASE WHEN coalesce(array_length(chains, 1), 0) > 0 THEN 1 ELSE 0 END) \
+         + (CASE WHEN install_command IS NOT NULL THEN 1 ELSE 0 END) \
+         + (CASE WHEN last_commit_at IS NOT NULL THEN 1 ELSE 0 END))::int AS metadata_quality \
+         FROM tools WHERE ",
+    );
     list_q.push(PUBLIC_TOOL_WHERE);
     if has_fts {
         push_list_query_filter(&mut list_q, Some(search_text), match_mode);

@@ -2259,6 +2259,116 @@ body.sidebar-scroll-locked { overflow: hidden; }
   font-weight: 500;
 }
 
+/* W8 — Stale Trust Badge (free discovery, informational only) */
+.trust-probe-badge {
+  margin: 16px 0 0;
+  padding: 14px 16px;
+  border: 1px solid #E5E5E5;
+  border-radius: 8px;
+  background: #FAFAFA;
+  color: #1A1A1A;
+  font-size: 14px;
+  line-height: 1.55;
+}
+.trust-probe-badge--live {
+  border-color: #CFE8D6;
+  background: #F4FBF6;
+}
+.trust-probe-badge--stale,
+.trust-probe-badge--dead {
+  border-color: #F0D7BF;
+  border-left: 4px solid #E76F00;
+  background: #FFF8F1;
+}
+.trust-probe-badge--compact {
+  margin: 0;
+  padding: 10px 12px;
+  font-size: 13px;
+}
+.trust-probe-badge-header {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+.trust-probe-badge-icon {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: #6B6B6B;
+}
+.trust-probe-badge--live .trust-probe-badge-icon { color: #1F7A45; }
+.trust-probe-badge--stale .trust-probe-badge-icon,
+.trust-probe-badge--dead .trust-probe-badge-icon { color: #B45309; }
+.trust-probe-badge-title-wrap { min-width: 0; }
+.trust-probe-badge-eyebrow {
+  margin: 0;
+  color: #6B6B6B;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+.trust-probe-badge-status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin: 4px 0 0;
+}
+.trust-probe-badge-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: #1A1A1A;
+  color: #FFFFFF;
+  font-size: 12px;
+  font-weight: 700;
+}
+.trust-probe-badge--live .trust-probe-badge-pill {
+  background: #1F7A45;
+}
+.trust-probe-badge--stale .trust-probe-badge-pill,
+.trust-probe-badge--dead .trust-probe-badge-pill {
+  background: #B45309;
+}
+.trust-probe-badge-stale-tag {
+  color: #6B6B6B;
+  font-size: 12px;
+  font-weight: 600;
+}
+.trust-probe-badge-meta,
+.trust-probe-badge-cost,
+.trust-probe-badge-hint,
+.trust-probe-badge-footnote {
+  margin: 8px 0 0;
+  color: #6B6B6B;
+  font-size: 13px;
+}
+.trust-probe-badge-cost {
+  color: #3B2A1F;
+  font-weight: 500;
+}
+.trust-probe-badge-hint--compact {
+  margin-top: 6px;
+}
+.trust-probe-badge-link {
+  color: #E76F00;
+  font-weight: 600;
+  text-decoration: none;
+}
+.trust-probe-badge-link:hover { text-decoration: underline; }
+.trust-probe-badge code {
+  font-size: 12px;
+  background: rgba(0, 0, 0, 0.05);
+  padding: 1px 4px;
+  border-radius: 4px;
+}
+.compare-matrix-probe-cell {
+  vertical-align: top;
+  min-width: 180px;
+}
+
 /* Guided discovery */
 .tool-finder {
   margin-top: 14px;

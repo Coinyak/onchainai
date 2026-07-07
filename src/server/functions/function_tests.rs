@@ -40,7 +40,9 @@ mod tests {
         let intent = resolve_search_intent("mcp wallet", None, None);
         let filters = intent_to_tool_filters(&intent);
         assert_eq!(filters.tool_type, vec!["mcp"]);
-        assert_eq!(intent.query, "wallet");
+        // "wallet" is now a function token, consumed from query.
+        assert_eq!(intent.query, "");
+        assert_eq!(filters.function, vec!["wallet"]);
     }
 
     #[test]
@@ -240,6 +242,21 @@ mod tests {
         };
         append_tool_filters(&mut query, &filters);
         assert!(query.sql().contains("chains @> $1"));
+    }
+    #[cfg(feature = "ssr")]
+    #[test]
+    fn append_tool_filters_chain_soft_allows_empty_chains() {
+        let mut query = sqlx::QueryBuilder::new("SELECT * FROM tools WHERE true");
+        let filters = ToolFilters {
+            chain_soft: vec!["bitcoin".into(), "solana".into()],
+            ..Default::default()
+        };
+        append_tool_filters(&mut query, &filters);
+        let sql = query.sql();
+        // Soft chain: must include OR coalesce(...= 0) to allow empty chains
+        assert!(sql.contains("coalesce(array_length(chains, 1), 0) = 0"));
+        // Must not use hard @> without the OR empty-chains escape
+        assert!(sql.contains("OR"));
     }
 
     #[test]

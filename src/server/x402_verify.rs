@@ -18,6 +18,7 @@ use crate::server::queries::PUBLIC_TOOL_WHERE;
 const PROBE_TIMEOUT: Duration = Duration::from_secs(5);
 const MAX_RESPONSE_BYTES: usize = 64 * 1024;
 const FAILURE_DEMOTE_THRESHOLD: i32 = 3;
+const L4_CONSECUTIVE_FAILURE_DAYS: i64 = 14;
 const DEFAULT_X402_VERIFY_CRON: &str = "0 0 3 * * *";
 const MAX_CONCURRENT_PROBES: usize = 4;
 
@@ -265,6 +266,113 @@ pub fn price_matches_advertised(probed_amount: &str, x402_price: &str) -> bool {
     !probed.is_empty() && probed == advertised
 }
 
+/// Map a scheduled probe outcome to `x402_probe_history.status`.
+pub fn probe_history_status(
+    outcome: &ProbeOutcome,
+    x402_price: Option<&str>,
+) -> (&'static str, Option<String>) {
+    match outcome {
+        ProbeOutcome::Verified { amount, .. } => {
+            let price_match = amount
+                .as_deref()
+                .zip(x402_price)
+                .is_some_and(|(probed, advertised)| price_matches_advertised(probed, advertised));
+            if price_match {
+                ("live", amount.clone())
+            } else {
+                ("price_mismatch", amount.clone())
+            }
+        }
+        ProbeOutcome::NotPaymentRequired | ProbeOutcome::RequestFailed(_) => ("dead", None),
+        ProbeOutcome::ParseFailed | ProbeOutcome::SsrfBlocked(_) => ("invalid", None),
+    }
+}
+
+pub async fn record_probe_history(
+    pool: &PgPool,
+    tool_id: Uuid,
+    endpoint_url: &str,
+    status: &str,
+    actual_price: Option<&str>,
+    latency_ms: i32,
+) {
+    let result = sqlx::query(
+        r#"
+        INSERT INTO x402_probe_history (tool_id, endpoint_url, status, actual_price, latency_ms)
+        VALUES ($1, $2, $3, $4, $5)
+        "#,
+    )
+    .bind(tool_id)
+    .bind(endpoint_url)
+    .bind(status)
+    .bind(actual_price)
+    .bind(latency_ms)
+    .execute(pool)
+    .await;
+    if let Err(e) = result {
+        tracing::warn!(tool_id = %tool_id, "x402 probe history insert failed: {e}");
+    }
+}
+
+/// True when the last `L4_CONSECUTIVE_FAILURE_DAYS` calendar days each have a non-live probe.
+pub fn l4_consecutive_failure_days_met(daily_statuses: &[String]) -> bool {
+    daily_statuses.len() >= L4_CONSECUTIVE_FAILURE_DAYS as usize
+        && daily_statuses
+            .iter()
+            .take(L4_CONSECUTIVE_FAILURE_DAYS as usize)
+            .all(|status| status != "live")
+}
+
+pub async fn maybe_auto_quarantine_l4(pool: &PgPool, tool_id: Uuid) -> Result<bool, sqlx::Error> {
+    let rows = sqlx::query_as::<_, DailyProbeStatusRow>(
+        r#"
+        SELECT status
+        FROM (
+            SELECT DISTINCT ON (date_trunc('day', probed_at AT TIME ZONE 'UTC'))
+                status,
+                probed_at
+            FROM x402_probe_history
+            WHERE tool_id = $1
+            ORDER BY date_trunc('day', probed_at AT TIME ZONE 'UTC') DESC, probed_at DESC
+        ) daily
+        ORDER BY probed_at DESC
+        LIMIT $2
+        "#,
+    )
+    .bind(tool_id)
+    .bind(L4_CONSECUTIVE_FAILURE_DAYS)
+    .fetch_all(pool)
+    .await?;
+
+    let statuses: Vec<String> = rows.into_iter().map(|r| r.status).collect();
+    if !l4_consecutive_failure_days_met(&statuses) {
+        return Ok(false);
+    }
+
+    let result = sqlx::query(
+        r#"
+        UPDATE tools
+        SET quarantined_at = now(),
+            updated_at = now()
+        WHERE id = $1
+          AND quarantined_at IS NULL
+        "#,
+    )
+    .bind(tool_id)
+    .execute(pool)
+    .await?;
+
+    if result.rows_affected() > 0 {
+        tracing::warn!(
+            tool_id = %tool_id,
+            days = L4_CONSECUTIVE_FAILURE_DAYS,
+            "L4 auto-quarantine: consecutive probe failures"
+        );
+        return Ok(true);
+    }
+    Ok(false)
+}
+
 fn pinned_probe_client(host: &str, addr: SocketAddr) -> reqwest::Client {
     reqwest::Client::builder()
         .redirect(Policy::none())
@@ -381,6 +489,83 @@ fn apply_outcome_to_flags(
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct ToolProbeRun {
+    pub outcome: ProbeOutcome,
+    pub history_status: String,
+    pub actual_price: Option<String>,
+    pub probed_at: DateTime<Utc>,
+    pub latency_ms: i32,
+    pub endpoint_verified: bool,
+    pub price_verified: bool,
+    pub failures: i32,
+}
+
+pub async fn run_on_demand_tool_probe(
+    pool: &PgPool,
+    tool_id: Uuid,
+    endpoint: &str,
+    x402_price: Option<&str>,
+    current_endpoint_verified: bool,
+    current_failures: i32,
+) -> Result<ToolProbeRun, sqlx::Error> {
+    let started = std::time::Instant::now();
+    let outcome = probe_x402_endpoint(endpoint).await;
+    let latency_ms = started.elapsed().as_millis().min(i32::MAX as u128) as i32;
+    let (history_status, actual_price) = probe_history_status(&outcome, x402_price);
+    record_probe_history(
+        pool,
+        tool_id,
+        endpoint,
+        history_status,
+        actual_price.as_deref(),
+        latency_ms,
+    )
+    .await;
+
+    let (endpoint_verified, price_verified, failures) = apply_outcome_to_flags(
+        &outcome,
+        x402_price,
+        current_endpoint_verified,
+        current_failures,
+    );
+
+    let probed_at = Utc::now();
+    sqlx::query(
+        r#"
+        UPDATE tools
+        SET x402_endpoint_verified = $2,
+            price_verified = $3,
+            x402_check_failures = $4,
+            x402_last_checked_at = $5,
+            updated_at = now()
+        WHERE id = $1
+        "#,
+    )
+    .bind(tool_id)
+    .bind(endpoint_verified)
+    .bind(price_verified)
+    .bind(failures)
+    .bind(probed_at)
+    .execute(pool)
+    .await?;
+
+    if let Err(e) = maybe_auto_quarantine_l4(pool, tool_id).await {
+        tracing::error!(tool_id = %tool_id, "L4 auto-quarantine check failed: {e}");
+    }
+
+    Ok(ToolProbeRun {
+        outcome,
+        history_status: history_status.to_string(),
+        actual_price,
+        probed_at,
+        latency_ms,
+        endpoint_verified,
+        price_verified,
+        failures,
+    })
+}
+
 pub async fn verify_tool_by_id(
     pool: &PgPool,
     _client: &reqwest::Client,
@@ -405,49 +590,32 @@ pub async fn verify_tool_by_id(
         _ => return Ok(None),
     };
 
-    let outcome = probe_x402_endpoint(endpoint).await;
-    let (endpoint_verified, price_verified, failures) = apply_outcome_to_flags(
-        &outcome,
+    let run = run_on_demand_tool_probe(
+        pool,
+        tool_id,
+        endpoint,
         row.x402_price.as_deref(),
         row.x402_endpoint_verified,
         row.x402_check_failures,
-    );
-
-    let checked_at = Utc::now();
-    sqlx::query(
-        r#"
-        UPDATE tools
-        SET x402_endpoint_verified = $2,
-            price_verified = $3,
-            x402_check_failures = $4,
-            x402_last_checked_at = $5,
-            updated_at = now()
-        WHERE id = $1
-        "#,
     )
-    .bind(tool_id)
-    .bind(endpoint_verified)
-    .bind(price_verified)
-    .bind(failures)
-    .bind(checked_at)
-    .execute(pool)
     .await?;
 
     tracing::info!(
         tool_id = %tool_id,
-        ?outcome,
-        endpoint_verified,
-        price_verified,
-        failures,
+        outcome = ?run.outcome,
+        endpoint_verified = run.endpoint_verified,
+        price_verified = run.price_verified,
+        failures = run.failures,
+        history_status = %run.history_status,
         "x402 probe completed"
     );
 
     Ok(Some(X402VerifyStatus {
         tool_id,
-        x402_endpoint_verified: endpoint_verified,
-        price_verified,
-        x402_check_failures: failures,
-        x402_last_checked_at: Some(checked_at),
+        x402_endpoint_verified: run.endpoint_verified,
+        price_verified: run.price_verified,
+        x402_check_failures: run.failures,
+        x402_last_checked_at: Some(run.probed_at),
     }))
 }
 
@@ -462,6 +630,11 @@ struct ToolProbeRow {
 #[derive(Debug, sqlx::FromRow)]
 struct ScheduledProbeRow {
     id: Uuid,
+}
+
+#[derive(Debug, sqlx::FromRow)]
+struct DailyProbeStatusRow {
+    status: String,
 }
 
 pub async fn run_scheduled_verification(pool: &PgPool, client: &reqwest::Client) {
@@ -655,6 +828,40 @@ mod tests {
                 asset: Some("usdc".into()),
             }
         );
+    }
+
+    #[test]
+    fn probe_history_status_maps_outcomes() {
+        let live = ProbeOutcome::Verified {
+            amount: Some("1000".into()),
+            asset: Some("usdc".into()),
+        };
+        let (status, _) = probe_history_status(&live, Some("$1,000 USDC"));
+        assert_eq!(status, "live");
+
+        let mismatch = ProbeOutcome::Verified {
+            amount: Some("2000".into()),
+            asset: Some("usdc".into()),
+        };
+        let (status, _) = probe_history_status(&mismatch, Some("0.001 usdc"));
+        assert_eq!(status, "price_mismatch");
+
+        let (status, _) = probe_history_status(&ProbeOutcome::NotPaymentRequired, None);
+        assert_eq!(status, "dead");
+    }
+
+    #[test]
+    fn l4_consecutive_failure_requires_fourteen_non_live_days() {
+        let dead: Vec<String> = std::iter::repeat_n("dead".to_string(), 14).collect();
+        assert!(l4_consecutive_failure_days_met(&dead));
+
+        let mixed: Vec<String> = (0..14)
+            .map(|i| if i == 0 { "live".into() } else { "dead".into() })
+            .collect();
+        assert!(!l4_consecutive_failure_days_met(&mixed));
+
+        let short: Vec<String> = std::iter::repeat_n("dead".to_string(), 13).collect();
+        assert!(!l4_consecutive_failure_days_met(&short));
     }
 
     #[test]

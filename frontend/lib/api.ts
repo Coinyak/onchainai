@@ -138,6 +138,29 @@ export interface PublicTool {
   updated_at: string;
 }
 
+/** W8 — free discovery trust signal from L4 probe history (x402 tools). */
+export interface SkipCostExposure {
+  probe_cost_usd: string;
+  estimated_dead_call_loss_usd: string;
+  message: string;
+}
+
+export interface StaleTrustBadge {
+  last_probe_at: string | null;
+  live: boolean;
+  stale: boolean;
+  stale_threshold_hours: number;
+  latest_probe_status: string | null;
+  skip_cost: SkipCostExposure;
+  fresh_probe_tool: string;
+  k2_conversion_reason: string;
+}
+
+/** Tool detail from GET /api/v2/tools/{slug} — PublicTool fields + optional trust_probe. */
+export type PublicToolDetail = PublicTool & {
+  trust_probe?: StaleTrustBadge | null;
+};
+
 export interface Tool {
   id: string;
   name: string;
@@ -170,7 +193,11 @@ export interface Tool {
   x402_price: string | null;
   referral_enabled?: boolean;
   referral_bps?: number | null;
+  referral_payout_address?: string | null;
   referral_model?: string | null;
+  x402_pay_to_address?: string | null;
+  x402_builder_code?: string | null;
+  x402_endpoint?: string | null;
   payment_verified: boolean;
   x402_endpoint_verified: boolean;
   price_verified: boolean;
@@ -388,6 +415,27 @@ export interface OperatorVerdict {
   created_at: string;
 }
 
+export interface UpdateToolReferralPayload {
+  slug: string;
+  referral_enabled: boolean;
+  referral_bps?: number | null;
+  referral_payout_address?: string | null;
+  referral_model?: string | null;
+  x402_pay_to_address?: string | null;
+  x402_builder_code?: string | null;
+  payment_verified: boolean;
+  x402_endpoint_verified: boolean;
+  price_verified: boolean;
+  x402_endpoint?: string | null;
+}
+
+export interface ReferralDashboardStats {
+  x402_tools: number;
+  referral_enabled_tools: number;
+  attribution_events: number;
+  reported_settlements: number;
+}
+
 export interface AdminToolWorkbenchView {
   tool: Tool;
   official_links: ToolOfficialLink[];
@@ -489,6 +537,7 @@ export interface ToolComparisonView {
   official_links: ToolOfficialLink[];
   trust_facts: TrustFact[];
   viewer_bookmarked: boolean;
+  trust_probe?: StaleTrustBadge | null;
 }
 
 export interface ToolSubmission {
@@ -637,8 +686,8 @@ export async function getCategories(): Promise<CategoryWithCount[]> {
   return rows.map(normalizeCategory);
 }
 
-export async function getToolBySlug(slug: string): Promise<PublicTool> {
-  return apiFetch<PublicTool>(`/api/v2/tools/${encodeURIComponent(slug)}`);
+export async function getToolBySlug(slug: string): Promise<PublicToolDetail> {
+  return apiFetch<PublicToolDetail>(`/api/v2/tools/${encodeURIComponent(slug)}`);
 }
 
 /** N1 related tools — returns [] until API is available. */
@@ -1122,6 +1171,30 @@ export async function searchToolsForPicker(
 
 export async function getAdminSiteSettings(): Promise<SiteSettings> {
   return apiFetch<SiteSettings>("/api/v2/admin/settings");
+}
+
+export async function getReferralDashboardStats(): Promise<ReferralDashboardStats> {
+  return apiFetch<ReferralDashboardStats>("/api/v2/admin/referral-stats");
+}
+
+export async function updateToolReferral(payload: UpdateToolReferralPayload): Promise<Tool> {
+  return apiFetch<Tool>("/api/v2/admin/tool-referral", {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function recordInstallGuideAttribution(
+  slug: string,
+  payload: { platform: string; attribution_session?: string },
+): Promise<{ ok: boolean; recorded: boolean }> {
+  return apiFetch<{ ok: boolean; recorded: boolean }>(
+    `/api/v2/tools/${encodeURIComponent(slug)}/attribution`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
+  );
 }
 
 export async function updateSiteSettings(
