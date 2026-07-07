@@ -2277,7 +2277,7 @@ body.sidebar-scroll-locked { overflow: hidden; }
 .trust-probe-badge--stale,
 .trust-probe-badge--dead {
   border-color: #F0D7BF;
-  border-left: 4px solid #E76F00;
+  border-left: 4px solid #B45309;
   background: #FFF8F1;
 }
 .trust-probe-badge--compact {

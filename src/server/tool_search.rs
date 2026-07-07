@@ -360,7 +360,8 @@ mod tests {
     fn resolve_search_intent_extracts_bridge_and_base() {
         let intent = resolve_search_intent("bridge USDC to Base", None, None);
         assert_eq!(intent.function.as_deref(), Some("bridge"));
-        assert_eq!(intent.chain.as_deref(), Some("base"));
+        assert!(intent.chain.is_none());
+        assert_eq!(intent.chain_soft, vec!["base"]);
         assert!(!intent.query.is_empty());
     }
 
@@ -380,7 +381,8 @@ mod tests {
         let intent = resolve_search_intent("mcp base", None, None);
         assert_eq!(intent.query, "");
         assert!(intent.function.is_none());
-        assert_eq!(intent.chain.as_deref(), Some("base"));
+        assert!(intent.chain.is_none());
+        assert_eq!(intent.chain_soft, vec!["base"]);
     }
 
     #[test]

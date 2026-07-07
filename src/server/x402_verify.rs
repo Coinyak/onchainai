@@ -314,28 +314,40 @@ pub async fn record_probe_history(
     }
 }
 
-/// True when the last `L4_CONSECUTIVE_FAILURE_DAYS` calendar days each have a non-live probe.
-pub fn l4_consecutive_failure_days_met(daily_statuses: &[String]) -> bool {
-    daily_statuses.len() >= L4_CONSECUTIVE_FAILURE_DAYS as usize
-        && daily_statuses
-            .iter()
-            .take(L4_CONSECUTIVE_FAILURE_DAYS as usize)
-            .all(|status| status != "live")
+/// True when `today` and the prior `L4_CONSECUTIVE_FAILURE_DAYS - 1` UTC days
+/// each have a non-live probe (no gaps).
+pub fn l4_consecutive_failure_days_met(
+    daily_rows: &[(chrono::NaiveDate, String)],
+    today: chrono::NaiveDate,
+) -> bool {
+    if daily_rows.len() < L4_CONSECUTIVE_FAILURE_DAYS as usize {
+        return false;
+    }
+    for offset in 0..L4_CONSECUTIVE_FAILURE_DAYS {
+        let expected_day = today - chrono::Duration::days(offset);
+        let (day, status) = &daily_rows[offset as usize];
+        if *day != expected_day || status == "live" {
+            return false;
+        }
+    }
+    true
 }
 
 pub async fn maybe_auto_quarantine_l4(pool: &PgPool, tool_id: Uuid) -> Result<bool, sqlx::Error> {
     let rows = sqlx::query_as::<_, DailyProbeStatusRow>(
         r#"
-        SELECT status
+        SELECT day, status
         FROM (
             SELECT DISTINCT ON (date_trunc('day', probed_at AT TIME ZONE 'UTC'))
+                (date_trunc('day', probed_at AT TIME ZONE 'UTC'))::date AS day,
                 status,
                 probed_at
             FROM x402_probe_history
             WHERE tool_id = $1
+              AND probed_at >= (now() AT TIME ZONE 'UTC' - ($2::bigint * interval '1 day'))
             ORDER BY date_trunc('day', probed_at AT TIME ZONE 'UTC') DESC, probed_at DESC
         ) daily
-        ORDER BY probed_at DESC
+        ORDER BY day DESC
         LIMIT $2
         "#,
     )
@@ -344,8 +356,10 @@ pub async fn maybe_auto_quarantine_l4(pool: &PgPool, tool_id: Uuid) -> Result<bo
     .fetch_all(pool)
     .await?;
 
-    let statuses: Vec<String> = rows.into_iter().map(|r| r.status).collect();
-    if !l4_consecutive_failure_days_met(&statuses) {
+    let today = chrono::Utc::now().date_naive();
+    let daily_rows: Vec<(chrono::NaiveDate, String)> =
+        rows.into_iter().map(|r| (r.day, r.status)).collect();
+    if !l4_consecutive_failure_days_met(&daily_rows, today) {
         return Ok(false);
     }
 
@@ -634,6 +648,7 @@ struct ScheduledProbeRow {
 
 #[derive(Debug, sqlx::FromRow)]
 struct DailyProbeStatusRow {
+    day: chrono::NaiveDate,
     status: String,
 }
 
@@ -852,16 +867,41 @@ mod tests {
 
     #[test]
     fn l4_consecutive_failure_requires_fourteen_non_live_days() {
-        let dead: Vec<String> = std::iter::repeat_n("dead".to_string(), 14).collect();
-        assert!(l4_consecutive_failure_days_met(&dead));
-
-        let mixed: Vec<String> = (0..14)
-            .map(|i| if i == 0 { "live".into() } else { "dead".into() })
+        let today = chrono::NaiveDate::from_ymd_opt(2026, 7, 7).expect("date");
+        let dead: Vec<(chrono::NaiveDate, String)> = (0..14)
+            .map(|offset| (today - chrono::Duration::days(offset), "dead".to_string()))
             .collect();
-        assert!(!l4_consecutive_failure_days_met(&mixed));
+        assert!(l4_consecutive_failure_days_met(&dead, today));
 
-        let short: Vec<String> = std::iter::repeat_n("dead".to_string(), 13).collect();
-        assert!(!l4_consecutive_failure_days_met(&short));
+        let mixed: Vec<(chrono::NaiveDate, String)> = (0..14)
+            .map(|offset| {
+                (
+                    today - chrono::Duration::days(offset),
+                    if offset == 0 {
+                        "live".into()
+                    } else {
+                        "dead".into()
+                    },
+                )
+            })
+            .collect();
+        assert!(!l4_consecutive_failure_days_met(&mixed, today));
+
+        let short: Vec<(chrono::NaiveDate, String)> = (0..13)
+            .map(|offset| (today - chrono::Duration::days(offset), "dead".to_string()))
+            .collect();
+        assert!(!l4_consecutive_failure_days_met(&short, today));
+
+        let gap: Vec<(chrono::NaiveDate, String)> = (0..14)
+            .map(|offset| {
+                let day_offset = if offset == 0 { 0 } else { offset + 1 };
+                (
+                    today - chrono::Duration::days(day_offset),
+                    "dead".to_string(),
+                )
+            })
+            .collect();
+        assert!(!l4_consecutive_failure_days_met(&gap, today));
     }
 
     #[test]

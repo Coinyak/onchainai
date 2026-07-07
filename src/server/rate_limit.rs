@@ -5,7 +5,7 @@
 
 use axum::http::{request::Parts, HeaderMap};
 use governor::{DefaultKeyedRateLimiter, Quota, RateLimiter};
-use std::net::SocketAddr;
+use std::net::{IpAddr, SocketAddr};
 use std::num::NonZeroU32;
 use std::sync::LazyLock;
 use uuid::Uuid;
@@ -182,58 +182,57 @@ pub fn check_mcp_ip_rate_limit(ip: &str) -> Result<(), RateLimitExceeded> {
         })
 }
 
-/// Best-effort client IP from Axum headers + peer address.
-pub fn client_ip_from_connect(headers: &HeaderMap, addr: SocketAddr) -> String {
+fn parse_ip(candidate: &str) -> Option<IpAddr> {
+    candidate.trim().parse().ok()
+}
+
+fn forwarded_client_ip(headers: &HeaderMap) -> Option<IpAddr> {
     if let Some(forwarded) = headers.get("x-forwarded-for").and_then(|v| v.to_str().ok()) {
-        if let Some(first) = forwarded.split(',').next() {
-            let ip = first.trim();
-            if !ip.is_empty() {
-                return ip.to_string();
-            }
+        if let Some(ip) = forwarded.split(',').next().and_then(parse_ip) {
+            return Some(ip);
         }
     }
 
-    if let Some(real_ip) = headers
+    headers
         .get("x-real-ip")
         .and_then(|v| v.to_str().ok())
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-    {
-        return real_ip.to_string();
-    }
+        .and_then(parse_ip)
+}
 
-    addr.ip().to_string()
+/// True when the immediate TCP peer is a reverse proxy we control (Railway/Vercel hop).
+fn is_trusted_proxy(peer: IpAddr) -> bool {
+    match peer {
+        IpAddr::V4(v4) => v4.is_private() || v4.is_loopback() || v4.is_link_local(),
+        IpAddr::V6(v6) => v6.is_loopback() || v6.is_unique_local(),
+    }
+}
+
+/// Client IP for rate limiting: honor forwarded headers only behind a trusted proxy.
+pub fn client_ip_from_connect(headers: &HeaderMap, addr: SocketAddr) -> String {
+    let peer = addr.ip();
+    if is_trusted_proxy(peer) {
+        if let Some(client) = forwarded_client_ip(headers) {
+            return client.to_string();
+        }
+    }
+    peer.to_string()
 }
 
 /// Best-effort client IP extraction for server functions and MCP.
 pub fn client_ip_from_parts(parts: &Parts) -> String {
-    if let Some(forwarded) = parts
-        .headers
-        .get("x-forwarded-for")
-        .and_then(|v| v.to_str().ok())
-    {
-        if let Some(first) = forwarded.split(',').next() {
-            let ip = first.trim();
-            if !ip.is_empty() {
-                return ip.to_string();
-            }
-        }
-    }
-
-    if let Some(real_ip) = parts
-        .headers
-        .get("x-real-ip")
-        .and_then(|v| v.to_str().ok())
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-    {
-        return real_ip.to_string();
-    }
-
-    parts
+    let peer = parts
         .extensions
         .get::<axum::extract::ConnectInfo<SocketAddr>>()
-        .map(|ci| ci.0.ip().to_string())
+        .map(|ci| ci.0.ip());
+
+    if let Some(peer) = peer.filter(|ip| is_trusted_proxy(*ip)) {
+        if let Some(client) = forwarded_client_ip(&parts.headers) {
+            return client.to_string();
+        }
+        return peer.to_string();
+    }
+
+    peer.map(|ip| ip.to_string())
         .unwrap_or_else(|| "unknown".into())
 }
 
@@ -291,12 +290,27 @@ mod tests {
     }
 
     #[test]
-    fn client_ip_prefers_forwarded_header() {
+    fn client_ip_honors_forwarded_header_behind_trusted_proxy() {
         let request = axum::http::Request::builder()
             .header("x-forwarded-for", "198.51.100.7, 10.0.0.1")
+            .extension(axum::extract::ConnectInfo(SocketAddr::from((
+                [10, 0, 0, 1],
+                8080,
+            ))))
             .body(())
             .expect("request");
         let (parts, _) = request.into_parts();
         assert_eq!(client_ip_from_parts(&parts), "198.51.100.7");
+    }
+
+    #[test]
+    fn client_ip_ignores_spoofed_forwarded_header_from_public_peer() {
+        let request = axum::http::Request::builder()
+            .header("x-forwarded-for", "198.51.100.7")
+            .body(())
+            .expect("request");
+        let (parts, _) = request.into_parts();
+        let addr = SocketAddr::from(([203, 0, 113, 10], 443));
+        assert_eq!(client_ip_from_connect(&parts.headers, addr), "203.0.113.10");
     }
 }

@@ -102,7 +102,7 @@ export function K2ProbeReceiptSection() {
 
         <div className="connect-k2-probe-docs">
           <div className="connect-guide-block">
-            <h3 className="connect-guide-block-title">MCP call (x402 client)</h3>
+            <h3 className="connect-guide-block-title">MCP call (x402-capable client)</h3>
             <p className="text-body-sm text-secondary mb-2">{K2_MCP_POST_HINT}</p>
             <div className="tool-install-stack">
               <div className="tool-install">
@@ -111,16 +111,18 @@ export function K2ProbeReceiptSection() {
               </div>
             </div>
             <p className="text-body-sm text-secondary mt-3">
-              Claude Code and Cursor may show a connection error on HTTP 402 — that is expected.
-              Use an x402-capable HTTP client or the REST path below.
+              Claude Code and Cursor may show a connection error on HTTP 402 — that is expected for
+              OnchainAI&apos;s K2 probe. Use an external x402-capable HTTP client or the REST path
+              below.
             </p>
           </div>
 
           <div className="connect-guide-block">
-            <h3 className="connect-guide-block-title">REST (x402 wallet client)</h3>
+            <h3 className="connect-guide-block-title">REST (x402-capable client)</h3>
             <p className="text-body-sm text-secondary mb-2">
-              <code className="text-code">GET {K2_REST_PATH}</code> returns HTTP 402 first, then
-              paid JSON with <code className="text-code">data.probe_receipt</code>.
+              <code className="text-code">GET {K2_REST_PATH}</code> is OnchainAI&apos;s own K2 probe
+              endpoint. An x402-capable client receives HTTP 402, settles to OnchainAI, then gets JSON
+              with <code className="text-code">data.probe_receipt</code>.
             </p>
             <div className="tool-install-stack">
               <div className="tool-install">

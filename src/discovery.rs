@@ -141,13 +141,9 @@ pub fn parse_search_intent(query: &str) -> SearchIntent {
         }
         if !is_single_token {
             if let Some(chain) = chain_id(token) {
-                // First chain token sets `chain` (hard filter for explicit API
-                // param compat). Additional chain tokens go to `chain_soft`.
-                // All chain tokens from query text are also pushed to
-                // `chain_soft` for soft-match filtering downstream.
-                if intent.chain.is_none() {
-                    intent.chain.get_or_insert_with(|| chain.to_string());
-                }
+                // Query-text chains are soft-only so tools with `chains: []`
+                // stay in recall. Hard `chain` filters come from explicit API
+                // params via `resolve_search_intent`, not NL parsing.
                 intent.chain_soft.push(chain.to_string());
                 continue;
             }
@@ -305,14 +301,15 @@ mod tests {
     #[test]
     fn search_intent_maps_high_confidence_tokens() {
         let intent = parse_search_intent("base wallet mcp");
-        assert_eq!(intent.chain.as_deref(), Some("base"));
+        assert!(intent.chain.is_none());
+        assert_eq!(intent.chain_soft, vec!["base"]);
         assert_eq!(intent.tool_type.as_deref(), Some("mcp"));
         // "wallet" is now recognized as a function token, so query_terms is empty.
         assert_eq!(intent.function.as_deref(), Some("wallet"));
         assert_eq!(intent.query_terms, "");
 
         let href = search_intent_href("/tools", &intent);
-        assert_eq!(href, "/tools?function=wallet&chain=base&type=mcp");
+        assert_eq!(href, "/tools?function=wallet&type=mcp");
     }
 
     #[test]
@@ -340,7 +337,8 @@ mod tests {
     fn search_intent_swap_base_maps_chain_and_function_without_fts() {
         let intent = parse_search_intent("swap base");
         assert_eq!(intent.function.as_deref(), Some("swap"));
-        assert_eq!(intent.chain.as_deref(), Some("base"));
+        assert!(intent.chain.is_none());
+        assert_eq!(intent.chain_soft, vec!["base"]);
         assert_eq!(intent.query_terms, "");
     }
 
@@ -400,7 +398,7 @@ mod tests {
     #[test]
     fn search_intent_chain_soft_collects_all_chains_from_query() {
         let intent = parse_search_intent("bridge bitcoin solana ethereum");
-        assert_eq!(intent.chain.as_deref(), Some("bitcoin"));
+        assert!(intent.chain.is_none());
         assert_eq!(intent.chain_soft, vec!["bitcoin", "solana", "ethereum"]);
         assert_eq!(intent.function.as_deref(), Some("bridge"));
         assert_eq!(intent.query_terms, "");
@@ -409,7 +407,7 @@ mod tests {
     #[test]
     fn search_intent_chain_soft_single_chain_also_populated() {
         let intent = parse_search_intent("swap base");
-        assert_eq!(intent.chain.as_deref(), Some("base"));
+        assert!(intent.chain.is_none());
         assert_eq!(intent.chain_soft, vec!["base"]);
     }
 

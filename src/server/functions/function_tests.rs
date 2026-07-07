@@ -17,7 +17,8 @@ mod tests {
 
         assert_eq!(merged.status, vec!["verified"]);
         assert_eq!(merged.tool_type, vec!["mcp"]);
-        assert_eq!(merged.chain, vec!["base"]);
+        assert!(merged.chain.is_empty());
+        assert_eq!(merged.chain_soft, vec!["base"]);
         assert!(intent.query.is_empty());
     }
 
