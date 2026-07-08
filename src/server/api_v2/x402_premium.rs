@@ -126,7 +126,10 @@ async fn post_recommend_verified_tool(
         }
     };
     if config.is_active()
-        && !crate::server::okx_payment::is_okx_gated_tool("recommend_verified_tool")
+        && !crate::server::okx_payment::should_skip_cdp_for_okx(
+            state.okx_premium_gate_active,
+            "recommend_verified_tool",
+        )
     {
         match require_axis_b_payment(&config, "recommend_verified_tool", &headers).await {
             Ok(_settlement) => {}
@@ -222,7 +225,12 @@ async fn post_gap_audit(
                 .into_response()
         }
     };
-    if config.is_active() && !crate::server::okx_payment::is_okx_gated_tool("gap_audit") {
+    if config.is_active()
+        && !crate::server::okx_payment::should_skip_cdp_for_okx(
+            state.okx_premium_gate_active,
+            "gap_audit",
+        )
+    {
         match require_axis_b_payment(&config, "gap_audit", &headers).await {
             Ok(_settlement) => {}
             Err(response) => return response,

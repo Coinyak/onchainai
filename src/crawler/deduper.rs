@@ -42,11 +42,13 @@ pub fn dedupe(tools: Vec<Tool>) -> Vec<Tool> {
         match &tool.repo_url {
             None => out.push(tool),
             Some(url) => {
-                let has_install = tool
+                let install = tool
                     .install_command
-                    .as_ref()
-                    .is_some_and(|s| !s.trim().is_empty());
-                let install = tool.install_command.clone().unwrap_or_default();
+                    .as_deref()
+                    .unwrap_or("")
+                    .trim()
+                    .to_string();
+                let has_install = !install.is_empty();
                 let key = (url.clone(), install);
 
                 if let Some(&idx) = best_by_key.get(&key) {
@@ -337,6 +339,37 @@ mod tests {
         ];
         let out = dedupe(tools);
         assert_eq!(out.len(), 1, "placeholder should be dropped");
+        assert_eq!(out[0].name, "npm-real");
+    }
+
+    #[test]
+    fn whitespace_only_install_treated_as_no_install() {
+        let tools = vec![
+            make_tool_with_install(
+                "vendor-placeholder",
+                Some("https://github.com/x/x"),
+                0,
+                None,
+            ),
+            make_tool_with_install(
+                "whitespace-only",
+                Some("https://github.com/x/x"),
+                5,
+                Some("   "),
+            ),
+            make_tool_with_install(
+                "npm-real",
+                Some("https://github.com/x/x"),
+                42,
+                Some("npx x"),
+            ),
+        ];
+        let out = dedupe(tools);
+        assert_eq!(
+            out.len(),
+            1,
+            "whitespace-only install must not survive as a distinct key"
+        );
         assert_eq!(out[0].name, "npm-real");
     }
 

@@ -149,18 +149,18 @@ pub fn is_okx_enabled() -> bool {
 /// CDP payment gates for these routes must be skipped to avoid double-charging.
 pub const OKX_GATED_ROUTES: &[&str] = &["recommend_verified_tool", "gap_audit"];
 
-/// Check if a tool name is gated by the OKX middleware (skip CDP handler gate).
-pub fn is_okx_gated_tool(tool_name: &str) -> bool {
-    is_okx_enabled() && OKX_GATED_ROUTES.contains(&tool_name)
+/// Skip handler-level CDP gate only when OKX middleware is active for this tool.
+pub fn should_skip_cdp_for_okx(okx_premium_gate_active: bool, tool_name: &str) -> bool {
+    okx_premium_gate_active && OKX_GATED_ROUTES.contains(&tool_name)
 }
 
-/// Validate an EVM address: starts with 0x, length >= 42, not a placeholder.
+/// Validate an EVM address: exact 20-byte hex (0x + 40 hex digits), not a placeholder.
 fn is_valid_evm_address(addr: &str) -> bool {
     let trimmed = addr.trim();
-    !trimmed.is_empty()
-        && trimmed != "0xYourWalletAddress"
+    trimmed != "0xYourWalletAddress"
+        && trimmed.len() == 42
         && trimmed.starts_with("0x")
-        && trimmed.len() >= 42
+        && trimmed[2..].bytes().all(|b| b.is_ascii_hexdigit())
 }
 
 #[cfg(test)]
@@ -262,31 +262,31 @@ mod tests {
     }
 
     #[test]
-    fn is_okx_gated_tool_only_when_enabled() {
-        let _g = _lock_env();
-        std::env::remove_var("OKX_API_KEY");
-        assert!(!is_okx_gated_tool("recommend_verified_tool"));
-        assert!(!is_okx_gated_tool("gap_audit"));
-
-        std::env::set_var("OKX_API_KEY", "test-key");
-        std::env::set_var("OKX_SECRET_KEY", "test-secret");
-        std::env::set_var("OKX_PASSPHRASE", "test-pass");
-        assert!(is_okx_gated_tool("recommend_verified_tool"));
-        assert!(is_okx_gated_tool("gap_audit"));
-        assert!(!is_okx_gated_tool("check_endpoint_health"));
-        assert!(!is_okx_gated_tool("search_tools"));
-        std::env::remove_var("OKX_API_KEY");
-        std::env::remove_var("OKX_SECRET_KEY");
-        std::env::remove_var("OKX_PASSPHRASE");
+    fn should_skip_cdp_only_when_middleware_active() {
+        assert!(!should_skip_cdp_for_okx(false, "recommend_verified_tool"));
+        assert!(!should_skip_cdp_for_okx(false, "gap_audit"));
+        assert!(should_skip_cdp_for_okx(true, "recommend_verified_tool"));
+        assert!(should_skip_cdp_for_okx(true, "gap_audit"));
+        assert!(!should_skip_cdp_for_okx(true, "check_endpoint_health"));
+        assert!(!should_skip_cdp_for_okx(true, "search_tools"));
     }
 
     #[test]
-    fn is_valid_evm_address_rejects_placeholder() {
+    fn is_valid_evm_address_rejects_invalid() {
         assert!(!is_valid_evm_address("0xYourWalletAddress"));
         assert!(!is_valid_evm_address(""));
         assert!(!is_valid_evm_address("0x123"));
+        assert!(!is_valid_evm_address(
+            "0x1234567890abcdef1234567890abcdef123456789"
+        ));
+        assert!(!is_valid_evm_address(
+            "0x1234567890abcdef1234567890abcdef1234567g"
+        ));
         assert!(is_valid_evm_address(
             "0x1234567890abcdef1234567890abcdef12345678"
+        ));
+        assert!(is_valid_evm_address(
+            "0xAbCdEf1234567890abcdef1234567890abcdef12"
         ));
     }
 }

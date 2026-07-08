@@ -25,6 +25,8 @@ pub use config::{Config, CANONICAL_DOMAIN, MCP_ENDPOINT_CMD, SITE_ORIGIN};
 pub struct AppState {
     pub pool: sqlx::PgPool,
     pub config: Config,
+    /// True only when OKX x402 middleware is applied with non-empty route config.
+    pub okx_premium_gate_active: bool,
 }
 
 #[cfg(feature = "ssr")]
@@ -134,7 +136,36 @@ pub async fn build_app(pool: sqlx::PgPool, config: Config) -> axum::Router {
     };
 
     let siwx_domain = config.siwx_domain.clone();
-    let state = AppState { pool, config };
+
+    // OKX init before AppState — handlers must know whether middleware is truly active.
+    let okx_server = match tokio::time::timeout(
+        std::time::Duration::from_secs(5),
+        crate::server::okx_payment::init_okx_server(),
+    )
+    .await
+    {
+        Ok(Some(server)) => Some(server),
+        Ok(None) => None,
+        Err(_) => {
+            tracing::warn!(
+                "OKX facilitator init timed out (5s) — A2MCP disabled, CDP routes remain active"
+            );
+            None
+        }
+    };
+    let okx_routes = crate::server::okx_payment::build_okx_routes();
+    let okx_premium_gate_active = okx_server.is_some() && !okx_routes.is_empty();
+    if okx_server.is_some() && okx_routes.is_empty() {
+        tracing::warn!(
+            "OKX credentials set but pay-to routes are empty — OKX A2MCP middleware skipped"
+        );
+    }
+
+    let state = AppState {
+        pool,
+        config,
+        okx_premium_gate_active,
+    };
 
     let allowed_origins = cors_allowed_origins(&siwx_domain);
     let cors = CorsLayer::new()
@@ -345,26 +376,6 @@ pub async fn build_app(pool: sqlx::PgPool, config: Config) -> axum::Router {
 
     let api_v2_routes = crate::server::api_v2::router(state.clone());
 
-    // OKX Agent Payments Protocol — A2MCP middleware on premium endpoints.
-    // Initializes only when OKX_API_KEY/SECRET/PASSPHRASE are set; otherwise
-    // gracefully skipped (existing CDP premium routes remain independent).
-    // Timeout: 5s to avoid blocking server startup if OKX facilitator is slow.
-    let okx_server = match tokio::time::timeout(
-        std::time::Duration::from_secs(5),
-        crate::server::okx_payment::init_okx_server(),
-    )
-    .await
-    {
-        Ok(Some(server)) => Some(server),
-        Ok(None) => None,
-        Err(_) => {
-            tracing::warn!(
-                "OKX facilitator init timed out (5s) — A2MCP disabled, CDP routes remain active"
-            );
-            None
-        }
-    };
-
     let app = Router::new()
         .merge(auth_routes)
         .merge(mcp_routes)
@@ -372,10 +383,10 @@ pub async fn build_app(pool: sqlx::PgPool, config: Config) -> axum::Router {
         .merge(api_v2_routes)
         .merge(operator_routes);
 
-    let app = if let Some(server) = okx_server {
+    let app = if okx_premium_gate_active {
+        let server = okx_server.expect("okx_premium_gate_active implies okx_server");
         tracing::info!("Applying OKX x402 payment middleware to premium A2MCP routes");
-        let routes = crate::server::okx_payment::build_okx_routes();
-        app.layer(x402_axum::payment_middleware(routes, server))
+        app.layer(x402_axum::payment_middleware(okx_routes, server))
     } else {
         app
     };
