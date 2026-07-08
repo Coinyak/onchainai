@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # OKX AI Agent Marketplace — single bundled A2MCP ASP register / re-submit (W6).
 #
-# One x402 service covers all MCP tools on POST /mcp ($0.1 USDT/call, OKX Broker).
+# One A2MCP service on POST /mcp. Listing copy is value-first (trust/install-risk);
+# fee is only the structured fee field (FEE=0.1 USDT0 / tools/call, OKX Broker).
+# Canonical text must stay in sync with docs/listings/directory-forms.md §OKX.
 #
 # Prerequisites:
 #   1. onchainos CLI: curl -sSL https://raw.githubusercontent.com/okx/onchainos-skills/main/install.sh | sh
@@ -39,14 +41,18 @@ if [[ ! -f "${AVATAR}" ]]; then
 fi
 
 NAME="OnchainAI"
-DESCRIPTION="Curated crypto tool intelligence for AI agents — search, compare, and vet MCP, CLI, SDK, API, and x402 services with trust scoring, install-risk analysis, live endpoint probes, and verified recommendations."
+# Value-first — fee lives in structured fee field ($0.1), not the headline.
+DESCRIPTION="Find, compare, and vet crypto MCP/CLI/SDK/API tools with trust scores and install-risk before your agent installs anything."
 ENDPOINT="https://www.onchain-ai.xyz/mcp"
 FEE="0.1"
 LANG="${OKX_ASP_LANG:-en-US}"
 AGENT_ID="${OKX_ASP_AGENT_ID:-4609}"
 
 SERVICE_NAME="OnchainAI MCP"
-SERVICE_DESCRIPTION=$'Full-stack agent toolkit: ranked tool search, trust-aware compare, install safety guides, x402 market analytics, on-demand endpoint health probes, toolkit export, verified picks, and catalog gap analysis — one endpoint, pay-per-call.\n1. POST /mcp JSON-RPC tools/call with tool name and arguments (e.g. search_tools, compare_tools, check_endpoint_health)'
+# ≤500 chars. No URLs (OKX D6). Two lines (OKX D1): capability summary + what caller provides.
+# Value-first; fee is only in structured fee field.
+SERVICE_DESCRIPTION=$'Crypto tool intelligence for AI agents: ranked search, trust and install-risk signals, side-by-side compare, install guides, x402 metadata, live endpoint probes, verified picks, and gap audits — so agents vet tools before they install or pay third parties. Maintained catalog, not a raw link dump.
+Provide a JSON-RPC tools/call body (tool name plus arguments). If payment is required, settle the challenge and retry with a payment-signature header.'
 
 # Single bundled A2MCP SKU for validate-listing / create.
 SERVICE_JSON="$(python3 - <<PY

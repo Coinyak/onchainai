@@ -86,75 +86,72 @@ Index appears after CDP Facilitator **settle** on a paid route with Bazaar disco
 
 ## OKX AI Agent Marketplace — https://okx.ai/agents
 
-> Registration is wallet-login SPA only (no curl). **W7 resolved 2026-07-08 (Path A):** OKX Agent Payments Protocol uses OKX Broker facilitator on X Layer (eip155:196) with USDT0. Handler-level OKX gate implemented (`require_okx_payment`) for `/mcp` JSON-RPC and REST endpoints. Single price $0.1/call for all premium tools.
+> **ASP #4609** · Path A A2MCP · re-submit via `./scripts/register-okx-asp.sh` (Agentic Wallet login required).
 >
-> **Rejection (ASP #4609, 2026-07-08):** "A2MCP service has not been integrated with the OKX Agent Payments Protocol standard." Root cause: prod used CDP/Base USDC, not OKX Broker/X Layer USDT0. Fix: implemented OKX handler-level gate + Railway env sync.
+> **Copy policy:** public listing text is **value-first** (outcome: vet tools before install). Fee lives in the structured fee field only — do not lead marketing copy with `$0.1`. Do not claim free discovery on this SKU: when OKX gate is on, every MCP `tools/call` is metered.
 >
-> **Rejection [T2] (2026-07-08/09):** "A2MCP service is missing a valid public HTTPS endpoint — provide one." Action: set A2MCP service URL to **`https://www.onchain-ai.xyz/mcp`** in the agent listing form and resubmit. Code also pins 402 `resource.url` to the public origin (never Railway `*.up.railway.app`).
+> **History:** Rejected 2026-07-08 (protocol: CDP/Base vs OKX Broker/X Layer USDT0) → fixed. Rejected [T2] (missing public HTTPS endpoint) → endpoint `https://www.onchain-ai.xyz/mcp`; 402 `resource.url` pinned to public origin (PR #76).
 
-### A2MCP endpoint (T2 — required field)
+### Quick reference (do not confuse)
+
+| What | Value |
+|------|--------|
+| **OKX A2MCP endpoint field** | `https://www.onchain-ai.xyz/mcp` |
+| **Never list as endpoint** | `*.up.railway.app`, homepage-only, `http://`, localhost |
+| **402 `resource.url` (code)** | Same public origin via `SITE_ORIGIN` (`src/server/okx_payment.rs`, PR #76) |
+| **Listing copy source of truth** | `scripts/register-okx-asp.sh` (this doc must match) |
+| **Fee** | Structured field `0.1` only — not the marketing headline |
+| **Smoke** | `GET /mcp` → 200 · `initialize` → 200 · unpaid `tools/call` → **402** |
+| **False negative** | `onchainos agent x402-check` is often GET-only (“not 402”); ignore for pass/fail |
+
+### A2MCP endpoint (required)
 
 ```
 https://www.onchain-ai.xyz/mcp
 ```
 
-- Transport: streamable HTTP · `POST` JSON-RPC 2.0 · `GET` returns discovery JSON (200)
-- Do **not** use: homepage only, `http://`, localhost, or `*.up.railway.app`
-
-### Registration metadata (Path A — full A2MCP)
+- Transport: streamable HTTP · `POST` JSON-RPC 2.0 · `GET` discovery JSON 200
+- Do **not** use: homepage only, `http://`, localhost, `*.up.railway.app`
+- Note: `onchainos agent x402-check` may GET-only and report “not 402”; metering is on `POST tools/call`
+### Submitted listing copy (canonical — keep in sync with `scripts/register-okx-asp.sh`)
 
 | Field | Value |
 |-------|-------|
-| Agent name | OnchainAI — Crypto tool directory with trust probes, gap audits, and verified recommendations |
-| Provider | OnchainAI |
-| Service | OnchainAI Crypto Tool Directory (MCP + x402 premium) |
-| **A2MCP endpoint (T2)** | **`https://www.onchain-ai.xyz/mcp`** (POST JSON-RPC, streamable-http) |
-| Payment model | A2MCP / x402 (HTTP 402, OKX Agent Payments Protocol) |
-| Price | $0.1 USDT0 per call (single price for all premium tools) |
-| Network | X Layer (eip155:196) |
-| Asset | USDT0 — `0x779ded0c9e1022225f8e0630b35a9b54be713736` (6 decimals) |
-| Facilitator | OKX Broker (`https://web3.okx.com/api/v6/pay/x402`) |
-| Payout wallet | `0x2af05c1661da38a2919dc27b4c8b71cb91c30017` (X Layer) |
-| Premium tools | `check_endpoint_health` (Trust Probe), `export_toolkit` (Toolkit Export), `recommend_verified_tool` (Verified Recommendation), `gap_audit` (Catalog Gap Audit) — all $0.1/call |
-| Free tools (same endpoint) | `search_tools`, `get_tool_detail`, `get_install_guide`, `list_categories`, `get_dashboard_snapshot`, `compare_tools`, `get_price_history`, `get_x402_trends` |
-| Logo | OnchainAI official brand logo (uploaded at registration) |
-| Repo | https://github.com/Coinyak/onchainai |
-| Docs | https://www.onchain-ai.xyz/connect |
-| Registry cross-list | `io.github.Coinyak/onchainai` v0.2.0 (`server.json`) |
+| Agent ID | `4609` |
+| Name | `OnchainAI` |
+| Profile description | Find, compare, and vet crypto MCP/CLI/SDK/API tools with trust scores and install-risk before your agent installs anything. |
+| Service name | `OnchainAI MCP` |
+| Service type | `A2MCP` |
+| Service description | *(two lines, no URLs — OKX D1/D6)* see below |
+| Endpoint | `https://www.onchain-ai.xyz/mcp` |
+| Fee (structured field only) | `0.1` USDT0 per `tools/call` (flat SKU) |
+| Network / asset | X Layer (`eip155:196`) · USDT0 `0x779ded0c9e1022225f8e0630b35a9b54be713736` |
+| Facilitator | OKX Broker |
+| Pay-to | `0x2af05c1661da38a2919dc27b4c8b71cb91c30017` |
+| Logo | `public/brand/onchainai-icon-512.png` |
+| Repo / docs | https://github.com/Coinyak/onchainai · https://www.onchain-ai.xyz/connect |
 
-### English resubmit copy-paste (Agent conversation / listing form)
-
-Paste into the OKX agent listing / conversation interface when updating T2:
+**Service description (submitted):**
 
 ```
-Please update Agent "OnchainAI" A2MCP public HTTPS endpoint and resubmit.
-
-A2MCP service endpoint (public HTTPS):
-https://www.onchain-ai.xyz/mcp
-
-Transport: streamable HTTP (JSON-RPC 2.0 over POST /mcp)
-GET /mcp returns discovery metadata (200); POST /mcp tools/call returns HTTP 402
-with PAYMENT-REQUIRED when unpaid (OKX Agent Payments Protocol / x402 v2).
-
-Payment:
-- Model: A2MCP pay-per-call
-- Network: X Layer (eip155:196)
-- Asset: USDT0 (0x779ded0c9e1022225f8e0630b35a9b54be713736, 6 decimals)
-- Price: $0.1 USDT0 per call
-- Pay-to: 0x2af05c1661da38a2919dc27b4c8b71cb91c30017
-- Facilitator: OKX Broker (https://web3.okx.com)
-
-Smoke checks for reviewers:
-- GET  https://www.onchain-ai.xyz/mcp → 200 JSON (endpoint, tools[])
-- POST https://www.onchain-ai.xyz/mcp  method=initialize → 200 serverInfo.name=onchainai
-- POST https://www.onchain-ai.xyz/mcp  method=tools/call name=search_tools (no payment) → 402 + payment-required header (network eip155:196, asset USDT0)
-
-Website: https://www.onchain-ai.xyz
-Connect docs: https://www.onchain-ai.xyz/connect
-Repo: https://github.com/Coinyak/onchainai
+Crypto tool intelligence for AI agents: ranked search, trust and install-risk signals, side-by-side compare, install guides, x402 metadata, live endpoint probes, verified picks, and gap audits — so agents vet tools before they install or pay third parties. Maintained catalog, not a raw link dump.
+Provide a JSON-RPC tools/call body (tool name plus arguments). If payment is required, settle the challenge and retry with a payment-signature header.
 ```
 
-### Pre-resubmit proof checklist
+**Hooks (use in prose; not fee-led):**
+
+- Look up, compare, and probe crypto tools before your agent installs the wrong one.
+- Maintained catalog with trust/install-risk — not a raw link dump.
+
+### Operator notes (not public marketing)
+
+| Topic | Fact |
+|-------|------|
+| Metered | All MCP `tools/call` methods when OKX package is active (including `search_tools`, compare, probes, Agent Sync tools when linked) |
+| Unmetered | `GET /mcp` discovery; `initialize`; `tools/list`; website UI |
+| SKU shape | One flat fee field — no free/premium tool split on the OKX listing |
+| Resubmit | `OKX_ASP_AGENT_ID=4609 ./scripts/register-okx-asp.sh` |
+| Smoke | GET `/mcp` → 200; POST `initialize` → 200; unpaid POST `tools/call` → 402 + payment-required (X Layer USDT0) |
 
 ```bash
 # Discovery
@@ -168,12 +165,12 @@ curl -sS -X POST https://www.onchain-ai.xyz/mcp \
   -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"okx-review","version":"0.0.1"}}}'
 # expect 200 + serverInfo
 
-# Payment challenge (402)
+# Payment challenge (402) — this is the real A2MCP check, not GET-only x402-check
 curl -sS -D - -o /dev/null -X POST https://www.onchain-ai.xyz/mcp \
   -H "Content-Type: application/json" \
   -H "Accept: application/json, text/event-stream" \
   -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"search_tools","arguments":{"query":"uniswap"}}}'
-# expect HTTP/2 402 and payment-required header
+# expect 402 and payment-required header
 ```
 
 ### Railway env vars (set by `deploy-railway.sh`)
@@ -184,4 +181,4 @@ curl -sS -D - -o /dev/null -X POST https://www.onchain-ai.xyz/mcp \
 | `OKX_SECRET_KEY` | OKX platform secret key |
 | `OKX_PASSPHRASE` | OKX API passphrase |
 | `OKX_PAY_TO_ADDRESS` | X Layer payout address (`0x2af05c1661da38a2919dc27b4c8b71cb91c30017`) |
-| `OKX_PREMIUM_PRICE_USD` | Price per call (`$0.1`, defaults to $0.1 if unset) |
+| `OKX_PREMIUM_PRICE_USD` | Per-call fee string for app config (`$0.1`; defaults to `$0.1` if unset) — **not** listing marketing copy |
