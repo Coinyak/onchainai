@@ -1122,7 +1122,12 @@ mod tests {
     fn validate_comment_content_bounds() {
         assert!(validate_comment_content("hello").is_ok());
         assert!(validate_comment_content("").is_err());
+        assert!(validate_comment_content("   ").is_err());
+        assert!(validate_comment_content(&"x".repeat(2000)).is_ok());
         assert!(validate_comment_content(&"x".repeat(2001)).is_err());
+        // Multibyte scalars count as one character each (not UTF-8 bytes).
+        assert!(validate_comment_content(&"한".repeat(2000)).is_ok());
+        assert!(validate_comment_content(&"한".repeat(2001)).is_err());
     }
 
     #[test]

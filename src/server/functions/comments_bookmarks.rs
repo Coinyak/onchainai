@@ -60,10 +60,11 @@ inserted AS (
 SELECT EXISTS(SELECT 1 FROM inserted)
 "#;
 
-/// Validate comment body before insert.
+/// Validate comment body before insert (Unicode scalar count, not bytes).
 pub(crate) fn validate_comment_content(content: &str) -> Result<(), &'static str> {
     let trimmed = content.trim();
-    if trimmed.is_empty() || trimmed.len() > 2000 {
+    let chars = trimmed.chars().count();
+    if chars == 0 || chars > 2000 {
         return Err("comment must be 1–2000 characters");
     }
     Ok(())

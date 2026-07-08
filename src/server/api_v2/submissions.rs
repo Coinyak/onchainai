@@ -36,7 +36,7 @@ async fn submit_tool(
 
     let user = require_user_from(&state, &headers).await?;
     if let Err(limit) = check_user_rate_limit(user.id, UserRateLimitAction::SubmitTool) {
-        return Err(ApiError::BadRequest(limit.to_string()));
+        return Err(ApiError::TooManyRequests(limit.to_string()));
     }
 
     // x402 listings go through the probe-gated open-listing flow, and only when

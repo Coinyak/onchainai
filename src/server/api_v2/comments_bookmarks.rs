@@ -144,7 +144,7 @@ async fn create_comment(
 
     let user = require_user_from(&state, &headers).await?;
     if let Err(limit) = check_user_rate_limit(user.id, UserRateLimitAction::CreateComment) {
-        return Err(ApiError::BadRequest(limit.to_string()));
+        return Err(ApiError::TooManyRequests(limit.to_string()));
     }
 
     let tool_id = sqlx::query_scalar::<_, Uuid>(APPROVED_TOOL_ID_BY_SLUG_SQL)
@@ -246,7 +246,7 @@ async fn set_bookmark(
 ) -> Result<Json<bool>, ApiError> {
     let user = require_user_from(&state, &headers).await?;
     if let Err(limit) = check_user_rate_limit(user.id, UserRateLimitAction::ToggleBookmark) {
-        return Err(ApiError::BadRequest(limit.to_string()));
+        return Err(ApiError::TooManyRequests(limit.to_string()));
     }
 
     let tool_id = resolve_bookmark_tool_id(&state.pool, &slug)
@@ -282,7 +282,7 @@ async fn toggle_bookmark(
 ) -> Result<Json<bool>, ApiError> {
     let user = require_user_from(&state, &headers).await?;
     if let Err(limit) = check_user_rate_limit(user.id, UserRateLimitAction::ToggleBookmark) {
-        return Err(ApiError::BadRequest(limit.to_string()));
+        return Err(ApiError::TooManyRequests(limit.to_string()));
     }
 
     let tool_id = resolve_bookmark_tool_id(&state.pool, &slug)
