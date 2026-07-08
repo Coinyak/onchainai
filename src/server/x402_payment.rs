@@ -29,8 +29,9 @@ pub const DEFAULT_NETWORK: &str = "eip155:84532";
 pub const DEFAULT_PRICE_USD: &str = "$0.001";
 pub const DEFAULT_TIMEOUT_SECS: i32 = 300;
 
-/// USDC on Base Sepolia (testnet) and Base mainnet.
-const USDC_BASE_SEPOLIA: &str = "0x036CbD53842c542663c028720630235A916019A";
+/// USDC on Base Sepolia (testnet) and Base mainnet (Circle official contracts).
+/// Both must be 42-char `0x` + 40 hex addresses — truncated assets break EIP-712 extras.
+const USDC_BASE_SEPOLIA: &str = "0x036CbD53842c542663c028720630235A916019A7";
 const USDC_BASE_MAINNET: &str = "0x833589fCD6eDb6E08f4c7C32D4f71b54bDa02913";
 
 #[derive(Debug, Clone)]
@@ -550,6 +551,27 @@ mod tests {
         let extra = usdc_eip712_extra("eip155:8453", USDC_BASE_MAINNET).expect("extra");
         assert_eq!(extra["name"], "USD Coin");
         assert_eq!(extra["version"], "2");
+    }
+
+    #[test]
+    fn default_usdc_assets_are_valid_evm_addresses() {
+        assert_eq!(
+            USDC_BASE_SEPOLIA.len(),
+            42,
+            "Base Sepolia USDC must be 0x+40 hex"
+        );
+        assert_eq!(
+            USDC_BASE_MAINNET.len(),
+            42,
+            "Base mainnet USDC must be 0x+40 hex"
+        );
+        assert!(USDC_BASE_SEPOLIA.starts_with("0x"));
+        assert!(USDC_BASE_MAINNET.starts_with("0x"));
+        assert_eq!(default_usdc_asset("eip155:8453"), USDC_BASE_MAINNET);
+        assert_eq!(default_usdc_asset("eip155:84532"), USDC_BASE_SEPOLIA);
+        let sepolia_extra = usdc_eip712_extra("eip155:84532", USDC_BASE_SEPOLIA).expect("extra");
+        assert_eq!(sepolia_extra["name"], "USDC");
+        assert_eq!(sepolia_extra["version"], "2");
     }
 
     #[test]
