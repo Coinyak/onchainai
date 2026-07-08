@@ -114,6 +114,7 @@ async fn post_recommend_verified_tool(
     );
 
     // Axis-B premium gate before cache — avoid serving paid probe results without payment.
+    // Skip CDP handler-level gate when OKX middleware handles this route (prevents double-charge).
     let config = match load_mcp_premium_config(&state.pool).await {
         Ok(config) => config,
         Err(e) => {
@@ -124,7 +125,9 @@ async fn post_recommend_verified_tool(
                 .into_response()
         }
     };
-    if config.is_active() {
+    if config.is_active()
+        && !crate::server::okx_payment::is_okx_gated_tool("recommend_verified_tool")
+    {
         match require_axis_b_payment(&config, "recommend_verified_tool", &headers).await {
             Ok(_settlement) => {}
             Err(response) => return response,
@@ -219,7 +222,7 @@ async fn post_gap_audit(
                 .into_response()
         }
     };
-    if config.is_active() {
+    if config.is_active() && !crate::server::okx_payment::is_okx_gated_tool("gap_audit") {
         match require_axis_b_payment(&config, "gap_audit", &headers).await {
             Ok(_settlement) => {}
             Err(response) => return response,

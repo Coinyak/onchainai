@@ -56,6 +56,9 @@ ssr = [
     "dep:ed25519-dalek",
     "dep:tracing",
     "dep:tracing-subscriber",
+    "dep:okxweb3-app-x402-core",
+    "dep:okxweb3-app-x402-evm",
+    "dep:okxweb3-app-x402-axum",
 ]
 
 [profile.dev]
@@ -98,6 +101,11 @@ solana-sdk = { version = "2", optional = true }
 validator = { version = "0.18", features = ["derive"] }
 governor = { version = "0.6", features = ["dashmap"], optional = true }
 tower_governor = { version = "0.8.0", features = ["tracing"], optional = true }
+
+# OKX Agent Payments Protocol — A2MCP integration (X Layer)
+okxweb3-app-x402-core = { version = "0.3", optional = true }
+okxweb3-app-x402-evm = { version = "0.3", optional = true }
+okxweb3-app-x402-axum = { version = "0.3", optional = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
