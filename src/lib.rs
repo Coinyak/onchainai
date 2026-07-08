@@ -27,6 +27,10 @@ pub struct AppState {
     pub config: Config,
     /// True only when OKX x402 middleware is applied with non-empty route config.
     pub okx_premium_gate_active: bool,
+    /// Shared OKX facilitator client for handler-level x402 gates (MCP `/mcp`).
+    /// `None` when OKX credentials are not set; handlers skip the OKX gate and
+    /// fall through to the existing CDP/Base gate.
+    pub okx_client: Option<std::sync::Arc<x402_core::http::OkxHttpFacilitatorClient>>,
 }
 
 #[cfg(feature = "ssr")]
@@ -155,6 +159,11 @@ pub async fn build_app(pool: sqlx::PgPool, config: Config) -> axum::Router {
     };
     let okx_routes = crate::server::okx_payment::build_okx_routes();
     let okx_premium_gate_active = okx_server.is_some() && !okx_routes.is_empty();
+    let okx_client = if okx_premium_gate_active {
+        crate::server::okx_payment::create_okx_facilitator_client()
+    } else {
+        None
+    };
     if okx_server.is_some() && okx_routes.is_empty() {
         tracing::warn!(
             "OKX credentials set but pay-to routes are empty — OKX A2MCP middleware skipped"
@@ -165,6 +174,7 @@ pub async fn build_app(pool: sqlx::PgPool, config: Config) -> axum::Router {
         pool,
         config,
         okx_premium_gate_active,
+        okx_client,
     };
 
     let allowed_origins = cors_allowed_origins(&siwx_domain);

@@ -10,7 +10,7 @@ https://www.onchain-ai.xyz/mcp
 
 - Transport: **streamable HTTP** (JSON-RPC 2.0 over `POST /mcp`; `GET` returns `405 Allow: POST` by design)
 - Auth: none. Rate limited per IP.
-- Free tools: `search_tools`, `get_tool_detail`, `get_install_guide`, `list_categories`, `get_dashboard_snapshot`, `compare_tools`, `get_price_history`, `get_x402_trends` · Paid (x402 per call): `check_endpoint_health` ($0.001), `export_toolkit` ($0.01), `recommend_verified_tool` ($0.01), `gap_audit` ($0.05) · Linked account (Agent Sync): `save_to_toolkit`, `save_stack_to_blueprint`, `link_status`
+- Free tools: `search_tools`, `get_tool_detail`, `get_install_guide`, `list_categories`, `get_dashboard_snapshot`, `compare_tools`, `get_price_history`, `get_x402_trends` · Paid (x402 per call): `check_endpoint_health`, `export_toolkit`, `recommend_verified_tool`, `gap_audit` — $0.1/call each (OKX Broker X Layer USDT0 when OKX enabled; CDP/Base USDC fallback) · Linked account (Agent Sync): `save_to_toolkit`, `save_stack_to_blueprint`, `link_status`
 - This is the **only** official endpoint. Anything else claiming to be OnchainAI is not ours.
 
 ## Claude Code (CLI)
@@ -175,7 +175,7 @@ Copy-paste payloads: `docs/listings/directory-forms.md`.
 | awesome-crypto-mcp-servers | [hive-intel/awesome-crypto-mcp-servers#209](https://github.com/hive-intel/awesome-crypto-mcp-servers/pull/209) | Open |
 | Self catalog | [onchain-ai.xyz/tools/onchainai](https://www.onchain-ai.xyz/tools/onchainai) | Seeded (official) |
 | Smithery / mcp.so / PulseMCP / Glama | See `docs/listings/directory-forms.md` | Operator submit |
-| OKX AI Agent Marketplace | [okx.ai/agents](https://okx.ai/agents) — ASP #4609 | Submitted 2026-07-08 — Trust Probe $0.003 + Toolkit Export $0.01 USDT; review ~2 business days |
+| OKX AI Agent Marketplace | [okx.ai/agents](https://okx.ai/agents) — ASP #4609 | Rejected 2026-07-08 (A2MCP protocol mismatch). Path A integration in progress: OKX Broker facilitator + X Layer USDT0, $0.1/call single price for all premium tools |
 | x402 Bazaar (seller) | CDP Facilitator settle — no registration form | After `check_endpoint_health` prod settle |
 | Base Builder Code | [dashboard.base.org](https://dashboard.base.org) | Operator register app + domain |
 

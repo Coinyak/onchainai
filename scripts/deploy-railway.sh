@@ -169,6 +169,29 @@ sync_vars() {
   if [[ -n "${CDP_API_KEY_PRIVATE_KEY:-}" ]]; then
     vars+=("CDP_API_KEY_PRIVATE_KEY=${CDP_API_KEY_PRIVATE_KEY}")
   fi
+  # OKX Agent Payments Protocol (A2MCP) — X Layer USDT0, OKX Broker facilitator.
+  # Required for OKX AI Agent Marketplace listing. All 3 credentials must be set.
+  if [[ -n "${OKX_API_KEY:-}" ]]; then
+    vars+=("OKX_API_KEY=${OKX_API_KEY}")
+  fi
+  if [[ -n "${OKX_SECRET_KEY:-}" ]]; then
+    vars+=("OKX_SECRET_KEY=${OKX_SECRET_KEY}")
+  fi
+  if [[ -n "${OKX_PASSPHRASE:-}" ]]; then
+    vars+=("OKX_PASSPHRASE=${OKX_PASSPHRASE}")
+  fi
+  if [[ -n "${OKX_PAY_TO_ADDRESS:-}" ]]; then
+    vars+=("OKX_PAY_TO_ADDRESS=${OKX_PAY_TO_ADDRESS}")
+  fi
+  if [[ -n "${OKX_PREMIUM_PRICE_USD:-}" ]]; then
+    if [[ "${OKX_PREMIUM_PRICE_USD}" == *deploy-railway.sh* ]]; then
+      echo "WARNING: OKX_PREMIUM_PRICE_USD looks corrupted ('${OKX_PREMIUM_PRICE_USD}')" >&2
+      echo "  .env should use OKX_PREMIUM_PRICE_USD=\\\$0.1 (escaped dollar sign)" >&2
+      vars+=('OKX_PREMIUM_PRICE_USD=$0.1')
+    else
+      vars+=('OKX_PREMIUM_PRICE_USD='"${OKX_PREMIUM_PRICE_USD}")
+    fi
+  fi
   railway variable set -s "${SERVICE_NAME}" --skip-deploys "${vars[@]}"
 }
 
