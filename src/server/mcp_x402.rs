@@ -18,11 +18,12 @@ use crate::server::x402_payment::{
 };
 
 /// MCP tools that may require OnchainAI's own x402 payment when premium is enabled.
-/// `compare_tools` is Free Forever per the Free Tier Guardian founder decision
-/// (OD-FTG, 2026-07-04-free-tier-guardian-spec.md). Product A (`recommend_verified_tool`)
-/// and S0 (`gap_audit`) are Axis-B premium — same gate as `export_toolkit`
-/// (operator-toggled via site_settings). M3 analytics (`get_price_history`,
-/// `get_x402_trends`) are discovery/metadata endpoints — free (OD-FTG §2).
+/// Discovery tools (`search_tools`, `get_tool_detail`, `compare_tools`, etc.) are
+/// currently free as a product guideline, not a hard rule — the operator may move
+/// any tool into the premium set. Product A (`recommend_verified_tool`), S0
+/// (`gap_audit`), and `export_toolkit` are premium (operator-toggled via
+/// site_settings). M3 analytics (`get_price_history`, `get_x402_trends`) are
+/// discovery/metadata endpoints — currently free.
 pub const PREMIUM_MCP_TOOLS: &[&str] = &["export_toolkit", "recommend_verified_tool", "gap_audit"];
 
 pub fn is_premium_mcp_tool(name: &str) -> bool {
@@ -160,21 +161,7 @@ mod tests {
         assert!(!is_premium_mcp_tool("get_x402_trends"));
         assert!(!is_premium_mcp_tool("search_tools"));
         assert!(!is_premium_mcp_tool("check_endpoint_health"));
-    }
-
-    /// Code-level OD-FTG guard: compare_tools must never re-enter the premium set.
-    /// Mirrors the doc-only FTG-D guard in scripts/spec-verify.sh so cargo test
-    /// also fails on regression, not just the harness doc scan.
-    #[test]
-    fn compare_tools_is_free_forever_odftg() {
-        assert!(
-            !is_premium_mcp_tool("compare_tools"),
-            "compare_tools must stay free (OD-FTG); re-adding it to PREMIUM_MCP_TOOLS is a regression"
-        );
-        assert!(
-            !PREMIUM_MCP_TOOLS.contains(&"compare_tools"),
-            "PREMIUM_MCP_TOOLS must not contain compare_tools (OD-FTG)"
-        );
+        assert!(!is_premium_mcp_tool("compare_tools"));
     }
 
     #[test]

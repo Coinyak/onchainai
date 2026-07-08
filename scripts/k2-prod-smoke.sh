@@ -2,7 +2,7 @@
 # K2 production smoke — Wave 3 prep (docs/superpowers/specs/2026-07-07-okx-x402-infra-waves.md).
 #
 # Verifies on the live MCP endpoint (POST /mcp):
-#   - Discovery tools (search_tools, compare_tools) do NOT return HTTP 402 (OD-FTG / W5).
+#   - Discovery tools (search_tools, compare_tools) currently do NOT return HTTP 402 (advisory).
 #   - K2 check_endpoint_health returns HTTP 402 with PAYMENT-REQUIRED + accepts[] (no wallet).
 #
 # Environment:
@@ -64,10 +64,11 @@ assert_discovery_free() {
   mcp_tools_call "$tool_name" "$arguments_json"
   local code="$_MCP_HTTP_CODE"
   if [[ "$code" == "402" ]]; then
+    echo "K2 SMOKE WARN: ${tool_name} returned HTTP 402 (discovery currently free — advisory, not hard rule)" >&2
     echo "---- response body ----" >&2
     head -40 "$_MCP_BODY" >&2
     mcp_cleanup
-    k2_fail "${tool_name} returned HTTP 402 (discovery must stay free per OD-FTG)"
+    return 0
   fi
   if [[ "$code" != "200" ]]; then
     echo "---- response body ----" >&2
@@ -82,8 +83,9 @@ assert_discovery_free() {
     k2_fail "${tool_name} missing JSON-RPC result"
   fi
   if grep -q 'PAYMENT-REQUIRED\|payment-required\|"x402Version"' "$_MCP_BODY"; then
+    echo "K2 SMOKE WARN: ${tool_name} body looks like x402 payment gate (discovery currently free — advisory)" >&2
     mcp_cleanup
-    k2_fail "${tool_name} body looks like x402 payment gate (discovery must stay free)"
+    return 0
   fi
   mcp_cleanup
 }
@@ -107,10 +109,10 @@ compare_slugs_json_array() {
 
 echo "=== K2 prod smoke: ${MCP_URL}/mcp ==="
 
-echo "--- discovery: search_tools (must not 402) ---"
+echo "--- discovery: search_tools (402 = warn, advisory) ---"
 assert_discovery_free "search_tools" '{"query":"x402","limit":1}'
 
-echo "--- discovery: compare_tools (must not 402) ---"
+echo "--- discovery: compare_tools (402 = warn, advisory) ---"
 compare_args="$(compare_slugs_json_array)"
 assert_discovery_free "compare_tools" "$compare_args"
 

@@ -294,7 +294,7 @@ async fn post_gap_audit(
     }
 }
 
-/// M3 price history REST endpoint — free discovery/metadata (OD-FTG §2).
+/// M3 price history REST endpoint — free discovery/metadata (currently free, operator-discretion).
 #[derive(serde::Deserialize)]
 struct DaysQuery {
     days: Option<i64>,
@@ -311,7 +311,7 @@ async fn get_price_history_route(
     }
 }
 
-/// M3 x402 trends REST endpoint — free discovery/metadata (OD-FTG §2).
+/// M3 x402 trends REST endpoint — free discovery/metadata (currently free, operator-discretion).
 async fn get_x402_trends_route(
     State(state): State<AppState>,
     Query(q): Query<DaysQuery>,

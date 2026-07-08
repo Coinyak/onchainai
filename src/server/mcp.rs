@@ -568,12 +568,24 @@ async fn tools_call(
         Err(err) => return ToolsCallOutcome::Err(err),
     };
 
-    // OKX handler-level gate: when OKX is active, all premium tools (including
-    // check_endpoint_health) are gated through OKX Broker on X Layer USDT0.
-    // This covers `/mcp` JSON-RPC, which the route middleware cannot inspect.
-    let okx_gated = okx_premium_gate_active
-        && okx_client.is_some()
-        && crate::server::okx_payment::OKX_GATED_ROUTES.contains(&request.name.as_str());
+    // Cheap prechecks before any OKX settlement — never charge for unknown tools or
+    // auth-only calls that would fail after payment.
+    if !is_known_mcp_tool(&request.name) {
+        return ToolsCallOutcome::Err((-32601, format!("Unknown tool: {}", request.name)));
+    }
+    if requires_agent_auth(&request.name) && agent.is_none() {
+        return ToolsCallOutcome::Err((
+            -32001,
+            serde_json::to_string(&crate::server::agent_sync::link_required_payload())
+                .unwrap_or_else(|_| "link_required".into()),
+        ));
+    }
+
+    // OKX bundled package: when OKX is active, every /mcp tools/call is $0.1 USDT0
+    // via OKX Broker (discovery + premium). OKX marketplace lists one A2MCP SKU on
+    // this endpoint. Direct MCP on the same host also sees 402 until payment; REST
+    // discovery APIs remain separate and ungated.
+    let okx_gated = okx_premium_gate_active && okx_client.is_some();
 
     if okx_gated {
         let client = okx_client.expect("okx_gated implies okx_client is Some");
@@ -591,7 +603,8 @@ async fn tools_call(
         }
     } else if crate::server::mcp_x402::is_premium_mcp_tool(&request.name) {
         // CDP/Base fallback: operator-toggled x402 via site_settings.
-        // compare_tools is Free Forever (OD-FTG) and intentionally NOT in PREMIUM_MCP_TOOLS.
+        // Discovery tools (compare_tools, search_tools, etc.) are currently free —
+        // not in PREMIUM_MCP_TOOLS. Operator may move any tool to premium set.
         // Default disabled, so export_toolkit stays free until explicitly enabled.
         // Skipped when OKX is active for this tool (prevents double-charge).
         if !crate::server::okx_payment::should_skip_cdp_for_okx(
@@ -636,14 +649,53 @@ async fn tools_call(
     }
 }
 
-/// Human-readable description for each OKX-gated premium tool.
+fn is_known_mcp_tool(name: &str) -> bool {
+    matches!(
+        name,
+        "search_tools"
+            | "get_tool_detail"
+            | "get_install_guide"
+            | "list_categories"
+            | "get_dashboard_snapshot"
+            | "compare_tools"
+            | "get_price_history"
+            | "get_x402_trends"
+            | "check_endpoint_health"
+            | "export_toolkit"
+            | "recommend_verified_tool"
+            | "gap_audit"
+            | "save_to_toolkit"
+            | "save_stack_to_blueprint"
+            | "link_status"
+    )
+}
+
+fn requires_agent_auth(name: &str) -> bool {
+    matches!(
+        name,
+        "save_to_toolkit" | "save_stack_to_blueprint" | "link_status"
+    )
+}
+
+/// Human-readable description for each OKX-gated MCP tool (bundled package).
 fn tool_description_for_okx(name: &str) -> &'static str {
     match name {
+        "search_tools" => "search crypto tools by keyword, chain, category",
+        "get_tool_detail" => "detailed tool info with trust and install safety data",
+        "get_install_guide" => "install command and risk assessment for a tool",
+        "list_categories" => "list all tool categories in the directory",
+        "get_dashboard_snapshot" => "catalog overview: tool counts, x402 stats, chains",
+        "compare_tools" => "side-by-side comparison of 2-4 tools",
+        "get_price_history" => "x402 pricing history for a tool",
+        "get_x402_trends" => "x402 ecosystem trends and statistics",
         "check_endpoint_health" => "x402 endpoint liveness probe with 30-day uptime",
         "export_toolkit" => "export selected tools as a portable toolkit JSON",
         "recommend_verified_tool" => "AI-verified tool recommendation for a given intent",
         "gap_audit" => "catalog gap audit: find missing crypto tool categories",
-        _ => "OnchainAI premium MCP tool",
+        "save_to_toolkit" => "save a tool to your personal toolkit",
+        "save_stack_to_blueprint" => "save multiple tools to a blueprint",
+        "link_status" => "check agent sync connection status",
+        _ => "OnchainAI MCP tool",
     }
 }
 
@@ -909,7 +961,7 @@ async fn call_gap_audit(
     }
 }
 
-/// M3 get_price_history — free discovery/metadata (OD-FTG §2).
+/// M3 get_price_history — free discovery/metadata (currently free, operator-discretion).
 async fn call_get_price_history(
     pool: &PgPool,
     args: &Value,
@@ -934,7 +986,7 @@ async fn call_get_price_history(
     }
 }
 
-/// M3 get_x402_trends — free discovery/metadata (OD-FTG §2).
+/// M3 get_x402_trends — free discovery/metadata (currently free, operator-discretion).
 async fn call_get_x402_trends(
     pool: &PgPool,
     args: &Value,

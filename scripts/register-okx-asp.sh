@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-# OKX AI Agent Marketplace — A2MCP ASP register + activate (W6).
+# OKX AI Agent Marketplace — single bundled A2MCP ASP register / re-submit (W6).
+#
+# One x402 service covers all MCP tools on POST /mcp ($0.1 USDT/call, OKX Broker).
 #
 # Prerequisites:
 #   1. onchainos CLI: curl -sSL https://raw.githubusercontent.com/okx/onchainos-skills/main/install.sh | sh
@@ -7,11 +9,9 @@
 #        onchainos wallet login <email>
 #        onchainos wallet verify <OTP>
 #
-# Default: paid SKUs only (4 A2MCP services on POST /mcp).
-# Discovery tools stay free on the MCP endpoint but are not OKX-listed.
-#
 # Usage:
 #   ./scripts/register-okx-asp.sh
+#   OKX_ASP_AGENT_ID=4609 ./scripts/register-okx-asp.sh
 #   OKX_ASP_LANG=ko-KR ./scripts/register-okx-asp.sh
 set -euo pipefail
 
@@ -31,6 +31,7 @@ if [[ "${logged_in}" != "True" && "${logged_in}" != "true" ]]; then
   exit 1
 fi
 
+# Official OnchainAI brand mark (512×512 PNG for OKX agent avatar).
 AVATAR="${ROOT}/public/brand/onchainai-icon-512.png"
 if [[ ! -f "${AVATAR}" ]]; then
   echo "Avatar not found: ${AVATAR}" >&2
@@ -38,27 +39,35 @@ if [[ ! -f "${AVATAR}" ]]; then
 fi
 
 NAME="OnchainAI"
-DESCRIPTION="Crypto tool directory for AI agents — discover, compare, and vet MCP, CLI, SDK, API, and x402 tools with trust metadata."
+DESCRIPTION="Curated crypto tool intelligence for AI agents — search, compare, and vet MCP, CLI, SDK, API, and x402 services with trust scoring, install-risk analysis, live endpoint probes, and verified recommendations."
 ENDPOINT="https://www.onchain-ai.xyz/mcp"
+FEE="0.1"
 LANG="${OKX_ASP_LANG:-en-US}"
+AGENT_ID="${OKX_ASP_AGENT_ID:-4609}"
+
+SERVICE_NAME="OnchainAI MCP"
+SERVICE_DESCRIPTION=$'Full-stack agent toolkit: ranked tool search, trust-aware compare, install safety guides, x402 market analytics, on-demand endpoint health probes, toolkit export, verified picks, and catalog gap analysis — one endpoint, pay-per-call.\n1. POST /mcp JSON-RPC tools/call with tool name and arguments (e.g. search_tools, compare_tools, check_endpoint_health)'
+
+# Single bundled A2MCP SKU for validate-listing / create.
+SERVICE_JSON="$(python3 - <<PY
+import json
+print(json.dumps([{
+    "serviceName": "${SERVICE_NAME}",
+    "serviceDescription": """${SERVICE_DESCRIPTION}""",
+    "serviceType": "A2MCP",
+    "fee": "${FEE}",
+    "endpoint": "${ENDPOINT}",
+}]))
+PY
+)"
 
 echo "== pre-check (asp) =="
 precheck="$(onchainos agent pre-check --role asp)"
 echo "${precheck}"
-can_create="$(echo "${precheck}" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('data',{}).get('canCreate', d.get('canCreate', False)))" 2>/dev/null || echo false)"
-if [[ "${can_create}" != "True" && "${can_create}" != "true" ]]; then
-  consent_key="$(echo "${precheck}" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('data',{}).get('consent',{}).get('consentKey',''))" 2>/dev/null || true)"
-  if [[ -n "${consent_key}" ]]; then
-    echo "== accept marketplace terms (first-time wallet) =="
-    precheck="$(onchainos agent pre-check --role asp --consent-key "${consent_key}")"
-    echo "${precheck}"
-    can_create="$(echo "${precheck}" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('data',{}).get('canCreate', d.get('canCreate', False)))" 2>/dev/null || echo false)"
-  fi
-fi
-if [[ "${can_create}" != "True" && "${can_create}" != "true" ]]; then
-  echo "Cannot create ASP under this wallet (see pre-check above). Use update/activate on existing ASP or switch wallet." >&2
-  exit 1
-fi
+
+echo "== x402 endpoint check =="
+x402_check="$(onchainos agent x402-check --endpoint "${ENDPOINT}" 2>/dev/null || true)"
+echo "${x402_check}"
 
 echo "== upload avatar =="
 upload_out="$(onchainos agent upload --file "${AVATAR}")"
@@ -72,32 +81,78 @@ if [[ -z "${picture_url}" ]]; then
   exit 1
 fi
 
-SERVICE_JSON='[
-  {"serviceName":"Trust Probe Endpoint Health","serviceDescription":"On-demand x402 endpoint liveness check before calling third-party paid APIs.\n1. Tool slug from search_tools results","serviceType":"A2MCP","fee":"0.003","endpoint":"'"${ENDPOINT}"'"},
-  {"serviceName":"Agent Toolkit Export","serviceDescription":"Export approved crypto tools as JSON and markdown install kit for AI agents.\n1. Tool slugs (up to 25) or a function category id","serviceType":"A2MCP","fee":"0.01","endpoint":"'"${ENDPOINT}"'"},
-  {"serviceName":"Verified Tool Recommendation","serviceDescription":"Returns a single verified live x402 tool for a task intent. Probes top candidates on-demand for liveness and price honesty.\n1. Natural-language intent (required)\n2. Optional chain or function filter","serviceType":"A2MCP","fee":"0.01","endpoint":"'"${ENDPOINT}"'"},
-  {"serviceName":"Agent Gap Audit","serviceDescription":"Decomposes a task intent into subgoals and maps each to OnchainAI catalog tools, surfacing gaps where no tools exist.\n1. Natural-language task intent (required)","serviceType":"A2MCP","fee":"0.05","endpoint":"'"${ENDPOINT}"'"}
-]'
-
-echo "== validate-listing =="
+echo "== validate-listing (1 bundled SKU @ ${FEE} USDT) =="
 validate_out="$(onchainos agent validate-listing --role asp --name "${NAME}" --description "${DESCRIPTION}" --service "${SERVICE_JSON}")"
 echo "${validate_out}"
 pass="$(echo "${validate_out}" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('pass', False))" 2>/dev/null || echo false)"
 if [[ "${pass}" != "True" && "${pass}" != "true" ]]; then
-  echo "validate-listing failed — fix findings before create." >&2
+  echo "validate-listing failed — fix findings before submit." >&2
   exit 1
 fi
 
-echo "== create ASP =="
-create_out="$(onchainos agent create \
-  --role asp \
-  --name "${NAME}" \
-  --description "${DESCRIPTION}" \
-  --picture "${picture_url}" \
-  --service "${SERVICE_JSON}")"
-echo "${create_out}"
+if [[ -n "${AGENT_ID}" ]]; then
+  echo "== fetch existing services for ASP #${AGENT_ID} =="
+  service_list="$(onchainos agent service-list --agent-id "${AGENT_ID}" 2>/dev/null)" || true
+  if [[ -z "${service_list}" ]] || ! echo "${service_list}" | python3 -c "import sys,json; json.load(sys.stdin)" 2>/dev/null; then
+    echo "service-list failed for ASP #${AGENT_ID}" >&2
+    exit 1
+  fi
+  echo "${service_list}" | python3 -c "
+import sys, json
+d = json.load(sys.stdin)
+items = d.get('data', [{}])[0].get('list', [])
+print(f'existing services: {len(items)}')
+for s in items:
+    print(f\"  delete id={s['id']} ({s['serviceName']})\")
+"
 
-agent_id="$(echo "${create_out}" | python3 -c "
+  UPDATE_SERVICE_JSON="$(printf '%s' "${service_list}" | python3 -c "
+import json, sys
+name, desc, fee, endpoint = sys.argv[1:5]
+items = json.load(sys.stdin).get('data', [{}])[0].get('list', [])
+ops = []
+for s in items:
+    ops.append({
+        'operation': 'delete',
+        'id': str(s['id']),
+        'serviceName': s['serviceName'],
+        'serviceDescription': s['serviceDescription'],
+        'serviceType': s['serviceType'],
+        'fee': s['fee'],
+        'endpoint': s['endpoint'],
+    })
+ops.append({
+    'operation': 'create',
+    'serviceName': name,
+    'serviceDescription': desc,
+    'serviceType': 'A2MCP',
+    'fee': fee,
+    'endpoint': endpoint,
+})
+print(json.dumps(ops))
+" "${SERVICE_NAME}" "${SERVICE_DESCRIPTION}" "${FEE}" "${ENDPOINT}")"
+
+  echo "== update ASP #${AGENT_ID} (replace with 1 bundled SKU) =="
+  if ! update_out="$(onchainos agent update \
+    --agent-id "${AGENT_ID}" \
+    --name "${NAME}" \
+    --description "${DESCRIPTION}" \
+    --picture "${picture_url}" \
+    --service "${UPDATE_SERVICE_JSON}" 2>&1)"; then
+    echo "${update_out}" >&2
+    exit 1
+  fi
+  echo "${update_out}"
+else
+  echo "== create ASP =="
+  create_out="$(onchainos agent create \
+    --role asp \
+    --name "${NAME}" \
+    --description "${DESCRIPTION}" \
+    --picture "${picture_url}" \
+    --service "${SERVICE_JSON}")"
+  echo "${create_out}"
+  AGENT_ID="$(echo "${create_out}" | python3 -c "
 import sys, json
 d = json.load(sys.stdin)
 data = d.get('data', d)
@@ -107,33 +162,17 @@ for key in ('newAgentId', 'agentId', 'id'):
         print(v)
         break
 " 2>/dev/null || true)"
-
-if [[ -z "${agent_id}" || "${agent_id}" == "None" ]]; then
-  echo "create succeeded but agent id missing — run: onchainos agent get-my-agents --role asp" >&2
-  agents="$(onchainos agent get-my-agents --role asp)"
-  echo "${agents}"
-  agent_id="$(echo "${agents}" | python3 -c "
-import sys, json
-d = json.load(sys.stdin)
-items = d.get('data', d)
-if isinstance(items, dict):
-    items = items.get('list', items.get('agents', []))
-if not items:
-    sys.exit(0)
-last = items[-1] if isinstance(items, list) else items
-print(last.get('agentId', last.get('id', '')))
-" 2>/dev/null || true)"
 fi
 
-if [[ -z "${agent_id}" ]]; then
+if [[ -z "${AGENT_ID}" || "${AGENT_ID}" == "None" ]]; then
   echo "Could not resolve agent id for activate." >&2
   exit 1
 fi
 
-echo "== activate #${agent_id} (review ~2 business days) =="
-activate_out="$(onchainos agent activate --agent-id "${agent_id}" --preferred-language "${LANG}")"
+echo "== activate #${AGENT_ID} (review ~2 business days) =="
+activate_out="$(onchainos agent activate --agent-id "${AGENT_ID}" --preferred-language "${LANG}")"
 echo "${activate_out}"
 
 echo ""
-echo "Done. ASP #${agent_id} submitted for OKX review."
+echo "Done. ASP #${AGENT_ID} — 1 bundled A2MCP SKU @ ${FEE} USDT/call on ${ENDPOINT}"
 echo "Check okx.ai/agents and Agentic Wallet email for approval status."
