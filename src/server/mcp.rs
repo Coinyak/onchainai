@@ -127,7 +127,7 @@ pub async fn handle_mcp(
                 state.okx_client.as_ref(),
                 state.okx_premium_gate_active,
             )
-                .await
+            .await
             {
                 ToolsCallOutcome::Ok(value) => {
                     (StatusCode::OK, Json(ok_response(id, value))).into_response()
@@ -618,8 +618,15 @@ async fn tools_call(
             }
         }
     }
-    match dispatch_tool_call(pool, &request.name, &request.args, agent, headers, okx_gated)
-        .await
+    match dispatch_tool_call(
+        pool,
+        &request.name,
+        &request.args,
+        agent,
+        headers,
+        okx_gated,
+    )
+    .await
     {
         Ok(DispatchOutcome::Text(content)) => {
             ToolsCallOutcome::Ok(tool_call_text_response(content))

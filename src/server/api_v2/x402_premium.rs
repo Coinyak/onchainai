@@ -51,18 +51,17 @@ async fn get_check_endpoint_health(
     // When OKX is active, use OKX handler-level gate instead of CDP.
     if state.okx_premium_gate_active {
         if let Some(okx_client) = &state.okx_client {
-            let settlement =
-                match crate::server::okx_payment::require_okx_payment(
-                    okx_client,
-                    "check_endpoint_health",
-                    "x402 endpoint liveness probe",
-                    &headers,
-                )
-                .await
-                {
-                    Ok(s) => s,
-                    Err(resp) => return resp,
-                };
+            let settlement = match crate::server::okx_payment::require_okx_payment(
+                okx_client,
+                "check_endpoint_health",
+                "x402 endpoint liveness probe",
+                &headers,
+            )
+            .await
+            {
+                Ok(s) => s,
+                Err(resp) => return resp,
+            };
 
             return match check_endpoint_health(&state.pool, &slug).await {
                 Ok(report) => {
