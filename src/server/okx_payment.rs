@@ -117,6 +117,25 @@ pub fn okx_price_display() -> String {
     okx_price()
 }
 
+/// Canonical public HTTPS URL for a path (never Railway internal host).
+///
+/// OKX A2MCP listing validators and payment `resource.url` must point at the
+/// public origin. When `resource` is unset, x402 middleware derives the URL from
+/// `Host` / `X-Forwarded-*`, which on Railway is `*.up.railway.app`.
+fn public_resource_url(path: &str) -> String {
+    let path = if path.starts_with('/') {
+        path.to_string()
+    } else {
+        format!("/{path}")
+    };
+    format!("{}{path}", crate::config::SITE_ORIGIN)
+}
+
+/// Canonical A2MCP MCP endpoint (public HTTPS).
+pub fn okx_a2mcp_endpoint() -> String {
+    public_resource_url("/mcp")
+}
+
 /// Build the routes config for OKX A2MCP premium endpoints.
 ///
 /// Each premium endpoint is mapped to "METHOD /path" with an `exact` payment
@@ -136,18 +155,21 @@ pub fn build_okx_routes() -> RoutesConfig {
 
     // Premium REST endpoints — route middleware handles these by exact path match.
     // MCP `/mcp` JSON-RPC is handled at the handler level (require_okx_payment).
+    // Pin `resource` to SITE_ORIGIN so 402 PAYMENT-REQUIRED never leaks Railway hosts.
     let premium_routes = [
         (
             "POST /api/v2/premium/recommend-verified-tool",
+            "/api/v2/premium/recommend-verified-tool",
             "AI agent recommends the best verified tool for a given intent",
         ),
         (
             "POST /api/v2/premium/gap-audit",
+            "/api/v2/premium/gap-audit",
             "Gap audit: find missing crypto tool categories for a given intent",
         ),
     ];
 
-    for (route_key, description) in premium_routes {
+    for (route_key, path, description) in premium_routes {
         routes.insert(
             route_key.to_string(),
             RoutePaymentConfig {
@@ -162,7 +184,7 @@ pub fn build_okx_routes() -> RoutesConfig {
                 description: description.to_string(),
                 mime_type: "application/json".to_string(),
                 sync_settle: Some(true),
-                resource: None,
+                resource: Some(public_resource_url(path)),
                 operation: None,
             },
         );
@@ -274,9 +296,13 @@ fn okx_payment_requirements() -> Option<PaymentRequirements> {
 }
 
 /// Build `ResourceInfo` for a specific tool call.
+///
+/// `url` is the public HTTPS A2MCP endpoint (not `mcp://` and not Railway).
+/// OKX marketplace T2 checks require a valid public HTTPS service URL; tool
+/// identity stays in `description`.
 fn okx_resource_info(tool_name: &str, description: &str) -> ResourceInfo {
     ResourceInfo {
-        url: format!("mcp://tool/{tool_name}"),
+        url: okx_a2mcp_endpoint(),
         description: Some(format!("OnchainAI MCP {tool_name}: {description}")),
         mime_type: Some("application/json".to_string()),
     }
@@ -591,7 +617,46 @@ mod tests {
         assert!(routes.contains_key("POST /api/v2/premium/gap-audit"));
         // check-endpoint-health uses {slug} — not OKX-gated (exact-string match can't handle params).
         assert!(!routes.contains_key("GET /api/v2/premium/check-endpoint-health/{slug}"));
+        // Pin public HTTPS resource URLs (no Railway internal host).
+        let gap = routes.get("POST /api/v2/premium/gap-audit").expect("gap-audit");
+        assert_eq!(
+            gap.resource.as_deref(),
+            Some("https://www.onchain-ai.xyz/api/v2/premium/gap-audit")
+        );
+        let rec = routes
+            .get("POST /api/v2/premium/recommend-verified-tool")
+            .expect("recommend");
+        assert_eq!(
+            rec.resource.as_deref(),
+            Some("https://www.onchain-ai.xyz/api/v2/premium/recommend-verified-tool")
+        );
         std::env::remove_var("OKX_PAY_TO_ADDRESS");
+    }
+
+    #[test]
+    fn okx_resource_info_uses_public_https_mcp_endpoint() {
+        let info = okx_resource_info("search_tools", "search crypto tools");
+        assert_eq!(info.url, "https://www.onchain-ai.xyz/mcp");
+        assert!(info
+            .description
+            .as_deref()
+            .unwrap_or("")
+            .contains("search_tools"));
+        assert!(!info.url.contains("railway"));
+        assert!(!info.url.starts_with("mcp://"));
+    }
+
+    #[test]
+    fn public_resource_url_and_a2mcp_endpoint() {
+        assert_eq!(
+            public_resource_url("/api/v2/premium/gap-audit"),
+            "https://www.onchain-ai.xyz/api/v2/premium/gap-audit"
+        );
+        assert_eq!(
+            public_resource_url("mcp"),
+            "https://www.onchain-ai.xyz/mcp"
+        );
+        assert_eq!(okx_a2mcp_endpoint(), "https://www.onchain-ai.xyz/mcp");
     }
 
     #[test]
