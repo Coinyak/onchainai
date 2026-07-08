@@ -167,12 +167,13 @@ pub async fn build_app(pool: sqlx::PgPool, config: Config) -> axum::Router {
         }
     };
     let okx_routes = crate::server::okx_payment::build_okx_routes();
-    let okx_premium_gate_active = okx_server.is_some() && !okx_routes.is_empty();
-    let okx_client = if okx_premium_gate_active {
+    let okx_client = if okx_server.is_some() && !okx_routes.is_empty() {
         crate::server::okx_payment::create_okx_facilitator_client()
     } else {
         None
     };
+    // Gate only when facilitator client is ready — avoids skipping CDP with no OKX gate.
+    let okx_premium_gate_active = okx_client.is_some();
     if okx_server.is_some() && okx_routes.is_empty() {
         tracing::warn!(
             "OKX credentials set but pay-to routes are empty — OKX A2MCP middleware skipped"

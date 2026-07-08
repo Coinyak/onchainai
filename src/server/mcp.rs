@@ -568,6 +568,19 @@ async fn tools_call(
         Err(err) => return ToolsCallOutcome::Err(err),
     };
 
+    // Cheap prechecks before any OKX settlement — never charge for unknown tools or
+    // auth-only calls that would fail after payment.
+    if !is_known_mcp_tool(&request.name) {
+        return ToolsCallOutcome::Err((-32601, format!("Unknown tool: {}", request.name)));
+    }
+    if requires_agent_auth(&request.name) && agent.is_none() {
+        return ToolsCallOutcome::Err((
+            -32001,
+            serde_json::to_string(&crate::server::agent_sync::link_required_payload())
+                .unwrap_or_else(|_| "link_required".into()),
+        ));
+    }
+
     // OKX bundled package: when OKX is active, every /mcp tools/call is $0.1 USDT0
     // via OKX Broker (discovery + premium). OKX marketplace lists one A2MCP SKU on
     // this endpoint. Direct MCP on the same host also sees 402 until payment; REST
@@ -634,6 +647,34 @@ async fn tools_call(
         Ok(DispatchOutcome::Http(response)) => ToolsCallOutcome::Http(response),
         Err((code, msg)) => ToolsCallOutcome::Err((code, msg)),
     }
+}
+
+fn is_known_mcp_tool(name: &str) -> bool {
+    matches!(
+        name,
+        "search_tools"
+            | "get_tool_detail"
+            | "get_install_guide"
+            | "list_categories"
+            | "get_dashboard_snapshot"
+            | "compare_tools"
+            | "get_price_history"
+            | "get_x402_trends"
+            | "check_endpoint_health"
+            | "export_toolkit"
+            | "recommend_verified_tool"
+            | "gap_audit"
+            | "save_to_toolkit"
+            | "save_stack_to_blueprint"
+            | "link_status"
+    )
+}
+
+fn requires_agent_auth(name: &str) -> bool {
+    matches!(
+        name,
+        "save_to_toolkit" | "save_stack_to_blueprint" | "link_status"
+    )
 }
 
 /// Human-readable description for each OKX-gated MCP tool (bundled package).

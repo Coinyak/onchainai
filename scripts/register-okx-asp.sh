@@ -92,7 +92,11 @@ fi
 
 if [[ -n "${AGENT_ID}" ]]; then
   echo "== fetch existing services for ASP #${AGENT_ID} =="
-  service_list="$(onchainos agent service-list --agent-id "${AGENT_ID}" 2>/dev/null)"
+  service_list="$(onchainos agent service-list --agent-id "${AGENT_ID}" 2>/dev/null)" || true
+  if [[ -z "${service_list}" ]] || ! echo "${service_list}" | python3 -c "import sys,json; json.load(sys.stdin)" 2>/dev/null; then
+    echo "service-list failed for ASP #${AGENT_ID}" >&2
+    exit 1
+  fi
   echo "${service_list}" | python3 -c "
 import sys, json
 d = json.load(sys.stdin)
