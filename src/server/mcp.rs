@@ -119,8 +119,15 @@ pub async fn handle_mcp(
                     .and_then(|v| v.to_str().ok()),
             )
             .await;
-            return match tools_call(&state.pool, rpc_req.params, agent.as_ref(), &parts.headers)
-                .await
+            return match tools_call(
+                &state.pool,
+                rpc_req.params,
+                agent.as_ref(),
+                &parts.headers,
+                state.okx_client.as_ref(),
+                state.okx_premium_gate_active,
+            )
+            .await
             {
                 ToolsCallOutcome::Ok(value) => {
                     (StatusCode::OK, Json(ok_response(id, value))).into_response()
@@ -553,35 +560,90 @@ async fn tools_call(
     params: Option<Value>,
     agent: Option<&crate::server::agent_sync::AgentAuth>,
     headers: &HeaderMap,
+    okx_client: Option<&std::sync::Arc<x402_core::http::OkxHttpFacilitatorClient>>,
+    okx_premium_gate_active: bool,
 ) -> ToolsCallOutcome {
     let request = match ToolCallRequest::parse(params) {
         Ok(req) => req,
         Err(err) => return ToolsCallOutcome::Err(err),
     };
-    // Axis B premium (export_toolkit only): operator-toggled x402 via site_settings.
-    // compare_tools is Free Forever (OD-FTG) and intentionally NOT in PREMIUM_MCP_TOOLS.
-    // Default disabled, so export_toolkit stays free until explicitly enabled.
-    // Same facilitator verify+settle gate as K2 check_endpoint_health.
-    if crate::server::mcp_x402::is_premium_mcp_tool(&request.name) {
-        let config = match crate::server::mcp_x402::load_mcp_premium_config(pool).await {
-            Ok(config) => config,
-            Err(e) => return ToolsCallOutcome::Err((-32603, format!("settings load failed: {e}"))),
-        };
-        if config.is_active() {
-            match crate::server::mcp_x402::require_axis_b_payment(&config, &request.name, headers)
+
+    // OKX handler-level gate: when OKX is active, all premium tools (including
+    // check_endpoint_health) are gated through OKX Broker on X Layer USDT0.
+    // This covers `/mcp` JSON-RPC, which the route middleware cannot inspect.
+    let okx_gated = okx_premium_gate_active
+        && okx_client.is_some()
+        && crate::server::okx_payment::OKX_GATED_ROUTES.contains(&request.name.as_str());
+
+    if okx_gated {
+        let client = okx_client.expect("okx_gated implies okx_client is Some");
+        let description = tool_description_for_okx(&request.name);
+        match crate::server::okx_payment::require_okx_payment(
+            client,
+            &request.name,
+            description,
+            headers,
+        )
+        .await
+        {
+            Ok(_settlement) => {}
+            Err(response) => return ToolsCallOutcome::Http(response),
+        }
+    } else if crate::server::mcp_x402::is_premium_mcp_tool(&request.name) {
+        // CDP/Base fallback: operator-toggled x402 via site_settings.
+        // compare_tools is Free Forever (OD-FTG) and intentionally NOT in PREMIUM_MCP_TOOLS.
+        // Default disabled, so export_toolkit stays free until explicitly enabled.
+        // Skipped when OKX is active for this tool (prevents double-charge).
+        if !crate::server::okx_payment::should_skip_cdp_for_okx(
+            okx_premium_gate_active,
+            &request.name,
+        ) {
+            let config = match crate::server::mcp_x402::load_mcp_premium_config(pool).await {
+                Ok(config) => config,
+                Err(e) => {
+                    return ToolsCallOutcome::Err((-32603, format!("settings load failed: {e}")))
+                }
+            };
+            if config.is_active() {
+                match crate::server::mcp_x402::require_axis_b_payment(
+                    &config,
+                    &request.name,
+                    headers,
+                )
                 .await
-            {
-                Ok(_settlement) => {}
-                Err(response) => return ToolsCallOutcome::Http(response),
+                {
+                    Ok(_settlement) => {}
+                    Err(response) => return ToolsCallOutcome::Http(response),
+                }
             }
         }
     }
-    match dispatch_tool_call(pool, &request.name, &request.args, agent, headers).await {
+    match dispatch_tool_call(
+        pool,
+        &request.name,
+        &request.args,
+        agent,
+        headers,
+        okx_gated,
+    )
+    .await
+    {
         Ok(DispatchOutcome::Text(content)) => {
             ToolsCallOutcome::Ok(tool_call_text_response(content))
         }
         Ok(DispatchOutcome::Http(response)) => ToolsCallOutcome::Http(response),
         Err((code, msg)) => ToolsCallOutcome::Err((code, msg)),
+    }
+}
+
+/// Human-readable description for each OKX-gated premium tool.
+fn tool_description_for_okx(name: &str) -> &'static str {
+    match name {
+        "check_endpoint_health" => "x402 endpoint liveness probe with 30-day uptime",
+        "export_toolkit" => "export selected tools as a portable toolkit JSON",
+        "recommend_verified_tool" => "AI-verified tool recommendation for a given intent",
+        "gap_audit" => "catalog gap audit: find missing crypto tool categories",
+        _ => "OnchainAI premium MCP tool",
     }
 }
 
@@ -613,6 +675,7 @@ async fn dispatch_tool_call(
     args: &Value,
     agent: Option<&crate::server::agent_sync::AgentAuth>,
     headers: &HeaderMap,
+    payment_already_gated: bool,
 ) -> Result<DispatchOutcome, (i32, String)> {
     match name {
         "search_tools" => call_search_tools(pool, args)
@@ -628,7 +691,9 @@ async fn dispatch_tool_call(
         "get_install_guide" => call_install_guide(pool, args)
             .await
             .map(DispatchOutcome::Text),
-        "check_endpoint_health" => call_check_endpoint_health(pool, args, headers).await,
+        "check_endpoint_health" => {
+            call_check_endpoint_health(pool, args, headers, payment_already_gated).await
+        }
         "compare_tools" => call_compare_tools(pool, args)
             .await
             .map(DispatchOutcome::Text),
@@ -654,32 +719,43 @@ async fn call_check_endpoint_health(
     pool: &PgPool,
     args: &Value,
     headers: &HeaderMap,
+    payment_already_gated: bool,
 ) -> Result<DispatchOutcome, (i32, String)> {
     use crate::server::x402_payment::{
-        facilitator_client, payment_success_response, require_payment, X402PaymentConfig,
+        facilitator_client, payment_success_response, require_payment, PaymentSettlement,
+        X402PaymentConfig,
     };
     use crate::server::x402_premium::{check_endpoint_health, PremiumDataError};
 
     let slug = required_str(args, "slug", "slug required")?;
-    let config = X402PaymentConfig::from_env();
-    let resource_url = format!("/api/v2/premium/check-endpoint-health/{slug}");
-    let requirements = config.requirement_for(
-        &resource_url,
-        "x402 endpoint liveness, 30-day uptime, and last probe timestamp",
-        "application/json",
-    );
-    let client = facilitator_client();
-    let settlement = match require_payment(
-        &client,
-        &config,
-        headers,
-        requirements,
-        Some(crate::server::x402_payment::CHECK_ENDPOINT_HEALTH_PAYMENT_HINT),
-    )
-    .await
-    {
-        Ok(s) => s,
-        Err(resp) => return Ok(DispatchOutcome::Http(resp)),
+
+    // Skip CDP gate when OKX handler-level gate already verified payment.
+    let settlement = if payment_already_gated {
+        PaymentSettlement {
+            payer: None,
+            transaction: None,
+        }
+    } else {
+        let config = X402PaymentConfig::from_env();
+        let resource_url = format!("/api/v2/premium/check-endpoint-health/{slug}");
+        let requirements = config.requirement_for(
+            &resource_url,
+            "x402 endpoint liveness, 30-day uptime, and last probe timestamp",
+            "application/json",
+        );
+        let client = facilitator_client();
+        match require_payment(
+            &client,
+            &config,
+            headers,
+            requirements,
+            Some(crate::server::x402_payment::CHECK_ENDPOINT_HEALTH_PAYMENT_HINT),
+        )
+        .await
+        {
+            Ok(s) => s,
+            Err(resp) => return Ok(DispatchOutcome::Http(resp)),
+        }
     };
 
     let report = match check_endpoint_health(pool, slug).await {
@@ -701,12 +777,17 @@ async fn call_check_endpoint_health(
         }
     };
 
+    let price_display = if payment_already_gated {
+        crate::server::okx_payment::okx_price_display()
+    } else {
+        X402PaymentConfig::from_env().price_display
+    };
     let body = json!({
         "data": report,
         "payment": {
             "payer": settlement.payer,
             "transaction": settlement.transaction,
-            "price": config.price_display,
+            "price": price_display,
         }
     });
     let response = payment_success_response(body.clone(), &settlement)

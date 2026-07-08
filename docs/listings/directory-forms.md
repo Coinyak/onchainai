@@ -86,16 +86,36 @@ Index appears after CDP Facilitator **settle** on a paid route with Bazaar disco
 
 ## OKX AI Agent Marketplace — https://okx.ai/agents
 
-> Registration is wallet-login SPA only (no curl). **W7 partial (2026-07-07):** public OKX Onchain OS Payments uses an own **Broker** (not CDP Facilitator); confirm `okx.ai/agents` A2MCP settle path after wallet login. If incompatible, submit **discovery-only** (free MCP tools) per Plan B — see `docs/superpowers/specs/2026-07-07-okx-x402-infra-waves.md` §3.4.
+> Registration is wallet-login SPA only (no curl). **W7 resolved 2026-07-08 (Path A):** OKX Agent Payments Protocol uses OKX Broker facilitator on X Layer (eip155:196) with USDT0. Handler-level OKX gate implemented (`require_okx_payment`) for `/mcp` JSON-RPC and REST endpoints. Single price $0.1/call for all premium tools.
+>
+> **Rejection (ASP #4609, 2026-07-08):** "A2MCP service has not been integrated with the OKX Agent Payments Protocol standard." Root cause: prod used CDP/Base USDC, not OKX Broker/X Layer USDT0. Fix: implemented OKX handler-level gate + Railway env sync, re-submitting with full A2MCP integration.
+
+### Registration metadata (Path A — full A2MCP)
 
 | Field | Value |
 |-------|-------|
+| Agent name | OnchainAI — Crypto tool directory with trust probes, gap audits, and verified recommendations |
 | Provider | OnchainAI |
-| Service | OnchainAI Trust Probe (x402 endpoint liveness) |
+| Service | OnchainAI Crypto Tool Directory (MCP + x402 premium) |
 | Endpoint | `https://www.onchain-ai.xyz/mcp` (POST JSON-RPC, streamable-http) |
-| Payment model | A2MCP / x402 (HTTP 402) |
-| Paid tools | `check_endpoint_health` (Trust Probe, $0.003 USDT on OKX / $0.001 USDC direct MCP) · `export_toolkit` (Toolkit Export, $0.01 USDT/USDC) · `recommend_verified_tool` (Verified Recommendation, $0.01 USDC direct MCP) · `gap_audit` (Catalog Gap Audit, $0.05 USDC direct MCP) |
-| Payout wallet | `0x2af05c1661da38a2919dc27b4c8b71cb91c30017` (Base USDC) — **same as** prod `X402_PAY_TO_ADDRESS` and `site_settings.default_referral_payout_address` |
-| Free tools (same endpoint, not OKX-listed) | `search_tools`, `get_tool_detail`, `get_install_guide`, `list_categories`, `get_dashboard_snapshot`, `compare_tools`, `get_price_history`, `get_x402_trends` |
+| Payment model | A2MCP / x402 (HTTP 402, OKX Agent Payments Protocol) |
+| Price | $0.1 USDT0 per call (single price for all premium tools) |
+| Network | X Layer (eip155:196) |
+| Asset | USDT0 — `0x779ded0c9e1022225f8e0630b35a9b54be713736` (6 decimals) |
+| Facilitator | OKX Broker (`https://web3.okx.com/api/v6/pay/x402`) |
+| Payout wallet | `0x2af05c1661da38a2919dc27b4c8b71cb91c30017` (X Layer) |
+| Premium tools | `check_endpoint_health` (Trust Probe), `export_toolkit` (Toolkit Export), `recommend_verified_tool` (Verified Recommendation), `gap_audit` (Catalog Gap Audit) — all $0.1/call |
+| Free tools (same endpoint) | `search_tools`, `get_tool_detail`, `get_install_guide`, `list_categories`, `get_dashboard_snapshot`, `compare_tools`, `get_price_history`, `get_x402_trends` |
+| Logo | OnchainAI official brand logo (uploaded at registration) |
 | Repo | https://github.com/Coinyak/onchainai |
 | Registry cross-list | `io.github.Coinyak/onchainai` v0.2.0 (`server.json`) |
+
+### Railway env vars (set by `deploy-railway.sh`)
+
+| Variable | Description |
+|----------|-------------|
+| `OKX_API_KEY` | OKX platform API key (HMAC auth) |
+| `OKX_SECRET_KEY` | OKX platform secret key |
+| `OKX_PASSPHRASE` | OKX API passphrase |
+| `OKX_PAY_TO_ADDRESS` | X Layer payout address (`0x2af05c1661da38a2919dc27b4c8b71cb91c30017`) |
+| `OKX_PREMIUM_PRICE_USD` | Price per call (`$0.1`, defaults to $0.1 if unset) |

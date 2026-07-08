@@ -48,6 +48,41 @@ async fn get_check_endpoint_health(
     Path(slug): Path<String>,
     headers: HeaderMap,
 ) -> Response {
+    // When OKX is active, use OKX handler-level gate instead of CDP.
+    if state.okx_premium_gate_active {
+        if let Some(okx_client) = &state.okx_client {
+            let settlement = match crate::server::okx_payment::require_okx_payment(
+                okx_client,
+                "check_endpoint_health",
+                "x402 endpoint liveness probe",
+                &headers,
+            )
+            .await
+            {
+                Ok(s) => s,
+                Err(resp) => return resp,
+            };
+
+            return match check_endpoint_health(&state.pool, &slug).await {
+                Ok(report) => {
+                    let body = json!({
+                        "data": report,
+                        "payment": {
+                            "payer": settlement.payer,
+                            "transaction": settlement.transaction,
+                            "price": crate::server::okx_payment::okx_price_display(),
+                        }
+                    });
+                    crate::server::okx_payment::okx_payment_success_response(body, &settlement)
+                }
+                Err(err) => {
+                    (err.status_code(), Json(json!({ "error": err.message() }))).into_response()
+                }
+            };
+        }
+    }
+
+    // CDP/Base fallback
     let config = X402PaymentConfig::from_env();
     let resource_url = format!("/api/v2/premium/check-endpoint-health/{slug}");
     let requirements = config.requirement_for(
