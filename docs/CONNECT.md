@@ -8,9 +8,10 @@ OnchainAI exposes one read-only, no-auth MCP endpoint:
 https://www.onchain-ai.xyz/mcp
 ```
 
-- Transport: **streamable HTTP** (JSON-RPC 2.0 over `POST /mcp`; `GET` returns `405 Allow: POST` by design)
+- Transport: **streamable HTTP** (JSON-RPC 2.0 over `POST /mcp`; `GET /mcp` returns discovery JSON 200)
 - Auth: none. Rate limited per IP.
-- Free tools: `search_tools`, `get_tool_detail`, `get_install_guide`, `list_categories`, `get_dashboard_snapshot`, `compare_tools`, `get_price_history`, `get_x402_trends` · Paid (x402 per call): `check_endpoint_health`, `export_toolkit`, `recommend_verified_tool`, `gap_audit` — $0.1/call each (OKX Broker X Layer USDT0 when OKX enabled; CDP/Base USDC fallback) · Linked account (Agent Sync): `save_to_toolkit`, `save_stack_to_blueprint`, `link_status`
+- **Billing (prod when OKX A2MCP is active):** every `tools/call` is pay-per-call on X Layer USDT0 via OKX Broker (flat fee field on the OKX listing). Unmetered: `GET /mcp`, `initialize`, `tools/list`. When OKX is off, CDP/Base fallback may meter only premium tools (`check_endpoint_health`, `export_toolkit`, `recommend_verified_tool`, `gap_audit`). Agent Sync (`save_to_toolkit`, …) needs a linked token **and**, when OKX is active, payment on `tools/call` (same flat SKU).
+- **OKX SKU exception:** free-tier guardian prefers free discovery tools; Path A intentionally meters **all** `tools/call` under OKX (single marketplace SKU). See `docs/listings/directory-forms.md` §Policy exception. Not a documentation error.
 - This is the **only** official endpoint. Anything else claiming to be OnchainAI is not ours.
 
 ## Claude Code (CLI)
@@ -130,7 +131,7 @@ With a valid Bearer token, `tools/list` also exposes:
 - `link_status` — check whether the client is linked
 
 Without a token, `save_to_toolkit` returns `link_required` with
-`link_url` pointing to `/connect#agent-sync`. Read-only tools stay public.
+`link_url` pointing to `/connect#agent-sync`. Read-only tools need no linked token; when OKX A2MCP is active they still require payment on `tools/call`.
 
 ### Transport note
 
@@ -175,7 +176,7 @@ Copy-paste payloads: `docs/listings/directory-forms.md`.
 | awesome-crypto-mcp-servers | [hive-intel/awesome-crypto-mcp-servers#209](https://github.com/hive-intel/awesome-crypto-mcp-servers/pull/209) | Open |
 | Self catalog | [onchain-ai.xyz/tools/onchainai](https://www.onchain-ai.xyz/tools/onchainai) | Seeded (official) |
 | Smithery / mcp.so / PulseMCP / Glama | See `docs/listings/directory-forms.md` | Operator submit |
-| OKX AI Agent Marketplace | [okx.ai/agents](https://okx.ai/agents) — ASP #4609 | Rejected 2026-07-08 (A2MCP protocol mismatch). Path A integration in progress: OKX Broker facilitator + X Layer USDT0, $0.1/call single price for all premium tools |
+| OKX AI Agent Marketplace | [okx.ai/agents](https://okx.ai/agents) — ASP #4609 | Listing under review (value-first copy + public `/mcp` endpoint). Operator: `docs/listings/directory-forms.md`, `scripts/register-okx-asp.sh` |
 | x402 Bazaar (seller) | CDP Facilitator settle — no registration form | After `check_endpoint_health` prod settle |
 | Base Builder Code | [dashboard.base.org](https://dashboard.base.org) | Operator register app + domain |
 
@@ -183,8 +184,8 @@ Copy-paste payloads: `docs/listings/directory-forms.md`.
 
 | Symptom | Explanation |
 |---|---|
-| `405 Method Not Allowed` on GET | Expected — the endpoint is POST-only JSON-RPC. Point an MCP client at it, not a browser. |
+| Browser shows JSON on GET `/mcp` | Expected discovery payload. Tool calls use POST JSON-RPC from an MCP client. |
 | `429 Too Many Requests` | Per-IP rate limit. Back off and retry. |
 | Tool not found by slug | Slugs come from `search_tools` results — don't guess them. |
 | Client only supports stdio | Use the `mcp-remote` bridge above. |
-| `Connection closed` on `check_endpoint_health` | Expected on Claude Code/Cursor — HTTP 402 is not an MCP JSON-RPC result. Use free `get_tool_detail` (x402 flags) or REST `GET /api/v2/premium/check-endpoint-health/{slug}` with an x402 wallet client. |
+| `Connection closed` on `check_endpoint_health` | Expected on Claude Code/Cursor — HTTP 402 is not an MCP JSON-RPC result. **OKX on:** every MCP `tools/call` (including `get_tool_detail`) is metered until paid; use website UI / unmetered `tools/list` / `GET /mcp` discovery, or REST with an x402 wallet client. **OKX off (CDP fallback):** free `get_tool_detail` for x402 flags, or paid REST `GET /api/v2/premium/check-endpoint-health/{slug}`. |
