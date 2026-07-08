@@ -61,10 +61,21 @@ SELECT EXISTS(SELECT 1 FROM inserted)
 "#;
 
 /// Validate comment body before insert (Unicode scalar count, not bytes).
+///
+/// Caps the scalar walk at 2001 so oversized bodies (up to the request-body
+/// limit) do not force a full-string `chars().count()`. A cheap byte-length
+/// guard rejects inputs that cannot fit in 2000 UTF-8 scalars (max 4 bytes each).
 pub(crate) fn validate_comment_content(content: &str) -> Result<(), &'static str> {
     let trimmed = content.trim();
-    let chars = trimmed.chars().count();
-    if chars == 0 || chars > 2000 {
+    if trimmed.is_empty() {
+        return Err("comment must be 1–2000 characters");
+    }
+    // 2000 scalars × up to 4 UTF-8 bytes/scalar.
+    if trimmed.len() > 2000 * 4 {
+        return Err("comment must be 1–2000 characters");
+    }
+    let chars = trimmed.chars().take(2001).count();
+    if chars > 2000 {
         return Err("comment must be 1–2000 characters");
     }
     Ok(())

@@ -555,8 +555,16 @@ mod tests {
 
     #[test]
     fn default_usdc_assets_are_valid_evm_addresses() {
-        assert_eq!(USDC_BASE_SEPOLIA.len(), 42, "Base Sepolia USDC must be 0x+40 hex");
-        assert_eq!(USDC_BASE_MAINNET.len(), 42, "Base mainnet USDC must be 0x+40 hex");
+        assert_eq!(
+            USDC_BASE_SEPOLIA.len(),
+            42,
+            "Base Sepolia USDC must be 0x+40 hex"
+        );
+        assert_eq!(
+            USDC_BASE_MAINNET.len(),
+            42,
+            "Base mainnet USDC must be 0x+40 hex"
+        );
         assert!(USDC_BASE_SEPOLIA.starts_with("0x"));
         assert!(USDC_BASE_MAINNET.starts_with("0x"));
         assert_eq!(default_usdc_asset("eip155:8453"), USDC_BASE_MAINNET);

@@ -1128,6 +1128,10 @@ mod tests {
         // Multibyte scalars count as one character each (not UTF-8 bytes).
         assert!(validate_comment_content(&"한".repeat(2000)).is_ok());
         assert!(validate_comment_content(&"한".repeat(2001)).is_err());
+        // Byte-length guard: more than 2000*4 UTF-8 bytes cannot fit 2000 scalars.
+        assert!(validate_comment_content(&"x".repeat(8001)).is_err());
+        // Early-exit still rejects just-over-limit without requiring a full 8MB scan.
+        assert!(validate_comment_content(&"x".repeat(5000)).is_err());
     }
 
     #[test]
