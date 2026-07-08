@@ -435,7 +435,7 @@ mod tests {
 
     #[test]
     fn cache_set_and_get_roundtrip() {
-        let key = "test_intent|chain=|function=";
+        let key = "test_intent_roundtrip_unique|chain=|function=";
         let now = Utc::now();
         let response = ProductAResponse {
             verified_tool: None,
@@ -452,7 +452,7 @@ mod tests {
 
     #[test]
     fn cache_expires_after_60s() {
-        let key = "test_expire|chain=|function=";
+        let key = "test_expire_unique|chain=|function=";
         let now = Utc::now();
         let response = ProductAResponse {
             verified_tool: None,
