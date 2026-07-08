@@ -10,7 +10,7 @@ https://www.onchain-ai.xyz/mcp
 
 - Transport: **streamable HTTP** (JSON-RPC 2.0 over `POST /mcp`; `GET /mcp` returns discovery JSON 200)
 - Auth: none. Rate limited per IP.
-- **Billing (prod when OKX A2MCP is active):** every `tools/call` is pay-per-call on X Layer USDT0 via OKX Broker (flat fee field on the OKX listing). Unmetered: `GET /mcp`, `initialize`, `tools/list`. When OKX is off, CDP/Base fallback may meter only premium tools (`check_endpoint_health`, `export_toolkit`, `recommend_verified_tool`, `gap_audit`). Agent Sync (`save_to_toolkit`, …) needs a linked token.
+- **Billing (prod when OKX A2MCP is active):** every `tools/call` is pay-per-call on X Layer USDT0 via OKX Broker (flat fee field on the OKX listing). Unmetered: `GET /mcp`, `initialize`, `tools/list`. When OKX is off, CDP/Base fallback may meter only premium tools (`check_endpoint_health`, `export_toolkit`, `recommend_verified_tool`, `gap_audit`). Agent Sync (`save_to_toolkit`, …) needs a linked token **and**, when OKX is active, payment on `tools/call` (same flat SKU).
 - This is the **only** official endpoint. Anything else claiming to be OnchainAI is not ours.
 
 ## Claude Code (CLI)
@@ -130,7 +130,7 @@ With a valid Bearer token, `tools/list` also exposes:
 - `link_status` — check whether the client is linked
 
 Without a token, `save_to_toolkit` returns `link_required` with
-`link_url` pointing to `/connect#agent-sync`. Read-only tools stay public.
+`link_url` pointing to `/connect#agent-sync`. Read-only tools need no linked token; when OKX A2MCP is active they still require payment on `tools/call`.
 
 ### Transport note
 
@@ -187,4 +187,4 @@ Copy-paste payloads: `docs/listings/directory-forms.md`.
 | `429 Too Many Requests` | Per-IP rate limit. Back off and retry. |
 | Tool not found by slug | Slugs come from `search_tools` results — don't guess them. |
 | Client only supports stdio | Use the `mcp-remote` bridge above. |
-| `Connection closed` on `check_endpoint_health` | Expected on Claude Code/Cursor — HTTP 402 is not an MCP JSON-RPC result. Use free `get_tool_detail` (x402 flags) or REST `GET /api/v2/premium/check-endpoint-health/{slug}` with an x402 wallet client. |
+| `Connection closed` on `check_endpoint_health` | Expected on Claude Code/Cursor — HTTP 402 is not an MCP JSON-RPC result. **OKX on:** every MCP `tools/call` (including `get_tool_detail`) is metered until paid; use website UI / unmetered `tools/list` / `GET /mcp` discovery, or REST with an x402 wallet client. **OKX off (CDP fallback):** free `get_tool_detail` for x402 flags, or paid REST `GET /api/v2/premium/check-endpoint-health/{slug}`. |

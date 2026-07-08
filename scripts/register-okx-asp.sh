@@ -87,7 +87,7 @@ if [[ -z "${picture_url}" ]]; then
   exit 1
 fi
 
-echo "== validate-listing (1 bundled SKU @ ${FEE} USDT) =="
+echo "== validate-listing (1 bundled SKU @ ${FEE} USDT0) =="
 validate_out="$(onchainos agent validate-listing --role asp --name "${NAME}" --description "${DESCRIPTION}" --service "${SERVICE_JSON}")"
 echo "${validate_out}"
 pass="$(echo "${validate_out}" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('pass', False))" 2>/dev/null || echo false)"
@@ -180,5 +180,5 @@ activate_out="$(onchainos agent activate --agent-id "${AGENT_ID}" --preferred-la
 echo "${activate_out}"
 
 echo ""
-echo "Done. ASP #${AGENT_ID} — 1 bundled A2MCP SKU @ ${FEE} USDT/call on ${ENDPOINT}"
+echo "Done. ASP #${AGENT_ID} — 1 bundled A2MCP SKU @ ${FEE} USDT0/call on ${ENDPOINT}"
 echo "Check okx.ai/agents and Agentic Wallet email for approval status."
