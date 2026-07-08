@@ -10,7 +10,7 @@ https://www.onchain-ai.xyz/mcp
 
 - Transport: **streamable HTTP** (JSON-RPC 2.0 over `POST /mcp`; `GET` returns `405 Allow: POST` by design)
 - Auth: none. Rate limited per IP.
-- Free tools: `search_tools`, `get_tool_detail`, `get_install_guide`, `list_categories`, `get_dashboard_snapshot`, `compare_tools`, `export_toolkit` · Paid: `check_endpoint_health` (x402 per call) · Linked account (Agent Sync): `save_to_toolkit`, `save_stack_to_blueprint`, `link_status`
+- Free tools: `search_tools`, `get_tool_detail`, `get_install_guide`, `list_categories`, `get_dashboard_snapshot`, `compare_tools`, `get_price_history`, `get_x402_trends` · Paid (x402 per call): `check_endpoint_health` ($0.001), `export_toolkit` ($0.01), `recommend_verified_tool` ($0.01), `gap_audit` ($0.05) · Linked account (Agent Sync): `save_to_toolkit`, `save_stack_to_blueprint`, `link_status`
 - This is the **only** official endpoint. Anything else claiming to be OnchainAI is not ours.
 
 ## Claude Code (CLI)
