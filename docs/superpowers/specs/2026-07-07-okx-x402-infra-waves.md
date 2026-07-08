@@ -119,7 +119,7 @@ ASP #4609 거절 원인: 등록서에 4개 유료 SKU를 OKX Broker + X Layer US
 
 - **Plan B(비호환 시 fallback, §1 목표7):** 여전히 유효 — OKX env가 없으면 CDP/Base로 graceful degradation. 필요시 discovery-only로 전환 가능.
 - **FacilitatorProvider trait(아키텍처 해소 경로)** — CDP/OKX verify를 URL 주입형 멀티클라이언트 trait으로 분리. **프록시/커스터디 아님** — 단지 facilitator verify 엔드포인트를 설정 주입으로 전환. 비호환 판명 시 OKX 전용 client 구현체만 추가(결제 라우팅·자금 이동 없음). 별도 구현 스펙 필요.
-- **FacilitatorProvider trait(아키텍처 해소 경로, Path A 재검토 시)** — CDP/OKX verify를 URL 주입형 멀티클라이언트 trait으로 분리. **프록시/커스터디 아님** — 단지 facilitator verify 엔드포인트를 설정 주입으로 전환. W7 비호환 판명 확인 후, Path A 재검토 시 OKX 전용 client 구현체만 추가(결제 라우팅·자금 이동 없음). 별도 구현 스펙 필요. **현재는 Plan B로 우회, Path A는 W7 완전 해소 전까지 보류.**
+- **FacilitatorProvider trait(아키텍처 개선 경로, 향후)** — CDP/OKX verify를 URL 주입형 멀티클라이언트 trait으로 분리. **프록시/커스터디 아님** — 단지 facilitator verify 엔드포인트를 설정 주입으로 전환. 현재는 handler-level gate로 해결됨; trait 추상화는 두 facilitator를 더 깔끔하게 통합하는 리팩터링 후보.
 - **해소 조건**: OKX 로그인 후 dev docs 확인(오너 수동·§6) 또는 브라우저 세션으로 agent 팩트체크. **오너 30분 OKX dev docs 팩트체크를 Wave 1부터 병렬(등재 자체는 Wave 3)**.
 
 ### 3.5 문서 연동

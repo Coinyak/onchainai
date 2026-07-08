@@ -24,11 +24,11 @@ use serde_json::json;
 
 use x402_axum::{AcceptConfig, RoutePaymentConfig, RoutesConfig, X402ResourceServer};
 use x402_core::facilitator::FacilitatorClient;
-use x402_core::http::{
-    decode_payment_signature_header, encode_payment_required_header,
-};
 use x402_core::http::OkxHttpFacilitatorClient;
-use x402_core::types::{PaymentRequired, PaymentRequirements, ResourceInfo, SettleRequest, VerifyRequest};
+use x402_core::http::{decode_payment_signature_header, encode_payment_required_header};
+use x402_core::types::{
+    PaymentRequired, PaymentRequirements, ResourceInfo, SettleRequest, VerifyRequest,
+};
 use x402_evm::ExactEvmScheme;
 
 /// X Layer mainnet CAIP-2 identifier.
@@ -456,10 +456,7 @@ pub fn okx_payment_success_response(
 
     if let Ok(encoded) = encode_payment_response_header_from_json(&header_body) {
         if let Ok(hv) = HeaderValue::from_str(&encoded) {
-            headers.insert(
-                axum::http::HeaderName::from_static("payment-response"),
-                hv,
-            );
+            headers.insert(axum::http::HeaderName::from_static("payment-response"), hv);
         }
     }
 
