@@ -179,7 +179,7 @@ pub fn is_okx_enabled() -> bool {
     !api_key.is_empty() && !secret_key.is_empty() && !passphrase.is_empty()
 }
 
-/// All premium tools gated by OKX when active. When OKX is enabled, handler-level
+/// Premium tools gated by OKX when active. When OKX is enabled, handler-level
 /// CDP payment gates for these tools must be skipped to avoid double-charging.
 /// Includes both MCP-dispatched tools and REST check_endpoint_health.
 pub const OKX_GATED_ROUTES: &[&str] = &[
@@ -659,7 +659,6 @@ mod tests {
         assert!(OKX_GATED_ROUTES.contains(&"export_toolkit"));
         assert!(OKX_GATED_ROUTES.contains(&"recommend_verified_tool"));
         assert!(OKX_GATED_ROUTES.contains(&"gap_audit"));
-        // Free tools must not be in the gated set
         assert!(!OKX_GATED_ROUTES.contains(&"search_tools"));
         assert!(!OKX_GATED_ROUTES.contains(&"compare_tools"));
     }

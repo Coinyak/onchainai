@@ -145,7 +145,7 @@ function SettingsForm({ initial }: { initial: SiteSettings }) {
       <fieldset className="space-y-3 rounded-md border border-border p-4" data-testid="mcp-premium-settings">
         <legend className="text-body-sm font-medium px-1">MCP premium (Axis B x402)</legend>
         <p className="text-body-sm text-secondary">
-          Charge for export_toolkit via HTTP 402 on POST /mcp. compare_tools is Free Forever (OD-FTG) and is never charged. Discovery tools stay free.
+          Charge for export_toolkit via HTTP 402 on POST /mcp. Discovery tools (search, compare, etc.) are currently free — operator may move any tool to premium.
         </p>
         <label className="flex items-center gap-2 min-h-touch">
           <input

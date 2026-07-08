@@ -50,6 +50,7 @@ want() { # want ID -> 0 if selected (or no selection given)
 }
 ok()   { printf '  \033[32m[PASS]\033[0m %-10s %s\n' "$1" "$2"; P=$((P+1)); }
 no()   { printf '  \033[31m[FAIL]\033[0m %-10s %s\n' "$1" "$2"; F=$((F+1)); FAILED_IDS+=("$1"); }
+adv()  { printf '  \033[36m[ADV ]\033[0m %-10s %s\n' "$1" "$2"; P=$((P+1)); }
 man()  { printf '  \033[33m[MAN ]\033[0m %-10s %s\n' "$1" "$2"; M=$((M+1)); }
 skip() { printf '  \033[90m[SKIP]\033[0m %-10s %s\n' "$1" "$2"; S=$((S+1)); }
 
@@ -64,6 +65,16 @@ present() { local id="$1" d="$2" pat="$3"; shift 3; want "$id" || return
 absent() { local id="$1" d="$2" pat="$3"; shift 3; want "$id" || return
   for f in "$@"; do [ -e "$f" ] && grep -Eq -- "$pat" "$f" && { no "$id" "$d"; return; }; done
   ok "$id" "$d"
+}
+# advise_absent ID "desc" PATTERN FILE...  -> advisory: warn if found, never fail
+advise_absent() { local id="$1" d="$2" pat="$3"; shift 3; want "$id" || return
+  for f in "$@"; do
+    if [ -e "$f" ] && grep -Eq -- "$pat" "$f"; then
+      adv "$id" "$d (found — advisory only, operator may change premium set)"
+      return
+    fi
+  done
+  adv "$id" "$d"
 }
 exists() { local id="$1" d="$2" path="$3"; want "$id" || return
   [ -e "$path" ] && ok "$id" "$d" || no "$id" "$d ($path 없음)"; }
@@ -192,17 +203,16 @@ echo "[6] 트랙5 신뢰 카드"
 absent D7-icon "북마크 ☆ 글리프 제거(SVG화)" '☆' src/components/tool_card.rs
 present D7-trust "카드가 install_risk 시각화" 'install_risk' src/components/tool_card.rs frontend/components/tools/ToolCard.tsx
 
-echo "[7] Free Tier Guardian (OD-FTG 2026-07-04)"
+echo "[7] Free Tier Guardian (OD-FTG 2026-07-04) — advisory (currently free, operator-discretion)"
 exists FTG-C "FTG 정책 스펙" docs/superpowers/specs/2026-07-04-free-tier-guardian-spec.md
-present FTG-C2 "영구 무료 선언" '영구 무료' docs/superpowers/specs/2026-07-04-free-tier-guardian-spec.md
+present FTG-C2 "무료 정책 선언" '무료' docs/superpowers/specs/2026-07-04-free-tier-guardian-spec.md
 exists FTG-D-doc "x402 정본 스펙" docs/X402_OPEN_LISTING_SPEC.md
 ftg_compare_free FTG-D "compare paid wording absent (policy docs)" \
   docs/X402_OPEN_LISTING_SPEC.md \
   docs/superpowers/specs/2026-07-04-free-tier-guardian-spec.md
-# Code-level OD-FTG guard: the Rust premium set must not contain compare_tools.
-# (FTG-D above scans docs only; this catches the actual constant so the harness
-# fails without needing cargo test.)
-absent FTG-D2 "PREMIUM_MCP_TOOLS excludes compare_tools (code)" 'pub const PREMIUM_MCP_TOOLS.*&\[.*compare_tools' src/server/mcp_x402.rs
+# Advisory: compare_tools is currently NOT in PREMIUM_MCP_TOOLS, but this is a
+# product guideline, not a hard rule. Operator may move any tool to premium.
+advise_absent FTG-D2 "PREMIUM_MCP_TOOLS currently excludes compare_tools (advisory)" 'pub const PREMIUM_MCP_TOOLS.*&\[.*compare_tools' src/server/mcp_x402.rs
 absent FTG-A "MCP discovery 402 게이트 없음" 'paymentRequired|require_x402_payment|x402_gate' src/server/mcp.rs
 present FTG-E "README 무료 MCP 선언" 'free.*read-only|read-only.*free' README.md
 curl_has FTG-B "compare API 비인증 200" "$PROD_URL/api/v2/tools/compare?slugs=aave,uniswap" '\[|\{'

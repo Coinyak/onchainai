@@ -568,9 +568,9 @@ async fn tools_call(
         Err(err) => return ToolsCallOutcome::Err(err),
     };
 
-    // OKX handler-level gate: when OKX is active, all premium tools (including
-    // check_endpoint_health) are gated through OKX Broker on X Layer USDT0.
-    // This covers `/mcp` JSON-RPC, which the route middleware cannot inspect.
+    // OKX handler-level gate: when OKX is active, premium tools in OKX_GATED_ROUTES
+    // are gated through OKX Broker on X Layer USDT0. Discovery tools stay on the
+    // direct MCP path (currently free — operator may move any tool to premium).
     let okx_gated = okx_premium_gate_active
         && okx_client.is_some()
         && crate::server::okx_payment::OKX_GATED_ROUTES.contains(&request.name.as_str());
@@ -591,7 +591,8 @@ async fn tools_call(
         }
     } else if crate::server::mcp_x402::is_premium_mcp_tool(&request.name) {
         // CDP/Base fallback: operator-toggled x402 via site_settings.
-        // compare_tools is Free Forever (OD-FTG) and intentionally NOT in PREMIUM_MCP_TOOLS.
+        // Discovery tools (compare_tools, search_tools, etc.) are currently free —
+        // not in PREMIUM_MCP_TOOLS. Operator may move any tool to premium set.
         // Default disabled, so export_toolkit stays free until explicitly enabled.
         // Skipped when OKX is active for this tool (prevents double-charge).
         if !crate::server::okx_payment::should_skip_cdp_for_okx(
@@ -909,7 +910,7 @@ async fn call_gap_audit(
     }
 }
 
-/// M3 get_price_history — free discovery/metadata (OD-FTG §2).
+/// M3 get_price_history — free discovery/metadata (currently free, operator-discretion).
 async fn call_get_price_history(
     pool: &PgPool,
     args: &Value,
@@ -934,7 +935,7 @@ async fn call_get_price_history(
     }
 }
 
-/// M3 get_x402_trends — free discovery/metadata (OD-FTG §2).
+/// M3 get_x402_trends — free discovery/metadata (currently free, operator-discretion).
 async fn call_get_x402_trends(
     pool: &PgPool,
     args: &Value,

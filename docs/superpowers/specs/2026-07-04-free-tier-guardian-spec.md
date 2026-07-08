@@ -1,10 +1,10 @@
-# Free Tier Guardian — 영구 무료 티어 정책 스펙
+# Free Tier Guardian — 현재 무료 티어 정책 스펙 (운영자 재량)
 
 > Related: [[../../X402_OPEN_LISTING_SPEC]] | [[../../X402_REFERRAL_SPEC]] | [[2026-07-03-x402-activation-spec]] | [[../../UI_UX_IMPROVEMENT_SPEC]] Phase 2·5 | [[../../../AGENTS.md]] | [[../../../README.md]]
 >
-> Date: 2026-07-04  
-> Status: **Final — 창업자 결정(OD-FTG)**  
-> Scope: OnchainAI **자체 서비스**에서 영구 무료로 유지할 표면을 문서화하고, 웹·MCP·SEO `/x402` 허브·`compare_tools`에 대한 **회귀 방지 가드레일**을 정의한다.  
+> Date: 2026-07-04 (updated 2026-07-08)  
+> Status: **Advisory — 운영자 재량 (OD-FTG 완화)**  
+> Scope: OnchainAI 자체 서비스에서 현재 무료로 유지하는 표면을 문서화. **영구 무료가 아닌 운영자 재량** — 필요 시 유료화 가능. 회귀 방지 가드레일은 advisory로 전환.  
 > Evidence: `README.md`, `src/server/mcp.rs`, `src/server/api_v2/public_tools.rs`, `frontend/app/compare/`, `X402_OPEN_LISTING_SPEC` 정본 대조
 
 **본 문서는 구현 코드를 포함하지 않는다.** 정책·수용 기준·검증·금지 사항만 정의한다.
@@ -13,7 +13,7 @@
 
 ## 0. 세션 요약
 
-OnchainAI의 wedge는 **크립토 특화 × 큐레이션 × 신뢰/설치안전**이다. 에이전트·개발자가 *도구를 찾고 비교하고 설치 가이드를 받는* 핵심 발견 루프는 **영구 무료**로 유지한다. 수익화(K1 어트리뷰션, 미래 K3 스폰서 노출)는 **발견 루프 바깥** 또는 **제3자 x402 도구 호출**에만 적용한다.
+OnchainAI의 wedge는 **크립토 특화 × 큐레이션 × 신뢰/설치안전**이다. 에이전트·개발자가 *도구를 찾고 비교하고 설치 가이드를 받는* 핵심 발견 루프는 **현재 무료**로 유지한다 (운영자 재량, 영구 규칙 아님). 수익화(K1 어트리뷰션, 미래 K3 스폰서 노출, OKX A2MCP)는 발견 루프 바깥 또는 제3자 x402 도구 호출에 적용한다.
 
 | # | 정책 갭 | 스펙 ID | 심각도 |
 |---|---------|---------|--------|
@@ -23,7 +23,7 @@ OnchainAI의 wedge는 **크립토 특화 × 큐레이션 × 신뢰/설치안전*
 | 4 | SEO `/x402` 허브(미구현)가 유료 게이트·CSR 전용으로 출시될 위험 | FTG-4 | P1 |
 | 5 | OnchainAI MCP에 402 핸드셰이크가 들어갈 위험(K2 deferred와 충돌) | FTG-5 | P0 |
 
-**창업자 결정(OD-FTG, 2026-07-04)**: 아래 §2 목록은 **영구 무료(Free Forever)**. 향후 수익 실험은 §3 **명시적 유료 후보**만 대상으로 하며, §2 항목에 402·로그인 강제·프리미엄 플래그를 추가하는 PR은 **거부**한다.
+**창업자 결정(OD-FTG, 2026-07-04; 완화 2026-07-08)**: 아래 §2 목록은 **현재 무료(운영자 재량)** — 영구 규칙이 아님. 향후 수익 실험은 §3 **명시적 유료 후보** 또는 운영자 판단으로 §2 항목을 유료화할 수 있다. 회귀 방지 가드(FTG-D2 등)는 advisory.
 
 ---
 
@@ -37,7 +37,7 @@ OnchainAI의 wedge는 **크립토 특화 × 큐레이션 × 신뢰/설치안전*
 
 ---
 
-## 2. 영구 무료(Free Forever) — 창업자 확정 목록
+## 2. 현재 무료(운영자 재량) — 제품 가이드라인 목록
 
 > **정의**: 인증 불필요·결제 불필요·계정 불필요. IP/유저 **레이트리밋**은 허용(남용 방지 ≠ 유료화). Agent Sync Bearer 토큰은 **계정 연결**이지 결제가 아니다.
 
@@ -53,7 +53,7 @@ OnchainAI의 wedge는 **크립토 특화 × 큐레이션 × 신뢰/설치안전*
 
 ### 2.2 웹 (Next.js / Vercel)
 
-| 표면 | 경로·API | 영구 무료 범위 |
+| 표면 | 경로·API | 현재 무료 범위 |
 |------|----------|----------------|
 | 툴 브라우저 | `/tools`, `POST /api/v2/browser-data`, `GET /api/v2/tools/list` | 전 필터·미리보기·`compare_tools` 쿼리 파라미 |
 | 툴 상세 | `/tools/[slug]`, `GET /api/v2/tools/:slug` | SSR 메타·JSON-LD·OG·본문 요약 |
@@ -66,7 +66,7 @@ OnchainAI의 wedge는 **크립토 특화 × 큐레이션 × 신뢰/설치안전*
 
 ### 2.3 MCP (`POST /mcp`, Bearer 없음 = 공개 티어)
 
-| MCP tool | 영구 무료 범위 | 비고 |
+| MCP tool | 현재 무료 범위 | 비고 |
 |----------|----------------|------|
 | `search_tools` | query·category·chain·sort·limit·cursor | x402 툴 포함 검색 |
 | `get_tool_detail` | slug 1건 전체 공개 필드 | x402_price·검증 플래그 포함 |
@@ -87,8 +87,8 @@ OnchainAI의 wedge는 **크립토 특화 × 큐레이션 × 신뢰/설치안전*
 
 ### 2.5 REST 공개 API (`/api/v2/*`, 인증 없음)
 
-- `GET /api/v2/tools/compare` — **영구 무료** (`compare_tools` MCP와 필드·한도 동일).
-- `GET /api/v2/tools/search`, `GET /api/v2/tools/:slug`, `GET /api/v2/dashboard`, `GET /api/v2/categories`, `GET /api/v2/chains` — 영구 무료.
+- `GET /api/v2/tools/compare` — **현재 무료** (`compare_tools` MCP와 필드·한도 동일).
+- `GET /api/v2/tools/search`, `GET /api/v2/tools/:slug`, `GET /api/v2/dashboard`, `GET /api/v2/categories`, `GET /api/v2/chains` — 현재 무료.
 - 공개 응답은 기존처럼 `sanitize_tool_for_public_response` 적용(payout 주소 등 민감 필드 제거).
 
 ---
@@ -108,7 +108,7 @@ OnchainAI의 wedge는 **크립토 특화 × 큐레이션 × 신뢰/설치안전*
 
 ---
 
-## 4. SEO `/x402` 허브 스펙 (영구 무료 랜딩)
+## 4. SEO `/x402` 허브 스펙 (현재 무료 랜딩)
 
 ### 4.1 목적
 
@@ -143,7 +143,7 @@ OnchainAI의 wedge는 **크립토 특화 × 큐레이션 × 신뢰/설치안전*
 - **한도**: `MIN=2`, `MAX=4` (웹 `frontend/lib/compare.ts`와 동일).
 - **가시성**: `PUBLIC_TOOL_WHERE` 동일; 비공개 slug는 soft skip+메시지.
 - **인증**: 불필요.
-- **과금**: 없음(영구).
+- **과금**: 없음(현재 무료, 운영자 재량).
 
 ### 5.2 수용 기준
 
@@ -160,7 +160,7 @@ OnchainAI의 wedge는 **크립토 특화 × 큐레이션 × 신뢰/설치안전*
 
 | 구분 | OnchainAI (무료) | 제3자 x402 도구 (유료 가능) |
 |------|------------------|----------------------------|
-| 검색·상세·비교 | ✅ 영구 무료 | 카탈로그 엔트리로 무료 **발견** |
+| 검색·상세·비교 | ✅ 현재 무료 | 카탈로그 엔트리로 무료 **발견** |
 | x402_price·endpoint 메타 | ✅ 무료 노출 | 제공자가 설정 |
 | install_guide x402_notice | ✅ 무료 고지 | 호출 시 지갑 필요 안내 |
 | 실제 API 호출·USDC 결제 | ❌ OnchainAI 미제공 | 제공자 MCP/API에서 발생 |
@@ -190,7 +190,7 @@ OnchainAI의 wedge는 **크립토 특화 × 큐레이션 × 신뢰/설치안전*
 |----|------|-----------|
 | FTG-A | MCP 유료 키워드 부재 | `src/server/mcp.rs`에 `402`/`paymentRequired`/`x402_gate` 없음 |
 | FTG-B | compare API 공개 | `curl -s -o /dev/null -w '%{http_code}' '$PROD_URL/api/v2/tools/compare?slugs=aave,uniswap'` → `200` |
-| FTG-C | 정책 문서 존재 | `docs/superpowers/specs/2026-07-04-free-tier-guardian-spec.md`에 `영구 무료` |
+| FTG-C | 정책 문서 존재 | `docs/superpowers/specs/2026-07-04-free-tier-guardian-spec.md`에 무료 정책 선언 |
 | FTG-D | compare 유료 문구 제거 | `scripts/spec-verify.sh` `ftg_compare_free`: `compare_tools`/`/compare` 라인에 과금 키워드(`유료|paid|402|…`)가 있으나 `무료|폐기|채택하지` 등 부정·폐기 표기가 없으면 FAIL |
 | FTG-E | README 무료 선언 | `README.md`에 `free`+`read-only` |
 
@@ -209,7 +209,7 @@ OnchainAI의 wedge는 **크립토 특화 × 큐레이션 × 신뢰/설치안전*
 - OnchainAI 자체 discovery API에 x402 micropayment 도입(K2 compare/search 게이트).
 - `/x402`에서 제3자 facilitator·지갑 연결·결제 실행.
 - `compare_tools`·`/compare` 로그인 필수화.
-- Featured·스폰서(K3)가 quality gate·영구 무료 발견을 대체하는 것.
+- Featured·스폰서(K3)가 quality gate·현재 무료 발견을 대체하는 것.
 - Free tier 제거를 전제한「grace period 후 유료」플래그.
 
 ---
@@ -218,7 +218,8 @@ OnchainAI의 wedge는 **크립토 특화 × 큐레이션 × 신뢰/설치안전*
 
 | ID | 날짜 | 결정 |
 |----|------|------|
-| OD-FTG | 2026-07-04 | §2 **영구 무료** 목록 확정; `compare_tools`·`/x402` 허브·x402 카탈로그 발견 포함 |
+| OD-FTG | 2026-07-04 | §2 무료 목록 확정; `compare_tools`·`/x402` 허브·x402 카탈로그 발견 포함 |
+| OD-FTG-4 | 2026-07-08 | **완화**: §2를 영구 규칙이 아닌 **현재 무료(운영자 재량)**으로 전환; FTG-D2·k2-prod-smoke discovery 체크 advisory |
 | OD-FTG-2 | 2026-07-04 | §K2「compare_tools 유료」**폐기**; 수익 실험은 §3 후보만 |
 | OD-FTG-3 | 2026-07-04 | 레이트리밋은 유지; 남용 방지 ≠ paywall |
 
@@ -227,7 +228,7 @@ OnchainAI의 wedge는 **크립토 특화 × 큐레이션 × 신뢰/설치안전*
 ## 10. 완료 정의 (Definition of Done)
 
 - [ ] 본 스펙 `docs/INDEX.md` 등재.
-- [x] `X402_OPEN_LISTING_SPEC`·§2와 정합(compare 영구 무료).
+- [x] `X402_OPEN_LISTING_SPEC`·§2와 정합(compare 현재 무료).
 - [ ] `scripts/spec-verify.sh`에 FTG-A~E 추가(또는 `scripts/smoke-test.sh` 확장).
 - [ ] MCP `compare_tools` 착수 시 §5 계약·테스트 먼저.
 - [ ] `/x402` 허브 착수 시 §4 SSR·SEO 게이트 먼저.

@@ -1,7 +1,7 @@
 //! M3 analytics — price history and x402 trends from probe history data.
 //!
 //! Aggregates `x402_probe_history` into price timelines and ecosystem trends.
-//! Free discovery/metadata (OD-FTG §2). Spec: docs/MVP_DESIGN.md §11 (M3 roadmap).
+//! Free discovery/metadata (currently free, operator-discretion). Spec: docs/MVP_DESIGN.md §11 (M3 roadmap).
 
 use chrono::{DateTime, Utc};
 use serde::Serialize;
