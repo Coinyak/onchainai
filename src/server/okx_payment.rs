@@ -618,7 +618,9 @@ mod tests {
         // check-endpoint-health uses {slug} — not OKX-gated (exact-string match can't handle params).
         assert!(!routes.contains_key("GET /api/v2/premium/check-endpoint-health/{slug}"));
         // Pin public HTTPS resource URLs (no Railway internal host).
-        let gap = routes.get("POST /api/v2/premium/gap-audit").expect("gap-audit");
+        let gap = routes
+            .get("POST /api/v2/premium/gap-audit")
+            .expect("gap-audit");
         assert_eq!(
             gap.resource.as_deref(),
             Some("https://www.onchain-ai.xyz/api/v2/premium/gap-audit")
@@ -652,10 +654,7 @@ mod tests {
             public_resource_url("/api/v2/premium/gap-audit"),
             "https://www.onchain-ai.xyz/api/v2/premium/gap-audit"
         );
-        assert_eq!(
-            public_resource_url("mcp"),
-            "https://www.onchain-ai.xyz/mcp"
-        );
+        assert_eq!(public_resource_url("mcp"), "https://www.onchain-ai.xyz/mcp");
         assert_eq!(okx_a2mcp_endpoint(), "https://www.onchain-ai.xyz/mcp");
     }
 
