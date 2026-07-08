@@ -179,19 +179,30 @@ pub fn is_okx_enabled() -> bool {
     !api_key.is_empty() && !secret_key.is_empty() && !passphrase.is_empty()
 }
 
-/// Premium tools gated by OKX when active. When OKX is enabled, handler-level
-/// CDP payment gates for these tools must be skipped to avoid double-charging.
-/// Includes both MCP-dispatched tools and REST check_endpoint_health.
+/// All MCP tools in the OKX bundled A2MCP package ($0.1 USDT0/call on POST /mcp).
+/// When OKX env is active, handler-level gate applies to every tools/call — including
+/// discovery. CDP handler gates are skipped while OKX is active (no double-charge).
 pub const OKX_GATED_ROUTES: &[&str] = &[
+    "search_tools",
+    "get_tool_detail",
+    "get_install_guide",
+    "list_categories",
+    "get_dashboard_snapshot",
+    "compare_tools",
+    "get_price_history",
+    "get_x402_trends",
+    "check_endpoint_health",
+    "export_toolkit",
     "recommend_verified_tool",
     "gap_audit",
-    "export_toolkit",
-    "check_endpoint_health",
+    "save_to_toolkit",
+    "save_stack_to_blueprint",
+    "link_status",
 ];
 
-/// Skip handler-level CDP gate only when OKX middleware is active for this tool.
-pub fn should_skip_cdp_for_okx(okx_premium_gate_active: bool, tool_name: &str) -> bool {
-    okx_premium_gate_active && OKX_GATED_ROUTES.contains(&tool_name)
+/// Skip handler-level CDP gate when OKX bundled package is active.
+pub fn should_skip_cdp_for_okx(okx_premium_gate_active: bool, _tool_name: &str) -> bool {
+    okx_premium_gate_active
 }
 
 /// Shared OKX facilitator client (initialized once at startup, stored in AppState).
@@ -584,16 +595,12 @@ mod tests {
     }
 
     #[test]
-    fn should_skip_cdp_only_when_middleware_active() {
-        assert!(!should_skip_cdp_for_okx(false, "recommend_verified_tool"));
-        assert!(!should_skip_cdp_for_okx(false, "gap_audit"));
-        assert!(!should_skip_cdp_for_okx(false, "export_toolkit"));
+    fn should_skip_cdp_for_all_tools_when_okx_package_active() {
+        assert!(!should_skip_cdp_for_okx(false, "search_tools"));
         assert!(!should_skip_cdp_for_okx(false, "check_endpoint_health"));
-        assert!(should_skip_cdp_for_okx(true, "recommend_verified_tool"));
-        assert!(should_skip_cdp_for_okx(true, "gap_audit"));
-        assert!(should_skip_cdp_for_okx(true, "export_toolkit"));
+        assert!(should_skip_cdp_for_okx(true, "search_tools"));
+        assert!(should_skip_cdp_for_okx(true, "compare_tools"));
         assert!(should_skip_cdp_for_okx(true, "check_endpoint_health"));
-        assert!(!should_skip_cdp_for_okx(true, "search_tools"));
     }
 
     #[test]
@@ -654,12 +661,12 @@ mod tests {
     }
 
     #[test]
-    fn okx_gated_routes_includes_all_premium_tools() {
+    fn okx_gated_routes_includes_bundled_package_tools() {
+        assert!(OKX_GATED_ROUTES.contains(&"search_tools"));
+        assert!(OKX_GATED_ROUTES.contains(&"compare_tools"));
         assert!(OKX_GATED_ROUTES.contains(&"check_endpoint_health"));
         assert!(OKX_GATED_ROUTES.contains(&"export_toolkit"));
         assert!(OKX_GATED_ROUTES.contains(&"recommend_verified_tool"));
         assert!(OKX_GATED_ROUTES.contains(&"gap_audit"));
-        assert!(!OKX_GATED_ROUTES.contains(&"search_tools"));
-        assert!(!OKX_GATED_ROUTES.contains(&"compare_tools"));
     }
 }

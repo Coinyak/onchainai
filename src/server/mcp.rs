@@ -568,12 +568,11 @@ async fn tools_call(
         Err(err) => return ToolsCallOutcome::Err(err),
     };
 
-    // OKX handler-level gate: when OKX is active, premium tools in OKX_GATED_ROUTES
-    // are gated through OKX Broker on X Layer USDT0. Discovery tools stay on the
-    // direct MCP path (currently free — operator may move any tool to premium).
-    let okx_gated = okx_premium_gate_active
-        && okx_client.is_some()
-        && crate::server::okx_payment::OKX_GATED_ROUTES.contains(&request.name.as_str());
+    // OKX bundled package: when OKX is active, every /mcp tools/call is $0.1 USDT0
+    // via OKX Broker (discovery + premium). OKX marketplace lists one A2MCP SKU on
+    // this endpoint. Direct MCP on the same host also sees 402 until payment; REST
+    // discovery APIs remain separate and ungated.
+    let okx_gated = okx_premium_gate_active && okx_client.is_some();
 
     if okx_gated {
         let client = okx_client.expect("okx_gated implies okx_client is Some");
@@ -637,14 +636,25 @@ async fn tools_call(
     }
 }
 
-/// Human-readable description for each OKX-gated premium tool.
+/// Human-readable description for each OKX-gated MCP tool (bundled package).
 fn tool_description_for_okx(name: &str) -> &'static str {
     match name {
+        "search_tools" => "search crypto tools by keyword, chain, category",
+        "get_tool_detail" => "detailed tool info with trust and install safety data",
+        "get_install_guide" => "install command and risk assessment for a tool",
+        "list_categories" => "list all tool categories in the directory",
+        "get_dashboard_snapshot" => "catalog overview: tool counts, x402 stats, chains",
+        "compare_tools" => "side-by-side comparison of 2-4 tools",
+        "get_price_history" => "x402 pricing history for a tool",
+        "get_x402_trends" => "x402 ecosystem trends and statistics",
         "check_endpoint_health" => "x402 endpoint liveness probe with 30-day uptime",
         "export_toolkit" => "export selected tools as a portable toolkit JSON",
         "recommend_verified_tool" => "AI-verified tool recommendation for a given intent",
         "gap_audit" => "catalog gap audit: find missing crypto tool categories",
-        _ => "OnchainAI premium MCP tool",
+        "save_to_toolkit" => "save a tool to your personal toolkit",
+        "save_stack_to_blueprint" => "save multiple tools to a blueprint",
+        "link_status" => "check agent sync connection status",
+        _ => "OnchainAI MCP tool",
     }
 }
 
