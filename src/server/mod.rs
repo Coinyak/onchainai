@@ -20,6 +20,8 @@ pub mod mcp_search;
 #[cfg(feature = "ssr")]
 pub mod mcp_x402;
 #[cfg(feature = "ssr")]
+pub mod okx_payment;
+#[cfg(feature = "ssr")]
 pub mod operator_harness;
 #[cfg(feature = "ssr")]
 pub mod operator_review_transition;

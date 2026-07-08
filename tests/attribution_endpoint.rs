@@ -33,6 +33,8 @@ mod ssr {
 
     async fn test_pool_and_config() -> Result<(sqlx::PgPool, Config), String> {
         let _ = dotenvy::dotenv();
+        // Prevent live OKX network calls during integration tests.
+        std::env::remove_var("OKX_API_KEY");
         let database_url = std::env::var("SUPABASE_URL_TEST")
             .ok()
             .filter(|value| !value.trim().is_empty())
@@ -124,7 +126,7 @@ mod ssr {
                 return;
             }
         };
-        let app = build_app(pool, config);
+        let app = build_app(pool, config).await;
         let missing = format!("missing-attr-{}", Uuid::new_v4());
         let req = attribution_post(&missing, serde_json::json!({ "platform": "cursor" }), 7);
         let res = app.oneshot(req).await.expect("route attribution");
@@ -141,7 +143,7 @@ mod ssr {
             }
         };
         let (tool_id, slug) = insert_referral_test_tool(&pool).await;
-        let app = build_app(pool.clone(), config);
+        let app = build_app(pool.clone(), config).await;
         let req = attribution_post(&slug, serde_json::json!({ "platform": "bad platform" }), 8);
         let res = app.oneshot(req).await.expect("route attribution");
         assert_eq!(res.status(), StatusCode::BAD_REQUEST);
@@ -158,7 +160,7 @@ mod ssr {
             }
         };
         let (tool_id, slug) = insert_non_referral_test_tool(&pool).await;
-        let app = build_app(pool.clone(), config);
+        let app = build_app(pool.clone(), config).await;
         let req = attribution_post(
             &slug,
             serde_json::json!({ "platform": "cursor", "attribution_session": "sess-skip" }),
@@ -182,7 +184,7 @@ mod ssr {
             }
         };
         let (tool_id, slug) = insert_referral_test_tool(&pool).await;
-        let app = build_app(pool.clone(), config);
+        let app = build_app(pool.clone(), config).await;
         let session = format!("sess-dedup-{}", Uuid::new_v4());
         let body = serde_json::json!({
             "platform": "cursor",
@@ -222,7 +224,7 @@ mod ssr {
             }
         };
         let (tool_id, slug) = insert_referral_test_tool(&pool).await;
-        let app = build_app(pool.clone(), config);
+        let app = build_app(pool.clone(), config).await;
         let mut got_429 = false;
         for i in 0..65 {
             let session = format!("rate-{i}-{}", Uuid::new_v4());

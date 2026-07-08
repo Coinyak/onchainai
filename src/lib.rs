@@ -25,6 +25,8 @@ pub use config::{Config, CANONICAL_DOMAIN, MCP_ENDPOINT_CMD, SITE_ORIGIN};
 pub struct AppState {
     pub pool: sqlx::PgPool,
     pub config: Config,
+    /// True only when OKX x402 middleware is applied with non-empty route config.
+    pub okx_premium_gate_active: bool,
 }
 
 #[cfg(feature = "ssr")]
@@ -120,7 +122,7 @@ fn cors_allowed_origins(siwx_domain: &str) -> Vec<String> {
 
 /// Build the Axum application router (API-only; no Leptos SSR).
 #[cfg(feature = "ssr")]
-pub fn build_app(pool: sqlx::PgPool, config: Config) -> axum::Router {
+pub async fn build_app(pool: sqlx::PgPool, config: Config) -> axum::Router {
     use axum::Router;
     use tower::ServiceBuilder;
     use tower_governor::{governor::GovernorConfigBuilder, GovernorLayer};
@@ -134,7 +136,36 @@ pub fn build_app(pool: sqlx::PgPool, config: Config) -> axum::Router {
     };
 
     let siwx_domain = config.siwx_domain.clone();
-    let state = AppState { pool, config };
+
+    // OKX init before AppState — handlers must know whether middleware is truly active.
+    let okx_server = match tokio::time::timeout(
+        std::time::Duration::from_secs(5),
+        crate::server::okx_payment::init_okx_server(),
+    )
+    .await
+    {
+        Ok(Some(server)) => Some(server),
+        Ok(None) => None,
+        Err(_) => {
+            tracing::warn!(
+                "OKX facilitator init timed out (5s) — A2MCP disabled, CDP routes remain active"
+            );
+            None
+        }
+    };
+    let okx_routes = crate::server::okx_payment::build_okx_routes();
+    let okx_premium_gate_active = okx_server.is_some() && !okx_routes.is_empty();
+    if okx_server.is_some() && okx_routes.is_empty() {
+        tracing::warn!(
+            "OKX credentials set but pay-to routes are empty — OKX A2MCP middleware skipped"
+        );
+    }
+
+    let state = AppState {
+        pool,
+        config,
+        okx_premium_gate_active,
+    };
 
     let allowed_origins = cors_allowed_origins(&siwx_domain);
     let cors = CorsLayer::new()
@@ -345,13 +376,22 @@ pub fn build_app(pool: sqlx::PgPool, config: Config) -> axum::Router {
 
     let api_v2_routes = crate::server::api_v2::router(state.clone());
 
-    Router::new()
+    let app = Router::new()
         .merge(auth_routes)
         .merge(mcp_routes)
         .merge(static_routes)
         .merge(api_v2_routes)
-        .merge(operator_routes)
-        .layer(axum::middleware::from_fn(cache_control_headers))
+        .merge(operator_routes);
+
+    let app = if okx_premium_gate_active {
+        let server = okx_server.expect("okx_premium_gate_active implies okx_server");
+        tracing::info!("Applying OKX x402 payment middleware to premium A2MCP routes");
+        app.layer(x402_axum::payment_middleware(okx_routes, server))
+    } else {
+        app
+    };
+
+    app.layer(axum::middleware::from_fn(cache_control_headers))
         .layer(axum::middleware::from_fn(canonical_host_redirect))
         .layer(security_headers)
         .layer(cors)
@@ -451,8 +491,10 @@ mod tests {
     #[tokio::test]
     async fn static_assets_bypass_general_rate_limiter() {
         std::env::remove_var("ONCHAINAI_RELAX_RATE_LIMIT");
+        // Prevent live OKX network calls during tests.
+        std::env::remove_var("OKX_API_KEY");
 
-        let app = build_app(test_pool(), test_config());
+        let app = build_app(test_pool(), test_config()).await;
         for path in [
             "/favicon.ico",
             "/apple-touch-icon.png",
@@ -476,8 +518,10 @@ mod tests {
     #[tokio::test]
     async fn dynamic_routes_stay_rate_limited() {
         std::env::remove_var("ONCHAINAI_RELAX_RATE_LIMIT");
+        // Prevent live OKX network calls during tests.
+        std::env::remove_var("OKX_API_KEY");
 
-        let app = build_app(test_pool(), test_config());
+        let app = build_app(test_pool(), test_config()).await;
         let mut got_429 = false;
         for _ in 0..150 {
             let req = request_with_ip("/api/admin/operator/snapshot");
@@ -564,7 +608,7 @@ pub async fn run_server() -> anyhow::Result<()> {
     }
 
     let port = cfg.port;
-    let app = build_app(pool, cfg);
+    let app = build_app(pool, cfg).await;
     let addr = format!("0.0.0.0:{port}");
     tracing::info!("binding Axum API server on {addr}");
     let listener = tokio::net::TcpListener::bind(&addr).await?;

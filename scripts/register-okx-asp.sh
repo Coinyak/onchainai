@@ -7,7 +7,7 @@
 #        onchainos wallet login <email>
 #        onchainos wallet verify <OTP>
 #
-# Default: paid SKUs only (Trust Probe $0.003 + Toolkit Export $0.01 USDT).
+# Default: paid SKUs only (4 A2MCP services on POST /mcp).
 # Discovery tools stay free on the MCP endpoint but are not OKX-listed.
 #
 # Usage:
@@ -74,7 +74,9 @@ fi
 
 SERVICE_JSON='[
   {"serviceName":"Trust Probe Endpoint Health","serviceDescription":"On-demand x402 endpoint liveness check before calling third-party paid APIs.\n1. Tool slug from search_tools results","serviceType":"A2MCP","fee":"0.003","endpoint":"'"${ENDPOINT}"'"},
-  {"serviceName":"Agent Toolkit Export","serviceDescription":"Export approved crypto tools as JSON and markdown install kit for AI agents.\n1. Tool slugs (up to 25) or a function category id","serviceType":"A2MCP","fee":"0.01","endpoint":"'"${ENDPOINT}"'"}
+  {"serviceName":"Agent Toolkit Export","serviceDescription":"Export approved crypto tools as JSON and markdown install kit for AI agents.\n1. Tool slugs (up to 25) or a function category id","serviceType":"A2MCP","fee":"0.01","endpoint":"'"${ENDPOINT}"'"},
+  {"serviceName":"Verified Tool Recommendation","serviceDescription":"Returns a single verified live x402 tool for a task intent. Probes top candidates on-demand for liveness and price honesty.\n1. Natural-language intent (required)\n2. Optional chain or function filter","serviceType":"A2MCP","fee":"0.01","endpoint":"'"${ENDPOINT}"'"},
+  {"serviceName":"Agent Gap Audit","serviceDescription":"Decomposes a task intent into subgoals and maps each to OnchainAI catalog tools, surfacing gaps where no tools exist.\n1. Natural-language task intent (required)","serviceType":"A2MCP","fee":"0.05","endpoint":"'"${ENDPOINT}"'"}
 ]'
 
 echo "== validate-listing =="
