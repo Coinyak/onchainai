@@ -65,7 +65,6 @@ const SEED_PACKAGES: &[&str] = &[
     "web3",
     "eth-account",
     "eth-utils",
-    "web3py",
     "solana",
     "solders",
     "anchorpy",
@@ -76,7 +75,6 @@ const SEED_PACKAGES: &[&str] = &[
     "stellar-sdk",
     "pytezos",
     "cardano",
-    "algorand-sdk",
     "mcp",
     "mcp-server",
 ];
@@ -183,8 +181,19 @@ fn parse_keywords(raw: &str) -> Vec<String> {
         .collect()
 }
 
-/// Determine tool_type from entry points.
-fn infer_tool_type(entry_points: &Option<serde_json::Value>) -> String {
+/// Determine tool_type from entry points, classifiers, and keywords.
+///
+/// PyPI's JSON API may return `entry_points: null` for packages that declare
+/// console scripts via `pyproject.toml` `[project.scripts]` instead of
+/// setuptools `entry_points`. When that happens, fall back to:
+///   1. `Environment :: Console` classifier (PEP 625 / modern packaging)
+///   2. `cli` keyword in the package metadata
+fn infer_tool_type(
+    entry_points: &Option<serde_json::Value>,
+    classifiers: &[String],
+    keywords: &str,
+) -> String {
+    // Primary: console_scripts entry points (setuptools style).
     if let Some(ep) = entry_points {
         if let Some(obj) = ep.as_object() {
             if let Some(console_scripts) = obj.get("console_scripts").and_then(|v| v.as_object()) {
@@ -194,6 +203,23 @@ fn infer_tool_type(entry_points: &Option<serde_json::Value>) -> String {
             }
         }
     }
+
+    // Fallback 1: `Environment :: Console` classifier (pyproject.toml packages).
+    if classifiers
+        .iter()
+        .any(|c| c.eq_ignore_ascii_case("Environment :: Console"))
+    {
+        return "cli".to_string();
+    }
+
+    // Fallback 2: `cli` keyword (author-declared intent).
+    if keywords
+        .split([',', ' ', ';'])
+        .any(|k| k.trim().eq_ignore_ascii_case("cli"))
+    {
+        return "cli".to_string();
+    }
+
     "sdk".to_string()
 }
 
@@ -211,7 +237,11 @@ fn package_to_raw(response: &PackageResponse) -> RawTool {
     );
 
     let description = info.summary.clone().or(info.description.clone());
-    let tool_type = infer_tool_type(&info.entry_points);
+    let tool_type = infer_tool_type(
+        &info.entry_points,
+        &info.classifiers,
+        info.keywords.as_deref().unwrap_or(""),
+    );
     let install_command = Some(format!("pip install {}", info.name));
     let source_url = Some(format!("{PYPI_WEB_BASE}/{}/", info.name));
 
@@ -305,7 +335,7 @@ pub async fn crawl() -> Result<Vec<RawTool>> {
 /// Upsert operator-curated docs/product links into `tool_official_links`.
 async fn sync_curated_official_links(pool: &sqlx::PgPool) {
     for (package_name, meta) in CURATED_PACKAGE_META {
-        let slug = package_name.strip_suffix("-core").unwrap_or(package_name);
+        let slug = package_name;
         let tool_id = match sqlx::query_scalar::<_, uuid::Uuid>(
             "SELECT id FROM tools WHERE slug = $1",
         )
@@ -480,13 +510,41 @@ mod tests {
         let ep = serde_json::json!({
             "console_scripts": { "bag": "bag.cli:main" }
         });
-        assert_eq!(infer_tool_type(&Some(ep)), "cli");
+        assert_eq!(infer_tool_type(&Some(ep), &[], ""), "cli");
     }
 
     #[test]
     fn infer_tool_type_sdk_without_console_scripts() {
-        assert_eq!(infer_tool_type(&None), "sdk");
-        assert_eq!(infer_tool_type(&Some(serde_json::json!({}))), "sdk");
+        assert_eq!(infer_tool_type(&None, &[], ""), "sdk");
+        assert_eq!(
+            infer_tool_type(&Some(serde_json::json!({})), &[], ""),
+            "sdk"
+        );
+    }
+
+    #[test]
+    fn infer_tool_type_cli_from_console_classifier() {
+        // PyPI JSON API returns entry_points=null for pyproject.toml packages;
+        // the Environment::Console classifier is the fallback signal.
+        let classifiers = vec!["Environment :: Console".to_string()];
+        assert_eq!(infer_tool_type(&None, &classifiers, ""), "cli");
+    }
+
+    #[test]
+    fn infer_tool_type_cli_from_keyword() {
+        // bnbagent-studio has `cli` in its keywords.
+        assert_eq!(
+            infer_tool_type(&None, &[], "agent, blockchain, bnb, cli, x402"),
+            "cli"
+        );
+    }
+
+    #[test]
+    fn infer_tool_type_sdk_when_no_cli_signals() {
+        assert_eq!(
+            infer_tool_type(&None, &[], "blockchain, ethereum, web3"),
+            "sdk"
+        );
     }
 
     #[test]

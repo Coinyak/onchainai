@@ -11,8 +11,13 @@ use crate::models::Tool;
 ///
 /// Rules (per `docs/MVP_DESIGN.md` section 3 + VAL-CRAWL-012):
 /// - Tools with `None` repo_url are **always preserved**.
-/// - Among tools sharing the same `repo_url`, keep the one with the highest
-///   `stars`. Ties keep the first-seen entry.
+/// - Among tools sharing the same `repo_url` **and** the same
+///   `install_command`, keep the one with the highest `stars`. Ties keep
+///   the first-seen entry. This prevents the same installable package from
+///   appearing twice (e.g. crawled by both npm and vendor_orgs).
+/// - Tools that share a `repo_url` but have **different** install commands
+///   are treated as distinct packages (e.g. `pkg` + `pkg-core` from the
+///   same monorepo) and are both preserved.
 /// - Order of `None`-repo_url tools is preserved.
 /// - Order of the kept `Some`-repo_url tools follows first occurrence of
 ///   their (winning) entry.
@@ -20,21 +25,23 @@ use crate::models::Tool;
 pub fn dedupe(tools: Vec<Tool>) -> Vec<Tool> {
     use std::collections::HashMap;
 
-    // Map repo_url → best tool index in the output so far.
-    let mut best_by_url: HashMap<String, usize> = HashMap::new();
+    // Map (repo_url, install_command) → best tool index in the output so far.
+    let mut best_by_key: HashMap<(String, String), usize> = HashMap::new();
     let mut out: Vec<Tool> = Vec::with_capacity(tools.len());
 
     for tool in tools {
         match &tool.repo_url {
             None => out.push(tool),
             Some(url) => {
-                if let Some(&idx) = best_by_url.get(url) {
+                let install = tool.install_command.clone().unwrap_or_default();
+                let key = (url.clone(), install);
+                if let Some(&idx) = best_by_key.get(&key) {
                     // Collision: keep higher stars; tie → first-seen stays.
                     if tool.stars > out[idx].stars {
                         out[idx] = tool;
                     }
                 } else {
-                    best_by_url.insert(url.clone(), out.len());
+                    best_by_key.insert(key, out.len());
                     out.push(tool);
                 }
             }
@@ -51,6 +58,15 @@ mod tests {
     use uuid::Uuid;
 
     fn make_tool(name: &str, repo_url: Option<&str>, stars: i32) -> Tool {
+        make_tool_with_install(name, repo_url, stars, None)
+    }
+
+    fn make_tool_with_install(
+        name: &str,
+        repo_url: Option<&str>,
+        stars: i32,
+        install: Option<&str>,
+    ) -> Tool {
         let review = crate::models::tool::default_review_fields();
         Tool {
             id: Uuid::new_v4(),
@@ -64,7 +80,7 @@ mod tests {
             repo_url: repo_url.map(|s| s.to_string()),
             homepage: None,
             npm_package: None,
-            install_command: None,
+            install_command: install.map(|s| s.to_string()),
             mcp_endpoint: None,
             chains: vec![],
             status: "community".into(),
@@ -203,5 +219,51 @@ mod tests {
         assert_eq!(out[0].stars, 3);
         assert_eq!(out[1].name, "B");
         assert_eq!(out[2].name, "C");
+    }
+
+    #[test]
+    fn same_repo_different_install_both_preserved() {
+        // Simulates bnbagent-studio + bnbagent-studio-core: same GitHub repo
+        // URL, different pip install commands → both should be kept.
+        let tools = vec![
+            make_tool_with_install(
+                "bnbagent-studio",
+                Some("https://github.com/bnb-chain/bnbagent-studio"),
+                0,
+                Some("pip install bnbagent-studio"),
+            ),
+            make_tool_with_install(
+                "bnbagent-studio-core",
+                Some("https://github.com/bnb-chain/bnbagent-studio"),
+                0,
+                Some("pip install bnbagent-studio-core"),
+            ),
+        ];
+        let out = dedupe(tools);
+        assert_eq!(
+            out.len(),
+            2,
+            "same repo + different install should both survive"
+        );
+        assert!(out.iter().any(|t| t.name == "bnbagent-studio"));
+        assert!(out.iter().any(|t| t.name == "bnbagent-studio-core"));
+    }
+
+    #[test]
+    fn same_repo_same_install_dedupes() {
+        // Same repo + same install (e.g. crawled by two sources) → dedupe.
+        let tools = vec![
+            make_tool_with_install("via-npm", Some("https://github.com/x/x"), 10, Some("npx x")),
+            make_tool_with_install(
+                "via-vendor",
+                Some("https://github.com/x/x"),
+                500,
+                Some("npx x"),
+            ),
+        ];
+        let out = dedupe(tools);
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].name, "via-vendor");
+        assert_eq!(out[0].stars, 500);
     }
 }
