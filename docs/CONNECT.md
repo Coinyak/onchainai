@@ -11,6 +11,7 @@ https://www.onchain-ai.xyz/mcp
 - Transport: **streamable HTTP** (JSON-RPC 2.0 over `POST /mcp`; `GET /mcp` returns discovery JSON 200)
 - Auth: none. Rate limited per IP.
 - **Billing (prod when OKX A2MCP is active):** every `tools/call` is pay-per-call on X Layer USDT0 via OKX Broker (flat fee field on the OKX listing). Unmetered: `GET /mcp`, `initialize`, `tools/list`. When OKX is off, CDP/Base fallback may meter only premium tools (`check_endpoint_health`, `export_toolkit`, `recommend_verified_tool`, `gap_audit`). Agent Sync (`save_to_toolkit`, …) needs a linked token **and**, when OKX is active, payment on `tools/call` (same flat SKU).
+- **OKX SKU exception:** free-tier guardian prefers free discovery tools; Path A intentionally meters **all** `tools/call` under OKX (single marketplace SKU). See `docs/listings/directory-forms.md` §Policy exception. Not a documentation error.
 - This is the **only** official endpoint. Anything else claiming to be OnchainAI is not ours.
 
 ## Claude Code (CLI)

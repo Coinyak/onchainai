@@ -92,6 +92,20 @@ Index appears after CDP Facilitator **settle** on a paid route with Bazaar disco
 >
 > **History:** Rejected 2026-07-08 (protocol: CDP/Base vs OKX Broker/X Layer USDT0) → fixed. Rejected [T2] (missing public HTTPS endpoint) → endpoint `https://www.onchain-ai.xyz/mcp`; 402 `resource.url` pinned to public origin (PR #76).
 
+### Policy exception — OKX bundled SKU (intentional)
+
+Team guideline / free-tier guardian (and some automated review rules) prefer **free discovery** (`search_tools`, `get_tool_detail`, … without 402). That remains the default **when OKX A2MCP is off** (CDP/Base premium-only metering).
+
+**Exception (operator decision, Path A):** when OKX credentials are active, marketplace listing is **one flat A2MCP SKU**. Every MCP `tools/call` is metered — including discovery tools. This is intentional for OKX Agent Marketplace (single fee field, no free/premium tool split on the listing), not a docs bug.
+
+| Surface | Free / unmetered | Metered |
+|---------|------------------|---------|
+| OKX gate **off** | Discovery `tools/call` + unmetered methods | Premium tools only (CDP/Base) |
+| OKX gate **on** (prod Path A) | `GET /mcp`, `initialize`, `tools/list`, website UI | **All** `tools/call` (incl. `search_tools`) |
+| Always | No custody; third-party x402 is metadata only | — |
+
+Qodo / compliance bots may flag “discovery must not enforce x402” against this SKU — **accept as known exception**; do not “fix” by reverting docs to free-discovery claims while prod still meters all calls. Code change to free discovery under OKX would be a separate product decision, not a drive-by docs edit.
+
 ### Quick reference (do not confuse)
 
 | What | Value |
