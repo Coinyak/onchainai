@@ -18,6 +18,9 @@ use crate::models::Tool;
 /// - Tools that share a `repo_url` but have **different** install commands
 ///   are treated as distinct packages (e.g. `pkg` + `pkg-core` from the
 ///   same monorepo) and are both preserved.
+/// - If a `repo_url` group has both install-identified entries (from npm/PyPI)
+///   and a placeholder with no `install_command` (e.g. from `vendor_orgs`),
+///   the placeholder is **dropped** to avoid cross-source duplicates.
 /// - Order of `None`-repo_url tools is preserved.
 /// - Order of the kept `Some`-repo_url tools follows first occurrence of
 ///   their (winning) entry.
@@ -25,16 +28,27 @@ use crate::models::Tool;
 pub fn dedupe(tools: Vec<Tool>) -> Vec<Tool> {
     use std::collections::HashMap;
 
+    // Phase 1: Group by repo_url, dedupe within each (repo_url, install) key.
+    //
     // Map (repo_url, install_command) → best tool index in the output so far.
     let mut best_by_key: HashMap<(String, String), usize> = HashMap::new();
+    // Track which output indices are "no-install" placeholders per repo_url,
+    // so we can drop them if a real install-identified entry exists for the
+    // same repo.
+    let mut no_install_indices: HashMap<String, usize> = HashMap::new();
     let mut out: Vec<Tool> = Vec::with_capacity(tools.len());
 
     for tool in tools {
         match &tool.repo_url {
             None => out.push(tool),
             Some(url) => {
+                let has_install = tool
+                    .install_command
+                    .as_ref()
+                    .is_some_and(|s| !s.trim().is_empty());
                 let install = tool.install_command.clone().unwrap_or_default();
                 let key = (url.clone(), install);
+
                 if let Some(&idx) = best_by_key.get(&key) {
                     // Collision: keep higher stars; tie → first-seen stays.
                     if tool.stars > out[idx].stars {
@@ -42,13 +56,48 @@ pub fn dedupe(tools: Vec<Tool>) -> Vec<Tool> {
                     }
                 } else {
                     best_by_key.insert(key, out.len());
+                    if !has_install {
+                        no_install_indices.insert(url.clone(), out.len());
+                    }
                     out.push(tool);
                 }
             }
         }
     }
 
-    out
+    // Phase 2: Drop no-install placeholders when install-identified entries
+    // exist for the same repo_url. This prevents vendor_orgs entries (which
+    // have install_command=None) from surviving as duplicates when npm/PyPI
+    // already produced a concrete installable tool for the same repo.
+    let mut dropped_indices: std::collections::HashSet<usize> = std::collections::HashSet::new();
+    for (url, &placeholder_idx) in &no_install_indices {
+        // Check if any other entry for this repo_url has a real install_command.
+        let has_install_entry = out.iter().enumerate().any(|(i, t)| {
+            i != placeholder_idx
+                && t.repo_url.as_deref() == Some(url.as_str())
+                && t.install_command
+                    .as_ref()
+                    .is_some_and(|s| !s.trim().is_empty())
+        });
+        if has_install_entry {
+            dropped_indices.insert(placeholder_idx);
+        }
+    }
+
+    if dropped_indices.is_empty() {
+        return out;
+    }
+
+    out.into_iter()
+        .enumerate()
+        .filter_map(|(i, t)| {
+            if dropped_indices.contains(&i) {
+                None
+            } else {
+                Some(t)
+            }
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -265,5 +314,44 @@ mod tests {
         assert_eq!(out.len(), 1);
         assert_eq!(out[0].name, "via-vendor");
         assert_eq!(out[0].stars, 500);
+    }
+
+    #[test]
+    fn cross_source_vendor_placeholder_dropped_when_install_exists() {
+        // vendor_orgs produces install_command=None; npm produces
+        // install_command=Some("npx ...") for the same repo_url.
+        // The no-install placeholder should be dropped to avoid duplicates.
+        let tools = vec![
+            make_tool_with_install(
+                "vendor-placeholder",
+                Some("https://github.com/x/x"),
+                0,
+                None,
+            ),
+            make_tool_with_install(
+                "npm-real",
+                Some("https://github.com/x/x"),
+                42,
+                Some("npx x"),
+            ),
+        ];
+        let out = dedupe(tools);
+        assert_eq!(out.len(), 1, "placeholder should be dropped");
+        assert_eq!(out[0].name, "npm-real");
+    }
+
+    #[test]
+    fn cross_source_placeholder_kept_when_no_install_entry() {
+        // vendor_orgs placeholder with no install entry from any source
+        // should be preserved (it's the only signal for that repo).
+        let tools = vec![make_tool_with_install(
+            "vendor-only",
+            Some("https://github.com/y/y"),
+            5,
+            None,
+        )];
+        let out = dedupe(tools);
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].name, "vendor-only");
     }
 }
