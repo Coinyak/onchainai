@@ -142,17 +142,26 @@ pub async fn build_app(pool: sqlx::PgPool, config: Config) -> axum::Router {
     let siwx_domain = config.siwx_domain.clone();
 
     // OKX init before AppState — handlers must know whether middleware is truly active.
+    tracing::info!("Initializing OKX A2MCP payment server (15s timeout)...");
     let okx_server = match tokio::time::timeout(
-        std::time::Duration::from_secs(5),
+        std::time::Duration::from_secs(15),
         crate::server::okx_payment::init_okx_server(),
     )
     .await
     {
-        Ok(Some(server)) => Some(server),
-        Ok(None) => None,
+        Ok(Some(server)) => {
+            tracing::info!("OKX A2MCP payment server initialized successfully");
+            Some(server)
+        }
+        Ok(None) => {
+            tracing::warn!(
+                "OKX A2MCP init returned None — credentials missing or facilitator error"
+            );
+            None
+        }
         Err(_) => {
             tracing::warn!(
-                "OKX facilitator init timed out (5s) — A2MCP disabled, CDP routes remain active"
+                "OKX facilitator init timed out (15s) — A2MCP disabled, CDP routes remain active"
             );
             None
         }

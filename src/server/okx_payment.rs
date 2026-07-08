@@ -59,21 +59,28 @@ pub async fn init_okx_server() -> Option<X402ResourceServer> {
         return None;
     }
 
+    tracing::info!("OKX credentials found, creating facilitator client...");
+
     let base_url =
         std::env::var("OKX_FACILITATOR_URL").unwrap_or_else(|_| OKX_FACILITATOR_URL.into());
 
     let facilitator =
         match OkxHttpFacilitatorClient::with_url(&base_url, &api_key, &secret_key, &passphrase) {
-            Ok(client) => client,
+            Ok(client) => {
+                tracing::info!("OKX facilitator client created (base_url={base_url})");
+                client
+            }
             Err(e) => {
                 tracing::error!("Failed to create OKX facilitator client: {e}");
                 return None;
             }
         };
 
+    tracing::info!("Registering X Layer (eip155:196) with ExactEvmScheme...");
     let mut server =
         X402ResourceServer::new(facilitator).register(OKX_NETWORK, ExactEvmScheme::new());
 
+    tracing::info!("Calling OKX server.initialize() (GET /supported)...");
     if let Err(e) = server.initialize().await {
         tracing::error!("OKX x402 server initialize failed: {e}");
         return None;
