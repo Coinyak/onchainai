@@ -400,7 +400,7 @@ mod tests {
 
     #[test]
     fn gap_cache_roundtrip() {
-        let key = "gap|test";
+        let key = "gap|roundtrip_isolated";
         let now = Utc::now();
         let response = GapAuditResponse {
             intent: "test".into(),
@@ -429,18 +429,24 @@ mod tests {
         };
         for i in 0..105 {
             let ts = now + chrono::Duration::milliseconds(i);
-            gap_cache_set(format!("gap|cap-{i}"), response.clone(), ts);
+            gap_cache_set(format!("gap|maxtest-{i}"), response.clone(), ts);
         }
         let probe_at = now + chrono::Duration::seconds(1);
-        assert!(gap_cache_get("gap|cap-0", probe_at).is_none());
-        assert!(gap_cache_get("gap|cap-4", probe_at).is_none());
-        assert!(gap_cache_get("gap|cap-5", probe_at).is_some());
-        assert!(gap_cache_get("gap|cap-104", probe_at).is_some());
+        assert!(gap_cache_get("gap|maxtest-0", probe_at).is_none());
+        assert!(gap_cache_get("gap|maxtest-4", probe_at).is_none());
+        assert!(gap_cache_get("gap|maxtest-5", probe_at).is_some());
+        assert!(gap_cache_get("gap|maxtest-104", probe_at).is_some());
+        // Clean up: clear maxtest entries to avoid interfering with other cache tests.
+        if let Ok(mut guard) = GAP_CACHE.lock() {
+            if let Some(cache) = guard.as_mut() {
+                cache.retain(|key, _| !key.starts_with("gap|maxtest-"));
+            }
+        }
     }
 
     #[test]
     fn gap_cache_expires_after_60s() {
-        let key = "gap|expire";
+        let key = "gap|expire_unique";
         let now = Utc::now();
         let response = GapAuditResponse {
             intent: "test".into(),
