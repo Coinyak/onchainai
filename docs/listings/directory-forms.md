@@ -94,8 +94,8 @@ Index appears after CDP Facilitator **settle** on a paid route with Bazaar disco
 | Service | OnchainAI Trust Probe (x402 endpoint liveness) |
 | Endpoint | `https://www.onchain-ai.xyz/mcp` (POST JSON-RPC, streamable-http) |
 | Payment model | A2MCP / x402 (HTTP 402) |
-| Paid tools | `check_endpoint_health` (Trust Probe, $0.003 USDT on OKX / $0.001 USDC direct MCP) · `export_toolkit` (Toolkit Export, $0.01 USDT/USDC) |
+| Paid tools | `check_endpoint_health` (Trust Probe, $0.003 USDT on OKX / $0.001 USDC direct MCP) · `export_toolkit` (Toolkit Export, $0.01 USDT/USDC) · `recommend_verified_tool` (Verified Recommendation, $0.01 USDC direct MCP) · `gap_audit` (Catalog Gap Audit, $0.05 USDC direct MCP) |
 | Payout wallet | `0x2af05c1661da38a2919dc27b4c8b71cb91c30017` (Base USDC) — **same as** prod `X402_PAY_TO_ADDRESS` and `site_settings.default_referral_payout_address` |
-| Free tools (same endpoint, not OKX-listed) | `search_tools`, `get_tool_detail`, `get_install_guide`, `list_categories`, `get_dashboard_snapshot`, `compare_tools` |
+| Free tools (same endpoint, not OKX-listed) | `search_tools`, `get_tool_detail`, `get_install_guide`, `list_categories`, `get_dashboard_snapshot`, `compare_tools`, `get_price_history`, `get_x402_trends` |
 | Repo | https://github.com/Coinyak/onchainai |
 | Registry cross-list | `io.github.Coinyak/onchainai` v0.2.0 (`server.json`) |
