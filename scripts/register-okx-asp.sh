@@ -33,12 +33,18 @@ if [[ "${logged_in}" != "True" && "${logged_in}" != "true" ]]; then
   exit 1
 fi
 
-# Official OnchainAI brand mark (512×512 PNG for OKX agent avatar).
-AVATAR="${ROOT}/public/brand/onchainai-icon-512.png"
+# Full-bleed 1:1 cover from official logo mark (no white canvas / rounded frame).
+# Prefer cover for OKX.AI listing review; override with OKX_ASP_AVATAR if needed.
+AVATAR="${OKX_ASP_AVATAR:-${ROOT}/public/brand/okx-ai-agent-cover.png}"
 if [[ ! -f "${AVATAR}" ]]; then
-  echo "Avatar not found: ${AVATAR}" >&2
+  # Fallback: frontend tree (same asset, monorepo layout).
+  AVATAR="${ROOT}/frontend/public/brand/okx-ai-agent-cover.png"
+fi
+if [[ ! -f "${AVATAR}" ]]; then
+  echo "Avatar not found: ${AVATAR} (expected public/brand/okx-ai-agent-cover.png)" >&2
   exit 1
 fi
+echo "Using avatar: ${AVATAR}"
 
 NAME="OnchainAI"
 # Value-first — fee lives in structured fee field ($0.1), not the headline.
