@@ -149,7 +149,14 @@ where
                     WHEN tools.status IN ('official', 'verified') THEN tools.status
                     ELSE EXCLUDED.status
                 END,
-                official_team = COALESCE(tools.official_team, EXCLUDED.official_team),
+                -- Never rehydrate official_team from crawl when the row is not
+                -- official (verify-tool-official demotion clears the label; COALESCE
+                -- with EXCLUDED would undo that on the next vendor_orgs pass).
+                official_team = CASE
+                    WHEN tools.status = 'official'
+                    THEN COALESCE(tools.official_team, EXCLUDED.official_team)
+                    ELSE tools.official_team
+                END,
                 trust_score = EXCLUDED.trust_score,
                 approval_status = COALESCE(NULLIF(tools.approval_status, ''), EXCLUDED.approval_status),
                 submitted_by = tools.submitted_by,
@@ -1013,6 +1020,88 @@ mod tests {
             .await
             .expect("rollback vendor_orgs_slug_rename_policy test");
         eprintln!("vendor_orgs_slug_rename_policy: rollback ok");
+    }
+
+    /// After demotion clears `official_team`, a later crawl must not rehydrate
+    /// the label via `COALESCE(..., EXCLUDED.official_team)`.
+    #[tokio::test]
+    async fn demoted_official_team_not_rehydrated_on_upsert() {
+        let Some(pool) = test_pool_required_if_configured().await else {
+            return;
+        };
+
+        let mut tx = pool
+            .begin()
+            .await
+            .expect("begin demoted_official_team_not_rehydrated_on_upsert tx");
+
+        let slug = format!("demote-team-{}", uuid::Uuid::new_v4());
+        let mut seed = normalizer::normalize(
+            &RawTool {
+                name: "demote-team-tool".into(),
+                description: Some("was official, now community".into()),
+                tool_type: "sdk".into(),
+                repo_url: Some("https://github.com/circlefin/example".into()),
+                source: "manual".into(),
+                ..Default::default()
+            },
+            &std::collections::HashSet::new(),
+            "approved",
+        );
+        seed.slug = slug.clone();
+        seed.status = "community".into();
+        seed.official_team = None;
+
+        upsert_tools(
+            UpsertTarget::Connection(&mut tx),
+            std::slice::from_ref(&seed),
+        )
+        .await
+        .expect("seed demoted community row");
+
+        let mut crawl = normalizer::normalize(
+            &RawTool {
+                name: "demote-team-tool".into(),
+                description: Some("vendor crawl wants team label back".into()),
+                tool_type: "sdk".into(),
+                repo_url: Some("https://github.com/circlefin/example".into()),
+                source: "vendor_orgs".into(),
+                official_team: Some("Circle".into()),
+                ..Default::default()
+            },
+            &std::collections::HashSet::new(),
+            "pending",
+        );
+        crawl.slug = slug.clone();
+        crawl.official_team = Some("Circle".into());
+
+        upsert_tools(
+            UpsertTarget::Connection(&mut tx),
+            std::slice::from_ref(&crawl),
+        )
+        .await
+        .expect("upsert crawl onto demoted row");
+
+        let row: (String, Option<String>) = sqlx::query_as(
+            r#"
+            SELECT status, official_team
+            FROM tools WHERE slug = $1
+            "#,
+        )
+        .bind(&slug)
+        .fetch_one(&mut *tx)
+        .await
+        .expect("load demoted row after crawl");
+
+        assert_eq!(row.0, "community");
+        assert_eq!(
+            row.1, None,
+            "crawl must not rehydrate official_team after demotion"
+        );
+
+        tx.rollback()
+            .await
+            .expect("rollback demoted_official_team_not_rehydrated_on_upsert");
     }
 
     #[tokio::test]

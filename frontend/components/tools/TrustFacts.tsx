@@ -13,7 +13,7 @@ function buildDefaultFacts(tool: PublicTool): TrustFact[] {
   if (tool.status === "verified" || tool.status === "official") {
     facts.push({ label: "Verified", detail: `${tool.status} listing`, severity: "positive" });
   }
-  if (tool.official_team) {
+  if (tool.official_team && tool.status === "official") {
     facts.push({
       label: "Official team",
       detail: tool.official_team,
