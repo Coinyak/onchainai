@@ -87,7 +87,7 @@ export function PreviewPanelContent({
             {!(tool.official_team && tool.status === "official") && (
               <Badge variant={statusVariant(tool.status)}>{statusBadgeLabel(tool.status)}</Badge>
             )}
-            {tool.official_team && (
+            {tool.official_team && tool.status === "official" && (
               <Badge variant="official">Official: {tool.official_team}</Badge>
             )}
             <Badge variant={tool.type === "x402" ? "x402" : "neutral"}>

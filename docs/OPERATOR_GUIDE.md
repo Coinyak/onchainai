@@ -134,19 +134,24 @@ UI 변경 검수용 스크린샷은 로컬 또는 배포 URL에 대해 `node scr
 # 드라이런(기본): 판정·증거만 출력, 쓰기 없음
 node scripts/verify-tool-official.mjs <slug>
 
-# 자동 승인: 증거가 기준을 넘으면 status 갱신 + tool_review_events 감사 기록
+# 판정에 맞춰 status 갱신(승격·강등) + tool_review_events 감사 기록
 node scripts/verify-tool-official.mjs <slug> --apply
 
-# 전체 스캔(공개 도구 중 first-party org / 플랫폼 키워드 후보 일괄 판정)
+# 전체 스캔(공개 도구 중 first-party org / 플랫폼 키워드 / 기존 elevated 후보)
 node scripts/verify-tool-official.mjs --scan [--apply --i-understand-bulk] [--limit N]
+
+# 순수 헬퍼 스모크 (DB/네트워크 없음)
+node scripts/verify-tool-official.mjs --self-test
 ```
 
 - **일괄 적용**: `--scan --apply`는 반드시 `--i-understand-bulk`와 함께. 없으면 스크립트가 거부(deny-by-default).
 - **판정 규칙**: `official` = repo org가 first-party 목록(스크립트 상단 `FIRST_PARTY_ORGS`,
   PR로 확장)이거나 GitHub 도메인 인증 org + org 사이트가 도구 홈페이지와 일치.
   `verified` = repo 실존 + 아이덴티티 클러스터(org/npm scope/홈페이지 도메인) 일치.
-  증거 부족이면 community 유지. **다운그레이드는 절대 안 함.** 공개 게이트
-  (승인/관련성/critical 위험/격리) 미통과 도구는 승격 거부.
+  증거 부족·non-tool(docs/demo/CI 등)이면 `community`. **`--apply`는 판정과 다르면
+  승격·강등 모두 반영** (`official`→`verified`/`community`, `verified`→`community`
+  포함). `official`을 떠날 때 `official_team`은 null로 클리어. 공개 게이트
+  (승인/관련성/critical 위험/격리) 미통과 도구는 승격 거부(`refuse`).
 - **감사**: 모든 적용은 `tool_review_events`(action=`agent_auto_status`)에 before/after와
   근거가 남는다. x402 결제 플래그(`payment_verified` 등)는 이 하네스가 건드리지 않는다
   (소유권 증명은 클레임 플로 + 운영자).

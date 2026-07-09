@@ -4,17 +4,19 @@
 // Any operator or AI agent can run this when the owner asks "verify/official <tool>".
 // It collects public evidence (GitHub org, npm scope, homepage domain), decides
 // community | verified | official, and with --apply writes the new status plus a
-// tool_review_events audit row. Deny-by-default: no evidence, no change.
+// tool_review_events audit row. Deny-by-default for elevation: no evidence →
+// community (and --apply demotes any higher badge to match).
 //
 // Usage:
 //   node scripts/verify-tool-official.mjs <slug> [--apply]
 //   node scripts/verify-tool-official.mjs <slug>... [--apply --i-understand-bulk]
 //   node scripts/verify-tool-official.mjs --scan [--apply --i-understand-bulk] [--limit N]
 //   node scripts/verify-tool-official.mjs <slug> --expect-org <org> [--apply]
+//   node scripts/verify-tool-official.mjs --self-test
 //
 // Modes:
 //   default   dry-run: prints one JSON report line per slug, writes nothing
-//   --apply   apply qualifying status changes (never downgrades)
+//   --apply   write status to match the decision (upgrade OR downgrade)
 //   --scan    sweep public tools whose GitHub org is in the first-party map or
 //             whose name/slug matches PLATFORM_KEYWORDS; report candidates
 //
@@ -34,8 +36,13 @@
 //             GitHub org is domain-verified AND its site matches tool homepage
 //   verified  repo exists + three-way identity cluster (github org + npm scope +
 //             homepage label) — mirrors src/trust_verification.rs
+//   community insufficient evidence, non-tool repo, or failed identity checks
 //   never     elevate tools failing the public gate (approval/relevance/risk/
-//             quarantine); never downgrade; never touch x402 payment flags.
+//             quarantine); never touch x402 payment flags.
+//   apply     sets tools.status to the decision even when that is a downgrade
+//             (official→verified/community, verified→community). Clears
+//             official_team when leaving official. Bulk --apply still needs
+//             --i-understand-bulk.
 
 import { readFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
@@ -57,8 +64,9 @@ const PLATFORM_KEYWORDS = [
 
 // Repo name / slug patterns that are NOT developer tools (docs, specs, demos,
 // examples, infra automation, org profile repos, audits, etc.).
-// A repo matching any of these is blocked from official/verified elevation
-// even when it belongs to a first-party org.
+// Matching repos stay/return to community — no official/verified badge —
+// even when they belong to a first-party org. Also used so --apply can demote
+// tools that were previously elevated by org membership alone.
 const NON_TOOL_PATTERNS = [
   /^\.github$/i,
   /^(docs|documentation|documentation-en|documentation-zh|doc-|safe-docs|uniswap-docs|graphprotocol-docs|ton-blockchain-docs|wormhole-docs)/i,
@@ -86,6 +94,31 @@ const NON_TOOL_PATTERNS = [
   /^(account-policies)$/i,
   /^(action-is-release|action-publish-release)$/i,
   /^(contributor-docs)$/i,
+  // CI / packaging / lint / legal / ops — not catalog products
+  /^(github-actions|github-tools|ci-workflows|gh-actions-runners|actions)$/i,
+  /^homebrew[-_]/i,
+  /^(eslint-config|eslint-plugin)/i,
+  /^(cla-signatures|cla)$/i,
+  /^(grafonnet|grafonnet-lib)$/i,
+  /^(system-test|system-tests)$/i,
+  // Specs, papers, archives, lists, research fluff
+  /(whitepaper|technical-whitepaper)$/i,
+  /(-archive$|^eth-rnd-archive$)/i,
+  /^(awesome[-_]|bug-bounty)$/i,
+  /(specification|tvm-specification)$/i,
+  /(-improvement-proposals$|projectopensea-sips$)/i,
+  // Templates, starters, quickstarts, playgrounds, scaffolds
+  /(template|templates|starter|starters|quickstart|scaffolding|playground)$/i,
+  /^(shipyard|shipyard-core)$/i,
+  /^(create-thirdweb-app|expo-app-template|fintech-starter-app|wallets-quickstart)$/i,
+  /^(payments-sample-app|circle-cctp-crosschain-transfer)$/i,
+  /^(hello-token|hello-wormhole)$/i,
+  /^(test-dapp|test-dapp-multichain|snap-simple-keyring)$/i,
+  // Internal ops / pure packaging / meeting notes
+  /^(packages|tron-deployment|tronprotocol-pm|discv4-dns-lists)$/i,
+  /^(task-signing-tool|claiming-app-data|solana-data-aggregator)$/i,
+  /^(protocol-prototyping-site|extension-benchmark-stats)$/i,
+  /^(benchmark|benchmarks)$/i,
 ];
 
 /**
@@ -265,9 +298,10 @@ async function makePgBackend() {
       return r.rows;
     },
     async apply(tool, patch, audit) {
+      // Always set official_team (including NULL on demotion). COALESCE would
+      // trap demotions with a stale team label.
       await client.query(
-        `UPDATE tools SET status = $2, official_team = COALESCE($3, official_team),
-                          updated_at = now()
+        `UPDATE tools SET status = $2, official_team = $3, updated_at = now()
          WHERE id = $1`,
         [tool.id, patch.status, patch.official_team ?? null],
       );
@@ -515,23 +549,64 @@ function decide(tool, evidence) {
 
 const RANK = { community: 0, verified: 1, official: 2 };
 
+function directionOf(fromStatus, toStatus) {
+  const from = RANK[fromStatus] ?? 0;
+  const to = RANK[toStatus] ?? 0;
+  if (to > from) return "upgrade";
+  if (to < from) return "downgrade";
+  return "same";
+}
+
+/**
+ * Apply decision to tools.status (upgrade, downgrade, or team fill-in).
+ * Leaving official always clears official_team unless the new status is still
+ * official (then set decision.team when present).
+ */
 async function applyStatus(db, tool, decision) {
   const target = decision.decision;
-  const upgradesTeam = target === "official" && decision.team && !tool.official_team;
-  if (RANK[target] < RANK[tool.status] || (RANK[target] === RANK[tool.status] && !upgradesTeam)) {
-    return { applied: false, note: `no-op: current status '${tool.status}' >= '${target}'` };
+  if (!(target in RANK)) {
+    return { applied: false, note: `no-op: non-status decision '${target}'` };
   }
-  const patch = { status: target };
-  if (target === "official" && decision.team) patch.official_team = decision.team;
+
+  const newTeam =
+    target === "official" ? decision.team || tool.official_team || null : null;
+  const statusChanged = tool.status !== target;
+  const teamChanged =
+    target === "official"
+      ? Boolean(decision.team && decision.team !== tool.official_team)
+      : tool.official_team != null; // demotion clears team
+
+  if (!statusChanged && !teamChanged) {
+    return {
+      applied: false,
+      note: `no-op: already '${target}'`,
+      direction: "same",
+    };
+  }
+
+  const direction = statusChanged
+    ? directionOf(tool.status, target)
+    : "team";
+  const patch = {
+    status: target,
+    // Always send official_team so demotion nulls a stale label (REST + PG).
+    official_team: newTeam,
+  };
+  const verb =
+    direction === "downgrade"
+      ? "downgrade"
+      : direction === "upgrade"
+        ? "upgrade"
+        : "team-update";
   await db.apply(tool, patch, {
     tool_id: tool.id,
     admin_id: null,
     action: "agent_auto_status",
-    reason: `verify-tool-official.mjs: ${decision.reason}`,
+    reason: `verify-tool-official.mjs ${verb}: ${decision.reason}`,
     before_status: tool.status,
     after_status: target,
   });
-  return { applied: true };
+  return { applied: true, direction, team: newTeam };
 }
 
 async function processTool(db, tool) {
@@ -547,20 +622,31 @@ async function processTool(db, tool) {
   }
   const evidence = await collectEvidence(tool);
   const decision = decide(tool, evidence);
+  const isStatusDecision = decision.decision in RANK;
   const report = {
     slug: tool.slug,
     name: tool.name,
     current_status: tool.status,
     decision: decision.decision,
-    team: decision.team ?? tool.official_team ?? null,
+    // Only official keeps a team label in the report (and in DB after apply).
+    team:
+      decision.decision === "official"
+        ? (decision.team ?? tool.official_team ?? null)
+        : null,
     reason: decision.reason,
     evidence: evidence.checks,
+    direction: isStatusDecision
+      ? directionOf(tool.status, decision.decision)
+      : null,
     applied: false,
   };
-  if (APPLY && (decision.decision === "official" || decision.decision === "verified")) {
+  // Apply any concrete status decision (including community demotions).
+  if (APPLY && isStatusDecision) {
     const result = await applyStatus(db, tool, decision);
     report.applied = result.applied;
     if (result.note) report.note = result.note;
+    if (result.direction) report.direction = result.direction;
+    if (result.applied && Object.hasOwn(result, "team")) report.team = result.team;
   }
   return report;
 }
@@ -569,8 +655,10 @@ function isScanCandidate(tool) {
   if (tool.install_risk_level === "critical" || tool.install_risk_level === "high") {
     return false;
   }
-  // Exclude non-tool repos from scan candidates.
-  if (isNonToolRepo(tool.repo_url, tool.slug)) {
+  const elevated = tool.status === "official" || tool.status === "verified";
+  // Skip non-tool repos for elevation candidates, but keep elevated ones so
+  // --scan --apply can demote docs/demos/CI that already hold a trust badge.
+  if (!elevated && isNonToolRepo(tool.repo_url, tool.slug)) {
     return false;
   }
   const gh = tool.repo_url ? parseGithubRepo(tool.repo_url) : null;
@@ -578,20 +666,84 @@ function isScanCandidate(tool) {
     gh && Object.keys(FIRST_PARTY_ORGS).some((org) => normalize(org) === normalize(gh.org));
   const text = ` ${tool.name} ${tool.slug} `.toLowerCase();
   const kwHit = PLATFORM_KEYWORDS.some((k) => text.includes(k));
-  return orgHit || kwHit;
+  // Include already-elevated tools without org/keyword so --scan can demote
+  // hand-promoted or pattern-blocked repos that still hold a badge.
+  return orgHit || kwHit || elevated;
+}
+
+// --- self-test (pure helpers; no DB/network) ---------------------------------
+
+function runSelfTest() {
+  const fails = [];
+  const assert = (cond, msg) => {
+    if (!cond) fails.push(msg);
+  };
+
+  assert(directionOf("community", "official") === "upgrade", "upgrade direction");
+  assert(directionOf("official", "community") === "downgrade", "downgrade direction");
+  assert(directionOf("verified", "verified") === "same", "same direction");
+  assert(
+    isNonToolRepo("https://github.com/ton-blockchain/homebrew-ton", "homebrew-ton"),
+    "homebrew-ton is non-tool",
+  );
+  assert(
+    isNonToolRepo("https://github.com/Consensys/github-actions", "github-actions"),
+    "github-actions is non-tool",
+  );
+  assert(
+    !isNonToolRepo("https://github.com/ProjectOpenSea/seaport-js", "seaport-js"),
+    "seaport-js is a tool",
+  );
+  assert(
+    isNonToolRepo("https://github.com/WalletConnect/wcn-technical-whitepaper", "wcn-technical-whitepaper"),
+    "whitepaper is non-tool",
+  );
+  // Elevated non-tool without first-party org still scanned (demotion path).
+  assert(
+    isScanCandidate({
+      status: "official",
+      install_risk_level: "low",
+      repo_url: "https://github.com/not-a-first-party/homebrew-ton",
+      slug: "homebrew-ton",
+      name: "homebrew-ton",
+    }),
+    "elevated non-tool remains scan candidate for demotion",
+  );
+  assert(
+    !isScanCandidate({
+      status: "community",
+      install_risk_level: "low",
+      repo_url: "https://github.com/not-a-first-party/homebrew-ton",
+      slug: "homebrew-ton",
+      name: "homebrew-ton",
+    }),
+    "community non-tool without first-party org is not a scan candidate",
+  );
+
+  if (fails.length) {
+    console.error("self-test FAILED:");
+    for (const f of fails) console.error(`  - ${f}`);
+    process.exit(1);
+  }
+  console.log(JSON.stringify({ ok: true, tests: 9 }));
+  process.exit(0);
 }
 
 // --- main ----------------------------------------------------------------------
 
+if (args.includes("--self-test")) {
+  runSelfTest();
+}
+
 if (!SCAN && slugs.length === 0) {
   console.error(
-    "usage: node scripts/verify-tool-official.mjs <slug> [--apply] | <slug>... [--apply --i-understand-bulk] | --scan [--apply --i-understand-bulk]",
+    "usage: node scripts/verify-tool-official.mjs <slug> [--apply] | <slug>... [--apply --i-understand-bulk] | --scan [--apply --i-understand-bulk] | --self-test",
   );
   process.exit(2);
 }
 if (APPLY && !BULK_APPLY && (SCAN || slugs.length > 1)) {
   console.error(
-    "refusing bulk --apply without --i-understand-bulk (bulk promotions need explicit ack)",
+    "refusing bulk --apply without --i-understand-bulk (bulk upgrades/downgrades need explicit ack)",
   );
   process.exit(2);
 }
@@ -632,11 +784,17 @@ try {
 await db.close();
 
 for (const r of results) console.log(JSON.stringify(r));
+const applied = results.filter((r) => r.applied);
+const nUp = applied.filter((r) => r.direction === "upgrade").length;
+const nDown = applied.filter((r) => r.direction === "downgrade").length;
+const nTeam = applied.filter((r) => r.direction === "team").length;
 console.error(
   `done: ${results.length} tool(s) — ` +
     `official ${results.filter((r) => r.decision === "official").length}, ` +
     `verified ${results.filter((r) => r.decision === "verified").length}, ` +
     `community ${results.filter((r) => r.decision === "community").length}, ` +
     `refused ${results.filter((r) => r.decision === "refuse").length}` +
-    `${APPLY ? " (applied where qualifying)" : " (dry-run — pass --apply to write)"}`,
+    (APPLY
+      ? ` (applied ${applied.length}: ↑${nUp} ↓${nDown} team${nTeam})`
+      : " (dry-run — pass --apply to write)"),
 );
