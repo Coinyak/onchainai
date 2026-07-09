@@ -142,7 +142,7 @@ https://www.onchain-ai.xyz/mcp
 | Network / asset | X Layer (`eip155:196`) · USDT0 `0x779ded0c9e1022225f8e0630b35a9b54be713736` |
 | Facilitator | OKX Broker |
 | Pay-to | `0x2af05c1661da38a2919dc27b4c8b71cb91c30017` |
-| Logo | `public/brand/onchainai-icon-512.png` |
+| Logo | `public/brand/okx-ai-agent-cover.png` (full-bleed 1:1 from official mark; OKX listing) |
 | Repo / docs | https://github.com/Coinyak/onchainai · https://www.onchain-ai.xyz/connect |
 
 **Service description (submitted):**
