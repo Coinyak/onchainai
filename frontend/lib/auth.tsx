@@ -26,21 +26,20 @@ function sessionHintPresent(): boolean {
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const { data, isLoading, refetch } = useQuery({
+  // Skip /api/v2/me for anonymous traffic (bots + guests). Session cookie
+  // hint is set on login; only then do we burn an Edge rewrite on Vercel.
+  const { data, isLoading, isFetching, refetch } = useQuery({
     queryKey: ["me"],
     queryFn: getMe,
-    staleTime: 0,
-    gcTime: 0,
-    refetchOnMount: "always",
+    enabled: typeof document !== "undefined" && sessionHintPresent(),
+    staleTime: 60_000,
+    gcTime: 5 * 60_000,
+    refetchOnMount: true,
     refetchOnWindowFocus: true,
     retry: false,
   });
 
   useEffect(() => {
-    if (sessionHintPresent()) {
-      void refetch();
-    }
-
     function onFocus() {
       if (sessionHintPresent()) {
         void refetch();
@@ -53,7 +52,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const value: AuthContextValue = {
     user: data ?? null,
-    isLoading,
+    // Guest (no session hint): not loading. Logged-in: wait for first /me.
+    isLoading:
+      typeof document !== "undefined" && sessionHintPresent()
+        ? isLoading || (isFetching && data === undefined)
+        : false,
     isAuthenticated: !!data,
     isAdmin: data?.is_admin ?? false,
     refetch,
