@@ -143,6 +143,7 @@ function MobileToolbarStrip({
               key={id}
               href={typeHrefs[id]}
               scroll={false}
+              prefetch={false}
               className={
                 (id === "x402" ? x402Active : activeType === id)
                   ? "toolbar-type-chip active"
@@ -157,6 +158,7 @@ function MobileToolbarStrip({
               key={id}
               href={statusHrefs[id]}
               scroll={false}
+              prefetch={false}
               className={activeStatus === id ? "toolbar-type-chip active" : "toolbar-type-chip"}
             >
               {label}
@@ -254,6 +256,8 @@ export function ToolsBrowser({ base, showToolbarSearch = false, children }: Tool
         selected: null,
         page: params.page,
       }),
+    staleTime: 2 * 60 * 1000,
+    refetchOnMount: false,
   });
 
   const selectedSlug = params.selected;
@@ -412,20 +416,20 @@ export function ToolsBrowser({ base, showToolbarSearch = false, children }: Tool
               <div className="toolbar-desktop sticky-toolbar">
                 <div className="toolbar-rows">
                   <div className="toolbar-sort-row">
-                    <Link href={sortHot} scroll={false} className={params.sort === "hot" ? "sort-link active" : "sort-link"}>HOT ↓</Link>
-                    <Link href={sortNew} scroll={false} className={params.sort === "new" ? "sort-link active" : "sort-link"}>New</Link>
-                    <Link href={sortComments} scroll={false} className={params.sort === "comments" ? "sort-link active" : "sort-link"}>Comments</Link>
+                    <Link href={sortHot} scroll={false} prefetch={false} className={params.sort === "hot" ? "sort-link active" : "sort-link"}>HOT ↓</Link>
+                    <Link href={sortNew} scroll={false} prefetch={false} className={params.sort === "new" ? "sort-link active" : "sort-link"}>New</Link>
+                    <Link href={sortComments} scroll={false} prefetch={false} className={params.sort === "comments" ? "sort-link active" : "sort-link"}>Comments</Link>
                   </div>
                   <div className="toolbar-filter-row">
                     <span className="toolbar-filter-label">Filter:</span>
-                    <Link href={typeMcp} scroll={false} className={params.type === "mcp" ? "sort-link active" : "sort-link"}>MCP</Link>
-                    <Link href={typeCli} scroll={false} className={params.type === "cli" ? "sort-link active" : "sort-link"}>CLI</Link>
-                    <Link href={typeApi} scroll={false} className={params.type === "api" ? "sort-link active" : "sort-link"}>API</Link>
-                    <Link href={typeSdk} scroll={false} className={params.type === "sdk" ? "sort-link active" : "sort-link"}>SDK</Link>
-                    <Link href={typeSkill} scroll={false} className={params.type === "skill" ? "sort-link active" : "sort-link"}>Skill</Link>
-                    <Link href={typeX402} scroll={false} className={x402Active ? "sort-link active" : "sort-link"}>x402</Link>
-                    <Link href={statusVerified} scroll={false} className={params.status === "verified" ? "sort-link active" : "sort-link"}>Verified</Link>
-                    <Link href={statusOfficial} scroll={false} className={params.status === "official" ? "sort-link active" : "sort-link"}>Official</Link>
+                    <Link href={typeMcp} scroll={false} prefetch={false} className={params.type === "mcp" ? "sort-link active" : "sort-link"}>MCP</Link>
+                    <Link href={typeCli} scroll={false} prefetch={false} className={params.type === "cli" ? "sort-link active" : "sort-link"}>CLI</Link>
+                    <Link href={typeApi} scroll={false} prefetch={false} className={params.type === "api" ? "sort-link active" : "sort-link"}>API</Link>
+                    <Link href={typeSdk} scroll={false} prefetch={false} className={params.type === "sdk" ? "sort-link active" : "sort-link"}>SDK</Link>
+                    <Link href={typeSkill} scroll={false} prefetch={false} className={params.type === "skill" ? "sort-link active" : "sort-link"}>Skill</Link>
+                    <Link href={typeX402} scroll={false} prefetch={false} className={x402Active ? "sort-link active" : "sort-link"}>x402</Link>
+                    <Link href={statusVerified} scroll={false} prefetch={false} className={params.status === "verified" ? "sort-link active" : "sort-link"}>Verified</Link>
+                    <Link href={statusOfficial} scroll={false} prefetch={false} className={params.status === "official" ? "sort-link active" : "sort-link"}>Official</Link>
                   </div>
                 </div>
                 <span className="tool-count">{browserQuery.data.total} tools</span>
@@ -497,7 +501,7 @@ export function ToolsBrowser({ base, showToolbarSearch = false, children }: Tool
                   params.page,
                 ) && (
                   <div className="load-more-row">
-                    <Link href={loadMoreHref} scroll={false} className="load-more-btn">
+                    <Link href={loadMoreHref} scroll={false} prefetch={false} className="load-more-btn">
                       Load more
                     </Link>
                     <span className="load-more-count">
@@ -517,7 +521,7 @@ export function ToolsBrowser({ base, showToolbarSearch = false, children }: Tool
                 <p className="empty-state-message">
                   {previewQuery.error?.message ?? "Could not load tool preview."}
                 </p>
-                <Link href={closePreviewHref} scroll={false} className="empty-state-clear-btn">
+                <Link href={closePreviewHref} scroll={false} prefetch={false} className="empty-state-clear-btn">
                   Close preview
                 </Link>
               </div>

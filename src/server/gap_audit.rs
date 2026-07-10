@@ -398,8 +398,16 @@ mod tests {
         ));
     }
 
+    fn clear_gap_cache_for_test() {
+        if let Ok(mut guard) = GAP_CACHE.lock() {
+            *guard = Some(HashMap::new());
+        }
+    }
+
     #[test]
     fn gap_cache_roundtrip() {
+        // Global static cache is shared across parallel tests — isolate first.
+        clear_gap_cache_for_test();
         let key = "gap|roundtrip_isolated";
         let now = Utc::now();
         let response = GapAuditResponse {
@@ -413,10 +421,12 @@ mod tests {
         };
         gap_cache_set(key.into(), response, now);
         assert!(gap_cache_get(key, now).is_some());
+        clear_gap_cache_for_test();
     }
 
     #[test]
     fn gap_cache_enforces_max_entries() {
+        clear_gap_cache_for_test();
         let now = Utc::now();
         let response = GapAuditResponse {
             intent: "test".into(),
@@ -436,16 +446,12 @@ mod tests {
         assert!(gap_cache_get("gap|maxtest-4", probe_at).is_none());
         assert!(gap_cache_get("gap|maxtest-5", probe_at).is_some());
         assert!(gap_cache_get("gap|maxtest-104", probe_at).is_some());
-        // Clean up: clear maxtest entries to avoid interfering with other cache tests.
-        if let Ok(mut guard) = GAP_CACHE.lock() {
-            if let Some(cache) = guard.as_mut() {
-                cache.retain(|key, _| !key.starts_with("gap|maxtest-"));
-            }
-        }
+        clear_gap_cache_for_test();
     }
 
     #[test]
     fn gap_cache_expires_after_60s() {
+        clear_gap_cache_for_test();
         let key = "gap|expire_unique";
         let now = Utc::now();
         let response = GapAuditResponse {
@@ -460,5 +466,6 @@ mod tests {
         gap_cache_set(key.into(), response, now);
         let future = now + chrono::Duration::seconds(CACHE_TTL_SECS + 1);
         assert!(gap_cache_get(key, future).is_none());
+        clear_gap_cache_for_test();
     }
 }

@@ -16,6 +16,22 @@ export default function robots(): MetadataRoute.Robots {
     "/api/",
     "/auth/",
     "/onboarding/",
+    "/mcp", // machine-only; no SEO value (agents use CONNECT/docs)
+  ];
+
+  const blockEntireSite = [
+    "GoogleOther",
+    "Google-Extended",
+    "GPTBot",
+    "CCBot",
+    "Bytespider",
+    "ClaudeBot",
+    "anthropic-ai",
+    "PerplexityBot",
+    "Amazonbot",
+    "Applebot-Extended",
+    "meta-externalagent",
+    "Diffbot",
   ];
 
   return {
@@ -25,28 +41,11 @@ export default function robots(): MetadataRoute.Robots {
         allow: "/",
         disallow: privatePaths,
       },
-      // Non-Search Google crawlers (metrics: GoogleOther ≈ 1M req / 7d).
-      // Search indexing still uses Googlebot (allowed above).
-      {
-        userAgent: "GoogleOther",
-        disallow: ["/"],
-      },
-      {
-        userAgent: "Google-Extended",
-        disallow: ["/"],
-      },
-      {
-        userAgent: "GPTBot",
-        disallow: ["/"],
-      },
-      {
-        userAgent: "CCBot",
-        disallow: ["/"],
-      },
-      {
-        userAgent: "Bytespider",
-        disallow: ["/"],
-      },
+      // Non-search / training crawlers. Googlebot (Search) stays on catalog.
+      ...blockEntireSite.map((userAgent) => ({
+        userAgent,
+        disallow: ["/"] as string[],
+      })),
     ],
     sitemap: `${SITE_ORIGIN}/sitemap.xml`,
   };

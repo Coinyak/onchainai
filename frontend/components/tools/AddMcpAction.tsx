@@ -51,6 +51,7 @@ export function AddMcpAction({
       <Link
         href={href}
         scroll={false}
+        prefetch={false}
         className="card-action-btn add-mcp-action"
         aria-label={actionLabel}
         title={actionLabel}
@@ -66,6 +67,7 @@ export function AddMcpAction({
       <Link
         href={href}
         scroll={false}
+        prefetch={false}
         className="add-mcp-inline-btn"
         onClick={(e) => e.stopPropagation()}
       >
@@ -78,6 +80,7 @@ export function AddMcpAction({
     <Link
       href={href}
       scroll={false}
+      prefetch={false}
       className="add-mcp-primary-btn"
       onClick={(e) => e.stopPropagation()}
     >
