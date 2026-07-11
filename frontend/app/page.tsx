@@ -1,99 +1,67 @@
-"use client";
+import {
+  dehydrate,
+  HydrationBoundary,
+  QueryClient,
+} from "@tanstack/react-query";
+import { HomePageClient } from "@/app/HomePageClient";
+import { buildToolFilters } from "@/lib/browser-query";
+import {
+  getCategoriesServer,
+  getFeaturedCardsServer,
+  getSiteSettingsServer,
+  loadBrowserDataServer,
+} from "@/lib/server-api";
+/** ISR: bots and repeat visitors hit cached HTML instead of cold CSR + API fan-out. */
+export const revalidate = 120;
 
-// Tool Finder wizard removed per UI_UX_IMPROVEMENT_SPEC §11 (Phase 3 search absorbs quick-match).
-
-import { Suspense } from "react";
-import Link from "next/link";
-import { useSearchParams } from "next/navigation";
-import { useQuery } from "@tanstack/react-query";
-import { getFeaturedCards, getSiteSettings } from "@/lib/api";
-import { ToolsBrowser } from "@/components/tools/ToolsBrowser";
-import { SearchBar } from "@/components/tools/SearchBar";
-import { FeaturedCarousel } from "@/components/tools/FeaturedCarousel";
-import { PromoCards } from "@/components/tools/PromoCards";
-import { ToolListSkeleton } from "@/components/ui/Skeleton";
-
-const DEFAULT_SETTINGS = {
-  slogan: "Crypto tools, unified.",
-  description:
-    "Discover, install, and share crypto MCP, CLI, SDK, API, x402, RWA, and AI agent tools — all in one place.",
-  mcp_endpoint: "npx mcp-remote www.onchain-ai.xyz/mcp",
-  hero_title: null as string | null,
-  hero_subtitle: null as string | null,
-};
-
-function HomeHero({ q }: { q: string }) {
-  const settingsQuery = useQuery({
-    queryKey: ["site-settings"],
-    queryFn: getSiteSettings,
-    retry: false,
-  });
-  const featuredQuery = useQuery({
-    queryKey: ["featured"],
-    queryFn: getFeaturedCards,
-  });
-  const settings = settingsQuery.data ?? DEFAULT_SETTINGS;
-  const featured = featuredQuery.data ?? [];
-  const heroTitle = settings.hero_title?.trim() || settings.slogan;
-  const heroSubtitle = settings.hero_subtitle?.trim() || settings.description;
-
-  return (
-    <div className="home-page px-gutter md:px-6 py-8 md:py-10">
-      <section className="hero mb-8">
-        <h1 className="text-h1 md:text-[36px] font-bold tracking-tight leading-tight mb-3">
-          {heroTitle}
-        </h1>
-        <p className="text-secondary text-body-md md:text-mobile-body leading-relaxed mb-4 max-w-[720px]">
-          {heroSubtitle}
-        </p>
-        <p
-          className="text-body-sm text-secondary mb-6 max-w-[720px]"
-          data-testid="hero-agent-links"
-        >
-          <Link href="/connect" className="text-primary underline-offset-2 hover:underline">
-            Connect MCP
-          </Link>
-          {" · "}
-          <Link
-            href="/connect#agent-sync"
-            className="text-primary underline-offset-2 hover:underline"
-            data-testid="hero-link-agent-sync"
-          >
-            Link your agent
-          </Link>
-          {" · "}
-          <Link href="/llms.txt" className="text-primary underline-offset-2 hover:underline">
-            llms.txt
-          </Link>
-          {" for agents and editors"}
-        </p>
-      </section>
-      <FeaturedCarousel cards={featured} />
-      <section className="mb-6">
-        <PromoCards mcpEndpoint={settings.mcp_endpoint} />
-      </section>
-      <section className="home-search-section mb-4" aria-label="Search tools">
-        <SearchBar defaultValue={q} />
-      </section>
-    </div>
-  );
+/** Default home list query key — must match ToolsBrowser for empty URL state. */
+function defaultHomeBrowserQueryKey() {
+  const filters = buildToolFilters({ sort: "hot", page: 1 });
+  return ["browser-data", "home", "hot", filters, undefined, 1] as const;
 }
 
-function HomeContent() {
-  const searchParams = useSearchParams();
-  const q = searchParams.get("q")?.trim() ?? "";
+export default async function HomePage() {
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: {
+        staleTime: 120 * 1000,
+      },
+    },
+  });
+
+  const filters = buildToolFilters({ sort: "hot", page: 1 });
+  const browserKey = defaultHomeBrowserQueryKey();
+
+  const [browserData, featured, settings, categories] = await Promise.all([
+    loadBrowserDataServer({
+      sort: "hot",
+      filters,
+      search_q: null,
+      selected: null,
+      page: 1,
+    }),
+    getFeaturedCardsServer(),
+    getSiteSettingsServer(),
+    getCategoriesServer(),
+  ]);
+
+  // Seed only successful payloads so client does not remount-fetch defaults.
+  if (browserData) {
+    queryClient.setQueryData(browserKey, browserData);
+  }
+  if (featured.length > 0) {
+    queryClient.setQueryData(["featured"], featured);
+  }
+  if (settings) {
+    queryClient.setQueryData(["site-settings"], settings);
+  }
+  if (categories.length > 0) {
+    queryClient.setQueryData(["catalog-categories"], categories);
+  }
 
   return (
-    <ToolsBrowser base="home" showToolbarSearch={false}>
-      <HomeHero q={q} />
-    </ToolsBrowser>
-  );
-}
-
-export default function HomePage() {
-  return (
-    <Suspense fallback={<ToolListSkeleton count={6} />}>
-      <HomeContent />
-    </Suspense>
+    <HydrationBoundary state={dehydrate(queryClient)}>
+      <HomePageClient />
+    </HydrationBoundary>
   );
 }
