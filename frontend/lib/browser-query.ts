@@ -168,6 +168,32 @@ export function buildToolFilters(params: BrowserQueryParams): ToolFilters {
   };
 }
 
+/** Empty filter object used by home SSR seed and empty URL state. */
+export function emptyToolFilters(): ToolFilters {
+  return buildToolFilters({ sort: "hot", page: 1 });
+}
+
+/** Normalize search q so "" and whitespace match SSR `undefined` query keys. */
+export function normalizeSearchQ(q?: string | null): string | undefined {
+  const trimmed = q?.trim();
+  return trimmed ? trimmed : undefined;
+}
+
+/** Stable React Query key for ToolsBrowser / home ISR seed. */
+export function browserDataQueryKey(
+  base: BrowserBase,
+  sort: string,
+  filters: ToolFilters,
+  q: string | undefined,
+  page: number,
+) {
+  return ["browser-data", base, sort, filters, normalizeSearchQ(q), page] as const;
+}
+
+export function defaultHomeBrowserQueryKey() {
+  return browserDataQueryKey("home", "hot", emptyToolFilters(), undefined, 1);
+}
+
 function categoryFunctionFilter(base: BrowserBase, params: BrowserQueryParams): string | undefined {
   if (typeof base === "object") return undefined;
   return params.function;
@@ -212,7 +238,7 @@ export function paramsFromSearchParams(
     install_risk: searchParams.get("install_risk") ?? undefined,
     chain: searchParams.get("chain") ?? undefined,
     sort: searchParams.get("sort") ?? "hot",
-    q: searchParams.get("q") ?? undefined,
+    q: normalizeSearchQ(searchParams.get("q")),
     selected: searchParams.get("selected") ?? undefined,
     intent: intent === ADD_MCP_INTENT ? ADD_MCP_INTENT : undefined,
     compare_tools: searchParams.get("compare_tools") ?? undefined,
