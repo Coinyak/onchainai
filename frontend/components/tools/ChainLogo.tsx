@@ -52,6 +52,8 @@ export function ChainLogo({
       aria-hidden={decorative ? true : undefined}
       width={size}
       height={size}
+      loading="lazy"
+      decoding="async"
       onError={() => setBrokenForId(id)}
     />
   );

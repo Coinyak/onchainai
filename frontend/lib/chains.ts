@@ -85,7 +85,8 @@ export const CHAIN_CATALOG: ChainMeta[] = [
   { id: "xpr", label: "XPR Network", logo: "/chains/xpr.svg", aliases: ["proton", "xpr-network", "xpr-mainnet"], pinned: false },
 ];
 
-export const STRIP_PRIMARY_VISIBLE = 20;
+/** Eager logos on the chain strip (rest behind "+N more"). Keep low for Edge budget. */
+export const STRIP_PRIMARY_VISIBLE = 12;
 
 /** Bump when regenerating `public/chains` tiles (sync with scripts/chain-logo-manifest.json harness_round). */
 export const CHAIN_LOGO_ASSET_VERSION = "15";

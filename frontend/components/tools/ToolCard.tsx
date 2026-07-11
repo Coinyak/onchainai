@@ -115,6 +115,7 @@ export function ToolCard({
       <Link
         href={previewHref}
         scroll={false}
+        prefetch={false}
         className="tool-card-link no-underline text-inherit"
         data-testid="tool-card-link"
       >
@@ -200,6 +201,7 @@ export function ToolCard({
         </button>
         <Link
           href={compareUrl}
+          prefetch={false}
           className="card-action-btn"
           aria-label="Compare"
           title="Compare"

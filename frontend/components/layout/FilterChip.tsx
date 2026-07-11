@@ -34,7 +34,13 @@ export function FilterChip({ href, label, active, count, onNavigate }: FilterChi
 
   return (
     <li>
-      <Link href={href} scroll={false} className={className} onClick={onNavigate}>
+      <Link
+        href={href}
+        scroll={false}
+        prefetch={false}
+        className={className}
+        onClick={onNavigate}
+      >
         {chipContent}
       </Link>
     </li>

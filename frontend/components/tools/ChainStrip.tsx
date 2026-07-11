@@ -45,6 +45,7 @@ export function ChainStrip({ base, queryBase, activeChain, chainCounts }: ChainS
           <Link
             href={allHref}
             scroll={false}
+            prefetch={false}
             className={allActive ? "chain-tile chain-tile-all active" : "chain-tile chain-tile-all"}
             aria-label="All chains"
             title="All chains"
@@ -61,6 +62,7 @@ export function ChainStrip({ base, queryBase, activeChain, chainCounts }: ChainS
                 key={entry.id}
                 href={href}
                 scroll={false}
+                prefetch={false}
                 className={isActive ? "chain-tile chain-tile-logo active" : "chain-tile chain-tile-logo"}
                 aria-label={entry.label}
                 title={entry.label}
@@ -104,6 +106,7 @@ export function ChainStrip({ base, queryBase, activeChain, chainCounts }: ChainS
                 <Link
                   href={href}
                   scroll={false}
+                  prefetch={false}
                   className={isActive ? "chain-overflow-item active" : "chain-overflow-item"}
                   aria-current={isActive ? "page" : undefined}
                 >
