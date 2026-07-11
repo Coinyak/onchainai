@@ -256,7 +256,8 @@ export function ToolsBrowser({ base, showToolbarSearch = false, children }: Tool
         selected: null,
         page: params.page,
       }),
-    staleTime: 2 * 60 * 1000,
+    // Match home ISR (120s): hydrated SSR data should not immediately re-POST.
+    staleTime: 120 * 1000,
     refetchOnMount: false,
   });
 

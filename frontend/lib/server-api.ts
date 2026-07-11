@@ -1,9 +1,13 @@
 import type {
+  BrowserDataPayload,
   CategoryRow,
   CategoryWithCount,
+  FeaturedCard,
+  LoadBrowserDataRequest,
   PublicDashboardSnapshot,
   PublicToolDetail,
   SessionUser,
+  SiteSettings,
   Tool,
   ToolFilters,
   ToolListRequest,
@@ -140,6 +144,42 @@ export async function getPublicDashboardServer(
       `/api/v2/dashboard?limit=${limit}`,
       { revalidate: 300 },
     );
+  } catch {
+    return null;
+  }
+}
+
+/** Default catalog payload for home/tools SSR (hits Railway origin, not Vercel rewrite). */
+export async function loadBrowserDataServer(
+  req: LoadBrowserDataRequest,
+  revalidate = SEO_REVALIDATE_SECONDS,
+): Promise<BrowserDataPayload | null> {
+  try {
+    return await serverApiFetch<BrowserDataPayload>("/api/v2/browser-data", {
+      method: "POST",
+      body: JSON.stringify(req),
+      revalidate,
+    });
+  } catch {
+    return null;
+  }
+}
+
+export async function getFeaturedCardsServer(
+  revalidate = SEO_REVALIDATE_SECONDS,
+): Promise<FeaturedCard[]> {
+  try {
+    return await serverApiFetch<FeaturedCard[]>("/api/v2/featured", { revalidate });
+  } catch {
+    return [];
+  }
+}
+
+export async function getSiteSettingsServer(
+  revalidate = SEO_REVALIDATE_SECONDS,
+): Promise<SiteSettings | null> {
+  try {
+    return await serverApiFetch<SiteSettings>("/api/v2/settings", { revalidate });
   } catch {
     return null;
   }
