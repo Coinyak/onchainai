@@ -28,6 +28,8 @@ import {
   withoutSelected,
   shouldShowLoadMore,
   buildToolFilters,
+  browserDataQueryKey,
+  normalizeSearchQ,
   buildFilterRevision,
   compareReturnHref,
   stripPreviewParams,
@@ -247,12 +249,18 @@ export function ToolsBrowser({ base, showToolbarSearch = false, children }: Tool
   });
 
   const browserQuery = useQuery({
-    queryKey: ["browser-data", base, params.sort, filters, params.q, params.page],
+    queryKey: browserDataQueryKey(
+      base,
+      params.sort,
+      filters,
+      params.q,
+      params.page,
+    ),
     queryFn: () =>
       loadBrowserData({
         sort: params.sort,
         filters,
-        search_q: params.q ?? null,
+        search_q: normalizeSearchQ(params.q) ?? null,
         selected: null,
         page: params.page,
       }),

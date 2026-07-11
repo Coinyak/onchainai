@@ -21,11 +21,20 @@ const nextConfig: NextConfig = {
       "https://github.com/Coinyak/onchainai",
   },
   async headers() {
-    const immutableStatic = [
+    // chains/*.svg?v=… is content-addressed via query; safe to pin forever.
+    const immutableVersioned = [
       ...SECURITY_HEADERS,
       {
         key: "Cache-Control",
         value: "public, max-age=31536000, immutable",
+      },
+    ];
+    // brand/clients are overwritten in place (no ?v=); short TTL + SWR.
+    const revalidatingStatic = [
+      ...SECURITY_HEADERS,
+      {
+        key: "Cache-Control",
+        value: "public, max-age=86400, stale-while-revalidate=604800",
       },
     ];
     return [
@@ -33,10 +42,9 @@ const nextConfig: NextConfig = {
         source: "/:path*",
         headers: SECURITY_HEADERS,
       },
-      // Versioned via ?v= on chain logos; brand/clients rarely change.
-      { source: "/chains/:path*", headers: immutableStatic },
-      { source: "/brand/:path*", headers: immutableStatic },
-      { source: "/clients/:path*", headers: immutableStatic },
+      { source: "/chains/:path*", headers: immutableVersioned },
+      { source: "/brand/:path*", headers: revalidatingStatic },
+      { source: "/clients/:path*", headers: revalidatingStatic },
     ];
   },
   async rewrites() {

@@ -8,15 +8,24 @@ import { SITE_ORIGIN } from "@/lib/site";
  * - Soften non-search Google / AI training crawlers that inflated Edge usage.
  */
 export default function robots(): MetadataRoute.Robots {
+  // Both `/admin` and `/admin/` so exact + nested paths match reliably.
   const privatePaths = [
+    "/admin",
     "/admin/",
+    "/dashboard",
     "/dashboard/",
+    "/toolkit",
     "/toolkit/",
+    "/blueprints",
     "/blueprints/",
+    "/api",
     "/api/",
+    "/auth",
     "/auth/",
+    "/onboarding",
     "/onboarding/",
     "/mcp", // machine-only; no SEO value (agents use CONNECT/docs)
+    "/mcp/",
   ];
 
   const blockEntireSite = [

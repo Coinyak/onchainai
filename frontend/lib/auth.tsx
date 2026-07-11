@@ -4,6 +4,7 @@ import {
   createContext,
   useContext,
   useEffect,
+  useState,
   type ReactNode,
 } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -26,12 +27,21 @@ function sessionHintPresent(): boolean {
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  // Cookie is only readable after mount (SSR has no document). Start as
+  // "unknown" so we do not flash guest chrome for logged-in users once the
+  // session hint is detected — then load /me only when the hint is present.
+  const [sessionHint, setSessionHint] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    setSessionHint(sessionHintPresent());
+  }, []);
+
   // Skip /api/v2/me for anonymous traffic (bots + guests). Session cookie
   // hint is set on login; only then do we burn an Edge rewrite on Vercel.
   const { data, isLoading, isFetching, refetch } = useQuery({
     queryKey: ["me"],
     queryFn: getMe,
-    enabled: typeof document !== "undefined" && sessionHintPresent(),
+    enabled: sessionHint === true,
     staleTime: 60_000,
     gcTime: 5 * 60_000,
     refetchOnMount: true,
@@ -42,6 +52,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     function onFocus() {
       if (sessionHintPresent()) {
+        setSessionHint(true);
         void refetch();
       }
     }
@@ -52,11 +63,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const value: AuthContextValue = {
     user: data ?? null,
-    // Guest (no session hint): not loading. Logged-in: wait for first /me.
+    // null = not mounted yet; true = wait for /me; false = guest.
     isLoading:
-      typeof document !== "undefined" && sessionHintPresent()
-        ? isLoading || (isFetching && data === undefined)
-        : false,
+      sessionHint === null
+        ? true
+        : sessionHint
+          ? isLoading || (isFetching && data === undefined)
+          : false,
     isAuthenticated: !!data,
     isAdmin: data?.is_admin ?? false,
     refetch,
