@@ -14,10 +14,11 @@ import {
   getToolCommentCountServer,
   ServerApiError,
 } from "@/lib/server-api";
-import { DEFAULT_OG_IMAGE_PATH } from "@/lib/site";
+import { DEFAULT_OG_IMAGE_PATH, SEO_REVALIDATE_SECONDS } from "@/lib/site";
 import { serializeJsonLd } from "@/lib/json-ld";
 
-export const revalidate = 120;
+/** Must be a literal (Next segment config); keep in sync with SEO_REVALIDATE_SECONDS. */
+export const revalidate = 300;
 
 type PageProps = {
   params: Promise<{ slug: string }>;
@@ -84,7 +85,7 @@ export default async function ToolDetailPage({ params }: PageProps) {
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: {
-        staleTime: 120 * 1000,
+        staleTime: SEO_REVALIDATE_SECONDS * 1000,
       },
     },
   });

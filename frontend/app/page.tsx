@@ -16,15 +16,17 @@ import {
   getSiteSettingsServer,
   loadBrowserDataServer,
 } from "@/lib/server-api";
+import { SEO_REVALIDATE_SECONDS } from "@/lib/site";
 
-/** ISR: bots and repeat visitors hit cached HTML instead of cold CSR + API fan-out. */
-export const revalidate = 120;
+/** ISR: bots and repeat visitors hit cached HTML instead of cold CSR + API fan-out.
+ *  Must be a literal (Next segment config); keep in sync with SEO_REVALIDATE_SECONDS. */
+export const revalidate = 300;
 
 export default async function HomePage() {
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: {
-        staleTime: 120 * 1000,
+        staleTime: SEO_REVALIDATE_SECONDS * 1000,
       },
     },
   });

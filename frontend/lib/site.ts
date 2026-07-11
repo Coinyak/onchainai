@@ -5,4 +5,5 @@ export const SITE_ORIGIN =
 
 export const DEFAULT_OG_IMAGE_PATH = "/og-default.png";
 
-export const SEO_REVALIDATE_SECONDS = 120;
+/** ISR / server-fetch revalidate. Higher = fewer Edge regenerations under bot crawl. */
+export const SEO_REVALIDATE_SECONDS = 300;

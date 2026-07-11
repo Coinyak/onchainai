@@ -12,6 +12,7 @@ import {
   type CategoryWithCount,
 } from "@/lib/api";
 import { FUNCTION_CATEGORY_FALLBACK } from "@/lib/function-categories";
+import { SEO_REVALIDATE_SECONDS } from "@/lib/site";
 import {
   type BrowserBase,
   ADD_MCP_INTENT,
@@ -264,8 +265,8 @@ export function ToolsBrowser({ base, showToolbarSearch = false, children }: Tool
         selected: null,
         page: params.page,
       }),
-    // Match home ISR (120s): hydrated SSR data should not immediately re-POST.
-    staleTime: 120 * 1000,
+    // Match home ISR: hydrated SSR data should not immediately re-POST.
+    staleTime: SEO_REVALIDATE_SECONDS * 1000,
     refetchOnMount: false,
   });
 

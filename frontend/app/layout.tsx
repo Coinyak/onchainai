@@ -73,7 +73,8 @@ export default function RootLayout({
           <TopNav />
           <main className="site-page-body flex-1 flex flex-col">{children}</main>
           <SiteFooter />
-          <Analytics />
+          {/* Only on Vercel — local next start has no /_vercel/insights and fails browser gates. */}
+          {process.env.VERCEL ? <Analytics /> : null}
         </Providers>
       </body>
     </html>
