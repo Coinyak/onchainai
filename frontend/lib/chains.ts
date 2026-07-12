@@ -83,13 +83,14 @@ export const CHAIN_CATALOG: ChainMeta[] = [
   { id: "ethereal", label: "Ethereal", logo: "/chains/ethereal.svg", aliases: ["ethereal-mainnet"], pinned: false },
   { id: "stable", label: "Stable", logo: "/chains/stable.svg", aliases: ["stable-2", "stable-mainnet"], pinned: false },
   { id: "xpr", label: "XPR Network", logo: "/chains/xpr.svg", aliases: ["proton", "xpr-network", "xpr-mainnet"], pinned: false },
+  { id: "robinhood", label: "Robinhood Chain", logo: "/chains/robinhood.svg", aliases: ["robinhood-chain", "hood-chain", "hoodchain", "rh-chain", "robinhood-mainnet"], pinned: false },
 ];
 
 /** Eager logos on the chain strip (rest behind "+N more"). Keep low for Edge budget. */
 export const STRIP_PRIMARY_VISIBLE = 12;
 
 /** Bump when regenerating `public/chains` tiles (sync with scripts/chain-logo-manifest.json harness_round). */
-export const CHAIN_LOGO_ASSET_VERSION = "15";
+export const CHAIN_LOGO_ASSET_VERSION = "16";
 
 /** Chain IDs with a committed `/chains/<id>.svg` tile (no text-fallback tiles in strip). */
 export const CHAIN_LOGO_IDS = new Set<string>(

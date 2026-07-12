@@ -544,6 +544,19 @@ pub const CHAIN_CATALOG: &[ChainMeta] = &[
         aliases: &["proton", "xpr-network", "xpr-mainnet"],
         pinned: false,
     },
+    ChainMeta {
+        id: "robinhood",
+        label: "Robinhood Chain",
+        logo: "/chains/robinhood.svg",
+        aliases: &[
+            "robinhood-chain",
+            "hood-chain",
+            "hoodchain",
+            "rh-chain",
+            "robinhood-mainnet",
+        ],
+        pinned: false,
+    },
 ];
 
 /// Primary-row chain tiles (excluding the All tile).
@@ -655,6 +668,7 @@ fn chain_slug_from_eip155_network(network: &str) -> Option<&'static str> {
         (43114, "avalanche"),
         (56, "bsc"),
         (196, "x-layer"),
+        (4663, "robinhood"),
     ];
     let rest = network.trim().strip_prefix("eip155:")?;
     let chain_id: u32 = rest.parse().ok()?;
@@ -1044,7 +1058,7 @@ mod tests {
                 "XRPL catalog alias should resolve: {known_xrpl}"
             );
         }
-        for unknown in ["anubis", "robinhood"] {
+        for unknown in ["anubis", "fakenet"] {
             assert!(
                 resolve_chain(unknown).is_none(),
                 "unknown chain should not resolve: {unknown}"
@@ -1052,6 +1066,12 @@ mod tests {
             assert!(
                 !is_chain_noise(unknown),
                 "unknown chain should still render fallback pill: {unknown}"
+            );
+        }
+        for known_rh in ["robinhood", "robinhood-chain", "hoodchain", "rh-chain"] {
+            assert!(
+                resolve_chain(known_rh).is_some(),
+                "Robinhood Chain catalog alias should resolve: {known_rh}"
             );
         }
     }
@@ -1136,6 +1156,10 @@ mod tests {
             normalize_chain_token("eip155:8453"),
             Some("base".to_string())
         );
+        assert_eq!(
+            normalize_chain_token("eip155:4663"),
+            Some("robinhood".to_string())
+        );
     }
 
     #[test]
@@ -1164,7 +1188,7 @@ mod tests {
     #[test]
     fn strip_primary_visible_leaves_overflow_for_expand_control() {
         assert_eq!(STRIP_PRIMARY_VISIBLE, 20);
-        assert_eq!(CHAIN_CATALOG.len(), 73);
+        assert_eq!(CHAIN_CATALOG.len(), 74);
 
         let counts: Vec<(String, i64)> = CHAIN_CATALOG
             .iter()
