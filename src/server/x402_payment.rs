@@ -458,8 +458,9 @@ struct PaymentPayloadV2 {
     payload: Value,
     accepted: PaymentRequirementsV2,
     /// CDP Bazaar requires `paymentPayload.resource` on settle to associate discovery.
+    /// Clients may send a URL string **or** a ResourceInfo object — accept both.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    resource: Option<String>,
+    resource: Option<Value>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -712,19 +713,29 @@ async fn facilitator_post(
     })
 }
 
+fn resource_url_from_value(v: &Value) -> Option<String> {
+    match v {
+        Value::String(s) if !s.trim().is_empty() => Some(s.clone()),
+        Value::Object(map) => map
+            .get("url")
+            .and_then(|u| u.as_str())
+            .filter(|s| !s.is_empty())
+            .map(str::to_string),
+        _ => None,
+    }
+}
+
 /// Ensure CDP Bazaar can bind discovery meta: prefer client resource, else accepted.resource.url.
+/// Always store a **string** URL on paymentPayload.resource (CDP catalog association).
 fn ensure_payload_resource(
     mut payload: PaymentPayloadV2,
     expected: &PaymentRequirementsV2,
 ) -> PaymentPayloadV2 {
-    if payload
-        .resource
-        .as_deref()
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .is_some()
-    {
-        return payload;
+    if let Some(ref r) = payload.resource {
+        if let Some(url) = resource_url_from_value(r) {
+            payload.resource = Some(Value::String(url));
+            return payload;
+        }
     }
     if let Some(url) = expected
         .resource
@@ -732,7 +743,7 @@ fn ensure_payload_resource(
         .map(|r| r.url.clone())
         .filter(|u| !u.is_empty())
     {
-        payload.resource = Some(url);
+        payload.resource = Some(Value::String(url));
     } else if let Some(url) = payload
         .accepted
         .resource
@@ -740,7 +751,7 @@ fn ensure_payload_resource(
         .map(|r| r.url.clone())
         .filter(|u| !u.is_empty())
     {
-        payload.resource = Some(url);
+        payload.resource = Some(Value::String(url));
     }
     payload
 }
@@ -1113,7 +1124,23 @@ mod tests {
         };
         let filled = ensure_payload_resource(payload, &expected);
         assert_eq!(
-            filled.resource.as_deref(),
+            filled.resource.as_ref().and_then(|v| v.as_str()),
+            Some("https://www.onchain-ai.xyz/api/v2/premium/gap-audit")
+        );
+
+        // Client often sends ResourceInfo object — normalize to URL string.
+        let payload2 = PaymentPayloadV2 {
+            x402_version: 2,
+            payload: json!({}),
+            accepted: expected.clone(),
+            resource: Some(json!({
+                "url": "https://www.onchain-ai.xyz/api/v2/premium/gap-audit",
+                "description": "x"
+            })),
+        };
+        let filled2 = ensure_payload_resource(payload2, &expected);
+        assert_eq!(
+            filled2.resource.as_ref().and_then(|v| v.as_str()),
             Some("https://www.onchain-ai.xyz/api/v2/premium/gap-audit")
         );
     }
