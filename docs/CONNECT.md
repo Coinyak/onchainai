@@ -176,7 +176,8 @@ Copy-paste payloads: `docs/listings/directory-forms.md`.
 | awesome-crypto-mcp-servers | [hive-intel/awesome-crypto-mcp-servers#209](https://github.com/hive-intel/awesome-crypto-mcp-servers/pull/209) | Open · **paid copy pushed** 2026-07-12 |
 | awesome-x402 | [xpaysh/awesome-x402#811](https://github.com/xpaysh/awesome-x402/pull/811) | Open · **submitted 2026-07-12** (MCP section, paid remote) |
 | Self catalog | [onchain-ai.xyz/tools/onchainai](https://www.onchain-ai.xyz/tools/onchainai) | Seeded (official); site browse free |
-| Smithery / mcp.so / PulseMCP / Glama | `docs/listings/directory-forms.md` | **Paid blurb ready** · needs Smithery/dir account login to publish (CLI not authed here) |
+| Smithery | [coinyak/onchainai](https://smithery.ai/servers/coinyak/onchainai) (also [hoyeon4315/onchainai](https://smithery.ai/servers/hoyeon4315/onchainai)) | **Published 2026-07-12** · external `https://www.onchain-ai.xyz/mcp` (paid tools/call) |
+| mcp.so / PulseMCP / Glama | `docs/listings/directory-forms.md` | Paid blurb ready · web claim still operator (may crawl registry) |
 | OKX AI Agent Marketplace | [okx.ai/agents](https://okx.ai/agents) — ASP #4609 | **Re-submitted 2026-07-12** · 1 SKU `$0.1` · update tx `0x5bb50900…` · AI review “suggested pass”; activate still pending OKX QA |
 | x402 Bazaar (seller) | CDP merchant discovery | **Blocked** — needs `EVM_PRIVATE_KEY` (Base USDC) for one paid settle |
 | Base Builder Code | [dashboard.base.org](https://dashboard.base.org) | Applied `bc_ljttbnhv` |

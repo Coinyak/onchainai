@@ -38,6 +38,7 @@ Find, compare, and vet crypto MCP/CLI/SDK/API tools with trust scores and instal
 | GitHub repo topics | `mcp`, `x402`, `crypto`, `ai-agents`, `rust`, `nextjs`, `web3` |
 | `server.json` | **Published** — `io.github.Coinyak/onchainai` **v0.2.1** (2026-07-12) paid description live |
 | OKX ASP #4609 | **Re-submitted 2026-07-12** — Path A `$0.1` bundled SKU; profile update on-chain; activate pending OKX |
+| Smithery | **Published 2026-07-12** — [coinyak/onchainai](https://smithery.ai/servers/coinyak/onchainai) → `https://www.onchain-ai.xyz/mcp` |
 | awesome-crypto PR #209 | Paid listing copy pushed to fork branch |
 | web3-mcp-hub PR #1 | Paid listing copy pushed to fork branch |
 | MCP HTTP proof | https://www.onchain-ai.xyz/.well-known/mcp-registry-auth (deployed) |
