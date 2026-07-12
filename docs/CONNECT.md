@@ -181,7 +181,7 @@ Copy-paste payloads: `docs/listings/directory-forms.md`.
 | PulseMCP / Glama / mcpservers.org | browser forms | Opened submit flows; no public write API (Cloudflare / login) — may crawl Official Registry |
 | awesome-mcp-servers (punkpeye / appcypher) | mcp-submit | Already listed (tool reported) |
 | OKX AI Agent Marketplace | [okx.ai/agents](https://okx.ai/agents) — ASP #4609 | **Re-submitted 2026-07-12** · 1 SKU `$0.1` · update tx `0x5bb50900…` · AI review “suggested pass”; activate still pending OKX QA |
-| x402 Bazaar (seller) | Multi-price CDP + `extensions.bazaar` deployed 2026-07-12 | **3 SKUs settled** (health `$0.001`, recommend `$0.01`, gap `$0.01`) Base USDC while OKX briefly off. CDP merchant list may lag ≤10m / schema refine. OKX Path A stays separate `$0.1` flat. |
+| x402 Bazaar (seller) | Multi-price CDP + bazaar extension | **LIVE total=3** merchant `0x2af05c…` — health `$0.001`, recommend `$0.01`, gap_audit `$0.01` (Base USDC). OKX Path A separate `$0.1` flat. |
 | Base Builder Code | [dashboard.base.org](https://dashboard.base.org) | Applied `bc_ljttbnhv` |
 
 ## Troubleshooting
