@@ -2,6 +2,32 @@
 
 > Generated for operator one-click submit. Update the status table in `docs/CONNECT.md` after each success.
 
+## Product policy (2026-07-12 owner)
+
+| Surface | Billing |
+|---------|---------|
+| **Website** (`onchain-ai.xyz` UI, public web browse) | May stay free (discovery / catalog browse) |
+| **External MCP** (OKX, Smithery, mcp.so, PulseMCP, Glama, Cursor Directory, agent clients on `POST /mcp`) | **Paid** — same public endpoint as OKX Path A |
+| **Unmetered on MCP** | `GET /mcp`, `initialize`, `tools/list` only |
+| **Metered on MCP (prod, OKX gate on)** | **Every** `tools/call` — incl. `search_tools` — **$0.1** X Layer USDT0 (OKX Broker) |
+
+**Rules for all external listings**
+
+1. **Do not** claim “free discovery”, “free MCP”, or “no payment” for `POST /mcp` tools/call.
+2. Package like OKX: **one endpoint**, multi-tool capability in the description, fee in the fee field (or “x402 pay-per-call” if the directory has no fee field).
+3. Value-first copy (trust / install-risk / vet before install). Do not lead with `$0.1`.
+4. Endpoint always `https://www.onchain-ai.xyz/mcp` — never Railway hostname, http, or localhost.
+5. Smoke before submit: unpaid `tools/call` → **HTTP 402** + payment-required.
+
+### Canonical external MCP blurb (all directories)
+
+```
+Find, compare, and vet crypto MCP/CLI/SDK/API tools with trust scores and install-risk before your agent installs anything. Search, detail, compare, install guides, x402 metadata, live endpoint probes, verified picks, and gap audits — maintained catalog, not a raw link dump. Remote MCP: pay-per-call (x402) on tools/call; website browse may be free.
+```
+
+**Fee line (when the form has a fee / pricing field):** `0.1` USDT0 per `tools/call` (X Layer) — same SKU as OKX ASP #4609.  
+**If no fee field:** state “x402 micropayment required on tools/call” in the description; never “free”.
+
 ## Done (2026-07-04)
 
 | Item | Link |
@@ -10,7 +36,10 @@
 | web3-mcp-hub PR | https://github.com/rudazy/web3-mcp-hub/pull/1 |
 | awesome-crypto-mcp-servers PR | https://github.com/hive-intel/awesome-crypto-mcp-servers/pull/209 |
 | GitHub repo topics | `mcp`, `x402`, `crypto`, `ai-agents`, `rust`, `nextjs`, `web3` |
-| `server.json` | **Published** — `io.github.Coinyak/onchainai` v0.2.0 (2026-07-04) |
+| `server.json` | **Published** — `io.github.Coinyak/onchainai` v0.2.0 (2026-07-04); local **v0.2.1** paid description ready (republish needs Coinyak GitHub auth) |
+| OKX ASP #4609 | **Re-submitted 2026-07-12** — Path A `$0.1` bundled SKU; profile update on-chain; activate pending OKX |
+| awesome-crypto PR #209 | Paid listing copy pushed to fork branch |
+| web3-mcp-hub PR #1 | Paid listing copy pushed to fork branch |
 | MCP HTTP proof | https://www.onchain-ai.xyz/.well-known/mcp-registry-auth (deployed) |
 | MCP DNS TXT | `scripts/godaddy-mcp-registry-txt.sh` (apex; GoDaddy API keys) |
 
@@ -21,7 +50,8 @@
 | Name | OnchainAI |
 | URL | https://www.onchain-ai.xyz/mcp |
 | Transport | HTTP / streamable-http |
-| Description | Crypto tool directory MCP — search_tools, get_tool_detail, get_install_guide, list_categories, get_dashboard_snapshot. Free discovery for x402 APIs with trust metadata. |
+| Pricing | Paid — x402 pay-per-call on `tools/call` (~$0.1 / call when OKX gate active) |
+| Description | Find, compare, and vet crypto tools with trust and install-risk before install. Search, compare, probes, verified picks, gap audits. Remote MCP tools/call is pay-per-call (x402); not a free public dump. |
 | Repo | https://github.com/Coinyak/onchainai |
 
 ## mcp.so — https://mcp.so
@@ -30,8 +60,8 @@
 |-------|-------|
 | Server name | OnchainAI |
 | MCP URL | https://www.onchain-ai.xyz/mcp |
-| Tags | crypto, web3, x402, mcp, ai-agents |
-| Description | Discover and vet crypto MCP/CLI/SDK/API/x402 tools for AI agents. |
+| Tags | crypto, web3, x402, mcp, ai-agents, paid |
+| Description | Crypto tool intelligence MCP for agents — ranked search, trust/install-risk, compare, x402 probes. Pay-per-call (x402) on tools/call. |
 
 ## PulseMCP — https://www.pulsemcp.com
 
@@ -40,7 +70,9 @@
 | Name | OnchainAI |
 | Endpoint | https://www.onchain-ai.xyz/mcp |
 | Category | Crypto / Web3 |
+| Pricing note | x402 pay-per-call on tools/call |
 | GitHub | https://github.com/Coinyak/onchainai |
+| Description | Use canonical external MCP blurb above. |
 
 ## Glama — https://glama.ai/mcp/servers
 
@@ -49,10 +81,12 @@
 | Name | OnchainAI |
 | Remote URL | https://www.onchain-ai.xyz/mcp |
 | Homepage | https://www.onchain-ai.xyz/connect |
+| Description | Use canonical external MCP blurb above (paid tools/call). |
 
 ## Cursor Directory
 
-Use deeplink from https://www.onchain-ai.xyz/connect or MCP URL above.
+Use deeplink from https://www.onchain-ai.xyz/connect or MCP URL above.  
+Listing text: same paid blurb — do not mark as free MCP.
 
 ## Base Builder Code — https://dashboard.base.org
 
@@ -92,19 +126,19 @@ Index appears after CDP Facilitator **settle** on a paid route with Bazaar disco
 >
 > **History:** Rejected 2026-07-08 (protocol: CDP/Base vs OKX Broker/X Layer USDT0) → fixed. Rejected [T2] (missing public HTTPS endpoint) → endpoint `https://www.onchain-ai.xyz/mcp`; 402 `resource.url` pinned to public origin (PR #76).
 
-### Policy exception — OKX bundled SKU (intentional)
+### Policy — OKX bundled SKU = external paid standard (intentional)
 
-Team guideline / free-tier guardian (and some automated review rules) prefer **free discovery** (`search_tools`, `get_tool_detail`, … without 402). That remains the default **when OKX A2MCP is off** (CDP/Base premium-only metering).
+**Owner decision (2026-07-12):** website may stay free; **every external MCP surface is paid**, same model as OKX Path A.
 
-**Exception (operator decision, Path A):** when OKX credentials are active, marketplace listing is **one flat A2MCP SKU**. Every MCP `tools/call` is metered — including discovery tools. This is intentional for OKX Agent Marketplace (single fee field, no free/premium tool split on the listing), not a docs bug.
+When OKX credentials are active (prod), marketplace + any remote client on `POST /mcp` is **one flat A2MCP SKU**. Every MCP `tools/call` is metered — including discovery tools. No free/premium tool split on external listings.
 
 | Surface | Free / unmetered | Metered |
 |---------|------------------|---------|
-| OKX gate **off** | Discovery `tools/call` + unmetered methods | Premium tools only (CDP/Base) |
-| OKX gate **on** (prod Path A) | `GET /mcp`, `initialize`, `tools/list`, website UI | **All** `tools/call` (incl. `search_tools`) |
+| OKX gate **off** (dev / emergency) | Discovery `tools/call` + unmetered methods | Premium tools only (CDP/Base) |
+| OKX gate **on** (prod Path A) | `GET /mcp`, `initialize`, `tools/list`, **website UI** | **All** MCP `tools/call` (incl. `search_tools`) |
 | Always | No custody; third-party x402 is metadata only | — |
 
-Qodo / compliance bots may flag “discovery must not enforce x402” against this SKU — **accept as known exception**; do not “fix” by reverting docs to free-discovery claims while prod still meters all calls. Code change to free discovery under OKX would be a separate product decision, not a drive-by docs edit.
+Qodo / free-tier bots may flag “discovery must not enforce x402” — **accept**: external paid is the product rule; do not “fix” by claiming free discovery on listings while prod returns 402.
 
 ### Quick reference (do not confuse)
 
