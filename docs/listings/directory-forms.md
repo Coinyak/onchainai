@@ -108,11 +108,25 @@ Repo ships `server.json` at project root (`name`: `xyz.onchain-ai/onchainai`).
 
 ## x402 Bazaar (seller — no form)
 
-Index appears after CDP Facilitator **settle** on a paid route with Bazaar discovery metadata.
+Index appears after CDP Facilitator **settle** on a paid route with **Bazaar discovery extension** metadata (`extensions.bazaar`).
 
 - Facilitator: `https://api.cdp.coinbase.com/platform/v2/x402`
 - Self-check: `GET https://api.cdp.coinbase.com/platform/v2/x402/discovery/merchant?payTo=<X402_PAY_TO_ADDRESS>`
 - Docs: https://docs.cdp.coinbase.com/x402/bazaar
+- Multi-price CDP SKUs (OKX-off / Base USDC) — settle each once:
+
+| Resource | Method | Price |
+|----------|--------|-------|
+| `/api/v2/premium/check-endpoint-health/{slug}` | GET | `$0.001` |
+| `/api/v2/premium/recommend-verified-tool` | POST | `$0.01` |
+| `/api/v2/premium/gap-audit` | POST | `$0.01` |
+
+```bash
+# Requires OKX gate OFF (CDP Base 402). Buyer: Base USDC + ETH gas.
+EVM_PRIVATE_KEY=0x... node scripts/x402-cdp-seller-settle-all.mjs https://www.onchain-ai.xyz
+```
+
+OKX Path A remains a **separate** flat `$0.1` USDT0 SKU (not CDP Bazaar).
 
 ## x402 community
 

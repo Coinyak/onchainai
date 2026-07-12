@@ -126,10 +126,20 @@ pub async fn require_axis_b_payment(
             return Err((StatusCode::SERVICE_UNAVAILABLE, axum::Json(body)).into_response());
         }
     };
-    let requirements = gate.requirement_for(
-        &format!("mcp://tool/{tool_name}"),
+    // Prefer public HTTPS resource URL so CDP Bazaar can catalog MCP-backed tools
+    // alongside REST SKUs (mcp:// schemes are not Bazaar HTTP inventory).
+    let resource_path = format!("/mcp#tool={tool_name}");
+    let requirements = gate.requirement_for_catalog(
+        &resource_path,
         &format!("OnchainAI MCP {tool_name}"),
         "application/json",
+        None,
+        &["premium", "mcp", tool_name],
+        Some(crate::server::x402_payment::BazaarDiscovery::post(
+            format!("OnchainAI MCP {tool_name}"),
+            json!({ "name": tool_name, "arguments": {} }),
+            json!({ "content": [] }),
+        )),
     );
     let client = facilitator_client();
     require_payment(&client, &gate, headers, requirements, None)

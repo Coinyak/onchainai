@@ -15,14 +15,73 @@ use crate::server::gap_audit::{
 };
 use crate::server::m3_analytics::{get_price_history, get_x402_trends};
 use crate::server::mcp_search::{mcp_search_tools, McpSearchSort};
-use crate::server::mcp_x402::{load_mcp_premium_config, require_axis_b_payment};
+use crate::server::mcp_x402::load_mcp_premium_config;
 use crate::server::product_a::{
     cache_get, cache_key, cache_set, recommend_verified_tool, validate_intent, ProductAError,
     ProductAResponse, PRODUCT_A_DISCLAIMER,
 };
-use crate::server::x402_payment::{facilitator_client, require_payment, X402PaymentConfig};
+use crate::server::x402_payment::{
+    facilitator_client, require_payment, BazaarDiscovery, CdpSellerSku, X402PaymentConfig,
+};
 use crate::server::x402_premium::check_endpoint_health;
 use crate::AppState;
+
+/// CDP/Base payment for a seller SKU. Prefers Axis-B site_settings price when that
+/// operator toggle is active; otherwise uses the catalog `sku.price_usd`.
+async fn require_cdp_seller_payment(
+    state: &AppState,
+    headers: &HeaderMap,
+    sku: CdpSellerSku,
+    tool_name: &str,
+) -> Result<(), Response> {
+    let axis = load_mcp_premium_config(&state.pool).await.ok();
+    let mut config = X402PaymentConfig::from_env();
+    let price = if let Some(ref a) = axis {
+        if a.is_active() {
+            config.pay_to = a.pay_to.clone();
+            config.network = a.network.clone();
+            if let Some(asset) = a.asset.as_deref().filter(|v| !v.is_empty()) {
+                config.asset = asset.to_string();
+            }
+            config.enabled = true;
+            a.price.as_str()
+        } else {
+            sku.price_usd
+        }
+    } else {
+        sku.price_usd
+    };
+
+    let (input_example, output_example) = match tool_name {
+        "recommend_verified_tool" => (
+            json!({ "intent": "bridge USDC to Base", "chain": "base" }),
+            json!({ "verified_tool": { "slug": "example" }, "rejected": [] }),
+        ),
+        "gap_audit" => (
+            json!({ "intent": "bridge then swap then stake" }),
+            json!({ "subgoals": [], "gaps": [] }),
+        ),
+        _ => (json!({}), json!({})),
+    };
+    let bazaar = if sku.method.eq_ignore_ascii_case("GET") {
+        BazaarDiscovery::get(sku.description, output_example)
+    } else {
+        BazaarDiscovery::post(sku.description, input_example, output_example)
+    };
+
+    let requirements = config.requirement_for_catalog(
+        sku.path,
+        sku.description,
+        "application/json",
+        Some(price),
+        sku.tags,
+        Some(bazaar),
+    );
+    let client = facilitator_client();
+    require_payment(&client, &config, headers, requirements, None)
+        .await
+        .map(|_| ())
+}
 
 pub fn router(state: AppState) -> Router {
     Router::new()
@@ -82,13 +141,25 @@ async fn get_check_endpoint_health(
         }
     }
 
-    // CDP/Base fallback
+    // CDP/Base fallback — multi-price seller SKU ($0.001 K2 probe).
     let config = X402PaymentConfig::from_env();
+    let sku = crate::server::x402_payment::CDP_SELLER_SKUS[0];
+    // Concrete path for this call; template stays in Bazaar description tags.
     let resource_url = format!("/api/v2/premium/check-endpoint-health/{slug}");
-    let requirements = config.requirement_for(
+    let requirements = config.requirement_for_catalog(
         &resource_url,
-        "x402 endpoint liveness, 30-day uptime, and last probe timestamp",
+        sku.description,
         "application/json",
+        Some(sku.price_usd),
+        sku.tags,
+        Some(crate::server::x402_payment::BazaarDiscovery::get(
+            sku.description,
+            json!({
+                "live": true,
+                "uptime_30d_pct": 99.0,
+                "slug": slug,
+            }),
+        )),
     );
 
     let client = facilitator_client();
@@ -112,7 +183,7 @@ async fn get_check_endpoint_health(
                 "payment": {
                     "payer": settlement.payer,
                     "transaction": settlement.transaction,
-                    "price": config.price_display,
+                    "price": sku.price_usd,
                 }
             });
             match crate::server::x402_payment::payment_success_response(body.clone(), &settlement) {
@@ -148,27 +219,21 @@ async fn post_recommend_verified_tool(
         payload.function.as_deref(),
     );
 
-    // Axis-B premium gate before cache — avoid serving paid probe results without payment.
-    // Skip CDP handler-level gate when OKX middleware handles this route (prevents double-charge).
-    let config = match load_mcp_premium_config(&state.pool).await {
-        Ok(config) => config,
-        Err(e) => {
-            return (
-                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({ "error": format!("settings load failed: {e}") })),
-            )
-                .into_response()
-        }
-    };
-    if config.is_active()
-        && !crate::server::okx_payment::should_skip_cdp_for_okx(
-            state.okx_premium_gate_active,
+    // CDP multi-price SKU ($0.01) when OKX is off; Axis-B site_settings price if that toggle is on.
+    // Skip when OKX middleware meters this route (prevents double-charge).
+    if !crate::server::okx_payment::should_skip_cdp_for_okx(
+        state.okx_premium_gate_active,
+        "recommend_verified_tool",
+    ) {
+        if let Err(response) = require_cdp_seller_payment(
+            &state,
+            &headers,
+            crate::server::x402_payment::CDP_SELLER_SKUS[1],
             "recommend_verified_tool",
         )
-    {
-        match require_axis_b_payment(&config, "recommend_verified_tool", &headers).await {
-            Ok(_settlement) => {}
-            Err(response) => return response,
+        .await
+        {
+            return response;
         }
     }
 
@@ -250,25 +315,19 @@ async fn post_gap_audit(
     let now = chrono::Utc::now();
     let ckey = gap_cache_key(&intent);
 
-    let config = match load_mcp_premium_config(&state.pool).await {
-        Ok(config) => config,
-        Err(e) => {
-            return (
-                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({ "error": format!("settings load failed: {e}") })),
-            )
-                .into_response()
-        }
-    };
-    if config.is_active()
-        && !crate::server::okx_payment::should_skip_cdp_for_okx(
-            state.okx_premium_gate_active,
+    if !crate::server::okx_payment::should_skip_cdp_for_okx(
+        state.okx_premium_gate_active,
+        "gap_audit",
+    ) {
+        if let Err(response) = require_cdp_seller_payment(
+            &state,
+            &headers,
+            crate::server::x402_payment::CDP_SELLER_SKUS[2],
             "gap_audit",
         )
-    {
-        match require_axis_b_payment(&config, "gap_audit", &headers).await {
-            Ok(_settlement) => {}
-            Err(response) => return response,
+        .await
+        {
+            return response;
         }
     }
 
