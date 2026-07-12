@@ -152,14 +152,19 @@ async fn get_check_endpoint_health(
         "application/json",
         Some(sku.price_usd),
         sku.tags,
-        Some(crate::server::x402_payment::BazaarDiscovery::get(
-            sku.description,
-            json!({
-                "live": true,
-                "uptime_30d_pct": 99.0,
-                "slug": slug,
-            }),
-        )),
+        Some({
+            let mut b = crate::server::x402_payment::BazaarDiscovery::get(
+                sku.description,
+                json!({
+                    "live": true,
+                    "uptime_30d_pct": 99.0,
+                    "slug": slug,
+                }),
+            );
+            // Path-param slug surfaces as queryParams example for CDP schema validation.
+            b.input_example = json!({ "slug": slug });
+            b
+        }),
     );
 
     let client = facilitator_client();
