@@ -1069,9 +1069,10 @@ mod tests {
             );
         }
         for known_rh in ["robinhood", "robinhood-chain", "hoodchain", "rh-chain"] {
-            assert!(
-                resolve_chain(known_rh).is_some(),
-                "Robinhood Chain catalog alias should resolve: {known_rh}"
+            assert_eq!(
+                resolve_chain(known_rh).map(|c| c.id),
+                Some("robinhood"),
+                "Robinhood Chain catalog alias should resolve to robinhood: {known_rh}"
             );
         }
     }
