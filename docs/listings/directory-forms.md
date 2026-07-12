@@ -36,7 +36,7 @@ Find, compare, and vet crypto MCP/CLI/SDK/API tools with trust scores and instal
 | web3-mcp-hub PR | https://github.com/rudazy/web3-mcp-hub/pull/1 |
 | awesome-crypto-mcp-servers PR | https://github.com/hive-intel/awesome-crypto-mcp-servers/pull/209 |
 | GitHub repo topics | `mcp`, `x402`, `crypto`, `ai-agents`, `rust`, `nextjs`, `web3` |
-| `server.json` | **Published** — `io.github.Coinyak/onchainai` v0.2.0 (2026-07-04); local **v0.2.1** paid description ready (republish needs Coinyak GitHub auth) |
+| `server.json` | **Published** — `io.github.Coinyak/onchainai` **v0.2.1** (2026-07-12) paid description live |
 | OKX ASP #4609 | **Re-submitted 2026-07-12** — Path A `$0.1` bundled SKU; profile update on-chain; activate pending OKX |
 | awesome-crypto PR #209 | Paid listing copy pushed to fork branch |
 | web3-mcp-hub PR #1 | Paid listing copy pushed to fork branch |

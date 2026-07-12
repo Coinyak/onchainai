@@ -171,7 +171,7 @@ Copy-paste payloads: `docs/listings/directory-forms.md`.
 
 | Channel | URL / artifact | Status |
 |---------|----------------|--------|
-| Official MCP Registry | [io.github.Coinyak/onchainai](https://registry.modelcontextprotocol.io) v0.2.0 live; **v0.2.1 paid description ready** | Live; republish needs `Coinyak` GitHub device login (`./scripts/publish-mcp-registry.sh`) |
+| Official MCP Registry | [io.github.Coinyak/onchainai](https://registry.modelcontextprotocol.io) **v0.2.1** (latest) | **Published 2026-07-12** — paid tools/call description live |
 | web3-mcp-hub | [rudazy/web3-mcp-hub#1](https://github.com/rudazy/web3-mcp-hub/pull/1) | Open · **paid copy pushed** 2026-07-12 |
 | awesome-crypto-mcp-servers | [hive-intel/awesome-crypto-mcp-servers#209](https://github.com/hive-intel/awesome-crypto-mcp-servers/pull/209) | Open · **paid copy pushed** 2026-07-12 |
 | Self catalog | [onchain-ai.xyz/tools/onchainai](https://www.onchain-ai.xyz/tools/onchainai) | Seeded (official); site browse free |
