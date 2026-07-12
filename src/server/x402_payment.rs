@@ -582,11 +582,39 @@ pub fn requirements_match(
         && accepted.pay_to.eq_ignore_ascii_case(&expected.pay_to)
 }
 
-fn decode_payment_payload(header: &str) -> Result<PaymentPayloadV2, String> {
+fn decode_payment_payload(header: &str) -> Result<(Value, PaymentPayloadV2), String> {
     let bytes = base64::engine::general_purpose::STANDARD
         .decode(header.trim())
         .map_err(|e| format!("invalid base64 payment signature: {e}"))?;
-    serde_json::from_slice(&bytes).map_err(|e| format!("invalid payment payload json: {e}"))
+    let raw: Value = serde_json::from_slice(&bytes)
+        .map_err(|e| format!("invalid payment payload json: {e}"))?;
+    let typed: PaymentPayloadV2 = serde_json::from_value(raw.clone())
+        .map_err(|e| format!("invalid payment payload shape: {e}"))?;
+    Ok((raw, typed))
+}
+
+/// Forward the client payment payload as closely as possible (CDP schema is strict).
+/// Only normalize `resource` to a URL string when missing or object-shaped.
+fn prepare_payment_payload_for_facilitator(
+    mut raw: Value,
+    expected: &PaymentRequirementsV2,
+) -> Value {
+    let resource_url = raw
+        .get("resource")
+        .and_then(resource_url_from_value)
+        .or_else(|| {
+            expected
+                .resource
+                .as_ref()
+                .map(|r| r.url.clone())
+                .filter(|u| !u.is_empty())
+        });
+    if let Some(url) = resource_url {
+        if let Some(obj) = raw.as_object_mut() {
+            obj.insert("resource".into(), Value::String(url));
+        }
+    }
+    raw
 }
 
 pub fn facilitator_client() -> Client {
@@ -795,7 +823,7 @@ pub async fn verify_and_settle(
         return Err(PaymentGateError::Misconfigured);
     }
 
-    let mut payload =
+    let (raw_payload, payload) =
         decode_payment_payload(payment_signature).map_err(PaymentGateError::InvalidSignature)?;
 
     if payload.x402_version != 2 {
@@ -811,14 +839,12 @@ pub async fn verify_and_settle(
         ));
     }
 
-    payload = ensure_payload_resource(payload, expected);
+    // Forward client payload intact (CDP schema is strict). Only normalize resource URL.
+    let payload_value = prepare_payment_payload_for_facilitator(raw_payload, expected);
+    // paymentRequirements should include server Bazaar meta for indexing.
     let requirements_for_facilitator =
         merge_requirements_for_facilitator(&payload.accepted, expected);
-    payload.accepted = requirements_for_facilitator.clone();
-
     let requirements_value = serde_json::to_value(&requirements_for_facilitator)
-        .map_err(|e| PaymentGateError::InvalidSignature(e.to_string()))?;
-    let payload_value = serde_json::to_value(&payload)
         .map_err(|e| PaymentGateError::InvalidSignature(e.to_string()))?;
 
     let verify_body = json!({
@@ -852,7 +878,7 @@ pub async fn verify_and_settle(
 
     let settle_body = json!({
         "x402Version": 2,
-        "paymentPayload": serde_json::to_value(&payload).map_err(|e| PaymentGateError::Facilitator(e.to_string()))?,
+        "paymentPayload": payload_value,
         "paymentRequirements": requirements_value,
     });
 
