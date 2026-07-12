@@ -16,7 +16,7 @@ const LLAMA_CHAINS = "https://api.llama.fi/v2/chains";
 const LLAMA_PROTOCOLS = "https://api.llama.fi/protocols";
 const CG_PLATFORMS = "https://api.coingecko.com/api/v3/asset_platforms";
 
-/** Synced with src/chains.rs CHAIN_CATALOG ids (harness-round-12, 74 chains). */
+/** Synced with src/chains.rs CHAIN_CATALOG ids (harness-round-13, 74 chains). */
 const CATALOG_IDS = new Set([
   "bitcoin", "bob", "ethereum", "solana", "base", "arbitrum", "optimism",
   "polygon", "bsc", "avalanche", "sui", "zksync", "sonic", "unichain",
@@ -28,7 +28,7 @@ const CATALOG_IDS = new Set([
   "taiko", "immutable", "zora", "stellar", "algorand", "filecoin", "ronin",
   "worldchain", "hedera", "xrpl", "thorchain", "katana", "dydx", "fraxtal",
   "tezos", "mezo", "bittensor", "pulsechain", "provenance", "fluent",
-  "hydration", "mixin", "vaulta", "ethereal", "stable", "xpr",
+  "hydration", "mixin", "vaulta", "ethereal", "stable", "xpr", "robinhood",
 ]);
 
 const CHAIN_SLUG_MAP = {

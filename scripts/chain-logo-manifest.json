@@ -1,5 +1,5 @@
 {
-  "harness_round": 12,
+  "harness_round": 13,
   "goal": "official chain logos + DeFiLlama icons for extension chains (icons.llama.fi / icons.llamao.fi)",
   "raw_logos_dir": "raw-logos",
   "forbidden": [
@@ -515,6 +515,13 @@
       "label": "XPR Network",
       "kind": "wrap_raster",
       "source": "xpr_llama.png",
+      "markers": ["data:image/png;base64,"]
+    },
+    {
+      "id": "robinhood",
+      "label": "Robinhood Chain",
+      "kind": "wrap_raster",
+      "source": "robinhood_official.png",
       "markers": ["data:image/png;base64,"]
     }
   ]
