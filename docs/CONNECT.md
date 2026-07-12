@@ -181,7 +181,7 @@ Copy-paste payloads: `docs/listings/directory-forms.md`.
 | PulseMCP / Glama / mcpservers.org | browser forms | Opened submit flows; no public write API (Cloudflare / login) — may crawl Official Registry |
 | awesome-mcp-servers (punkpeye / appcypher) | mcp-submit | Already listed (tool reported) |
 | OKX AI Agent Marketplace | [okx.ai/agents](https://okx.ai/agents) — ASP #4609 | **Re-submitted 2026-07-12** · 1 SKU `$0.1` · update tx `0x5bb50900…` · AI review “suggested pass”; activate still pending OKX QA |
-| x402 Bazaar (seller) | CDP merchant discovery | **Blocked** — needs `EVM_PRIVATE_KEY` (Base USDC) for one paid settle |
+| x402 Bazaar (seller) | CDP settle **done** 2026-07-12 | **Settle OK** Base USDC `$0.001` tx `0x148f1c1d…` (payer `0x2b4a88EC…`); merchant index may lag / needs `extensions.bazaar` for full catalog |
 | Base Builder Code | [dashboard.base.org](https://dashboard.base.org) | Applied `bc_ljttbnhv` |
 
 ## Troubleshooting
