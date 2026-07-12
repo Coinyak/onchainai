@@ -174,6 +174,7 @@ Copy-paste payloads: `docs/listings/directory-forms.md`.
 | Official MCP Registry | [io.github.Coinyak/onchainai](https://registry.modelcontextprotocol.io) **v0.2.1** (latest) | **Published 2026-07-12** — paid tools/call description live |
 | web3-mcp-hub | [rudazy/web3-mcp-hub#1](https://github.com/rudazy/web3-mcp-hub/pull/1) | Open · **paid copy pushed** 2026-07-12 |
 | awesome-crypto-mcp-servers | [hive-intel/awesome-crypto-mcp-servers#209](https://github.com/hive-intel/awesome-crypto-mcp-servers/pull/209) | Open · **paid copy pushed** 2026-07-12 |
+| awesome-x402 | [xpaysh/awesome-x402#811](https://github.com/xpaysh/awesome-x402/pull/811) | Open · **submitted 2026-07-12** (MCP section, paid remote) |
 | Self catalog | [onchain-ai.xyz/tools/onchainai](https://www.onchain-ai.xyz/tools/onchainai) | Seeded (official); site browse free |
 | Smithery / mcp.so / PulseMCP / Glama | `docs/listings/directory-forms.md` | **Paid blurb ready** · needs Smithery/dir account login to publish (CLI not authed here) |
 | OKX AI Agent Marketplace | [okx.ai/agents](https://okx.ai/agents) — ASP #4609 | **Re-submitted 2026-07-12** · 1 SKU `$0.1` · update tx `0x5bb50900…` · AI review “suggested pass”; activate still pending OKX QA |
