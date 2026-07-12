@@ -784,33 +784,42 @@ fn ensure_payload_resource(
     payload
 }
 
-/// Prefer server-declared Bazaar extensions on facilitator requirements when the
-/// client payload omits them (CDP catalogs from paymentRequirements).
-fn merge_requirements_for_facilitator(
+/// Build facilitator `paymentRequirements` matching x402 V2 schema:
+/// `scheme/network/amount/asset/payTo/maxTimeoutSeconds/extra` only.
+/// Bazaar discovery meta goes in `extra.bazaar` (not `accepted.extensions` /
+/// `accepted.resource` — those fields make CDP reject the whole payload).
+fn facilitator_payment_requirements(
     accepted: &PaymentRequirementsV2,
     expected: &PaymentRequirementsV2,
-) -> PaymentRequirementsV2 {
-    let mut out = accepted.clone();
-    if out.extensions.is_none() {
-        out.extensions = expected.extensions.clone();
-    }
-    if out.resource.is_none() {
-        out.resource = expected.resource.clone();
-    }
-    if let Some(exp_extra) = &expected.extra {
-        match &mut out.extra {
-            Some(Value::Object(map)) => {
-                if !map.contains_key("bazaar") {
-                    if let Some(b) = exp_extra.get("bazaar") {
-                        map.insert("bazaar".into(), b.clone());
-                    }
-                }
+) -> Value {
+    let mut extra = accepted
+        .extra
+        .clone()
+        .or_else(|| expected.extra.clone())
+        .unwrap_or_else(|| json!({}));
+    if let Some(obj) = extra.as_object_mut() {
+        // Prefer server-declared bazaar meta for indexing.
+        if let Some(exp_extra) = &expected.extra {
+            if let Some(b) = exp_extra.get("bazaar") {
+                obj.insert("bazaar".into(), b.clone());
             }
-            None => out.extra = expected.extra.clone(),
-            _ => {}
+        } else if let Some(ext) = expected
+            .extensions
+            .as_ref()
+            .and_then(|e| e.get("bazaar"))
+        {
+            obj.insert("bazaar".into(), ext.clone());
         }
     }
-    out
+    json!({
+        "scheme": accepted.scheme,
+        "network": accepted.network,
+        "amount": accepted.amount,
+        "asset": accepted.asset,
+        "payTo": accepted.pay_to,
+        "maxTimeoutSeconds": accepted.max_timeout_seconds,
+        "extra": extra,
+    })
 }
 
 pub async fn verify_and_settle(
@@ -839,13 +848,15 @@ pub async fn verify_and_settle(
         ));
     }
 
-    // Forward client payload intact (CDP schema is strict). Only normalize resource URL.
-    let payload_value = prepare_payment_payload_for_facilitator(raw_payload, expected);
-    // paymentRequirements should include server Bazaar meta for indexing.
-    let requirements_for_facilitator =
-        merge_requirements_for_facilitator(&payload.accepted, expected);
-    let requirements_value = serde_json::to_value(&requirements_for_facilitator)
-        .map_err(|e| PaymentGateError::InvalidSignature(e.to_string()))?;
+    // CDP paymentPayload schema is strict: strip non-V2 fields from accepted,
+    // normalize resource to URL string, keep authorization payload intact.
+    let mut payload_value = prepare_payment_payload_for_facilitator(raw_payload, expected);
+    if let Some(obj) = payload_value.as_object_mut() {
+        if let Some(accepted) = obj.get_mut("accepted") {
+            *accepted = facilitator_payment_requirements(&payload.accepted, expected);
+        }
+    }
+    let requirements_value = facilitator_payment_requirements(&payload.accepted, expected);
 
     let verify_body = json!({
         "x402Version": 2,
@@ -876,6 +887,7 @@ pub async fn verify_and_settle(
         return Err(PaymentGateError::Facilitator(reason));
     }
 
+    // Re-use the same sanitized payload/requirements as verify.
     let settle_body = json!({
         "x402Version": 2,
         "paymentPayload": payload_value,
