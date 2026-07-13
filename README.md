@@ -121,7 +121,7 @@ Details: [docs/X402_REFERRAL_SPEC.md](docs/X402_REFERRAL_SPEC.md).
 │ Next.js frontend      │──────│ Rust binary (Axum)                │
 │ /connect, /tools, ... │ /api │  ├─ REST API (/api/v2)            │
 │ proxies /api /auth    │ /mcp │  ├─ MCP server (POST /mcp)        │
-│ /mcp to the API       │      │  ├─ Auth (OAuth/email/SIWX + JWT) │
+│ /mcp to the API       │      │  ├─ Auth (GitHub OAuth + JWT)     │
 └───────────────────────┘      │  └─ Crawler (tokio-cron)          │
                                └────────────┬──────────────────────┘
                                             │ sqlx

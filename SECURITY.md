@@ -34,7 +34,7 @@ requiring a compromised maintainer account.
   unapproved, quarantined, or critical-risk tools
 - Ways to make `get_install_guide` emit a `critical`-risk or attacker-controlled
   command
-- Auth/session bugs (JWT, OAuth callback, SIWX signature verification)
+- Auth/session bugs (JWT, OAuth callback)
 - Secret exposure (`SUPABASE_SERVICE_KEY`, `JWT_SECRET` must never reach clients)
 - SQL injection (all queries must stay parameterized) and stored XSS
 
