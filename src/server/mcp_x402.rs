@@ -1,9 +1,12 @@
-//! Axis B MCP premium pricing — HTTP 402 on POST /mcp (no custody, no third-party proxy).
+//! Axis B MCP premium pricing — HTTP 402 on public `POST /mcp` (no custody, no third-party proxy).
 //!
 //! Reuses the same facilitator verify/settle gate as K2 (`x402_payment`); the
 //! payee, network, and price come from operator-managed `site_settings` instead
-//! of env. Default disabled: all Axis B tools stay free until the operator
-//! enables MCP premium in admin settings.
+//! of env. Premium tools (`export_toolkit`, `recommend_verified_tool`, `gap_audit`)
+//! are **always paid** on public MCP: when Axis B is active use this gate at
+//! [`DEFAULT_MCP_PREMIUM_PRICE`]; else OKX USDT0 fallback; else HTTP 503.
+//! Discovery tools stay free. Operator toggle controls the Axis B rail only —
+//! it does not make premium free.
 
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
@@ -17,14 +20,20 @@ use crate::server::x402_payment::{
     usd_to_usdc_atomic, PaymentSettlement, X402PaymentConfig,
 };
 
-/// MCP tools that may require OnchainAI's own x402 payment when premium is enabled.
-/// Discovery tools (`search_tools`, `get_tool_detail`, `compare_tools`, etc.) are
-/// currently free as a product guideline, not a hard rule — the operator may move
-/// any tool into the premium set. Product A (`recommend_verified_tool`), S0
-/// (`gap_audit`), and `export_toolkit` are premium (operator-toggled via
-/// site_settings). M3 analytics (`get_price_history`, `get_x402_trends`) are
-/// discovery/metadata endpoints — currently free.
+/// MCP tools that **always** require OnchainAI payment before execution.
+/// Discovery tools (`search_tools`, `get_tool_detail`, `compare_tools`, etc.) stay free
+/// on public `POST /mcp`. These premium tools never run unpaid: Axis B (site_settings)
+/// when active, else OKX USDT0 when OKX is configured, else HTTP 503 misconfigured.
+/// `check_endpoint_health` (K2) is gated separately via CDP env payment.
+/// M3 analytics (`get_price_history`, `get_x402_trends`) remain free discovery/metadata.
 pub const PREMIUM_MCP_TOOLS: &[&str] = &["export_toolkit", "recommend_verified_tool", "gap_audit"];
+
+/// Canonical Axis B price for premium MCP tools (Base USDC), when not using OKX package.
+/// Operator may override via `site_settings.mcp_premium_price`; empty falls back here.
+pub const DEFAULT_MCP_PREMIUM_PRICE: &str = "$0.01";
+
+/// Display string paired with [`DEFAULT_MCP_PREMIUM_PRICE`].
+pub const DEFAULT_MCP_PREMIUM_DISPLAY_PRICE: &str = "$0.01/call";
 
 pub fn is_premium_mcp_tool(name: &str) -> bool {
     PREMIUM_MCP_TOOLS.contains(&name)
@@ -60,13 +69,21 @@ pub async fn load_mcp_premium_config(pool: &PgPool) -> Result<McpPremiumConfig, 
     let row = sqlx::query_as::<_, SiteSettings>("SELECT * FROM site_settings WHERE id = 1")
         .fetch_one(pool)
         .await?;
+    let price = row
+        .mcp_premium_price
+        .filter(|p| !p.trim().is_empty())
+        .unwrap_or_else(|| DEFAULT_MCP_PREMIUM_PRICE.to_string());
+    let display_price = row
+        .mcp_premium_display_price
+        .filter(|p| !p.trim().is_empty())
+        .or_else(|| Some(DEFAULT_MCP_PREMIUM_DISPLAY_PRICE.to_string()));
     Ok(McpPremiumConfig {
         enabled: row.mcp_premium_enabled,
         pay_to: row.mcp_premium_pay_to_address.unwrap_or_default(),
-        price: row.mcp_premium_price.unwrap_or_default(),
+        price,
         network: row.mcp_premium_network,
         asset: row.mcp_premium_asset,
-        display_price: row.mcp_premium_display_price,
+        display_price,
     })
 }
 
@@ -162,6 +179,16 @@ mod tests {
         assert!(!is_premium_mcp_tool("search_tools"));
         assert!(!is_premium_mcp_tool("check_endpoint_health"));
         assert!(!is_premium_mcp_tool("compare_tools"));
+    }
+
+    #[test]
+    fn default_mcp_premium_price_is_one_cent() {
+        assert_eq!(DEFAULT_MCP_PREMIUM_PRICE, "$0.01");
+        assert_eq!(DEFAULT_MCP_PREMIUM_DISPLAY_PRICE, "$0.01/call");
+        assert_eq!(
+            crate::server::x402_payment::usd_to_usdc_atomic(DEFAULT_MCP_PREMIUM_PRICE).as_deref(),
+            Some("10000")
+        );
     }
 
     #[test]

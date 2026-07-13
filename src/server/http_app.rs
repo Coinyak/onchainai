@@ -221,11 +221,18 @@ pub async fn build_app(pool: sqlx::PgPool, config: Config) -> axum::Router {
         auth_routes.layer(auth_rate_limit)
     };
 
+    // Hybrid billing: public /mcp = free discovery for site/agents;
+    // /mcp/okx = OKX marketplace package ($0.1 tools/call when OKX gate active).
     let mcp_routes = Router::new()
         .route(
             "/mcp",
             axum::routing::post(crate::server::mcp::handle_mcp)
                 .get(crate::server::mcp::handle_mcp_info),
+        )
+        .route(
+            "/mcp/okx",
+            axum::routing::post(crate::server::mcp::handle_mcp_okx)
+                .get(crate::server::mcp::handle_mcp_okx_info),
         )
         .with_state(state.clone())
         .layer(mcp_rate_limit);

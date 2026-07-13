@@ -160,15 +160,27 @@ async fn post_recommend_verified_tool(
                 .into_response()
         }
     };
-    if config.is_active()
-        && !crate::server::okx_payment::should_skip_cdp_for_okx(
-            state.okx_premium_gate_active,
-            "recommend_verified_tool",
-        )
-    {
-        match require_axis_b_payment(&config, "recommend_verified_tool", &headers).await {
-            Ok(_settlement) => {}
-            Err(response) => return response,
+    // Premium always paid: OKX middleware (skip), else Axis B, else 503 — never free.
+    let skip_cdp = crate::server::okx_payment::should_skip_cdp_for_okx(
+        true, // premium REST is OKX-middleware surface when gate active
+        state.okx_premium_gate_active,
+        "recommend_verified_tool",
+    );
+    if !skip_cdp {
+        if config.is_active() {
+            match require_axis_b_payment(&config, "recommend_verified_tool", &headers).await {
+                Ok(_settlement) => {}
+                Err(response) => return response,
+            }
+        } else {
+            return (
+                axum::http::StatusCode::SERVICE_UNAVAILABLE,
+                Json(json!({
+                    "error": "mcp_premium_misconfigured",
+                    "message": "Premium tool 'recommend_verified_tool' requires payment. Enable MCP premium in admin (pay_to + $0.01 price) or configure OKX A2MCP.",
+                })),
+            )
+                .into_response();
         }
     }
 
@@ -260,15 +272,26 @@ async fn post_gap_audit(
                 .into_response()
         }
     };
-    if config.is_active()
-        && !crate::server::okx_payment::should_skip_cdp_for_okx(
-            state.okx_premium_gate_active,
-            "gap_audit",
-        )
-    {
-        match require_axis_b_payment(&config, "gap_audit", &headers).await {
-            Ok(_settlement) => {}
-            Err(response) => return response,
+    let skip_cdp = crate::server::okx_payment::should_skip_cdp_for_okx(
+        true,
+        state.okx_premium_gate_active,
+        "gap_audit",
+    );
+    if !skip_cdp {
+        if config.is_active() {
+            match require_axis_b_payment(&config, "gap_audit", &headers).await {
+                Ok(_settlement) => {}
+                Err(response) => return response,
+            }
+        } else {
+            return (
+                axum::http::StatusCode::SERVICE_UNAVAILABLE,
+                Json(json!({
+                    "error": "mcp_premium_misconfigured",
+                    "message": "Premium tool 'gap_audit' requires payment. Enable MCP premium in admin (pay_to + $0.01 price) or configure OKX A2MCP.",
+                })),
+            )
+                .into_response();
         }
     }
 

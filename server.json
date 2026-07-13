@@ -2,8 +2,8 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.Coinyak/onchainai",
   "title": "OnchainAI",
-  "description": "Crypto tool MCP: search/trust/install-risk. Remote tools/call is x402 paid.",
-  "version": "0.2.1",
+  "description": "Crypto tool MCP: free discovery (search/trust/install-risk) on /mcp; optional x402 premium (~$0.01 export/recommend/gap, ~$0.001 health probe).",
+  "version": "0.2.2",
   "websiteUrl": "https://www.onchain-ai.xyz",
   "repository": {
     "url": "https://github.com/Coinyak/onchainai",

@@ -5,13 +5,21 @@ description: Find, vet, and install crypto/onchain tools such as MCP servers, CL
 
 # OnchainAI Crypto Tool Finder
 
-Use the connected `onchainai` MCP server to discover and safely install crypto tools.
+Use the connected `onchainai` MCP server (`https://www.onchain-ai.xyz/mcp` — free discovery by default; never use `/mcp/okx` unless the user explicitly wants the OKX pay-per-call package).
+
+## MCP pricing (public `/mcp`)
+
+- **Free — use freely:** `search_tools`, `get_tool_detail`, `get_install_guide`, `list_categories`, `get_dashboard_snapshot`, `compare_tools`, `get_price_history`, `get_x402_trends`, and Agent Sync tools when linked (`link_status`, `save_to_toolkit`, `save_stack_to_blueprint`).
+- **Premium (always paid, ~$0.01 USDC/call on Base when Axis B is configured):** `export_toolkit`, `recommend_verified_tool`, `gap_audit`. Unpaid calls get HTTP 402 or 503 — never free results.
+- **K2 probe (always paid, ~$0.001 USDC/call):** `check_endpoint_health`.
+- Claude Code, Cursor, and many MCP clients **cannot settle x402**. On HTTP 402 they may show `Connection closed` instead of a price. Prefer free `search_tools` / `get_tool_detail`; do not retry paid tools in a loop.
+- Do **not** claim that every `tools/call` on the public endpoint costs money — discovery tools above are free; only premium/K2 charge.
 
 ## Query Workflow
 
 1. Translate the user's goal into a search intent, including chain, protocol, type, or action when known.
-2. Call `search_tools` first. Use `query` for the capability, and pass chain/category/type filters when the MCP schema exposes them.
-3. For promising results, call `get_tool_detail` to inspect trust, source, supported chains, install metadata, and x402 fields.
+2. Call `search_tools` first (free). Use `query` for the capability, and pass chain/category/type filters when the MCP schema exposes them.
+3. For promising results, call `get_tool_detail` (free) to inspect trust, source, supported chains, install metadata, and x402 fields.
 4. When the user wants setup help, call `get_install_guide` for the target platform (`claude`, `cursor`, or `generic`).
 5. If the user is browsing rather than asking for a specific capability, call `list_categories` before searching.
 
@@ -32,7 +40,7 @@ Use the connected `onchainai` MCP server to discover and safely install crypto t
 ## x402 And Paid Tools
 
 - Do **not** call `check_endpoint_health` from Claude Code, Cursor, or other MCP clients without x402 payment support — they show `Connection closed` instead of price info. Use free `get_tool_detail` for `x402_endpoint_verified`, `price_verified`, and `payment_verified`, or document REST `GET /api/v2/premium/check-endpoint-health/{slug}` for x402-native HTTP clients.
-- If `pricing = "x402"` or an `x402_price` is present, state that calls may charge on use and require a connected agent wallet.
+- If `pricing = "x402"` or an `x402_price` is present on a **catalog tool**, state that third-party calls may charge on use and require a connected agent wallet. OnchainAI surfaces payment metadata only for those tools.
 - Surface the returned price and endpoint/payment verification flags.
 - Say "operator verified" only when `payment_verified`, `x402_endpoint_verified`, and `price_verified` are all true.
 - OnchainAI is discovery and trust metadata only. Do not create custody, facilitator, gateway, fund-moving, undocumented `referrer`, or `split` payment flows.

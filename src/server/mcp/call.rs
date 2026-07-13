@@ -31,8 +31,15 @@ async fn gate_tool_payment(
     headers: &HeaderMap,
     okx_client: Option<&std::sync::Arc<x402_core::http::OkxHttpFacilitatorClient>>,
     okx_premium_gate_active: bool,
+    // True only on `POST /mcp/okx` (OKX marketplace package). Public `/mcp` is free discovery.
+    okx_package_mode: bool,
 ) -> Result<bool, ToolsCallOutcome> {
-    let okx_gated = okx_premium_gate_active && okx_client.is_some();
+    // Hybrid: full OKX $0.1 package applies only on `/mcp/okx`.
+    // Premium tools are always paid on every path (never free when config is off).
+    let okx_gated = okx_package_mode
+        && okx_premium_gate_active
+        && okx_client.is_some()
+        && crate::server::okx_payment::is_okx_package_tool(tool_name);
     if okx_gated {
         let client = okx_client.expect("okx_gated implies okx_client is Some");
         let description = tool_description_for_okx(tool_name);
@@ -48,27 +55,70 @@ async fn gate_tool_payment(
             Err(response) => return Err(ToolsCallOutcome::Http(response)),
         }
     }
-    if crate::server::mcp_x402::is_premium_mcp_tool(tool_name) {
-        if !crate::server::okx_payment::should_skip_cdp_for_okx(okx_premium_gate_active, tool_name)
-        {
-            let config = match crate::server::mcp_x402::load_mcp_premium_config(pool).await {
-                Ok(config) => config,
-                Err(e) => {
-                    return Err(ToolsCallOutcome::Err((
-                        -32603,
-                        format!("settings load failed: {e}"),
-                    )))
-                }
-            };
-            if config.is_active() {
-                match crate::server::mcp_x402::require_axis_b_payment(&config, tool_name, headers)
-                    .await
+
+    // Axis B premium (export_toolkit / recommend_verified_tool / gap_audit): always paid.
+    // Public /mcp never serves these unpaid — even if admin toggle is off.
+    // (On /mcp/okx, the package gate above already charged and returned.)
+    if crate::server::mcp_x402::is_premium_mcp_tool(tool_name)
+        && !crate::server::okx_payment::should_skip_cdp_for_okx(
+            okx_package_mode,
+            okx_premium_gate_active,
+            tool_name,
+        )
+    {
+        let config = match crate::server::mcp_x402::load_mcp_premium_config(pool).await {
+            Ok(config) => config,
+            Err(e) => {
+                return Err(ToolsCallOutcome::Err((
+                    -32603,
+                    format!("settings load failed: {e}"),
+                )))
+            }
+        };
+
+        if config.is_active() {
+            match crate::server::mcp_x402::require_axis_b_payment(&config, tool_name, headers).await
+            {
+                Ok(_settlement) => return Ok(false),
+                Err(response) => return Err(ToolsCallOutcome::Http(response)),
+            }
+        }
+
+        // Axis B off: fall back to OKX USDT0 so premium stays paid when OKX creds exist.
+        // resource.url must match this public surface (not /mcp/okx).
+        if okx_premium_gate_active {
+            if let Some(client) = okx_client {
+                let description = tool_description_for_okx(tool_name);
+                let public_mcp = format!("{}/mcp", crate::config::SITE_ORIGIN);
+                match crate::server::okx_payment::require_okx_payment_for_resource(
+                    client,
+                    tool_name,
+                    description,
+                    headers,
+                    &public_mcp,
+                )
+                .await
                 {
-                    Ok(_settlement) => {}
+                    Ok(_settlement) => return Ok(true),
                     Err(response) => return Err(ToolsCallOutcome::Http(response)),
                 }
             }
         }
+
+        // No payment rail configured — refuse free execution (do not open premium).
+        let body = serde_json::json!({
+            "error": "mcp_premium_misconfigured",
+            "message": format!(
+                "Premium tool '{tool_name}' requires payment. Enable MCP premium in admin (pay_to + price) or configure OKX A2MCP."
+            ),
+        });
+        return Err(ToolsCallOutcome::Http(
+            (
+                axum::http::StatusCode::SERVICE_UNAVAILABLE,
+                axum::Json(body),
+            )
+                .into_response(),
+        ));
     }
     Ok(false)
 }
@@ -80,6 +130,7 @@ pub(crate) async fn tools_call(
     headers: &HeaderMap,
     okx_client: Option<&std::sync::Arc<x402_core::http::OkxHttpFacilitatorClient>>,
     okx_premium_gate_active: bool,
+    okx_package_mode: bool,
 ) -> ToolsCallOutcome {
     let request = match ToolCallRequest::parse(params) {
         Ok(req) => req,
@@ -103,6 +154,7 @@ pub(crate) async fn tools_call(
         headers,
         okx_client,
         okx_premium_gate_active,
+        okx_package_mode,
     )
     .await
     {

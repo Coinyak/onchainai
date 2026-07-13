@@ -112,9 +112,13 @@ fn build_okx_routes_has_premium_endpoints() {
 }
 
 #[test]
-fn okx_resource_info_uses_public_https_mcp_endpoint() {
-    let info = okx_resource_info("search_tools", "search crypto tools");
-    assert_eq!(info.url, "https://www.onchain-ai.xyz/mcp");
+fn okx_resource_info_uses_public_https_mcp_okx_endpoint() {
+    let info = okx_resource_info(
+        "search_tools",
+        "search crypto tools",
+        "https://www.onchain-ai.xyz/mcp/okx",
+    );
+    assert_eq!(info.url, "https://www.onchain-ai.xyz/mcp/okx");
     assert!(info
         .description
         .as_deref()
@@ -131,16 +135,26 @@ fn public_resource_url_and_a2mcp_endpoint() {
         "https://www.onchain-ai.xyz/api/v2/premium/gap-audit"
     );
     assert_eq!(public_resource_url("mcp"), "https://www.onchain-ai.xyz/mcp");
-    assert_eq!(okx_a2mcp_endpoint(), "https://www.onchain-ai.xyz/mcp");
+    // OKX marketplace package path only — public site agents use free /mcp.
+    assert_eq!(okx_a2mcp_endpoint(), "https://www.onchain-ai.xyz/mcp/okx");
 }
 
 #[test]
-fn should_skip_cdp_for_all_tools_when_okx_package_active() {
-    assert!(!should_skip_cdp_for_okx(false, "search_tools"));
-    assert!(!should_skip_cdp_for_okx(false, "check_endpoint_health"));
-    assert!(should_skip_cdp_for_okx(true, "search_tools"));
-    assert!(should_skip_cdp_for_okx(true, "compare_tools"));
-    assert!(should_skip_cdp_for_okx(true, "check_endpoint_health"));
+fn should_skip_cdp_only_on_okx_package_path_when_active() {
+    // Public /mcp (okx_package_mode=false): never skip CDP for OKX.
+    assert!(!should_skip_cdp_for_okx(false, true, "search_tools"));
+    assert!(!should_skip_cdp_for_okx(
+        false,
+        true,
+        "check_endpoint_health"
+    ));
+    assert!(!should_skip_cdp_for_okx(false, false, "search_tools"));
+    // OKX package path: skip CDP only when OKX gate is active.
+    assert!(!should_skip_cdp_for_okx(true, false, "search_tools"));
+    assert!(should_skip_cdp_for_okx(true, true, "search_tools"));
+    assert!(should_skip_cdp_for_okx(true, true, "compare_tools"));
+    assert!(should_skip_cdp_for_okx(true, true, "check_endpoint_health"));
+    assert!(should_skip_cdp_for_okx(true, true, "export_toolkit"));
 }
 
 #[test]
@@ -208,4 +222,8 @@ fn okx_gated_routes_includes_bundled_package_tools() {
     assert!(OKX_GATED_ROUTES.contains(&"export_toolkit"));
     assert!(OKX_GATED_ROUTES.contains(&"recommend_verified_tool"));
     assert!(OKX_GATED_ROUTES.contains(&"gap_audit"));
+    // Hybrid: package list is for /mcp/okx only; public /mcp discovery stays free.
+    assert!(is_okx_package_tool("search_tools"));
+    assert!(is_okx_package_tool("compare_tools"));
+    assert!(!is_okx_package_tool("not_a_tool"));
 }

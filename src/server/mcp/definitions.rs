@@ -173,7 +173,7 @@ fn get_dashboard_snapshot_definition() -> Value {
 fn check_endpoint_health_definition() -> Value {
     json!({
         "name": "check_endpoint_health",
-        "description": "Premium x402 trust data: endpoint liveness, 30-day probe uptime, and last probe time for a listed x402 tool. Requires x402 micropayment per call (HTTP 402 + PAYMENT-REQUIRED header). Standard MCP clients (Claude Code, Cursor) cannot complete payment and may show a connection error — use free get_tool_detail for x402 verification flags, or GET /api/v2/premium/check-endpoint-health/{slug} with an x402-capable HTTP client.",
+        "description": "Premium K2 x402 trust data: endpoint liveness, 30-day probe uptime, and last probe time for a listed x402 tool. On public POST /mcp requires ~$0.001 USDC (Base, CDP env gate) per call — HTTP 402 + PAYMENT-REQUIRED. Standard MCP clients (Claude Code, Cursor) cannot complete payment and may show a connection error — use free get_tool_detail for x402 verification flags, or GET /api/v2/premium/check-endpoint-health/{slug} with an x402-capable HTTP client. On POST /mcp/okx this is part of the OKX package rate.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -190,7 +190,7 @@ fn check_endpoint_health_definition() -> Value {
 fn compare_tools_definition() -> Value {
     json!({
         "name": "compare_tools",
-        "description": "Compare 2–4 approved tools side-by-side on trust, install risk, chains, pricing, and x402 status. May require x402 payment per call when OnchainAI MCP premium is enabled — HTTP 402 returns PAYMENT-REQUIRED on POST /mcp. Free alternative: call get_tool_detail for each slug.",
+        "description": "Free discovery on public POST /mcp: compare 2–4 approved tools side-by-side on trust, install risk, chains, pricing, and x402 status. Alternative: call get_tool_detail for each slug. On POST /mcp/okx this tool is package-metered.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -210,7 +210,7 @@ fn compare_tools_definition() -> Value {
 fn export_toolkit_definition() -> Value {
     json!({
         "name": "export_toolkit",
-        "description": "Export a bundle of approved tools as JSON + markdown install kit for agents. Pass slugs or a function category id. May require x402 payment per call when OnchainAI MCP premium is enabled — HTTP 402 returns PAYMENT-REQUIRED on POST /mcp.",
+        "description": "Premium: export a bundle of approved tools as JSON + markdown install kit for agents. Pass slugs or a function category id. Always paid on public POST /mcp — $0.01 USDC on Base (Axis B / site_settings; HTTP 402 + PAYMENT-REQUIRED). Not free discovery. On POST /mcp/okx uses the OKX package rate instead.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -232,7 +232,7 @@ fn export_toolkit_definition() -> Value {
 fn recommend_verified_tool_definition() -> Value {
     json!({
         "name": "recommend_verified_tool",
-        "description": "Premium: returns a single verified live x402 tool for a task. Probes top candidates on-demand for liveness and price honesty, then returns the best one with rejection reasons for the rest. Requires x402 micropayment per call (HTTP 402 + PAYMENT-REQUIRED header). Use free search_tools first to check if candidates exist.",
+        "description": "Premium: returns a single verified live x402 tool for a task. Probes top candidates on-demand for liveness and price honesty, then returns the best one with rejection reasons for the rest. Always paid on public POST /mcp — $0.01 USDC on Base (Axis B; HTTP 402 + PAYMENT-REQUIRED). Use free search_tools first to check if candidates exist. On POST /mcp/okx uses the OKX package rate instead.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -257,7 +257,7 @@ fn recommend_verified_tool_definition() -> Value {
 fn gap_audit_definition() -> Value {
     json!({
         "name": "gap_audit",
-        "description": "Premium: decomposes a task intent into subgoals and maps each to OnchainAI catalog tools, surfacing gaps where no tools exist. Returns a subgoal table with covered (candidate slugs) or gap (manual research needed) status. Requires x402 micropayment per call (HTTP 402 + PAYMENT-REQUIRED header). Use free search_tools for simple lookups.",
+        "description": "Premium: decomposes a task intent into subgoals and maps each to OnchainAI catalog tools, surfacing gaps where no tools exist. Returns a subgoal table with covered (candidate slugs) or gap (manual research needed) status. Always paid on public POST /mcp — $0.01 USDC on Base (Axis B; HTTP 402 + PAYMENT-REQUIRED). Use free search_tools for simple lookups. On POST /mcp/okx uses the OKX package rate instead.",
         "inputSchema": {
             "type": "object",
             "properties": {
