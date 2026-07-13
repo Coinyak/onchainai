@@ -49,7 +49,8 @@ echo "Using avatar: ${AVATAR}"
 NAME="OnchainAI"
 # Value-first — fee lives in structured fee field ($0.1), not the headline.
 DESCRIPTION="Find, compare, and vet crypto MCP/CLI/SDK/API tools with trust scores and install-risk before your agent installs anything."
-ENDPOINT="https://www.onchain-ai.xyz/mcp"
+# Hybrid billing: free discovery lives at /mcp; OKX paid package is /mcp/okx only.
+ENDPOINT="https://www.onchain-ai.xyz/mcp/okx"
 FEE="0.1"
 LANG="${OKX_ASP_LANG:-en-US}"
 AGENT_ID="${OKX_ASP_AGENT_ID:-4609}"
@@ -78,6 +79,20 @@ precheck="$(onchainos agent pre-check --role asp)"
 echo "${precheck}"
 
 echo "== x402 endpoint check =="
+# Hybrid package: GET /mcp/okx returns discovery JSON 200; unpaid tools/call is 402.
+# Prefer live POST smoke (matches product) before optional onchainos probe.
+smoke_code="$(curl -sS -o /tmp/okx_mcp_smoke.json -w '%{http_code}' -X POST "${ENDPOINT}" \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"search_tools","arguments":{"query":"bridge","limit":1}}}' \
+  || true)"
+echo "POST ${ENDPOINT} tools/call search_tools → HTTP ${smoke_code} (expect 402 when OKX gate active)"
+if [[ "${smoke_code}" != "402" ]]; then
+  echo "WARN: expected HTTP 402 on unpaid package tools/call; got ${smoke_code}" >&2
+  head -c 400 /tmp/okx_mcp_smoke.json 2>/dev/null || true
+  echo
+fi
+# onchainos x402-check often GETs the URL and flags MCP discovery 200 as invalid — advisory only.
 x402_check="$(onchainos agent x402-check --endpoint "${ENDPOINT}" 2>/dev/null || true)"
 echo "${x402_check}"
 
