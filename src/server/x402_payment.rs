@@ -79,25 +79,292 @@ impl X402PaymentConfig {
         description: &str,
         mime_type: &str,
     ) -> PaymentRequirementsV2 {
+        self.requirement_for_catalog(
+            resource_url,
+            description,
+            mime_type,
+            None,
+            &["premium", "trust-data"],
+            None,
+        )
+    }
+
+    /// Build requirements with optional price override, tags, and Bazaar discovery meta.
+    ///
+    /// `resource_url` may be a path (`/api/...`) or absolute `https://…` URL — paths are
+    /// pinned to [`crate::config::SITE_ORIGIN`] so Railway hosts never leak into CDP Bazaar.
+    pub fn requirement_for_catalog(
+        &self,
+        resource_url: &str,
+        description: &str,
+        mime_type: &str,
+        price_display_override: Option<&str>,
+        tags: &[&str],
+        bazaar: Option<BazaarDiscovery>,
+    ) -> PaymentRequirementsV2 {
+        let (amount, price_display) = match price_display_override {
+            Some(price) => (
+                usd_to_usdc_atomic(price).unwrap_or_else(|| self.amount.clone()),
+                price.to_string(),
+            ),
+            None => (self.amount.clone(), self.price_display.clone()),
+        };
+        let url = public_resource_url(resource_url);
+        let mut extra = usdc_eip712_extra(&self.network, &self.asset).unwrap_or_else(|| json!({}));
+        if let Some(obj) = extra.as_object_mut() {
+            obj.insert("priceDisplay".into(), json!(price_display));
+            if let Some(bazaar) = &bazaar {
+                obj.insert("bazaar".into(), bazaar.to_extension_value());
+            }
+        }
         PaymentRequirementsV2 {
             scheme: "exact".into(),
             network: self.network.clone(),
             asset: self.asset.clone(),
-            amount: self.amount.clone(),
+            amount,
             pay_to: self.pay_to.clone(),
             max_timeout_seconds: DEFAULT_TIMEOUT_SECS,
-            extra: usdc_eip712_extra(&self.network, &self.asset),
+            extra: Some(extra),
             resource: Some(ResourceInfo {
-                url: resource_url.into(),
+                url,
                 description: Some(description.into()),
                 mime_type: Some(mime_type.into()),
                 service_name: Some("OnchainAI".into()),
-                tags: Some(vec!["premium".into(), "trust-data".into()]),
-                icon_url: None,
+                tags: Some(tags.iter().map(|t| (*t).to_string()).collect()),
+                icon_url: Some(format!(
+                    "{}/brand/onchainai-logo.png",
+                    crate::config::SITE_ORIGIN
+                )),
             }),
+            extensions: bazaar.map(|b| json!({ "bazaar": b.to_extension_value() })),
         }
     }
 }
+
+/// Absolute public resource URL for x402 / CDP Bazaar (never Railway hostnames).
+pub fn public_resource_url(path_or_url: &str) -> String {
+    let trimmed = path_or_url.trim();
+    if trimmed.starts_with("http://") || trimmed.starts_with("https://") {
+        return trimmed.to_string();
+    }
+    let path = if trimmed.starts_with('/') {
+        trimmed.to_string()
+    } else {
+        format!("/{trimmed}")
+    };
+    format!("{}{path}", crate::config::SITE_ORIGIN)
+}
+
+/// CDP Bazaar discovery metadata (`extensions.bazaar` / accepts.extra.bazaar).
+///
+/// Without this, CDP may settle payments but **not** catalog the resource in
+/// `discovery/merchant` or `discovery/resources`. See docs.cdp.coinbase.com/x402/bazaar.
+#[derive(Debug, Clone)]
+pub struct BazaarDiscovery {
+    pub method: &'static str,
+    pub description: String,
+    pub input_example: Value,
+    pub output_example: Value,
+}
+
+impl BazaarDiscovery {
+    pub fn get(description: impl Into<String>, output_example: Value) -> Self {
+        Self {
+            method: "GET",
+            description: description.into(),
+            input_example: json!({}),
+            output_example,
+        }
+    }
+
+    pub fn post(
+        description: impl Into<String>,
+        input_example: Value,
+        output_example: Value,
+    ) -> Self {
+        Self {
+            method: "POST",
+            description: description.into(),
+            input_example,
+            output_example,
+        }
+    }
+
+    /// Shape matches `@x402/extensions` `declareDiscoveryExtension()` so CDP's
+    /// strict schema validation against `schema.properties.input` succeeds.
+    /// `method` is included on `info.input` (required by schema; SDK middleware
+    /// usually injects it — we set it explicitly for raw 402 servers).
+    fn to_extension_value(&self) -> Value {
+        let is_get = self.method.eq_ignore_ascii_case("GET")
+            || self.method.eq_ignore_ascii_case("HEAD")
+            || self.method.eq_ignore_ascii_case("DELETE");
+
+        if is_get {
+            let props = query_param_schema_props(&self.input_example);
+            let required: Vec<String> = props
+                .as_object()
+                .map(|o| o.keys().cloned().collect())
+                .unwrap_or_default();
+            json!({
+                "info": {
+                    "input": {
+                        "type": "http",
+                        "method": self.method,
+                        "queryParams": self.input_example,
+                    },
+                    "output": {
+                        "type": "json",
+                        "example": self.output_example,
+                    }
+                },
+                "schema": {
+                    "$schema": "https://json-schema.org/draft/2020-12/schema",
+                    "type": "object",
+                    "properties": {
+                        "input": {
+                            "type": "object",
+                            "properties": {
+                                "type": { "type": "string", "const": "http" },
+                                "method": {
+                                    "type": "string",
+                                    "enum": ["GET", "HEAD", "DELETE"]
+                                },
+                                "queryParams": {
+                                    "type": "object",
+                                    "properties": props,
+                                    "required": required,
+                                }
+                            },
+                            "required": ["type", "method"],
+                            "additionalProperties": false
+                        },
+                        "output": {
+                            "type": "object",
+                            "properties": {
+                                "type": { "type": "string" },
+                                "example": { "type": "object" }
+                            },
+                            "required": ["type"]
+                        }
+                    },
+                    "required": ["input"]
+                }
+            })
+        } else {
+            let body_props = query_param_schema_props(&self.input_example);
+            let body_required: Vec<String> = body_props
+                .as_object()
+                .map(|o| o.keys().cloned().collect())
+                .unwrap_or_default();
+            json!({
+                "info": {
+                    "input": {
+                        "type": "http",
+                        "method": self.method,
+                        "bodyType": "json",
+                        "body": self.input_example,
+                    },
+                    "output": {
+                        "type": "json",
+                        "example": self.output_example,
+                    }
+                },
+                "schema": {
+                    "$schema": "https://json-schema.org/draft/2020-12/schema",
+                    "type": "object",
+                    "properties": {
+                        "input": {
+                            "type": "object",
+                            "properties": {
+                                "type": { "type": "string", "const": "http" },
+                                "method": {
+                                    "type": "string",
+                                    "enum": ["POST", "PUT", "PATCH"]
+                                },
+                                "bodyType": {
+                                    "type": "string",
+                                    "enum": ["json", "form-data", "text"]
+                                },
+                                "body": {
+                                    "type": "object",
+                                    "properties": body_props,
+                                    "required": body_required,
+                                }
+                            },
+                            "required": ["type", "method", "bodyType", "body"],
+                            "additionalProperties": false
+                        },
+                        "output": {
+                            "type": "object",
+                            "properties": {
+                                "type": { "type": "string" },
+                                "example": { "type": "object" }
+                            },
+                            "required": ["type"]
+                        }
+                    },
+                    "required": ["input"]
+                }
+            })
+        }
+    }
+}
+
+/// Build JSON-Schema property map from an example object (string-typed fields).
+fn query_param_schema_props(example: &Value) -> Value {
+    let mut props = serde_json::Map::new();
+    if let Some(obj) = example.as_object() {
+        for (k, v) in obj {
+            let ty = match v {
+                Value::Number(n) if n.is_i64() || n.is_u64() => "integer",
+                Value::Number(_) => "number",
+                Value::Bool(_) => "boolean",
+                Value::Array(_) => "array",
+                Value::Object(_) => "object",
+                _ => "string",
+            };
+            props.insert(k.clone(), json!({ "type": ty }));
+        }
+    }
+    Value::Object(props)
+}
+
+/// CDP seller catalog: distinct public resource paths + display prices (OKX-off / Base USDC).
+#[derive(Debug, Clone, Copy)]
+pub struct CdpSellerSku {
+    pub path: &'static str,
+    pub method: &'static str,
+    pub price_usd: &'static str,
+    pub description: &'static str,
+    pub tags: &'static [&'static str],
+}
+
+/// Multi-price CDP/Bazaar SKUs (Path A OKX is a separate flat $0.1 SKU).
+pub const CDP_SELLER_SKUS: &[CdpSellerSku] = &[
+    CdpSellerSku {
+        path: "/api/v2/premium/check-endpoint-health/{slug}",
+        method: "GET",
+        price_usd: "$0.001",
+        description:
+            "Live x402 endpoint probe: liveness, 30-day uptime, advertised vs actual fee match",
+        tags: &["premium", "trust-data", "k2", "probe"],
+    },
+    CdpSellerSku {
+        path: "/api/v2/premium/recommend-verified-tool",
+        method: "POST",
+        price_usd: "$0.01",
+        description:
+            "Recommend one live verified x402 tool for an intent with rejection reasons",
+        tags: &["premium", "trust-data", "product-a", "recommend"],
+    },
+    CdpSellerSku {
+        path: "/api/v2/premium/gap-audit",
+        method: "POST",
+        price_usd: "$0.01",
+        description: "Decompose an intent into subgoals and map catalog coverage vs gaps",
+        tags: &["premium", "trust-data", "s0", "gap-audit"],
+    },
+];
 
 fn is_configured_pay_to(pay_to: &str) -> bool {
     let trimmed = pay_to.trim();
@@ -166,6 +433,9 @@ pub struct PaymentRequirementsV2 {
     pub extra: Option<Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub resource: Option<ResourceInfo>,
+    /// x402 v2 extensions (e.g. CDP Bazaar discovery). Optional for client payloads.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub extensions: Option<Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -177,6 +447,8 @@ pub struct PaymentRequiredV2 {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub resource: Option<ResourceInfo>,
     pub accepts: Vec<PaymentRequirementsV2>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub extensions: Option<Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -185,6 +457,10 @@ struct PaymentPayloadV2 {
     x402_version: i32,
     payload: Value,
     accepted: PaymentRequirementsV2,
+    /// CDP Bazaar requires `paymentPayload.resource` on settle to associate discovery.
+    /// Clients may send a URL string **or** a ResourceInfo object — accept both.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    resource: Option<Value>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -239,11 +515,13 @@ pub fn build_payment_required(
     error: Option<&str>,
 ) -> PaymentRequiredV2 {
     let resource = requirements.resource.clone();
+    let extensions = requirements.extensions.clone();
     PaymentRequiredV2 {
         x402_version: 2,
         error: error.map(str::to_string),
         resource,
         accepts: vec![requirements],
+        extensions,
     }
 }
 
@@ -304,11 +582,49 @@ pub fn requirements_match(
         && accepted.pay_to.eq_ignore_ascii_case(&expected.pay_to)
 }
 
-fn decode_payment_payload(header: &str) -> Result<PaymentPayloadV2, String> {
+fn decode_payment_payload(header: &str) -> Result<(Value, PaymentPayloadV2), String> {
     let bytes = base64::engine::general_purpose::STANDARD
         .decode(header.trim())
         .map_err(|e| format!("invalid base64 payment signature: {e}"))?;
-    serde_json::from_slice(&bytes).map_err(|e| format!("invalid payment payload json: {e}"))
+    let raw: Value = serde_json::from_slice(&bytes)
+        .map_err(|e| format!("invalid payment payload json: {e}"))?;
+    let typed: PaymentPayloadV2 = serde_json::from_value(raw.clone())
+        .map_err(|e| format!("invalid payment payload shape: {e}"))?;
+    Ok((raw, typed))
+}
+
+/// Forward the client payment payload as closely as possible (CDP V2 schema).
+/// `paymentPayload.resource` must be a ResourceInfo **object** `{ url, ... }` —
+/// a bare string fails CDP validation.
+fn prepare_payment_payload_for_facilitator(
+    mut raw: Value,
+    expected: &PaymentRequirementsV2,
+) -> Value {
+    let needs_object = match raw.get("resource") {
+        Some(Value::Object(map)) if map.get("url").and_then(|u| u.as_str()).is_some() => false,
+        _ => true,
+    };
+    if needs_object {
+        let obj = match raw.get("resource") {
+            Some(Value::String(url)) if !url.trim().is_empty() => json!({ "url": url }),
+            _ => expected.resource.as_ref().map_or(json!({}), |r| {
+                json!({
+                    "url": r.url,
+                    "description": r.description,
+                    "mimeType": r.mime_type,
+                    "serviceName": r.service_name,
+                    "tags": r.tags,
+                    "iconUrl": r.icon_url,
+                })
+            }),
+        };
+        if obj.get("url").is_some() {
+            if let Some(map) = raw.as_object_mut() {
+                map.insert("resource".into(), obj);
+            }
+        }
+    }
+    raw
 }
 
 pub fn facilitator_client() -> Client {
@@ -385,12 +701,17 @@ fn cdp_facilitator_request_path(facilitator_url: &str, endpoint: &str) -> Result
     ))
 }
 
+struct FacilitatorHttpResult {
+    body: Value,
+    extension_responses: Option<String>,
+}
+
 async fn facilitator_post(
     client: &Client,
     config: &X402PaymentConfig,
     path: &str,
     body: Value,
-) -> Result<Value, String> {
+) -> Result<FacilitatorHttpResult, String> {
     let url = format!(
         "{}/{}",
         config.facilitator_url.trim_end_matches('/'),
@@ -409,6 +730,12 @@ async fn facilitator_post(
         .await
         .map_err(|e| format!("facilitator {path} request failed: {e}"))?;
     let status = resp.status();
+    let extension_responses = resp
+        .headers()
+        .get("extension-responses")
+        .or_else(|| resp.headers().get("EXTENSION-RESPONSES"))
+        .and_then(|v| v.to_str().ok())
+        .map(str::to_string);
     let text = resp
         .text()
         .await
@@ -416,7 +743,90 @@ async fn facilitator_post(
     if !status.is_success() {
         return Err(format!("facilitator {path} returned {status}: {text}"));
     }
-    serde_json::from_str(&text).map_err(|e| format!("facilitator {path} invalid json: {e}"))
+    let body = serde_json::from_str(&text)
+        .map_err(|e| format!("facilitator {path} invalid json: {e}"))?;
+    Ok(FacilitatorHttpResult {
+        body,
+        extension_responses,
+    })
+}
+
+fn resource_url_from_value(v: &Value) -> Option<String> {
+    match v {
+        Value::String(s) if !s.trim().is_empty() => Some(s.clone()),
+        Value::Object(map) => map
+            .get("url")
+            .and_then(|u| u.as_str())
+            .filter(|s| !s.is_empty())
+            .map(str::to_string),
+        _ => None,
+    }
+}
+
+/// Ensure CDP Bazaar can bind discovery meta: ResourceInfo object with `url`.
+fn ensure_payload_resource(
+    mut payload: PaymentPayloadV2,
+    expected: &PaymentRequirementsV2,
+) -> PaymentPayloadV2 {
+    if let Some(ref r) = payload.resource {
+        if let Some(url) = resource_url_from_value(r) {
+            if r.is_string() {
+                payload.resource = Some(json!({ "url": url }));
+            }
+            return payload;
+        }
+    }
+    if let Some(r) = &expected.resource {
+        payload.resource = Some(json!({
+            "url": r.url,
+            "description": r.description,
+            "mimeType": r.mime_type,
+            "serviceName": r.service_name,
+            "tags": r.tags,
+            "iconUrl": r.icon_url,
+        }));
+    } else if let Some(r) = &payload.accepted.resource {
+        payload.resource = Some(json!({ "url": r.url }));
+    }
+    payload
+}
+
+/// Build facilitator `paymentRequirements` matching x402 V2 schema:
+/// `scheme/network/amount/asset/payTo/maxTimeoutSeconds/extra` only.
+/// Bazaar discovery meta goes in `extra.bazaar` (not `accepted.extensions` /
+/// `accepted.resource` — those fields make CDP reject the whole payload).
+fn facilitator_payment_requirements(
+    accepted: &PaymentRequirementsV2,
+    expected: &PaymentRequirementsV2,
+) -> Value {
+    let mut extra = accepted
+        .extra
+        .clone()
+        .or_else(|| expected.extra.clone())
+        .unwrap_or_else(|| json!({}));
+    if let Some(obj) = extra.as_object_mut() {
+        // Prefer server-declared bazaar meta for indexing.
+        if let Some(exp_extra) = &expected.extra {
+            if let Some(b) = exp_extra.get("bazaar") {
+                obj.insert("bazaar".into(), b.clone());
+            }
+        } else if let Some(ext) = expected
+            .extensions
+            .as_ref()
+            .and_then(|e| e.get("bazaar"))
+        {
+            obj.insert("bazaar".into(), ext.clone());
+        }
+    }
+    json!({
+        "scheme": accepted.scheme,
+        "network": accepted.network,
+        "amount": accepted.amount,
+        "asset": accepted.asset,
+        "payTo": accepted.pay_to,
+        "maxTimeoutSeconds": accepted.max_timeout_seconds,
+        "extra": extra,
+    })
 }
 
 pub async fn verify_and_settle(
@@ -429,7 +839,7 @@ pub async fn verify_and_settle(
         return Err(PaymentGateError::Misconfigured);
     }
 
-    let payload =
+    let (raw_payload, payload) =
         decode_payment_payload(payment_signature).map_err(PaymentGateError::InvalidSignature)?;
 
     if payload.x402_version != 2 {
@@ -445,10 +855,15 @@ pub async fn verify_and_settle(
         ));
     }
 
-    let requirements_value = serde_json::to_value(&payload.accepted)
-        .map_err(|e| PaymentGateError::InvalidSignature(e.to_string()))?;
-    let payload_value = serde_json::to_value(&payload)
-        .map_err(|e| PaymentGateError::InvalidSignature(e.to_string()))?;
+    // CDP paymentPayload schema is strict: strip non-V2 fields from accepted,
+    // normalize resource to URL string, keep authorization payload intact.
+    let mut payload_value = prepare_payment_payload_for_facilitator(raw_payload, expected);
+    if let Some(obj) = payload_value.as_object_mut() {
+        if let Some(accepted) = obj.get_mut("accepted") {
+            *accepted = facilitator_payment_requirements(&payload.accepted, expected);
+        }
+    }
+    let requirements_value = facilitator_payment_requirements(&payload.accepted, expected);
 
     let verify_body = json!({
         "x402Version": 2,
@@ -456,11 +871,19 @@ pub async fn verify_and_settle(
         "paymentRequirements": requirements_value,
     });
 
-    let verify_raw = facilitator_post(client, config, "verify", verify_body)
+    let verify_http = facilitator_post(client, config, "verify", verify_body)
         .await
         .map_err(PaymentGateError::Facilitator)?;
+    if let Some(ext) = &verify_http.extension_responses {
+        tracing::info!(
+            target: "x402_bazaar",
+            phase = "verify",
+            extension_responses = %ext,
+            "CDP EXTENSION-RESPONSES"
+        );
+    }
 
-    let verify: VerifyResponse = serde_json::from_value(verify_raw)
+    let verify: VerifyResponse = serde_json::from_value(verify_http.body)
         .map_err(|e| PaymentGateError::Facilitator(format!("verify parse: {e}")))?;
 
     if !verify.is_valid {
@@ -471,17 +894,32 @@ pub async fn verify_and_settle(
         return Err(PaymentGateError::Facilitator(reason));
     }
 
+    // Re-use the same sanitized payload/requirements as verify.
     let settle_body = json!({
         "x402Version": 2,
-        "paymentPayload": serde_json::to_value(&payload).map_err(|e| PaymentGateError::Facilitator(e.to_string()))?,
+        "paymentPayload": payload_value,
         "paymentRequirements": requirements_value,
     });
 
-    let settle_raw = facilitator_post(client, config, "settle", settle_body)
+    let settle_http = facilitator_post(client, config, "settle", settle_body)
         .await
         .map_err(PaymentGateError::Facilitator)?;
+    if let Some(ext) = &settle_http.extension_responses {
+        tracing::info!(
+            target: "x402_bazaar",
+            phase = "settle",
+            extension_responses = %ext,
+            "CDP EXTENSION-RESPONSES"
+        );
+    } else {
+        tracing::debug!(
+            target: "x402_bazaar",
+            phase = "settle",
+            "no EXTENSION-RESPONSES header from facilitator"
+        );
+    }
 
-    let settle: SettleResponse = serde_json::from_value(settle_raw)
+    let settle: SettleResponse = serde_json::from_value(settle_http.body)
         .map_err(|e| PaymentGateError::Facilitator(format!("settle parse: {e}")))?;
 
     if !settle.success {
@@ -592,6 +1030,7 @@ mod tests {
             max_timeout_seconds: 300,
             extra: None,
             resource: None,
+            extensions: None,
         };
         let mut accepted = expected.clone();
         accepted.pay_to = "0xabcdef0000000000000000000000000000000001".into();
@@ -610,6 +1049,7 @@ mod tests {
             max_timeout_seconds: 300,
             extra: None,
             resource: None,
+            extensions: None,
         };
         let required = build_payment_required(req, Some("Payment required"));
         let body = serde_json::to_value(&required).unwrap();
@@ -636,11 +1076,123 @@ mod tests {
                 tags: None,
                 icon_url: None,
             }),
+            extensions: Some(json!({ "bazaar": { "info": {} } })),
         };
         let required = build_payment_required(req.clone(), Some("Payment required"));
         assert_eq!(required.x402_version, 2);
         assert_eq!(required.accepts.len(), 1);
         assert_eq!(required.accepts[0].amount, "1000");
+        assert!(required.extensions.is_some());
+    }
+
+    #[test]
+    fn public_resource_url_pins_site_origin() {
+        assert_eq!(
+            public_resource_url("/api/v2/premium/gap-audit"),
+            format!("{}/api/v2/premium/gap-audit", crate::config::SITE_ORIGIN)
+        );
+        assert_eq!(
+            public_resource_url("https://example.com/x"),
+            "https://example.com/x"
+        );
+    }
+
+    #[test]
+    fn requirement_for_catalog_sets_bazaar_and_price_override() {
+        let cfg = X402PaymentConfig {
+            enabled: true,
+            facilitator_url: DEFAULT_FACILITATOR_URL.into(),
+            pay_to: "0x0000000000000000000000000000000000000001".into(),
+            network: "eip155:8453".into(),
+            asset: USDC_BASE_MAINNET.into(),
+            amount: "1000".into(),
+            price_display: "$0.001".into(),
+            cdp_api_key_name: None,
+            cdp_api_key_private: None,
+        };
+        let req = cfg.requirement_for_catalog(
+            "/api/v2/premium/gap-audit",
+            "gap audit",
+            "application/json",
+            Some("$0.01"),
+            &["premium", "s0"],
+            Some(BazaarDiscovery::post(
+                "gap audit",
+                json!({ "intent": "bridge" }),
+                json!({ "subgoals": [] }),
+            )),
+        );
+        assert_eq!(req.amount, "10000");
+        assert!(req
+            .resource
+            .as_ref()
+            .unwrap()
+            .url
+            .starts_with("https://www.onchain-ai.xyz/"));
+        let ext = req.extensions.as_ref().expect("extensions");
+        let input = &ext["bazaar"]["info"]["input"];
+        assert_eq!(input["type"], "http");
+        assert_eq!(input["method"], "POST");
+        assert_eq!(input["bodyType"], "json");
+        assert_eq!(
+            ext["bazaar"]["schema"]["properties"]["input"]["required"],
+            json!(["type", "method", "bodyType", "body"])
+        );
+        assert_eq!(CDP_SELLER_SKUS.len(), 3);
+    }
+
+    #[test]
+    fn ensure_payload_resource_fills_from_expected() {
+        let expected = PaymentRequirementsV2 {
+            scheme: "exact".into(),
+            network: "eip155:8453".into(),
+            asset: USDC_BASE_MAINNET.into(),
+            amount: "1000".into(),
+            pay_to: "0x0000000000000000000000000000000000000001".into(),
+            max_timeout_seconds: 300,
+            extra: None,
+            resource: Some(ResourceInfo {
+                url: "https://www.onchain-ai.xyz/api/v2/premium/gap-audit".into(),
+                description: None,
+                mime_type: None,
+                service_name: None,
+                tags: None,
+                icon_url: None,
+            }),
+            extensions: None,
+        };
+        let payload = PaymentPayloadV2 {
+            x402_version: 2,
+            payload: json!({}),
+            accepted: expected.clone(),
+            resource: None,
+        };
+        let filled = ensure_payload_resource(payload, &expected);
+        assert_eq!(
+            filled
+                .resource
+                .as_ref()
+                .and_then(|v| v.get("url"))
+                .and_then(|u| u.as_str()),
+            Some("https://www.onchain-ai.xyz/api/v2/premium/gap-audit")
+        );
+
+        // Bare string resource → object { url }.
+        let payload2 = PaymentPayloadV2 {
+            x402_version: 2,
+            payload: json!({}),
+            accepted: expected.clone(),
+            resource: Some(json!("https://www.onchain-ai.xyz/api/v2/premium/gap-audit")),
+        };
+        let filled2 = ensure_payload_resource(payload2, &expected);
+        assert_eq!(
+            filled2
+                .resource
+                .as_ref()
+                .and_then(|v| v.get("url"))
+                .and_then(|u| u.as_str()),
+            Some("https://www.onchain-ai.xyz/api/v2/premium/gap-audit")
+        );
     }
 
     #[test]

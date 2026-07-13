@@ -10,8 +10,8 @@ https://www.onchain-ai.xyz/mcp
 
 - Transport: **streamable HTTP** (JSON-RPC 2.0 over `POST /mcp`; `GET /mcp` returns discovery JSON 200)
 - Auth: none. Rate limited per IP.
-- **Billing (prod when OKX A2MCP is active):** every `tools/call` is pay-per-call on X Layer USDT0 via OKX Broker (flat fee field on the OKX listing). Unmetered: `GET /mcp`, `initialize`, `tools/list`. When OKX is off, CDP/Base fallback may meter only premium tools (`check_endpoint_health`, `export_toolkit`, `recommend_verified_tool`, `gap_audit`). Agent Sync (`save_to_toolkit`, …) needs a linked token **and**, when OKX is active, payment on `tools/call` (same flat SKU).
-- **OKX SKU exception:** free-tier guardian prefers free discovery tools; Path A intentionally meters **all** `tools/call` under OKX (single marketplace SKU). See `docs/listings/directory-forms.md` §Policy exception. Not a documentation error.
+- **Billing (prod, external MCP):** every `tools/call` is pay-per-call on X Layer USDT0 via OKX Broker (~$0.1 flat SKU) — **including** `search_tools`. Unmetered: `GET /mcp`, `initialize`, `tools/list`. **Website UI browse may stay free**; remote agent clients and marketplace listings are paid. When OKX is off, CDP/Base fallback may meter only premium tools (`check_endpoint_health`, `export_toolkit`, `recommend_verified_tool`, `gap_audit`). Agent Sync needs a linked token **and**, when OKX is active, payment on `tools/call`.
+- **Listing policy:** external directories (OKX, Smithery, mcp.so, …) list this MCP as **paid**, never “free discovery”. See `docs/listings/directory-forms.md` §Product policy.
 - This is the **only** official endpoint. Anything else claiming to be OnchainAI is not ours.
 
 ## Claude Code (CLI)
@@ -171,14 +171,18 @@ Copy-paste payloads: `docs/listings/directory-forms.md`.
 
 | Channel | URL / artifact | Status |
 |---------|----------------|--------|
-| Official MCP Registry | [io.github.Coinyak/onchainai](https://registry.modelcontextprotocol.io) v0.2.0 | Published 2026-07-04 |
-| web3-mcp-hub | [rudazy/web3-mcp-hub#1](https://github.com/rudazy/web3-mcp-hub/pull/1) | Open |
-| awesome-crypto-mcp-servers | [hive-intel/awesome-crypto-mcp-servers#209](https://github.com/hive-intel/awesome-crypto-mcp-servers/pull/209) | Open |
-| Self catalog | [onchain-ai.xyz/tools/onchainai](https://www.onchain-ai.xyz/tools/onchainai) | Seeded (official) |
-| Smithery / mcp.so / PulseMCP / Glama | See `docs/listings/directory-forms.md` | Operator submit |
-| OKX AI Agent Marketplace | [okx.ai/agents](https://okx.ai/agents) — ASP #4609 | Listing under review (value-first copy + public `/mcp` endpoint). Operator: `docs/listings/directory-forms.md`, `scripts/register-okx-asp.sh` |
-| x402 Bazaar (seller) | CDP Facilitator settle — no registration form | After `check_endpoint_health` prod settle |
-| Base Builder Code | [dashboard.base.org](https://dashboard.base.org) | Operator register app + domain |
+| Official MCP Registry | [io.github.Coinyak/onchainai](https://registry.modelcontextprotocol.io) **v0.2.1** (latest) | **Published 2026-07-12** — paid tools/call description live |
+| web3-mcp-hub | [rudazy/web3-mcp-hub#1](https://github.com/rudazy/web3-mcp-hub/pull/1) | Open · **paid copy pushed** 2026-07-12 |
+| awesome-crypto-mcp-servers | [hive-intel/awesome-crypto-mcp-servers#209](https://github.com/hive-intel/awesome-crypto-mcp-servers/pull/209) | Open · **paid copy pushed** 2026-07-12 |
+| awesome-x402 | [xpaysh/awesome-x402#811](https://github.com/xpaysh/awesome-x402/pull/811) | Open · **submitted 2026-07-12** (MCP section, paid remote) |
+| Self catalog | [onchain-ai.xyz/tools/onchainai](https://www.onchain-ai.xyz/tools/onchainai) | Seeded (official); site browse free |
+| Smithery | [coinyak/onchainai](https://smithery.ai/servers/coinyak/onchainai) (also [hoyeon4315/onchainai](https://smithery.ai/servers/hoyeon4315/onchainai)) | **Published 2026-07-12** · external `https://www.onchain-ai.xyz/mcp` (paid tools/call) |
+| mcp.so | [chatmcp/mcpso#3123](https://github.com/chatmcp/mcpso/issues/3123) | **Submitted 2026-07-12** (issue + full listing comment) |
+| PulseMCP / Glama / mcpservers.org | browser forms | Opened submit flows; no public write API (Cloudflare / login) — may crawl Official Registry |
+| awesome-mcp-servers (punkpeye / appcypher) | mcp-submit | Already listed (tool reported) |
+| OKX AI Agent Marketplace | [okx.ai/agents](https://okx.ai/agents) — ASP #4609 | **Re-submitted 2026-07-12** · 1 SKU `$0.1` · update tx `0x5bb50900…` · AI review “suggested pass”; activate still pending OKX QA |
+| x402 Bazaar (seller) | Multi-price CDP + bazaar extension | **LIVE total=3** merchant `0x2af05c…` — health `$0.001`, recommend `$0.01`, gap_audit `$0.01` (Base USDC). OKX Path A separate `$0.1` flat. |
+| Base Builder Code | [dashboard.base.org](https://dashboard.base.org) | Applied `bc_ljttbnhv` |
 
 ## Troubleshooting
 
