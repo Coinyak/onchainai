@@ -1,0 +1,34 @@
+{
+  "usage": "Code Health rule customizations for OnchainAI. Prefer fixing smells over disabling rules.",
+  "rule_sets": [
+    {
+      "matching_content_path": "**/*_tests.rs",
+      "rules": [
+        { "name": "Large Method", "weight": 0.3 },
+        { "name": "Large Assertion Blocks", "weight": 0.2 },
+        { "name": "Code Duplication", "weight": 0.5 }
+      ]
+    },
+    {
+      "matching_content_path": "**/function_tests.rs",
+      "rules": [
+        { "name": "Large Method", "weight": 0.3 },
+        { "name": "Large Assertion Blocks", "weight": 0.2 }
+      ]
+    },
+    {
+      "matching_content_path": "**/.audit-*.mjs",
+      "rules": [
+        { "name": "Large Method", "weight": 0.0 },
+        { "name": "Complex Method", "weight": 0.0 }
+      ]
+    },
+    {
+      "matching_content_path": "scripts/**",
+      "rules": [
+        { "name": "Large Method", "weight": 0.5 },
+        { "name": "Complex Method", "weight": 0.5 }
+      ]
+    }
+  ]
+}
