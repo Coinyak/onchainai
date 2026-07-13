@@ -6,6 +6,8 @@ pub mod functions;
 #[cfg(feature = "ssr")]
 pub mod agent_sync;
 #[cfg(feature = "ssr")]
+pub mod http_app;
+#[cfg(feature = "ssr")]
 pub mod api_v2;
 #[cfg(feature = "ssr")]
 pub mod gap_audit;

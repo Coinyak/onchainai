@@ -25,6 +25,46 @@ pub(crate) enum ToolsCallOutcome {
     Err((i32, String)),
 }
 
+
+async fn gate_tool_payment(
+    pool: &PgPool,
+    tool_name: &str,
+    headers: &HeaderMap,
+    okx_client: Option<&std::sync::Arc<x402_core::http::OkxHttpFacilitatorClient>>,
+    okx_premium_gate_active: bool,
+) -> Result<bool, ToolsCallOutcome> {
+    let okx_gated = okx_premium_gate_active && okx_client.is_some();
+    if okx_gated {
+        let client = okx_client.expect("okx_gated implies okx_client is Some");
+        let description = tool_description_for_okx(tool_name);
+        match crate::server::okx_payment::require_okx_payment(client, tool_name, description, headers)
+            .await
+        {
+            Ok(_settlement) => return Ok(true),
+            Err(response) => return Err(ToolsCallOutcome::Http(response)),
+        }
+    }
+    if crate::server::mcp_x402::is_premium_mcp_tool(tool_name) {
+        if !crate::server::okx_payment::should_skip_cdp_for_okx(okx_premium_gate_active, tool_name) {
+            let config = match crate::server::mcp_x402::load_mcp_premium_config(pool).await {
+                Ok(config) => config,
+                Err(e) => {
+                    return Err(ToolsCallOutcome::Err((-32603, format!("settings load failed: {e}"))))
+                }
+            };
+            if config.is_active() {
+                match crate::server::mcp_x402::require_axis_b_payment(&config, tool_name, headers)
+                    .await
+                {
+                    Ok(_settlement) => {}
+                    Err(response) => return Err(ToolsCallOutcome::Http(response)),
+                }
+            }
+        }
+    }
+    Ok(false)
+}
+
 pub(crate) async fn tools_call(
     pool: &PgPool,
     params: Option<Value>,
@@ -38,8 +78,6 @@ pub(crate) async fn tools_call(
         Err(err) => return ToolsCallOutcome::Err(err),
     };
 
-    // Cheap prechecks before any OKX settlement — never charge for unknown tools or
-    // auth-only calls that would fail after payment.
     if !is_known_mcp_tool(&request.name) {
         return ToolsCallOutcome::Err((-32601, format!("Unknown tool: {}", request.name)));
     }
@@ -51,56 +89,19 @@ pub(crate) async fn tools_call(
         ));
     }
 
-    // OKX bundled package: when OKX is active, every /mcp tools/call is $0.1 USDT0
-    // via OKX Broker (discovery + premium). OKX marketplace lists one A2MCP SKU on
-    // this endpoint. Direct MCP on the same host also sees 402 until payment; REST
-    // discovery APIs remain separate and ungated.
-    let okx_gated = okx_premium_gate_active && okx_client.is_some();
+    let okx_gated = match gate_tool_payment(
+        pool,
+        &request.name,
+        headers,
+        okx_client,
+        okx_premium_gate_active,
+    )
+    .await
+    {
+        Ok(gated) => gated,
+        Err(outcome) => return outcome,
+    };
 
-    if okx_gated {
-        let client = okx_client.expect("okx_gated implies okx_client is Some");
-        let description = tool_description_for_okx(&request.name);
-        match crate::server::okx_payment::require_okx_payment(
-            client,
-            &request.name,
-            description,
-            headers,
-        )
-        .await
-        {
-            Ok(_settlement) => {}
-            Err(response) => return ToolsCallOutcome::Http(response),
-        }
-    } else if crate::server::mcp_x402::is_premium_mcp_tool(&request.name) {
-        // CDP/Base fallback: operator-toggled x402 via site_settings.
-        // Discovery tools (compare_tools, search_tools, etc.) are currently free —
-        // not in PREMIUM_MCP_TOOLS. Operator may move any tool to premium set.
-        // Default disabled, so export_toolkit stays free until explicitly enabled.
-        // Skipped when OKX is active for this tool (prevents double-charge).
-        if !crate::server::okx_payment::should_skip_cdp_for_okx(
-            okx_premium_gate_active,
-            &request.name,
-        ) {
-            let config = match crate::server::mcp_x402::load_mcp_premium_config(pool).await {
-                Ok(config) => config,
-                Err(e) => {
-                    return ToolsCallOutcome::Err((-32603, format!("settings load failed: {e}")))
-                }
-            };
-            if config.is_active() {
-                match crate::server::mcp_x402::require_axis_b_payment(
-                    &config,
-                    &request.name,
-                    headers,
-                )
-                .await
-                {
-                    Ok(_settlement) => {}
-                    Err(response) => return ToolsCallOutcome::Http(response),
-                }
-            }
-        }
-    }
     match dispatch_tool_call(
         pool,
         &request.name,
@@ -118,6 +119,7 @@ pub(crate) async fn tools_call(
         Err((code, msg)) => ToolsCallOutcome::Err((code, msg)),
     }
 }
+
 
 fn is_known_mcp_tool(name: &str) -> bool {
     matches!(

@@ -323,6 +323,40 @@ pub struct OkxSettlement {
 /// - `Ok(settlement)` — payment verified and settled
 /// - `Err(response)` — HTTP 402 (PAYMENT-REQUIRED header + accepts body) or
 ///   503 when OKX is misconfigured; return verbatim from the handler.
+
+fn okx_missing_payment_response(
+    tool_name: &str,
+    resource: ResourceInfo,
+    requirements: PaymentRequirements,
+) -> Response {
+    let payment_required = PaymentRequired {
+        x402_version: 2,
+        error: Some(format!(
+            "Payment required for {tool_name} ({}) on X Layer USDT0",
+            okx_price()
+        )),
+        resource,
+        accepts: vec![requirements],
+        extensions: None,
+    };
+    okx_402_response(&payment_required)
+}
+
+fn okx_invalid_payment_response(
+    message: String,
+    resource: ResourceInfo,
+    requirements: PaymentRequirements,
+) -> Response {
+    let payment_required = PaymentRequired {
+        x402_version: 2,
+        error: Some(message),
+        resource,
+        accepts: vec![requirements],
+        extensions: None,
+    };
+    okx_402_response(&payment_required)
+}
+
 pub async fn require_okx_payment(
     client: &OkxHttpFacilitatorClient,
     tool_name: &str,
@@ -351,32 +385,22 @@ pub async fn require_okx_payment(
         .filter(|s| !s.is_empty());
 
     let Some(signature) = signature_header else {
-        // No payment — return 402 with PAYMENT-REQUIRED header
-        let payment_required = PaymentRequired {
-            x402_version: 2,
-            error: Some(format!(
-                "Payment required for {tool_name} ({}) on X Layer USDT0",
-                okx_price()
-            )),
+        return Err(okx_missing_payment_response(
+            tool_name,
             resource,
-            accepts: vec![requirements.clone()],
-            extensions: None,
-        };
-        return Err(okx_402_response(&payment_required));
+            requirements,
+        ));
     };
 
     // Decode and verify the payment payload
     let payment_payload = match decode_payment_signature_header(signature) {
         Ok(payload) => payload,
         Err(e) => {
-            let payment_required = PaymentRequired {
-                x402_version: 2,
-                error: Some(format!("Invalid payment signature: {e}")),
+            return Err(okx_invalid_payment_response(
+                format!("Invalid payment signature: {e}"),
                 resource,
-                accepts: vec![requirements.clone()],
-                extensions: None,
-            };
-            return Err(okx_402_response(&payment_required));
+                requirements,
+            ));
         }
     };
 
@@ -394,26 +418,20 @@ pub async fn require_okx_payment(
                     .as_deref()
                     .unwrap_or("verification failed");
                 let msg = verify_resp.invalid_message.as_deref().unwrap_or("");
-                let payment_required = PaymentRequired {
-                    x402_version: 2,
-                    error: Some(format!("Payment verification failed: {reason}: {msg}")),
+                return Err(okx_invalid_payment_response(
+                    format!("Payment verification failed: {reason}: {msg}"),
                     resource,
-                    accepts: vec![requirements.clone()],
-                    extensions: None,
-                };
-                return Err(okx_402_response(&payment_required));
+                    requirements.clone(),
+                ));
             }
         }
         Err(e) => {
             tracing::error!("OKX facilitator verify error: {e}");
-            let payment_required = PaymentRequired {
-                x402_version: 2,
-                error: Some(format!("Facilitator verify error: {e}")),
+            return Err(okx_invalid_payment_response(
+                format!("Facilitator verify error: {e}"),
                 resource,
-                accepts: vec![requirements.clone()],
-                extensions: None,
-            };
-            return Err(okx_402_response(&payment_required));
+                requirements.clone(),
+            ));
         }
     }
 
@@ -523,214 +541,5 @@ fn is_valid_evm_address(addr: &str) -> bool {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use std::sync::Mutex;
-
-    /// Serialize env-var-mutating tests to avoid parallel races.
-    static ENV_GUARD: Mutex<()> = Mutex::new(());
-
-    fn _lock_env() -> std::sync::MutexGuard<'static, ()> {
-        ENV_GUARD.lock().unwrap()
-    }
-
-    #[test]
-    fn okx_network_is_x_layer() {
-        assert_eq!(OKX_NETWORK, "eip155:196");
-    }
-
-    #[test]
-    fn okx_pay_to_falls_back_to_cdp_env() {
-        let _g = _lock_env();
-        // When OKX_PAY_TO_ADDRESS is not set, falls back to X402_PAY_TO_ADDRESS.
-        std::env::remove_var("OKX_PAY_TO_ADDRESS");
-        std::env::set_var(
-            "X402_PAY_TO_ADDRESS",
-            "0x1234567890abcdef1234567890abcdef12345678",
-        );
-        assert_eq!(okx_pay_to(), "0x1234567890abcdef1234567890abcdef12345678");
-        std::env::remove_var("X402_PAY_TO_ADDRESS");
-    }
-
-    #[test]
-    fn okx_pay_to_prefers_okx_env() {
-        let _g = _lock_env();
-        std::env::set_var(
-            "OKX_PAY_TO_ADDRESS",
-            "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        );
-        std::env::set_var(
-            "X402_PAY_TO_ADDRESS",
-            "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-        );
-        assert_eq!(okx_pay_to(), "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
-        std::env::remove_var("OKX_PAY_TO_ADDRESS");
-        std::env::remove_var("X402_PAY_TO_ADDRESS");
-    }
-
-    #[test]
-    fn okx_price_defaults_to_0_1() {
-        let _g = _lock_env();
-        std::env::remove_var("OKX_PREMIUM_PRICE_USD");
-        assert_eq!(okx_price(), "$0.1");
-    }
-
-    #[test]
-    fn is_okx_enabled_false_without_credentials() {
-        let _g = _lock_env();
-        std::env::remove_var("OKX_API_KEY");
-        std::env::remove_var("OKX_SECRET_KEY");
-        std::env::remove_var("OKX_PASSPHRASE");
-        assert!(!is_okx_enabled());
-    }
-
-    #[test]
-    fn is_okx_enabled_true_with_all_credentials() {
-        let _g = _lock_env();
-        std::env::set_var("OKX_API_KEY", "test-key");
-        std::env::set_var("OKX_SECRET_KEY", "test-secret");
-        std::env::set_var("OKX_PASSPHRASE", "test-pass");
-        assert!(is_okx_enabled());
-        std::env::remove_var("OKX_API_KEY");
-        std::env::remove_var("OKX_SECRET_KEY");
-        std::env::remove_var("OKX_PASSPHRASE");
-    }
-
-    #[test]
-    fn build_okx_routes_empty_without_pay_to() {
-        let _g = _lock_env();
-        std::env::remove_var("OKX_PAY_TO_ADDRESS");
-        std::env::remove_var("X402_PAY_TO_ADDRESS");
-        let routes = build_okx_routes();
-        assert!(routes.is_empty());
-    }
-
-    #[test]
-    fn build_okx_routes_has_premium_endpoints() {
-        let _g = _lock_env();
-        std::env::set_var(
-            "OKX_PAY_TO_ADDRESS",
-            "0x1234567890abcdef1234567890abcdef12345678",
-        );
-        let routes = build_okx_routes();
-        assert!(routes.contains_key("POST /api/v2/premium/recommend-verified-tool"));
-        assert!(routes.contains_key("POST /api/v2/premium/gap-audit"));
-        // check-endpoint-health uses {slug} — not OKX-gated (exact-string match can't handle params).
-        assert!(!routes.contains_key("GET /api/v2/premium/check-endpoint-health/{slug}"));
-        // Pin public HTTPS resource URLs (no Railway internal host).
-        let gap = routes
-            .get("POST /api/v2/premium/gap-audit")
-            .expect("gap-audit");
-        assert_eq!(
-            gap.resource.as_deref(),
-            Some("https://www.onchain-ai.xyz/api/v2/premium/gap-audit")
-        );
-        let rec = routes
-            .get("POST /api/v2/premium/recommend-verified-tool")
-            .expect("recommend");
-        assert_eq!(
-            rec.resource.as_deref(),
-            Some("https://www.onchain-ai.xyz/api/v2/premium/recommend-verified-tool")
-        );
-        std::env::remove_var("OKX_PAY_TO_ADDRESS");
-    }
-
-    #[test]
-    fn okx_resource_info_uses_public_https_mcp_endpoint() {
-        let info = okx_resource_info("search_tools", "search crypto tools");
-        assert_eq!(info.url, "https://www.onchain-ai.xyz/mcp");
-        assert!(info
-            .description
-            .as_deref()
-            .unwrap_or("")
-            .contains("search_tools"));
-        assert!(!info.url.contains("railway"));
-        assert!(!info.url.starts_with("mcp://"));
-    }
-
-    #[test]
-    fn public_resource_url_and_a2mcp_endpoint() {
-        assert_eq!(
-            public_resource_url("/api/v2/premium/gap-audit"),
-            "https://www.onchain-ai.xyz/api/v2/premium/gap-audit"
-        );
-        assert_eq!(public_resource_url("mcp"), "https://www.onchain-ai.xyz/mcp");
-        assert_eq!(okx_a2mcp_endpoint(), "https://www.onchain-ai.xyz/mcp");
-    }
-
-    #[test]
-    fn should_skip_cdp_for_all_tools_when_okx_package_active() {
-        assert!(!should_skip_cdp_for_okx(false, "search_tools"));
-        assert!(!should_skip_cdp_for_okx(false, "check_endpoint_health"));
-        assert!(should_skip_cdp_for_okx(true, "search_tools"));
-        assert!(should_skip_cdp_for_okx(true, "compare_tools"));
-        assert!(should_skip_cdp_for_okx(true, "check_endpoint_health"));
-    }
-
-    #[test]
-    fn is_valid_evm_address_rejects_invalid() {
-        assert!(!is_valid_evm_address("0xYourWalletAddress"));
-        assert!(!is_valid_evm_address(""));
-        assert!(!is_valid_evm_address("0x123"));
-        assert!(!is_valid_evm_address(
-            "0x1234567890abcdef1234567890abcdef123456789"
-        ));
-        assert!(!is_valid_evm_address(
-            "0x1234567890abcdef1234567890abcdef1234567g"
-        ));
-        assert!(is_valid_evm_address(
-            "0x1234567890abcdef1234567890abcdef12345678"
-        ));
-        assert!(is_valid_evm_address(
-            "0xAbCdEf1234567890abcdef1234567890abcdef12"
-        ));
-    }
-
-    #[test]
-    fn usd_to_usdt_atomic_converts_correctly() {
-        assert_eq!(usd_to_usdt_atomic("$0.1").as_deref(), Some("100000"));
-        assert_eq!(usd_to_usdt_atomic("$0.001").as_deref(), Some("1000"));
-        assert_eq!(usd_to_usdt_atomic("$1.0").as_deref(), Some("1000000"));
-        assert_eq!(usd_to_usdt_atomic("0.1").as_deref(), Some("100000"));
-        assert!(usd_to_usdt_atomic("invalid").is_none());
-        assert!(usd_to_usdt_atomic("$-1").is_none());
-    }
-
-    #[test]
-    fn okx_payment_requirements_builds_correctly() {
-        let _g = _lock_env();
-        std::env::set_var(
-            "OKX_PAY_TO_ADDRESS",
-            "0x2af05c1661da38a2919dc27b4c8b71cb91c30017",
-        );
-        std::env::remove_var("OKX_PREMIUM_PRICE_USD");
-        let req = okx_payment_requirements();
-        assert!(req.is_some());
-        let req = req.unwrap();
-        assert_eq!(req.network, "eip155:196");
-        assert_eq!(req.asset, XLAYER_USDT0_ADDRESS);
-        assert_eq!(req.amount, "100000"); // $0.1 → 6-decimal atomic
-        assert_eq!(req.scheme, "exact");
-        assert_eq!(req.pay_to, "0x2af05c1661da38a2919dc27b4c8b71cb91c30017");
-        assert_eq!(req.extra.get("decimals").unwrap(), &json!(6));
-        std::env::remove_var("OKX_PAY_TO_ADDRESS");
-    }
-
-    #[test]
-    fn okx_payment_requirements_none_without_pay_to() {
-        let _g = _lock_env();
-        std::env::remove_var("OKX_PAY_TO_ADDRESS");
-        std::env::remove_var("X402_PAY_TO_ADDRESS");
-        assert!(okx_payment_requirements().is_none());
-    }
-
-    #[test]
-    fn okx_gated_routes_includes_bundled_package_tools() {
-        assert!(OKX_GATED_ROUTES.contains(&"search_tools"));
-        assert!(OKX_GATED_ROUTES.contains(&"compare_tools"));
-        assert!(OKX_GATED_ROUTES.contains(&"check_endpoint_health"));
-        assert!(OKX_GATED_ROUTES.contains(&"export_toolkit"));
-        assert!(OKX_GATED_ROUTES.contains(&"recommend_verified_tool"));
-        assert!(OKX_GATED_ROUTES.contains(&"gap_audit"));
-    }
-}
+#[path = "okx_payment_tests.rs"]
+mod tests;

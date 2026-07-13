@@ -180,6 +180,106 @@ async fn find_or_create_agent_blueprint(
     Ok((id, json!([]), json!([])))
 }
 
+
+async fn approved_tool_exists(pool: &PgPool, slug: &str) -> Result<bool, FnError> {
+    sqlx::query_scalar(
+        r#"
+        SELECT EXISTS(
+            SELECT 1 FROM tools
+            WHERE slug = $1
+              AND approval_status = 'approved'
+              AND relevance_status = 'accepted'
+              AND quarantined_at IS NULL
+        )
+        "#,
+    )
+    .bind(slug)
+    .fetch_one(pool)
+    .await
+    .map_err(|e| FnError::new(format!("tool lookup failed: {e}")))
+}
+
+async fn load_blueprint_canvas(
+    pool: &PgPool,
+    user_id: Uuid,
+    blueprint_id: Option<Uuid>,
+    session_title: &str,
+) -> Result<(Uuid, Value), FnError> {
+    if let Some(id) = blueprint_id {
+        #[derive(sqlx::FromRow)]
+        struct Row {
+            id: Uuid,
+            nodes: Value,
+            edges: Value,
+        }
+        let row = sqlx::query_as::<_, Row>(
+            "SELECT id, nodes, edges FROM blueprints WHERE id = $1 AND user_id = $2",
+        )
+        .bind(id)
+        .bind(user_id)
+        .fetch_optional(pool)
+        .await
+        .map_err(|e| FnError::new(format!("blueprint load failed: {e}")))?
+        .ok_or_else(|| FnError::new("blueprint not found"))?;
+        return Ok((row.id, row.nodes));
+    }
+    let (id, nodes, _) = find_or_create_agent_blueprint(pool, user_id, session_title).await?;
+    Ok((id, nodes))
+}
+
+async fn blueprint_updated_at(
+    pool: &PgPool,
+    blueprint_id: Uuid,
+    user_id: Uuid,
+) -> Result<DateTime<Utc>, FnError> {
+    sqlx::query_scalar::<_, DateTime<Utc>>(
+        "SELECT updated_at FROM blueprints WHERE id = $1 AND user_id = $2",
+    )
+    .bind(blueprint_id)
+    .bind(user_id)
+    .fetch_one(pool)
+    .await
+    .map_err(|e| FnError::new(format!("blueprint timestamp failed: {e}")))
+}
+
+async fn skip_blueprint_sync(
+    pool: &PgPool,
+    auth: &AgentAuth,
+    slug: String,
+    blueprint_id: Uuid,
+    skip_reason: &str,
+    idempotency_key: Option<&str>,
+) -> Result<SyncBlueprintNodeResponse, FnError> {
+    let updated_at = blueprint_updated_at(pool, blueprint_id, auth.user_id).await?;
+    let response = SyncBlueprintNodeResponse {
+        ok: true,
+        slug,
+        blueprint_id,
+        node_id: None,
+        appended: false,
+        skip_reason: Some(skip_reason.into()),
+        updated_at,
+    };
+    if let Some(key) = idempotency_key.filter(|k| !k.is_empty()) {
+        let _ = record_blueprint_sync_log(pool, auth, &response.slug, key, &response).await;
+    }
+    Ok(response)
+}
+
+fn resolve_node_chains(
+    requested: Option<&[String]>,
+    tool_chains: &[String],
+) -> Result<Vec<String>, FnError> {
+    if let Some(values) = requested {
+        let normalized = normalize_agent_tool_chains(Some(values))?;
+        if normalized.is_empty() {
+            return Ok(initial_tool_node_chains(tool_chains));
+        }
+        return Ok(normalized);
+    }
+    Ok(initial_tool_node_chains(tool_chains))
+}
+
 pub async fn sync_blueprint_node(
     pool: &PgPool,
     auth: &AgentAuth,
@@ -200,110 +300,26 @@ pub async fn sync_blueprint_node(
         }
     }
 
-    let exists: bool = sqlx::query_scalar(
-        r#"
-        SELECT EXISTS(
-            SELECT 1 FROM tools
-            WHERE slug = $1
-              AND approval_status = 'approved'
-              AND relevance_status = 'accepted'
-              AND quarantined_at IS NULL
-        )
-        "#,
-    )
-    .bind(&slug)
-    .fetch_one(pool)
-    .await
-    .map_err(|e| FnError::new(format!("tool lookup failed: {e}")))?;
-
-    if !exists {
+    if !approved_tool_exists(pool, &slug).await? {
         return Err(FnError::new(format!("tool not found: {slug}")));
     }
 
     let session_title = agent_session_title(Utc::now());
-    let (blueprint_id, mut nodes, _edges) = if let Some(id) = req.blueprint_id {
-        #[derive(sqlx::FromRow)]
-        struct Row {
-            id: Uuid,
-            nodes: Value,
-            edges: Value,
-        }
-        let row = sqlx::query_as::<_, Row>(
-            "SELECT id, nodes, edges FROM blueprints WHERE id = $1 AND user_id = $2",
-        )
-        .bind(id)
-        .bind(auth.user_id)
-        .fetch_optional(pool)
-        .await
-        .map_err(|e| FnError::new(format!("blueprint load failed: {e}")))?
-        .ok_or_else(|| FnError::new("blueprint not found"))?;
-        (row.id, row.nodes, row.edges)
-    } else {
-        find_or_create_agent_blueprint(pool, auth.user_id, &session_title).await?
-    };
+    let (blueprint_id, mut nodes) =
+        load_blueprint_canvas(pool, auth.user_id, req.blueprint_id, &session_title).await?;
 
+    let idem = req.idempotency_key.as_deref();
     if slug_on_canvas(&nodes, &slug) {
-        let updated_at = sqlx::query_scalar::<_, DateTime<Utc>>(
-            "SELECT updated_at FROM blueprints WHERE id = $1 AND user_id = $2",
-        )
-        .bind(blueprint_id)
-        .bind(auth.user_id)
-        .fetch_one(pool)
-        .await
-        .map_err(|e| FnError::new(format!("blueprint timestamp failed: {e}")))?;
-
-        let response = SyncBlueprintNodeResponse {
-            ok: true,
-            slug,
-            blueprint_id,
-            node_id: None,
-            appended: false,
-            skip_reason: Some("duplicate_slug".into()),
-            updated_at,
-        };
-        if let Some(key) = req.idempotency_key.as_deref().filter(|k| !k.is_empty()) {
-            let _ = record_blueprint_sync_log(pool, auth, &response.slug, key, &response).await;
-        }
-        return Ok(response);
+        return skip_blueprint_sync(pool, auth, slug, blueprint_id, "duplicate_slug", idem).await;
     }
 
     let node_count = nodes.as_array().map(|a| a.len()).unwrap_or(0);
     if node_count >= BLUEPRINT_MAX_NODES {
-        let updated_at = sqlx::query_scalar::<_, DateTime<Utc>>(
-            "SELECT updated_at FROM blueprints WHERE id = $1 AND user_id = $2",
-        )
-        .bind(blueprint_id)
-        .bind(auth.user_id)
-        .fetch_one(pool)
-        .await
-        .map_err(|e| FnError::new(format!("blueprint timestamp failed: {e}")))?;
-
-        let response = SyncBlueprintNodeResponse {
-            ok: true,
-            slug,
-            blueprint_id,
-            node_id: None,
-            appended: false,
-            skip_reason: Some("node_limit".into()),
-            updated_at,
-        };
-        if let Some(key) = req.idempotency_key.as_deref().filter(|k| !k.is_empty()) {
-            let _ = record_blueprint_sync_log(pool, auth, &response.slug, key, &response).await;
-        }
-        return Ok(response);
+        return skip_blueprint_sync(pool, auth, slug, blueprint_id, "node_limit", idem).await;
     }
 
     let tool_chains = load_tool_chains(pool, &slug).await?;
-    let chains = if let Some(requested) = req.chains.as_deref() {
-        let normalized = normalize_agent_tool_chains(Some(requested))?;
-        if normalized.is_empty() {
-            initial_tool_node_chains(&tool_chains)
-        } else {
-            normalized
-        }
-    } else {
-        initial_tool_node_chains(&tool_chains)
-    };
+    let chains = resolve_node_chains(req.chains.as_deref(), &tool_chains)?;
 
     let (x, y) = next_agent_tool_node_coords(&nodes);
     let node_id = Uuid::new_v4().to_string();
