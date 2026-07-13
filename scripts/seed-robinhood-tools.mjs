@@ -81,7 +81,7 @@ const TOOLS = [
     source: "operator-curated",
   }),
 
-  // --- Robinhood brokerage / TradFi agent MCP (not L2; no chain tag) ---
+  // --- Robinhood brokerage / TradFi agent MCP (tagged robinhood for strip filter UX) ---
   tool({
     slug: "trayd-mcp",
     name: "Trayd MCP",
@@ -95,7 +95,7 @@ const TOOLS = [
     homepage: "https://github.com/trayders/trayd-mcp",
     mcp_endpoint: "https://mcp.trayd.ai/mcp",
     install_command: "claude mcp add --transport http trayd https://mcp.trayd.ai/mcp --scope user",
-    chains: [],
+    chains: ["robinhood"],
     stars: 34,
     requires_secret: true,
     install_risk_level: "high",
@@ -121,7 +121,7 @@ const TOOLS = [
     repo_url: "https://github.com/verygoodplugins/robinhood-mcp",
     homepage: "https://pypi.org/project/robinhood-mcp/",
     install_command: "pip install robinhood-mcp",
-    chains: [],
+    chains: ["robinhood"],
     stars: 33,
     license: "MIT",
     requires_secret: true,
@@ -148,7 +148,7 @@ const TOOLS = [
     repo_url: "https://github.com/rohitsingh-iitd/robinhood-mcp-server",
     homepage: "https://github.com/rohitsingh-iitd/robinhood-mcp-server",
     install_command: "pip install -r requirements.txt",
-    chains: [],
+    chains: ["robinhood"],
     stars: 30,
     requires_secret: true,
     install_risk_level: "high",
@@ -174,7 +174,7 @@ const TOOLS = [
     repo_url: "https://github.com/Open-Agent-Tools/open-stocks-mcp",
     homepage: "https://github.com/Open-Agent-Tools/open-stocks-mcp",
     install_command: "pip install open-stocks-mcp",
-    chains: [],
+    chains: ["robinhood"],
     stars: 9,
     license: "Apache-2.0",
     requires_secret: true,
