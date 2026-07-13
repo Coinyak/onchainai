@@ -130,36 +130,72 @@ d = json.load(sys.stdin)
 items = d.get('data', [{}])[0].get('list', [])
 print(f'existing services: {len(items)}')
 for s in items:
-    print(f\"  delete id={s['id']} ({s['serviceName']})\")
+    print(f\"  id={s['id']} ({s['serviceName']}) endpoint={s.get('endpoint','')}\")
 "
 
+  # Prefer operation=update on the existing A2MCP row (delete+create has hit OKX
+  # wallet TEE / send-uop failures). Fall back to delete-all + create when empty.
   UPDATE_SERVICE_JSON="$(printf '%s' "${service_list}" | python3 -c "
 import json, sys
 name, desc, fee, endpoint = sys.argv[1:5]
 items = json.load(sys.stdin).get('data', [{}])[0].get('list', [])
 ops = []
-for s in items:
+a2mcp = [s for s in items if str(s.get('serviceType', '')).upper() == 'A2MCP']
+if len(a2mcp) == 1:
+    s = a2mcp[0]
     ops.append({
-        'operation': 'delete',
+        'operation': 'update',
         'id': str(s['id']),
-        'serviceName': s['serviceName'],
-        'serviceDescription': s['serviceDescription'],
-        'serviceType': s['serviceType'],
-        'fee': s['fee'],
-        'endpoint': s['endpoint'],
+        'serviceName': name,
+        'serviceDescription': desc,
+        'serviceType': 'A2MCP',
+        'fee': fee,
+        'endpoint': endpoint,
     })
-ops.append({
-    'operation': 'create',
-    'serviceName': name,
-    'serviceDescription': desc,
-    'serviceType': 'A2MCP',
-    'fee': fee,
-    'endpoint': endpoint,
-})
+    # Drop any non-A2MCP leftovers if present
+    for s in items:
+        if str(s.get('serviceType', '')).upper() != 'A2MCP':
+            ops.append({
+                'operation': 'delete',
+                'id': str(s['id']),
+                'serviceName': s['serviceName'],
+                'serviceDescription': s.get('serviceDescription', ''),
+                'serviceType': s['serviceType'],
+                'fee': s.get('fee', ''),
+                'endpoint': s.get('endpoint', ''),
+            })
+elif not items:
+    ops.append({
+        'operation': 'create',
+        'serviceName': name,
+        'serviceDescription': desc,
+        'serviceType': 'A2MCP',
+        'fee': fee,
+        'endpoint': endpoint,
+    })
+else:
+    for s in items:
+        ops.append({
+            'operation': 'delete',
+            'id': str(s['id']),
+            'serviceName': s['serviceName'],
+            'serviceDescription': s.get('serviceDescription', ''),
+            'serviceType': s['serviceType'],
+            'fee': s.get('fee', ''),
+            'endpoint': s.get('endpoint', ''),
+        })
+    ops.append({
+        'operation': 'create',
+        'serviceName': name,
+        'serviceDescription': desc,
+        'serviceType': 'A2MCP',
+        'fee': fee,
+        'endpoint': endpoint,
+    })
 print(json.dumps(ops))
 " "${SERVICE_NAME}" "${SERVICE_DESCRIPTION}" "${FEE}" "${ENDPOINT}")"
 
-  echo "== update ASP #${AGENT_ID} (replace with 1 bundled SKU) =="
+  echo "== update ASP #${AGENT_ID} (sync bundled SKU → ${ENDPOINT}) =="
   if ! update_out="$(onchainos agent update \
     --agent-id "${AGENT_ID}" \
     --name "${NAME}" \
