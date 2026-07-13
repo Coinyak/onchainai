@@ -1,15 +1,16 @@
 //! OKX Agent Payments Protocol integration — A2MCP seller-side payment gate.
 //!
 //! Uses the official OKX x402 SDK crates with the OKX facilitator
-//! (HMAC-SHA256 auth) on X Layer (eip155:196). The existing CDP facilitator
-//! code (`x402_payment.rs`) stays for discovery/free tools; this module gates
-//! premium A2MCP endpoints listed on OKX.AI.
+//! (HMAC-SHA256 auth) on X Layer (eip155:196). CDP/Axis B gates on public
+//! `POST /mcp` live in `x402_payment` / `mcp_x402`. This module meters the
+//! OKX marketplace package path (`POST /mcp/okx`) and premium REST routes.
 //!
 //! Two gate layers:
 //! 1. **Route middleware** (`x402_axum::payment_middleware`) — intercepts REST
 //!    routes by exact `"METHOD /path"` match. Covers `/api/v2/premium/*` REST.
-//! 2. **Handler-level gate** (`require_okx_payment`) — for `/mcp` JSON-RPC,
-//!    where the middleware cannot inspect the tool name inside the body.
+//! 2. **Handler-level gate** (`require_okx_payment`) — for `POST /mcp/okx`
+//!    JSON-RPC only (public `POST /mcp` stays free discovery). Middleware cannot
+//!    inspect the tool name inside the body.
 //!    Analogous to `require_axis_b_payment` but uses `OkxHttpFacilitatorClient`.
 //!
 //! Spec: OKX Agent Payments Protocol — https://web3.okx.com/onchainos/dev-docs/payments/app
@@ -131,9 +132,12 @@ fn public_resource_url(path: &str) -> String {
     format!("{}{path}", crate::config::SITE_ORIGIN)
 }
 
-/// Canonical A2MCP MCP endpoint (public HTTPS).
+/// Canonical A2MCP MCP endpoint for the OKX marketplace package (public HTTPS).
+///
+/// Hybrid billing: site users connect to free `POST /mcp`. OKX Path A listings
+/// and marketplace agents use this paid package path only.
 pub fn okx_a2mcp_endpoint() -> String {
-    public_resource_url("/mcp")
+    public_resource_url("/mcp/okx")
 }
 
 /// Build the routes config for OKX A2MCP premium endpoints.
@@ -154,7 +158,8 @@ pub fn build_okx_routes() -> RoutesConfig {
     let mut routes = HashMap::new();
 
     // Premium REST endpoints — route middleware handles these by exact path match.
-    // MCP `/mcp` JSON-RPC is handled at the handler level (require_okx_payment).
+    // Package MCP `POST /mcp/okx` JSON-RPC uses handler-level require_okx_payment
+    // (public POST /mcp is free discovery — not middleware-gated).
     // Pin `resource` to SITE_ORIGIN so 402 PAYMENT-REQUIRED never leaks Railway hosts.
     let premium_routes = [
         (
@@ -201,9 +206,10 @@ pub fn is_okx_enabled() -> bool {
     !api_key.is_empty() && !secret_key.is_empty() && !passphrase.is_empty()
 }
 
-/// All MCP tools in the OKX bundled A2MCP package ($0.1 USDT0/call on POST /mcp).
-/// When OKX env is active, handler-level gate applies to every tools/call — including
-/// discovery. CDP handler gates are skipped while OKX is active (no double-charge).
+/// MCP tools metered on the OKX marketplace package path only (`POST /mcp/okx`).
+/// Public site MCP (`POST /mcp`) keeps discovery free; OKX $0.1 gate never runs there.
+/// On `/mcp/okx`, every tools/call in this list is $0.1 USDT0 when OKX env is active.
+/// CDP handler gates are skipped for those calls (no double-charge).
 pub const OKX_GATED_ROUTES: &[&str] = &[
     "search_tools",
     "get_tool_detail",
@@ -222,9 +228,19 @@ pub const OKX_GATED_ROUTES: &[&str] = &[
     "link_status",
 ];
 
-/// Skip handler-level CDP gate when OKX bundled package is active.
-pub fn should_skip_cdp_for_okx(okx_premium_gate_active: bool, _tool_name: &str) -> bool {
-    okx_premium_gate_active
+/// Whether `tool_name` is part of the OKX bundled A2MCP package.
+pub fn is_okx_package_tool(tool_name: &str) -> bool {
+    OKX_GATED_ROUTES.contains(&tool_name)
+}
+
+/// Skip handler-level CDP gate when the request is on the OKX package path and
+/// OKX is active for this tool (avoids double-charge with OKX USDT0).
+pub fn should_skip_cdp_for_okx(
+    okx_package_mode: bool,
+    okx_premium_gate_active: bool,
+    tool_name: &str,
+) -> bool {
+    okx_package_mode && okx_premium_gate_active && is_okx_package_tool(tool_name)
 }
 
 /// Shared OKX facilitator client (initialized once at startup, stored in AppState).
@@ -297,12 +313,12 @@ fn okx_payment_requirements() -> Option<PaymentRequirements> {
 
 /// Build `ResourceInfo` for a specific tool call.
 ///
-/// `url` is the public HTTPS A2MCP endpoint (not `mcp://` and not Railway).
-/// OKX marketplace T2 checks require a valid public HTTPS service URL; tool
-/// identity stays in `description`.
-fn okx_resource_info(tool_name: &str, description: &str) -> ResourceInfo {
+/// `resource_url` must be a public HTTPS URL (not `mcp://` and not Railway).
+/// Use [`okx_a2mcp_endpoint`] for the OKX package path; use public `/mcp` when
+/// charging premium tools on the free-discovery endpoint via OKX fallback.
+fn okx_resource_info(tool_name: &str, description: &str, resource_url: &str) -> ResourceInfo {
     ResourceInfo {
-        url: okx_a2mcp_endpoint(),
+        url: resource_url.to_string(),
         description: Some(format!("OnchainAI MCP {tool_name}: {description}")),
         mime_type: Some("application/json".to_string()),
     }
@@ -315,7 +331,7 @@ pub struct OkxSettlement {
     pub transaction: String,
 }
 
-/// Handler-level OKX x402 payment gate for MCP `/mcp` JSON-RPC tool calls.
+/// Handler-level OKX x402 payment gate for MCP `POST /mcp/okx` JSON-RPC tool calls.
 ///
 /// Analogous to `require_axis_b_payment` but uses the OKX Broker facilitator
 /// on X Layer (eip155:196) with USDT0 instead of CDP/Base USDC.
@@ -363,6 +379,25 @@ pub async fn require_okx_payment(
     tool_description: &str,
     headers: &HeaderMap,
 ) -> Result<OkxSettlement, Response> {
+    require_okx_payment_for_resource(
+        client,
+        tool_name,
+        tool_description,
+        headers,
+        &okx_a2mcp_endpoint(),
+    )
+    .await
+}
+
+/// Like [`require_okx_payment`] but pins `resource.url` to the actual request surface
+/// (public `/mcp` vs package `/mcp/okx`) so 402 payloads match the client path.
+pub async fn require_okx_payment_for_resource(
+    client: &OkxHttpFacilitatorClient,
+    tool_name: &str,
+    tool_description: &str,
+    headers: &HeaderMap,
+    resource_url: &str,
+) -> Result<OkxSettlement, Response> {
     let requirements = match okx_payment_requirements() {
         Some(req) => req,
         None => {
@@ -374,7 +409,7 @@ pub async fn require_okx_payment(
         }
     };
 
-    let resource = okx_resource_info(tool_name, tool_description);
+    let resource = okx_resource_info(tool_name, tool_description, resource_url);
 
     // Check for payment-signature header
     let signature_header = headers

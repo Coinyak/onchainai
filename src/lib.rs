@@ -30,9 +30,9 @@ pub struct AppState {
     pub config: Config,
     /// True only when OKX x402 middleware is applied with non-empty route config.
     pub okx_premium_gate_active: bool,
-    /// Shared OKX facilitator client for handler-level x402 gates (MCP `/mcp`).
-    /// `None` when OKX credentials are not set; handlers skip the OKX gate and
-    /// fall through to the existing CDP/Base gate.
+    /// Shared OKX facilitator client for handler-level x402 gates on `POST /mcp/okx`.
+    /// Public `POST /mcp` never uses this for discovery. `None` when OKX
+    /// credentials are not set; package path falls through / returns misconfigured.
     pub okx_client: Option<std::sync::Arc<x402_core::http::OkxHttpFacilitatorClient>>,
 }
 
@@ -74,6 +74,7 @@ async fn canonical_host_redirect(
 #[cfg(feature = "ssr")]
 fn cache_control_for_response(path: &str) -> Option<axum::http::HeaderValue> {
     if path == "/mcp"
+        || path == "/mcp/okx"
         || path.starts_with("/api/")
         || path.starts_with("/auth/")
         || path.starts_with("/onboarding/")
@@ -141,6 +142,7 @@ mod tests {
             "/auth/logout",
             "/onboarding/complete",
             "/mcp",
+            "/mcp/okx",
         ] {
             assert_eq!(
                 cache_header_str(path).as_deref(),

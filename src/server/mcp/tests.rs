@@ -48,11 +48,50 @@ fn mcp_info_lists_public_tools_and_endpoint() {
     assert_eq!(value["endpoint"], "https://www.onchain-ai.xyz/mcp");
     assert_eq!(value["docs"], "https://www.onchain-ai.xyz/connect");
     assert_eq!(value["transport"], "streamable-http");
+    assert_eq!(value["billing"], "free_discovery");
+    assert_eq!(value["billing_detail"]["mode"], "public");
+    assert_eq!(value["billing_detail"]["discovery"], "free");
+    assert_eq!(
+        value["billing_detail"]["premium_tools"]["price"],
+        crate::server::mcp_x402::DEFAULT_MCP_PREMIUM_PRICE
+    );
+    assert!(value["description"]
+        .as_str()
+        .unwrap()
+        .contains("free discovery"));
+    assert!(!value["description"]
+        .as_str()
+        .unwrap()
+        .to_ascii_lowercase()
+        .contains("entire"));
     let tools = value["tools"].as_array().unwrap();
     assert_eq!(tools.len(), 12);
     assert!(tools
         .iter()
         .all(|t| t["name"].is_string() && t["description"].is_string()));
+}
+
+#[test]
+fn mcp_okx_info_states_package_billing() {
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let response = rt.block_on(handle_mcp_okx_info()).into_response();
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = rt
+        .block_on(axum::body::to_bytes(response.into_body(), 1024 * 1024))
+        .unwrap();
+    let value: Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(value["name"], "onchainai-okx");
+    assert_eq!(value["endpoint"], "https://www.onchain-ai.xyz/mcp/okx");
+    assert_eq!(value["billing"], "okx_package_pay_per_call");
+    assert_eq!(value["billing_detail"]["mode"], "okx_package");
+    assert_eq!(value["billing_detail"]["every_tools_call"]["price"], "$0.1");
+    assert_eq!(
+        value["billing_detail"]["public_free_endpoint"],
+        "https://www.onchain-ai.xyz/mcp"
+    );
+    let desc = value["description"].as_str().unwrap();
+    assert!(desc.contains("$0.1"));
+    assert!(desc.contains("/mcp"));
 }
 
 #[test]
@@ -276,4 +315,67 @@ fn tool_descriptions_document_agent_call_flow() {
     let install = install_def["description"].as_str().unwrap();
     assert!(install.contains("blocked=true"));
     assert!(install.contains("critical"));
+}
+
+#[test]
+fn tool_descriptions_state_hybrid_billing_prices() {
+    use definitions::tool_definitions;
+
+    let tools = tool_definitions(false);
+    let desc = |name: &str| -> String {
+        tools
+            .iter()
+            .find(|t| t["name"].as_str() == Some(name))
+            .and_then(|t| t["description"].as_str())
+            .unwrap_or("")
+            .to_string()
+    };
+
+    // Free discovery tools must not claim $0.1 package pricing or imply full paywall.
+    for free in [
+        "search_tools",
+        "get_tool_detail",
+        "get_install_guide",
+        "list_categories",
+        "get_dashboard_snapshot",
+        "compare_tools",
+        "get_price_history",
+        "get_x402_trends",
+    ] {
+        let d = desc(free);
+        assert!(
+            !d.contains("$0.1"),
+            "{free} description must not claim OKX $0.1 package rate: {d}"
+        );
+    }
+    let compare = desc("compare_tools");
+    assert!(
+        compare.to_ascii_lowercase().contains("free"),
+        "compare_tools should document free discovery: {compare}"
+    );
+
+    // Premium trio: $0.01 Axis B, never "may require when enabled".
+    for premium in ["export_toolkit", "recommend_verified_tool", "gap_audit"] {
+        let d = desc(premium);
+        assert!(d.contains("$0.01"), "{premium} must state $0.01 USDC: {d}");
+        assert!(
+            d.to_ascii_lowercase().contains("always paid")
+                || d.to_ascii_lowercase().contains("axis b"),
+            "{premium} must state always-paid / Axis B: {d}"
+        );
+        assert!(
+            !d.contains("May require x402 payment per call when"),
+            "{premium} must not use optional premium language: {d}"
+        );
+    }
+
+    let health = desc("check_endpoint_health");
+    assert!(
+        health.contains("$0.001") || health.contains("~$0.001"),
+        "check_endpoint_health must state ~$0.001 USDC: {health}"
+    );
+    assert!(
+        !health.contains("$0.1"),
+        "check_endpoint_health public description must not claim $0.1: {health}"
+    );
 }

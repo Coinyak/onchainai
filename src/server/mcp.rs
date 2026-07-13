@@ -42,11 +42,43 @@ struct McpErrorObj {
     data: Option<Value>,
 }
 
-/// Axum handler for `POST /mcp`.
+/// Billing surface for MCP JSON-RPC.
+///
+/// Hybrid policy:
+/// - [`McpBillingMode::Public`] — site / Claude / Cursor / plugin on `POST /mcp`.
+///   Discovery tools are free. Premium trio (`export_toolkit`,
+///   `recommend_verified_tool`, `gap_audit`) is always paid ($0.01 USDC Base /
+///   Axis B, else OKX fallback, else 503). `check_endpoint_health` uses K2
+///   ~$0.001 USDC (CDP env).
+/// - [`McpBillingMode::OkxPackage`] — OKX marketplace A2MCP on `POST /mcp/okx`.
+///   Every `tools/call` is $0.1 X Layer USDT0 when OKX credentials are active.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum McpBillingMode {
+    Public,
+    OkxPackage,
+}
+
+/// Axum handler for free public `POST /mcp` (site Connect hub, plugin, agents).
 pub async fn handle_mcp(
     State(state): State<AppState>,
     req: Request<axum::body::Body>,
 ) -> impl IntoResponse {
+    handle_mcp_with_mode(state, req, McpBillingMode::Public).await
+}
+
+/// Axum handler for paid OKX marketplace package `POST /mcp/okx`.
+pub async fn handle_mcp_okx(
+    State(state): State<AppState>,
+    req: Request<axum::body::Body>,
+) -> impl IntoResponse {
+    handle_mcp_with_mode(state, req, McpBillingMode::OkxPackage).await
+}
+
+async fn handle_mcp_with_mode(
+    state: AppState,
+    req: Request<axum::body::Body>,
+    billing: McpBillingMode,
+) -> axum::response::Response {
     let (parts, body) = req.into_parts();
     let client_ip = client_ip_from_parts(&parts);
     if let Err(limit) = check_mcp_ip_rate_limit(&client_ip) {
@@ -88,11 +120,16 @@ pub async fn handle_mcp(
             .into_response();
     }
 
+    let okx_package_mode = matches!(billing, McpBillingMode::OkxPackage);
+
     let result = match rpc_req.method.as_str() {
         "initialize" => Ok(json!({
             "protocolVersion": negotiate_protocol_version(rpc_req.params.as_ref()),
             "capabilities": { "tools": {} },
-            "serverInfo": { "name": "onchainai", "version": env!("CARGO_PKG_VERSION") }
+            "serverInfo": {
+                "name": if okx_package_mode { "onchainai-okx" } else { "onchainai" },
+                "version": env!("CARGO_PKG_VERSION")
+            }
         })),
         "notifications/initialized" => Ok(json!({})),
         "tools/list" => {
@@ -122,6 +159,7 @@ pub async fn handle_mcp(
                 &parts.headers,
                 state.okx_client.as_ref(),
                 state.okx_premium_gate_active,
+                okx_package_mode,
             )
             .await
             {
@@ -171,6 +209,15 @@ fn negotiate_protocol_version(params: Option<&Value>) -> &'static str {
 /// POST JSON-RPC here; a plain browser GET returns a 200 describing the server
 /// instead of a bare 405, so anyone who opens the URL understands it instantly.
 pub async fn handle_mcp_info() -> impl IntoResponse {
+    mcp_info_response(McpBillingMode::Public)
+}
+
+/// GET `/mcp/okx` — paid OKX A2MCP package discovery document.
+pub async fn handle_mcp_okx_info() -> impl IntoResponse {
+    mcp_info_response(McpBillingMode::OkxPackage)
+}
+
+fn mcp_info_response(billing: McpBillingMode) -> axum::response::Response {
     let tools: Vec<Value> = tool_definitions(false)
         .into_iter()
         .map(|def| {
@@ -180,14 +227,57 @@ pub async fn handle_mcp_info() -> impl IntoResponse {
             })
         })
         .collect();
+    let (name, description, endpoint, billing_note, billing_detail) = match billing {
+        McpBillingMode::Public => (
+            "onchainai",
+            "OnchainAI public MCP — free discovery for site/Claude/Cursor/plugin agents. search_tools, get_tool_detail, get_install_guide, list_categories, compare_tools, dashboard, get_price_history, get_x402_trends are free. Premium always paid: export_toolkit / recommend_verified_tool / gap_audit = $0.01 USDC Base (Axis B); check_endpoint_health ≈ $0.001 USDC (K2). This path is not a full paywall. For OKX marketplace package pricing use POST /mcp/okx.",
+            format!("{}/mcp", crate::config::SITE_ORIGIN),
+            "free_discovery",
+            json!({
+                "mode": "public",
+                "discovery": "free",
+                "premium_tools": {
+                    "names": ["export_toolkit", "recommend_verified_tool", "gap_audit"],
+                    "price": crate::server::mcp_x402::DEFAULT_MCP_PREMIUM_PRICE,
+                    "network": "eip155:8453",
+                    "asset": "USDC",
+                    "rail": "axis_b_or_okx_fallback_or_503",
+                },
+                "check_endpoint_health": {
+                    "price": "~$0.001",
+                    "asset": "USDC",
+                    "rail": "k2_cdp_env",
+                },
+                "okx_package_endpoint": format!("{}/mcp/okx", crate::config::SITE_ORIGIN),
+            }),
+        ),
+        McpBillingMode::OkxPackage => (
+            "onchainai-okx",
+            "OnchainAI OKX A2MCP package — same tool set as public MCP; every tools/call is pay-per-call ($0.1 USDT0 on X Layer) via OKX Broker when the gate is active. Site/plugin agents should use free POST /mcp instead.",
+            format!("{}/mcp/okx", crate::config::SITE_ORIGIN),
+            "okx_package_pay_per_call",
+            json!({
+                "mode": "okx_package",
+                "every_tools_call": {
+                    "price": "$0.1",
+                    "network": "eip155:196",
+                    "asset": "USDT0",
+                    "rail": "okx_broker_when_active",
+                },
+                "public_free_endpoint": format!("{}/mcp", crate::config::SITE_ORIGIN),
+            }),
+        ),
+    };
     (
         StatusCode::OK,
         Json(json!({
-            "name": "onchainai",
+            "name": name,
             "version": env!("CARGO_PKG_VERSION"),
-            "description": "OnchainAI MCP server — discover, compare, and install crypto/onchain AI tools. POST JSON-RPC 2.0 to this endpoint from an MCP client.",
+            "description": description,
             "protocolVersion": DEFAULT_PROTOCOL_VERSION,
-            "endpoint": format!("{}/mcp", crate::config::SITE_ORIGIN),
+            "endpoint": endpoint,
+            "billing": billing_note,
+            "billing_detail": billing_detail,
             "transport": "streamable-http",
             "docs": format!("{}/connect", crate::config::SITE_ORIGIN),
             "tools": tools,

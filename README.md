@@ -28,13 +28,20 @@ afternoon of research.
 
 ## Use it from your agent (60 seconds)
 
-The OnchainAI MCP server is a no-auth endpoint. All discovery tools are free and
-read-only; the one exception is `check_endpoint_health`, an optional premium trust
-tool paid per call via x402:
+Default MCP is a **no-auth directory** endpoint (discovery/metadata — not wallet
+custody). **Free discovery** on public `/mcp` (search, detail, compare, install
+guides, categories, …). Optional OnchainAI-owned premium tools may return HTTP 402
+and settle via x402 (**$0.01 USDC** for `export_toolkit` /
+`recommend_verified_tool` / `gap_audit`; ~**$0.001 USDC** for
+`check_endpoint_health`). Website browse stays free.
 
 ```
 https://www.onchain-ai.xyz/mcp
 ```
+
+OKX marketplace integrators only: paid package path
+`https://www.onchain-ai.xyz/mcp/okx` (~$0.1 every `tools/call` when the OKX gate
+is active). Coding agents and the Claude plugin must use **`/mcp`**, not `/mcp/okx`.
 
 | Client | Setup |
 |---|---|
@@ -54,21 +61,26 @@ https://www.onchain-ai.xyz/mcp
 
 Full per-client walkthroughs (Codex, Windsurf, Gemini CLI, …): [docs/CONNECT.md](docs/CONNECT.md) or the live [/connect](https://www.onchain-ai.xyz/connect) page.
 
-### MCP tools
+### MCP tools (public `POST /mcp`)
 
-| Tool | What it does |
-|---|---|
-| `search_tools` | Search by capability ("bridge USDC to Base"), filter by category/chain, sort by relevance/trust/stars/recent |
-| `get_tool_detail` | Full metadata for one tool: trust score, install risk, chains, repo, x402 pricing |
-| `get_install_guide` | Platform-specific install steps (claude / cursor / generic / cli) with safety gating — `critical`-risk commands are withheld |
-| `list_categories` | Browse the taxonomy with tool counts |
-| `get_dashboard_snapshot` | Public coverage snapshot: totals, categories, trust, x402, featured |
-| `compare_tools` | Side-by-side comparison of 2–4 tools on trust, risk, chains, pricing (free today; operator can enable x402 premium) |
-| `export_toolkit` | Export a JSON + markdown install kit by slugs or category (free today; operator can enable x402 premium) |
-| `check_endpoint_health` | Endpoint liveness + 30-day probe uptime for a listed x402 tool — x402-paid per call (HTTP 402 handshake) |
+| Tool | Billing | What it does |
+|---|---|---|
+| `search_tools` | Free | Search by capability ("bridge USDC to Base"), filter by category/chain, sort by relevance/trust/stars/recent |
+| `get_tool_detail` | Free | Full metadata for one tool: trust score, install risk, chains, repo, x402 pricing |
+| `get_install_guide` | Free | Platform-specific install steps (claude / cursor / generic / cli) with safety gating — `critical`-risk commands are withheld |
+| `list_categories` | Free | Browse the taxonomy with tool counts |
+| `get_dashboard_snapshot` | Free | Public coverage snapshot: totals, categories, trust, x402, featured |
+| `compare_tools` | Free | Side-by-side comparison of 2–4 tools on trust, risk, chains, pricing |
+| `get_price_history` / `get_x402_trends` | Free | Probe history and catalog x402 trends (metadata) |
+| `export_toolkit` | **$0.01 USDC** | Export a JSON + markdown install kit by slugs or category |
+| `recommend_verified_tool` | **$0.01 USDC** | Pick one verified/live tool for an intent with rejection reasons |
+| `gap_audit` | **$0.01 USDC** | Decompose an intent and report catalog coverage gaps |
+| `check_endpoint_health` | ~**$0.001 USDC** | Live endpoint probe + 30-day uptime for a listed x402 tool (HTTP 402 handshake) |
 
-Linking your account from a coding agent (`/connect#agent-sync`) unlocks three more:
-`save_to_toolkit`, `save_stack_to_blueprint`, and `link_status`.
+Linking your account from a coding agent (`/connect#agent-sync`) unlocks three more
+(account link ≠ payment): `save_to_toolkit`, `save_stack_to_blueprint`, and `link_status`.
+
+Full hybrid table (incl. `/mcp/okx`): [docs/CONNECT.md](docs/CONNECT.md).
 
 ### Claude Code plugin
 
@@ -105,14 +117,15 @@ It ships with the plugin; you can also copy the skill directory into
 
 ## x402 & referral policy
 
-OnchainAI is **attribution and trust metadata only**:
+OnchainAI is a **tool directory** MCP (discovery/metadata), not a custody wallet:
 
-- We publish x402 price/endpoint metadata and verification flags (`payment_verified`, `x402_endpoint_verified`, `price_verified`) as trust signals.
+- **Third-party x402** in the catalog is attribution and trust metadata only — we publish price/endpoint flags (`payment_verified`, `x402_endpoint_verified`, `price_verified`) and never proxy those payments.
 - We record anonymous referral/attribution events (views, install-guide fetches) to support revenue-share agreements with tool owners.
-- We **never** hold or move funds, proxy payments, act as an x402 facilitator/gateway, or invent undocumented `referrer`/`split` payment fields.
-- Unverified x402 tools remain visible when they pass the normal public quality gate — verification is a badge, not a hiding mechanism.
+- We **never** hold user funds, act as a third-party payment gateway, or invent undocumented `referrer`/`split` payment fields.
+- **OnchainAI-owned** premium MCP tools (`export_toolkit`, `recommend_verified_tool`, `gap_audit`, `check_endpoint_health`) may settle x402 to **our** payee wallet when called — that is selling our own service, not custodying others.
+- Unverified third-party x402 tools remain visible when they pass the normal public quality gate — verification is a badge, not a hiding mechanism.
 
-Details: [docs/X402_REFERRAL_SPEC.md](docs/X402_REFERRAL_SPEC.md).
+Details: [docs/X402_REFERRAL_SPEC.md](docs/X402_REFERRAL_SPEC.md), hybrid connect: [docs/CONNECT.md](docs/CONNECT.md).
 
 ## Architecture
 

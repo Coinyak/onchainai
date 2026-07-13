@@ -2,8 +2,8 @@
 
 > Related: [[../../X402_OPEN_LISTING_SPEC]] | [[../../X402_REFERRAL_SPEC]] | [[2026-07-03-x402-activation-spec]] | [[../../UI_UX_IMPROVEMENT_SPEC]] Phase 2·5 | [[../../../AGENTS.md]] | [[../../../README.md]]
 >
-> Date: 2026-07-04 (updated 2026-07-08)  
-> Status: **Advisory — 운영자 재량 (OD-FTG 완화)**  
+> Date: 2026-07-04 (updated 2026-07-13 hybrid)  
+> Status: **Advisory — 운영자 재량 (OD-FTG 완화) + hybrid path split**  
 > Scope: OnchainAI 자체 서비스에서 현재 무료로 유지하는 표면을 문서화. **영구 무료가 아닌 운영자 재량** — 필요 시 유료화 가능. 회귀 방지 가드레일은 advisory로 전환.  
 > Evidence: `README.md`, `src/server/mcp.rs`, `src/server/api_v2/public_tools.rs`, `frontend/app/compare/`, `X402_OPEN_LISTING_SPEC` 정본 대조
 
@@ -13,7 +13,17 @@
 
 ## 0. 세션 요약
 
-OnchainAI의 wedge는 **크립토 특화 × 큐레이션 × 신뢰/설치안전**이다. 에이전트·개발자가 *도구를 찾고 비교하고 설치 가이드를 받는* 핵심 발견 루프는 **현재 무료**로 유지한다 (운영자 재량, 영구 규칙 아님). 수익화(K1 어트리뷰션, 미래 K3 스폰서 노출)는 발견 루프 바깥 또는 제3자 x402 도구 호출에 적용한다. **예외:** OKX A2MCP Path A 활성 시 마켓플레이스 **단일 번들 SKU**로 모든 MCP `tools/call`이 미터링된다 (OD-FTG-5) — 기본 free-discovery 가이드라인의 의도적 예외이며, 상세는 `docs/listings/directory-forms.md` §Policy exception.
+OnchainAI의 wedge는 **크립토 특화 × 큐레이션 × 신뢰/설치안전**이다. 에이전트·개발자가 *도구를 찾고 비교하고 설치 가이드를 받는* 핵심 발견 루프는 **공개 `POST /mcp`에서 무료**로 유지한다 (운영자 재량, 영구 규칙 아님). 수익화(K1 어트리뷰션, 미래 K3 스폰서 노출, 자사 프리미엄 MCP)는 발견 루프 바깥·명시 프리미엄 툴·또는 제3자 x402 도구 호출에 적용한다.
+
+**하이브리드(2026-07-13):**
+
+| 경로 | 과금 |
+|------|------|
+| Website UI | 무료 browse |
+| `POST /mcp` (site / plugin / coding agents) | **Free discovery**; premium only: `export_toolkit` / `recommend_verified_tool` / `gap_audit` = **$0.01 USDC**; `check_endpoint_health` ≈ **$0.001 USDC** |
+| `POST /mcp/okx` (OKX A2MCP only, OD-FTG-5) | 게이트 활성 시 **every `tools/call`** ~$0.1 USDT0 |
+
+상세 리스팅 카피: `docs/listings/directory-forms.md` §Product policy.
 
 | # | 정책 갭 | 스펙 ID | 심각도 |
 |---|---------|---------|--------|
@@ -33,7 +43,7 @@ OnchainAI의 wedge는 **크립토 특화 × 큐레이션 × 신뢰/설치안전*
 2. **일반 MCP 5툴**과 **x402 카탈로그 축**(필터·배지·고지·검증 신호)이 동일한 무료 정책을 따른다.
 3. `compare_tools`는 **웹·REST·MCP** 삼면 모두 무료이며, URL 공유·에이전트 자동 비교에 장벽이 없다.
 4. SEO **`/x402` 허브**는 크롤러·AI 인용에 적합한 **공개 SSR 랜딩**으로 제공한다(결제 UI 없음).
-5. OnchainAI는 제3자 x402 도구의 **가격 메타를 고지**할 뿐, 기본 모드에서는 자체 발견 API에 402를 반환하지 않는다. **OKX A2MCP Path A(OD-FTG-5) 활성 시**에는 마켓 단일 SKU로 `tools/call` 전부가 미터링될 수 있다.
+5. OnchainAI는 제3자 x402 도구의 **가격 메타를 고지**할 뿐, 기본 모드에서는 자체 발견 API에 402를 반환하지 않는다. **하이브리드(2026-07-13):** 공개 `POST /mcp` 디스커버리는 무료. **OKX A2MCP 패키지 전용 경로 `POST /mcp/okx`(OD-FTG-5)** 에서만 마켓 단일 SKU로 `tools/call` 전부가 미터링된다.
 
 ---
 
@@ -73,9 +83,21 @@ OnchainAI의 wedge는 **크립토 특화 × 큐레이션 × 신뢰/설치안전*
 | `get_install_guide` | slug+platform, x402_notice·referral 메타 | attribution 기록은 무료 동작 |
 | `list_categories` | 전 카테고리+카운트 | — |
 | `get_dashboard_snapshot` | limit≤12 공개 집계 | x402 섹션 포함 |
-| **`compare_tools`** (A2 신규) | slugs 2~4, trust/x402/chains/pricing/install 비교 | **§K2 유료 분류 폐기** — 구현 시 반드시 공개 티어 |
+| **`compare_tools`** | slugs 2~4, trust/x402/chains/pricing/install 비교 | **공개 티어 유지** (유료 분류 폐기) |
+| `get_price_history` / `get_x402_trends` | 프로브 이력·트렌드 메타 | 공개 티어 |
 
-**금지**: 위 6툴(및 동등 REST)에 대해 HTTP 402, `paymentRequired`, `X-Payment` 헤더 요구, API key·지갑 선행 조건.
+**금지 (공개 `/mcp` 디스커버리)**: 위 툴(및 동등 REST)에 대해 HTTP 402, `paymentRequired`, `X-Payment` 헤더 요구, API key·지갑 선행 조건.
+
+**공개 `/mcp` 프리미엄 (자사 서비스, 디스커버리 아님):**
+
+| MCP tool | 가격 (Base USDC) | 비고 |
+|----------|------------------|------|
+| `export_toolkit` | **$0.01** | Axis B / CDP (OKX fallback 가능) |
+| `recommend_verified_tool` | **$0.01** | 동일 |
+| `gap_audit` | **$0.01** | 동일 |
+| `check_endpoint_health` | ≈ **$0.001** | K2 라이브 프로브 |
+
+**`POST /mcp/okx`:** 위 free/premium 분할 **없음**. OKX 게이트 활성 시 모든 `tools/call` 미터링 (OD-FTG-5).
 
 ### 2.4 MCP Agent Sync (Bearer = 계정 연결, **결제 아님**)
 
@@ -168,8 +190,8 @@ OnchainAI의 wedge는 **크립토 특화 × 큐레이션 × 신뢰/설치안전*
 
 **수용 기준**
 
-- [ ] 공개 MCP·REST·웹 경로에 `402 Payment Required` 응답 코드 없음(제3자 URL 프로브 제외).
-- [ ] `get_install_guide`·웹 InstallGuide에「OnchainAI는 결제 처리 안 함」고지 유지.
+- [ ] 공개 `/mcp` **디스커버리**·REST·웹 경로에 discovery `tools/call` 에 대한 `402 Payment Required` 없음(제3자 URL 프로브·자사 프리미엄 툴·`/mcp/okx` 제외).
+- [ ] `get_install_guide`·웹 InstallGuide에「제3자 x402 결제는 OnchainAI가 처리하지 않음」고지 유지.
 - [ ] x402 미검증 툴도 public gate 통과 시 **무료 노출**(검증은 배지일 뿐).
 
 ---
@@ -188,11 +210,12 @@ OnchainAI의 wedge는 **크립토 특화 × 큐레이션 × 신뢰/설치안전*
 
 | ID | 검사 | 명령·패턴 |
 |----|------|-----------|
-| FTG-A | MCP 유료 키워드 부재 | `src/server/mcp.rs`에 `402`/`paymentRequired`/`x402_gate` 없음 |
+| FTG-A | 공개 디스커버리 무과금 | 공개 `POST /mcp` 에서 `search_tools` unpaid → **200** (not 402). 402는 프리미엄 툴 또는 `/mcp/okx` 에만 |
 | FTG-B | compare API 공개 | `curl -s -o /dev/null -w '%{http_code}' '$PROD_URL/api/v2/tools/compare?slugs=aave,uniswap'` → `200` |
-| FTG-C | 정책 문서 존재 | `docs/superpowers/specs/2026-07-04-free-tier-guardian-spec.md`에 무료 정책 선언 |
+| FTG-C | 정책 문서 존재 | 본 스펙 + `docs/CONNECT.md` hybrid 표 + `docs/listings/directory-forms.md` free blurb |
 | FTG-D | compare 유료 문구 제거 | `scripts/spec-verify.sh` `ftg_compare_free`: `compare_tools`/`/compare` 라인에 과금 키워드(`유료|paid|402|…`)가 있으나 `무료|폐기|채택하지` 등 부정·폐기 표기가 없으면 FAIL |
-| FTG-E | README 무료 선언 | `README.md`에 `free`+`read-only` |
+| FTG-E | README 하이브리드 선언 | `README.md`에 public `/mcp` free discovery + premium 가격 (or free+read-only) |
+| FTG-F | 경로 분리 | unpaid `search_tools` on `/mcp/okx` → **402** when OKX gate on; same call on `/mcp` → **200** |
 
 ### 7.3 문서 동기화
 
@@ -206,7 +229,8 @@ OnchainAI의 wedge는 **크립토 특화 × 큐레이션 × 신뢰/설치안전*
 
 ## 8. 비목표
 
-- OnchainAI 자체 discovery API에 x402 micropayment 도입(K2 compare/search 게이트).
+- 공개 `/mcp` discovery (`search_tools` 등)에 x402 micropayment 도입(K2 compare/search 게이트).
+- 코딩 에이전트·plugin 기본 URL을 `/mcp/okx` 로 유도.
 - `/x402`에서 제3자 facilitator·지갑 연결·결제 실행.
 - `compare_tools`·`/compare` 로그인 필수화.
 - Featured·스폰서(K3)가 quality gate·현재 무료 발견을 대체하는 것.
@@ -220,7 +244,8 @@ OnchainAI의 wedge는 **크립토 특화 × 큐레이션 × 신뢰/설치안전*
 |----|------|------|
 | OD-FTG | 2026-07-04 | §2 무료 목록 확정; `compare_tools`·`/x402` 허브·x402 카탈로그 발견 포함 |
 | OD-FTG-4 | 2026-07-08 | **완화**: §2를 영구 규칙이 아닌 **현재 무료(운영자 재량)**으로 전환; FTG-D2·k2-prod-smoke discovery 체크 advisory |
-| OD-FTG-5 | 2026-07-09 | **OKX Path A 예외**: OKX A2MCP 활성 시 단일 flat SKU로 **모든** MCP `tools/call`(discovery 포함) 미터링. free-discovery 가이드라인 예외. 코드 원복이 아닌 정책 기록. 정본: `docs/listings/directory-forms.md` §Policy exception, ASP #4609 |
+| OD-FTG-5 | 2026-07-09 | **OKX Path A 예외 (초안):** 단일 flat SKU로 모든 MCP `tools/call` 미터링 기록. ASP #4609 |
+| OD-FTG-5b | **2026-07-13** | **하이브리드 경로 분리:** free-discovery 예외는 **`POST /mcp/okx` 전용**. 공개 **`POST /mcp`** 는 디스커버리 무료 + 프리미엄 4툴($0.01 / ~$0.001). 2026-07-12 “every external MCP is paid on `/mcp`” 문구 **폐기**. 정본: `docs/listings/directory-forms.md` §Product policy, `docs/CONNECT.md` |
 | OD-FTG-2 | 2026-07-04 | §K2「compare_tools 유료」**폐기**; 수익 실험은 §3 후보만 |
 | OD-FTG-3 | 2026-07-04 | 레이트리밋은 유지; 남용 방지 ≠ paywall |
 

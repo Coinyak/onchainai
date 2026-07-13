@@ -35,8 +35,19 @@ export function ConnectPageContent() {
     >
       <h1 className="text-h1 font-bold mb-3">Connect OnchainAI to your agent</h1>
       <p className="text-secondary text-body-md leading-relaxed mb-4 max-w-[720px]">
-        One free MCP endpoint for Claude, Cursor, ChatGPT, Codex, VS Code, and more. Start with
-        universal install, or pick a client below.
+        One free-discovery MCP endpoint for Claude, Cursor, ChatGPT, Codex, VS Code, and more.
+        Start with universal install, or pick a client below.
+      </p>
+      <p
+        className="text-body-sm text-secondary mb-4 max-w-[720px]"
+        data-testid="connect-mcp-billing-note"
+      >
+        Endpoint:{" "}
+        <code className="text-code">{ONCHAINAI_MCP_HTTP_URL}</code> (not{" "}
+        <code className="text-code">/mcp/okx</code>). Search and detail stay free. Optional
+        OnchainAI premium tools may charge via x402 when enabled (~$0.01 for export / recommend /
+        gap audit; ~$0.001 for endpoint health). Claude Code often cannot settle x402 — use free
+        tools when unpaid. Third-party catalog x402 tools are metadata only.
       </p>
       <p
         className="text-body-sm text-secondary mb-6 max-w-[720px] connect-agent-sync-callout"

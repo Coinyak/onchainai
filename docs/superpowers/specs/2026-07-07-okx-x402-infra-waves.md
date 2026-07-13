@@ -2,12 +2,22 @@
 
 > Related: [[2026-07-07-product-a-verified-api]] | [[2026-07-07-s-group-strategy-memo]] | [[../../X402_OPEN_LISTING_SPEC]] | [[../../X402_REFERRAL_SPEC]] | [[../../CONNECT]] | [[../../OPERATOR_GUIDE]] | [[../../SECURITY]] | [[2026-07-04-free-tier-guardian-spec]] | [[2026-07-03-x402-activation-spec]] | [[../../../AGENTS.md]]
 >
-> Date: 2026-07-07
-> Status: Final spec — **W7 해소 2026-07-08 (Path A: OKX Broker 통합 구현 완료)** — OKX A2MCP handler-level gate + Railway env 동기화 구현. 재등록 대기. 본 문서는 인프라 Wave(0~3) + OKX A2MCP 등재만 다룬다. Product A(§9→별도)·S-group(§10→별도)은 Wave 4+ 로드맵 문서로 분리.
+> Date: 2026-07-07 (historical Wave record)
+> Status: Final Wave 0–3 record — **W7 해소 2026-07-08**. **Billing paths superseded 2026-07-13 hybrid** (see banner below).
 > Scope: ① OKX AI Agent Marketplace에 OnchainAI 자사 x402 서비스 등재(A2MCP/pay-per-call) ② 내부 x402 카탈로그·셀프등록·L4 자동내리기·어트리뷰션 정합화 ③ Free Tier Guardian(OD-FTG) 코드 정합(회귀 방지) ④ K2 전환 훅(free→paid 워크플로). **결제 실행·커스터디·facilitator 프록시·타인 자금 이동 범위 밖.**
 > Evidence: OKX AI Agent Marketplace User Agreement(2026-06-18, okx.ai/help/okx-ai-agent-marketplace-user-agreement) + `src/server/mcp_x402.rs` + `src/server/x402_payment.rs` + `docs/X402_OPEN_LISTING_SPEC.md` §K2 + `2026-07-04-free-tier-guardian-spec`(OD-FTG) 대조
 
 **본 문서는 구현 코드를 포함하지 않는다.** 목표 동작·오너 입력·수용 기준·검증·금지 사항만 정의한다.
+
+> **Hybrid supersession (2026-07-13) — read before using prices in this file:**
+> Current agent-facing billing is **path-split**, not “every external MCP is $0.1”.
+>
+> | Path | Billing (current) |
+> |------|-------------------|
+> | Website UI + public `POST /mcp` | Free discovery; premium on `/mcp`: `export_toolkit` / `recommend_verified_tool` / `gap_audit` = **$0.01 USDC**; `check_endpoint_health` ≈ **$0.001 USDC** |
+> | OKX only `POST /mcp/okx` | Flat package ~**$0.1** every `tools/call` when OKX gate active |
+>
+> Canonical: `docs/CONNECT.md`, `docs/listings/directory-forms.md`, free-tier guardian OD-FTG-5b. Sections below that price premium tools at $0.1 on the **public** path or assume a single `/mcp` SKU are **historical** (pre-hybrid Path A notes).
 
 ---
 
