@@ -203,7 +203,7 @@ Copy-paste payloads: `docs/listings/directory-forms.md`.
 | awesome-crypto-mcp-servers | [hive-intel/awesome-crypto-mcp-servers#209](https://github.com/hive-intel/awesome-crypto-mcp-servers/pull/209) | Open · switch copy to free `/mcp` blurb |
 | Self catalog | [onchain-ai.xyz/tools/onchainai](https://www.onchain-ai.xyz/tools/onchainai) | Seeded (official); site browse free |
 | Smithery / mcp.so / PulseMCP / Glama | `docs/listings/directory-forms.md` | Free `/mcp` blurb · publish with account login |
-| OKX AI Agent Marketplace | [okx.ai/agents](https://okx.ai/agents) — ASP #4609 | **Must list `https://www.onchain-ai.xyz/mcp/okx`** · 1 SKU `$0.1` · re-point listing after hybrid deploy · was on `/mcp` |
+| OKX AI Agent Marketplace | [okx.ai/agents](https://okx.ai/agents) — ASP #4609 | **Live endpoint `https://www.onchain-ai.xyz/mcp/okx`** · service id `33054` · fee `$0.1` · tx `0x15819294…` (2026-07-13) · approval: **Listing under review** |
 | x402 Bazaar (seller) | CDP merchant discovery | **Blocked** — needs `EVM_PRIVATE_KEY` (Base USDC) for one paid settle |
 | Base Builder Code | [dashboard.base.org](https://dashboard.base.org) | Applied `bc_ljttbnhv` |
 
