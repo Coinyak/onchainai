@@ -211,14 +211,8 @@ pub async fn build_app(pool: sqlx::PgPool, config: Config) -> axum::Router {
             "/onboarding/skip",
             axum::routing::post(crate::auth::onboarding::skip),
         )
-        .route(
-            "/auth/siwx/challenge",
-            axum::routing::post(crate::auth::siwx::challenge),
-        )
-        .route(
-            "/auth/siwx/verify",
-            axum::routing::post(crate::auth::siwx::verify),
-        )
+        // Wallet SIWX sign-in removed from product (GitHub-only). Keep unit tests in
+        // `auth::siwx` but do not expose challenge/verify HTTP routes.
         .with_state(state.clone());
 
     let auth_routes = if relax_rate_limit {

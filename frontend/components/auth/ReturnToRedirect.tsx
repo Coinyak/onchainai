@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import { consumeReturnTo, peekReturnTo, persistReturnTo } from "@/lib/return-to";
 
-/** After OAuth/wallet sign-in, honor return_to stored from /login. */
+/** After OAuth sign-in, honor return_to stored from /login. */
 export function ReturnToRedirect() {
   const { isAuthenticated, isLoading, isAdmin } = useAuth();
   const router = useRouter();

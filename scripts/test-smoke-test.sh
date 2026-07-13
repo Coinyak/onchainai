@@ -31,19 +31,20 @@ for script in smoke-test.sh smoke-test-api.sh smoke-test-frontend.sh smoke-test-
   [[ -f "${ROOT}/scripts/${script}" ]] || fail "missing scripts/${script}"
 done
 
-# Leptos smoke must stay for CI/local release binary.
-assert_contains 'Crypto tool coverage' "${ROOT}/scripts/smoke-test.sh"
-assert_contains 'Sign in to save your stack' "${ROOT}/scripts/smoke-test.sh"
-assert_contains 'wallet-sign-in' "${ROOT}/scripts/smoke-test.sh"
+# Local curl smoke for Next.js + API.
+assert_contains 'top-nav-sign-in' "${ROOT}/scripts/smoke-test.sh"
+assert_contains 'Sign in to save' "${ROOT}/scripts/smoke-test.sh"
+assert_contains 'Loading sign-in' "${ROOT}/scripts/smoke-test.sh"
 
 # API smoke targets Railway contract.
 assert_contains 'get_dashboard_snapshot' "${ROOT}/scripts/smoke-test-api.sh"
 assert_contains '/api/v2/blueprints' "${ROOT}/scripts/smoke-test-api.sh"
 assert_contains 'Vercel frontend' "${ROOT}/scripts/smoke-test-api.sh"
 
-# Frontend smoke targets Next.js split deploy.
+# Frontend smoke targets Next.js split deploy (wallet sign-in removed).
 assert_contains 'connect-page' "${ROOT}/scripts/smoke-test-frontend.sh"
-assert_contains 'wallet-sign-in' "${ROOT}/scripts/smoke-test-frontend.sh"
+assert_contains 'github-sign-in' "${ROOT}/scripts/smoke-test-frontend.sh"
+assert_contains 'unexpected wallet' "${ROOT}/scripts/smoke-test-frontend.sh"
 assert_contains '_next/static' "${ROOT}/scripts/smoke-test-frontend.sh"
 assert_not_contains 'sidebar-brand' "${ROOT}/scripts/smoke-test-frontend.sh"
 

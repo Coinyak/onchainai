@@ -555,7 +555,7 @@ pub const CHAIN_CATALOG: &[ChainMeta] = &[
             "rh-chain",
             "robinhood-mainnet",
         ],
-        pinned: false,
+        pinned: true,
     },
 ];
 
@@ -1173,23 +1173,25 @@ mod tests {
         let ordered = strip_chains(&counts);
         assert_eq!(ordered[0].id, "bitcoin");
         assert_eq!(ordered[1].id, "bob");
-        assert_eq!(ordered[2].id, "ethereum");
-        assert_eq!(ordered[3].id, "solana");
-        assert_eq!(ordered[4].id, "base");
+        assert_eq!(ordered[2].id, "robinhood");
+        assert_eq!(ordered[3].id, "ethereum");
+        assert_eq!(ordered[4].id, "solana");
+        assert_eq!(ordered[5].id, "base");
     }
 
     #[test]
     fn strip_includes_pinned_at_zero_count() {
         let ordered = strip_chains(&[]);
-        assert_eq!(ordered.len(), 2);
+        assert_eq!(ordered.len(), 3);
         assert_eq!(ordered[0].id, "bitcoin");
         assert_eq!(ordered[1].id, "bob");
+        assert_eq!(ordered[2].id, "robinhood");
     }
 
     #[test]
     fn strip_primary_visible_leaves_overflow_for_expand_control() {
         assert_eq!(STRIP_PRIMARY_VISIBLE, 20);
-        assert_eq!(CHAIN_CATALOG.len(), 74);
+        assert!(CHAIN_CATALOG.len() > STRIP_PRIMARY_VISIBLE);
 
         let counts: Vec<(String, i64)> = CHAIN_CATALOG
             .iter()

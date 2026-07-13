@@ -169,6 +169,7 @@ const signInModal = await page.evaluate(() => {
   return {
     open: true,
     hasGitHub: !!githubLink,
+    // Wallet sign-in was removed; assert it stays gone.
     hasWallet: !!dialog.querySelector(
       '[data-testid="wallet-sign-in"], [data-testid="wallet-sign-in-link"]',
     ),
@@ -186,8 +187,8 @@ if (!signInModal.open) {
       `interaction:sign-in-modal-github-missing-rel-external:${signInModal.githubRel}`,
     );
   }
-  if (!signInModal.hasWallet) {
-    errors.push("interaction:sign-in-modal-missing-wallet");
+  if (signInModal.hasWallet) {
+    errors.push("interaction:sign-in-modal-unexpected-wallet");
   }
   const modalStacking = await page.evaluate(() => {
     const dialog = document.querySelector('[role="dialog"]');

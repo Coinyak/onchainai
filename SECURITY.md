@@ -19,7 +19,7 @@ window to ship a fix before any public disclosure.
 - The `onchainai` Rust API and MCP server (`src/`), including
   `https://www.onchain-ai.xyz/mcp` and `/api/v2/*`
 - The Next.js frontend (`frontend/`), served at `https://www.onchain-ai.xyz`
-- Auth flows: GitHub OAuth, email magic link, SIWX wallet sign-in
+- Auth flows: GitHub OAuth (primary), email magic link where configured; wallet SIWX sign-in removed from UI
 - The Claude Code plugin bundle (`plugin/onchainai/`)
 - Database RLS policies (`migrations/`)
 
