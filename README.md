@@ -99,7 +99,7 @@ It ships with the plugin; you can also copy the skill directory into
 - **x402 awareness** — paid tools carry price metadata, verification flags, and referral/attribution disclosure ([policy below](#x402--referral-policy))
 - **MCP server for agents** — the read-only tools above, rate-limited and sanitized
 - **Claude Code plugin + skill** — one-command onboarding for agent users
-- **3-way auth** — GitHub OAuth + email magic link + SIWX wallet sign-in (CAIP-122)
+- **Auth** — GitHub OAuth (primary); email magic link where configured
 - **Community layer** — submissions, comments, upvotes, bookmarks, toolkit, compare, blueprints
 - **Admin dashboard** — tool review, categories, crawler control, featured carousel, users, site settings
 
@@ -121,7 +121,7 @@ Details: [docs/X402_REFERRAL_SPEC.md](docs/X402_REFERRAL_SPEC.md).
 │ Next.js frontend      │──────│ Rust binary (Axum)                │
 │ /connect, /tools, ... │ /api │  ├─ REST API (/api/v2)            │
 │ proxies /api /auth    │ /mcp │  ├─ MCP server (POST /mcp)        │
-│ /mcp to the API       │      │  ├─ Auth (OAuth/email/SIWX + JWT) │
+│ /mcp to the API       │      │  ├─ Auth (GitHub OAuth + JWT)     │
 └───────────────────────┘      │  └─ Crawler (tokio-cron)          │
                                └────────────┬──────────────────────┘
                                             │ sqlx

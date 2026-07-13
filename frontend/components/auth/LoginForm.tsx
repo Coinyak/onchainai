@@ -1,17 +1,12 @@
 "use client";
 
-import { useState } from "react";
 import {
-  clientApiBase,
   githubSignInHref,
   githubSwitchHref,
   isVercelPreviewHost,
   productionLoginHref,
 } from "@/lib/auth-origin";
-import { hardNavigateAfterAuth } from "@/lib/auth-nav";
 import { GitHubMarkIcon } from "@/components/icons/GitHubMarkIcon";
-import { connectWalletSiwx, SiwxError } from "@/lib/siwx";
-import { consumeReturnTo } from "@/lib/return-to";
 
 interface LoginFormProps {
   compact?: boolean;
@@ -28,10 +23,6 @@ export function LoginForm({
   authError = null,
   signedOut = false,
 }: LoginFormProps) {
-  const [walletBusy, setWalletBusy] = useState(false);
-  const [walletMsg, setWalletMsg] = useState<string | null>(null);
-
-  const apiBase = clientApiBase();
   const githubHref = githubSignInHref();
   const githubSwitchAction = githubSwitchHref();
 
@@ -44,25 +35,6 @@ export function LoginForm({
   const descClass = compact
     ? "text-body-md text-secondary mb-6"
     : "text-body-md text-secondary mb-8";
-
-  async function handleWalletSignIn() {
-    setWalletBusy(true);
-    setWalletMsg(null);
-    try {
-      const { redirect } = await connectWalletSiwx(apiBase);
-      const returnTo = consumeReturnTo();
-      const target = returnTo || redirect;
-      hardNavigateAfterAuth(target);
-    } catch (err) {
-      const message =
-        err instanceof SiwxError
-          ? err.message
-          : "Wallet sign-in failed. Try again.";
-      setWalletMsg(message);
-    } finally {
-      setWalletBusy(false);
-    }
-  }
 
   return (
     <div>
@@ -102,8 +74,7 @@ export function LoginForm({
           <a href={productionLoginHref()} className="text-primary underline hover:no-underline">
             www.onchain-ai.xyz
           </a>{" "}
-          or local dev (<code className="text-body-sm">localhost:3000</code>). Use wallet sign-in
-          below to stay authenticated on this preview deployment.
+          or local dev (<code className="text-body-sm">localhost:3000</code>).
         </p>
       )}
       <a
@@ -128,22 +99,6 @@ export function LoginForm({
             </button>
           </form>
         </div>
-      )}
-      <div className="mt-3">
-        <button
-          type="button"
-          data-testid="wallet-sign-in"
-          disabled={walletBusy}
-          onClick={() => void handleWalletSignIn()}
-          className="flex items-center justify-center w-full min-h-touch px-4 py-2.5 rounded-md border border-border text-body-md font-medium hover:bg-neutral-hover disabled:opacity-60 text-primary"
-        >
-          {walletBusy ? "Connecting wallet..." : "Connect Wallet"}
-        </button>
-      </div>
-      {walletMsg && (
-        <p className="mt-2 text-body-sm text-error" role="alert">
-          {walletMsg}
-        </p>
       )}
       {onCancel && (
         <button

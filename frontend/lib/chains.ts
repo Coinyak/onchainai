@@ -83,7 +83,7 @@ export const CHAIN_CATALOG: ChainMeta[] = [
   { id: "ethereal", label: "Ethereal", logo: "/chains/ethereal.svg", aliases: ["ethereal-mainnet"], pinned: false },
   { id: "stable", label: "Stable", logo: "/chains/stable.svg", aliases: ["stable-2", "stable-mainnet"], pinned: false },
   { id: "xpr", label: "XPR Network", logo: "/chains/xpr.svg", aliases: ["proton", "xpr-network", "xpr-mainnet"], pinned: false },
-  { id: "robinhood", label: "Robinhood Chain", logo: "/chains/robinhood.svg", aliases: ["robinhood-chain", "hood-chain", "hoodchain", "rh-chain", "robinhood-mainnet"], pinned: false },
+  { id: "robinhood", label: "Robinhood Chain", logo: "/chains/robinhood.svg", aliases: ["robinhood-chain", "hood-chain", "hoodchain", "rh-chain", "robinhood-mainnet"], pinned: true },
 ];
 
 /** Eager logos on the chain strip (rest behind "+N more"). Keep low for Edge budget. */
@@ -198,11 +198,12 @@ export function stripChains(chainCounts: [string, number][]): ChainMeta[] {
     }
   }
 
-  const pinned = CHAIN_CATALOG.filter((c) => c.pinned && byId.has(c.id));
+  // Match src/chains.rs: pinned catalog entries always appear (even at count 0).
+  const pinned = CHAIN_CATALOG.filter((c) => c.pinned);
   const pinnedIds = new Set(pinned.map((c) => c.id));
   const rest = [...byId.values()]
-    .filter((entry) => !pinnedIds.has(entry.meta.id))
-    .sort((a, b) => b.count - a.count)
+    .filter((entry) => !pinnedIds.has(entry.meta.id) && entry.count > 0)
+    .sort((a, b) => b.count - a.count || a.meta.id.localeCompare(b.meta.id))
     .map((entry) => entry.meta);
 
   return [...pinned, ...rest];

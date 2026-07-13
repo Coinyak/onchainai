@@ -19,7 +19,7 @@ window to ship a fix before any public disclosure.
 - The `onchainai` Rust API and MCP server (`src/`), including
   `https://www.onchain-ai.xyz/mcp` and `/api/v2/*`
 - The Next.js frontend (`frontend/`), served at `https://www.onchain-ai.xyz`
-- Auth flows: GitHub OAuth, email magic link, SIWX wallet sign-in
+- Auth flows: GitHub OAuth (primary), email magic link where configured; wallet SIWX sign-in removed from UI
 - The Claude Code plugin bundle (`plugin/onchainai/`)
 - Database RLS policies (`migrations/`)
 
@@ -34,7 +34,7 @@ requiring a compromised maintainer account.
   unapproved, quarantined, or critical-risk tools
 - Ways to make `get_install_guide` emit a `critical`-risk or attacker-controlled
   command
-- Auth/session bugs (JWT, OAuth callback, SIWX signature verification)
+- Auth/session bugs (JWT, OAuth callback)
 - Secret exposure (`SUPABASE_SERVICE_KEY`, `JWT_SECRET` must never reach clients)
 - SQL injection (all queries must stay parameterized) and stored XSS
 

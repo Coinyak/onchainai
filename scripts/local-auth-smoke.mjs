@@ -9,13 +9,9 @@
  * Prerequisites:
  *   - Dev server running (`cargo leptos watch` or similar) on port 3000
  *   - `npm i -g playwright` or project-local playwright (see browser-smoke.mjs)
- *   - For wallet button to be interactive (not link fallback): `cargo leptos build`
- *     so the WASM hydrate bundle is served at /pkg/
- *   - On local URLs, the smoke also performs a temporary SIWX sign-in through
- *     /auth/siwx/challenge + /auth/siwx/verify, then verifies TopNav/profile
- *     menu/logout. Set ONCHAINAI_SKIP_SESSION_AUTH_SMOKE=1 to skip that part.
- *     If SUPABASE_URL + SUPABASE_SERVICE_KEY are available in env/.env, the
- *     temporary auth user is deleted afterward.
+ *   - Session auth smoke previously used SIWX challenge/verify; wallet SIWX
+ *     HTTP routes are removed (GitHub-only product auth). The session block
+ *     always skips unless a future GitHub-based harness replaces it.
  *
  * Manual: new GitHub account (incognito + separate OAuth app)
  * ----------------------------------------------------------------
@@ -29,18 +25,6 @@
  * 5. Restart the local server, click "Continue with GitHub" in the modal.
  * 6. Approve as the new GitHub user — first login should redirect to
  *    /onboarding/profile (post_auth_redirect_path for users without nickname).
- *
- * Manual: new wallet (MetaMask account switch + SIWX)
- * ---------------------------------------------------
- * 1. Ensure WASM hydrate is built (`cargo leptos build`); wallet button must
- *    show data-testid="wallet-sign-in" (button), not wallet-sign-in-link.
- * 2. Install MetaMask (or any EIP-1193 provider) and unlock it.
- * 3. Create/import a fresh account in MetaMask (Account menu → Add account).
- * 4. In the sign-in modal click "Connect Wallet" — MetaMask prompts
- *    eth_requestAccounts → personal_sign on /auth/siwx/challenge message.
- * 5. On success the app navigates to verify.redirect (first-time:
- *    /onboarding/profile). Switch MetaMask accounts and repeat to test another
- *    wallet identity without clearing cookies (each address = new user).
  */
 import { chromium } from "playwright";
 import { generateKeyPairSync, sign } from "node:crypto";
@@ -98,26 +82,8 @@ function loadDotEnv() {
 }
 
 function sessionSmokeConfig() {
-  let parsed;
-  try {
-    parsed = new URL(base);
-  } catch {
-    return { enabled: false, reason: "invalid base URL" };
-  }
-  const isLocal = ["localhost", "127.0.0.1", "::1"].includes(parsed.hostname);
-  if (!isLocal) {
-    return { enabled: false, reason: "non-local base URL" };
-  }
-  if (process.env.ONCHAINAI_SKIP_SESSION_AUTH_SMOKE === "1") {
-    return { enabled: false, reason: "ONCHAINAI_SKIP_SESSION_AUTH_SMOKE=1" };
-  }
-
-  loadDotEnv();
-  return {
-    enabled: true,
-    supabaseUrl: process.env.SUPABASE_URL?.replace(/\/$/, "") ?? "",
-    serviceKey: process.env.SUPABASE_SERVICE_KEY ?? "",
-  };
+  // Wallet SIWX HTTP routes were removed; no non-interactive session mint remains.
+  return { enabled: false, reason: "siwx-http-routes-removed" };
 }
 
 const BASE58_ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
@@ -359,13 +325,14 @@ if (!signInBtn) {
     }
     return {
       open: true,
-      hasGitHub: !!dialog.querySelector('a[href="/auth/github"]'),
-      githubText: dialog.querySelector('a[href="/auth/github"]')?.textContent?.trim() ?? "",
+      hasGitHub: !!dialog.querySelector(
+        '[data-testid="github-sign-in"], a[href="/auth/github"], a[href*="/auth/github"]',
+      ),
+      githubText:
+        dialog.querySelector('[data-testid="github-sign-in"]')?.textContent?.trim() ?? "",
       hasWallet: !!dialog.querySelector(
         '[data-testid="wallet-sign-in"], [data-testid="wallet-sign-in-link"]',
       ),
-      walletIsButton: !!dialog.querySelector('[data-testid="wallet-sign-in"]'),
-      walletIsLink: !!dialog.querySelector('[data-testid="wallet-sign-in-link"]'),
       title:
         document.querySelector("#login-modal-title, #login-title, [role='dialog'] h1")
           ?.textContent?.trim() ?? "",
@@ -377,20 +344,19 @@ if (!signInBtn) {
   } else {
     if (!modal.hasGitHub) fail("auth-modal-missing-github");
     const githubRel = await page.evaluate(() => {
-      const link = document.querySelector('a[href="/auth/github"]');
+      const link =
+        document.querySelector('[data-testid="github-sign-in"]')
+        ?? document.querySelector('a[href="/auth/github"]');
       return link?.getAttribute("rel") ?? "";
     });
     if (!githubRel.includes("external")) {
       fail("auth-modal-github-missing-rel-external", githubRel);
     }
-    if (!modal.hasWallet) fail("auth-modal-missing-wallet");
+    if (modal.hasWallet) fail("auth-modal-unexpected-wallet");
     if (!modal.title.includes("Sign in")) {
       fail("auth-modal-missing-title", modal.title);
     }
-    console.log(
-      `modal: github=${modal.hasGitHub} wallet=${modal.hasWallet}` +
-        ` (hydrated=${modal.walletIsButton}, ssr-link=${modal.walletIsLink})`,
-    );
+    console.log(`modal: github=${modal.hasGitHub} wallet=${modal.hasWallet}`);
   }
 
   await page.keyboard.press("Escape");

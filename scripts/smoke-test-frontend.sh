@@ -47,7 +47,7 @@ login_body="$(check_get "/login")"
 if smoke_body_has "$login_body" 'Continue with GitHub'; then
   smoke_body_has "$login_body" 'data-testid="github-sign-in"' || smoke_fail "GET /login missing github-sign-in test id"
   smoke_body_has "$login_body" 'rel="external"' || smoke_fail "GET /login missing rel=external on GitHub sign-in link"
-  smoke_body_has "$login_body" 'data-testid="wallet-sign-in"' || smoke_fail "GET /login missing wallet sign-in button"
+  smoke_body_has "$login_body" 'data-testid="wallet-sign-in"' && smoke_fail "GET /login unexpected wallet sign-in button"
   smoke_body_has "$login_body" 'id="login-title"' || smoke_fail "GET /login missing login-title heading"
 else
   smoke_body_has "$login_body" 'Loading sign-in' || smoke_fail "GET /login missing sign-in shell (SSR or hydrated)"
