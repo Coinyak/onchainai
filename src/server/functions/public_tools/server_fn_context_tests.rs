@@ -1,6 +1,5 @@
 //! Tests for public_tools::server_fn_context_tests
 
-
 use super::{fetch_public_install_guide, fetch_tool_by_slug};
 use crate::public_install_guide::{
     build_install_guide_for_platform, build_public_install_guide, resolve_install_guide,
@@ -50,8 +49,7 @@ pub async fn call_fetch_public_install_guide(
     pool: &sqlx::PgPool,
     slug: &str,
     platform: &str,
-) -> Result<crate::public_install_guide::PublicInstallGuide, crate::server::fn_error::FnError>
-{
+) -> Result<crate::public_install_guide::PublicInstallGuide, crate::server::fn_error::FnError> {
     fetch_public_install_guide(pool, slug, platform).await
 }
 
@@ -88,9 +86,7 @@ pub async fn run_get_public_install_guide_server_fn_loads_approved_tool() {
 
     let guide = call_fetch_public_install_guide(&pool, &slug, "claude")
         .await
-        .unwrap_or_else(|error| {
-            panic!("fetch_public_install_guide() failed for {slug}: {error}")
-        });
+        .unwrap_or_else(|error| panic!("fetch_public_install_guide() failed for {slug}: {error}"));
 
     assert_eq!(guide.slug, slug);
     assert_eq!(guide.platform, "claude");

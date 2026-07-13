@@ -1,11 +1,8 @@
 //! Install command / config builders.
-use crate::install_safety::{
-    blocks_structured_config, claude_mcp_config, install_warning_text,
-};
+use crate::install_safety::{blocks_structured_config, claude_mcp_config, install_warning_text};
 use crate::models::Tool;
 
 use super::types::*;
-
 
 pub fn http_mcp_universal_install_command(endpoint: &str) -> Option<String> {
     let endpoint = endpoint.trim();
@@ -131,11 +128,19 @@ pub(crate) fn referral_disclosure_for_tool(tool: &Tool) -> Option<String> {
     ))
 }
 
-pub(crate) fn structured_config_json(slug: &str, command: &str, risk_level: &str) -> Option<String> {
+pub(crate) fn structured_config_json(
+    slug: &str,
+    command: &str,
+    risk_level: &str,
+) -> Option<String> {
     claude_mcp_config(slug, command, risk_level)
 }
 
-pub(crate) fn blocked_guide(tool: &Tool, slug: &str, platform: InstallPlatform) -> PublicInstallGuide {
+pub(crate) fn blocked_guide(
+    tool: &Tool,
+    slug: &str,
+    platform: InstallPlatform,
+) -> PublicInstallGuide {
     PublicInstallGuide {
         slug: slug.to_string(),
         tool_name: tool.name.clone(),
@@ -224,4 +229,3 @@ pub fn add_mcp_action_label(tool: &Tool) -> Option<&'static str> {
         Some("Use with agent")
     }
 }
-

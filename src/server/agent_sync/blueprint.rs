@@ -180,7 +180,6 @@ async fn find_or_create_agent_blueprint(
     Ok((id, json!([]), json!([])))
 }
 
-
 async fn approved_tool_exists(pool: &PgPool, slug: &str) -> Result<bool, FnError> {
     sqlx::query_scalar(
         r#"
@@ -488,4 +487,3 @@ async fn record_blueprint_sync_log(
     .await;
     Ok(())
 }
-

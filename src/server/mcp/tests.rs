@@ -2,15 +2,15 @@
 
 use super::*;
 use crate::models::Tool;
+use crate::server::mcp::install_guide::{
+    referral_metadata_for_tool, InstallGuide, ReferralMetadata,
+};
+use crate::server::queries::MCP_SEARCH_TOOLS_BASE_SQL;
 use crate::server::queries::{APPROVED_TOOL_BY_SLUG_SQL, CATEGORIES_WITH_COUNTS_SQL};
 use definitions::{
     get_install_guide_definition, get_tool_detail_definition, list_categories_definition,
     search_tools_definition,
 };
-use crate::server::mcp::install_guide::{
-    referral_metadata_for_tool, InstallGuide, ReferralMetadata,
-};
-use crate::server::queries::MCP_SEARCH_TOOLS_BASE_SQL;
 
 #[test]
 fn protocol_version_echoes_supported_and_falls_back() {
@@ -242,9 +242,7 @@ fn mcp_queries_include_public_visibility_filter() {
     assert!(MCP_SEARCH_TOOLS_BASE_SQL.contains("install_risk_level <> 'critical'"));
     assert!(MCP_SEARCH_TOOLS_BASE_SQL.contains("quarantined_at IS NULL"));
     assert!(crate::server::queries::MCP_SEARCH_TOOLS_COUNT_SQL.contains("COUNT(*)"));
-    assert!(
-        crate::server::queries::MCP_SEARCH_TOOLS_COUNT_SQL.contains("quarantined_at IS NULL")
-    );
+    assert!(crate::server::queries::MCP_SEARCH_TOOLS_COUNT_SQL.contains("quarantined_at IS NULL"));
     assert!(APPROVED_TOOL_BY_SLUG_SQL.contains("relevance_status = 'accepted'"));
     assert!(CATEGORIES_WITH_COUNTS_SQL.contains("quarantined_at IS NULL"));
 }

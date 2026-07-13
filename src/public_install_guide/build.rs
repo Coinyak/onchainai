@@ -1,7 +1,5 @@
 //! Public install guide assembly.
-use crate::install_safety::{
-    blocks_structured_config, claude_mcp_config, install_warning_text,
-};
+use crate::install_safety::{blocks_structured_config, claude_mcp_config, install_warning_text};
 use crate::models::Tool;
 
 use super::commands::*;

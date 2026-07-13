@@ -38,10 +38,7 @@ pub async fn fetch_filtered_category_counts(
 
 /// Fetch a single **approved** tool by slug, if present.
 #[cfg(feature = "ssr")]
-pub async fn fetch_tool_by_slug(
-    pool: &sqlx::PgPool,
-    slug: &str,
-) -> Result<Option<Tool>, FnError> {
+pub async fn fetch_tool_by_slug(pool: &sqlx::PgPool, slug: &str) -> Result<Option<Tool>, FnError> {
     let tool = sqlx::query_as::<_, Tool>(APPROVED_TOOL_BY_SLUG_SQL)
         .bind(slug)
         .fetch_optional(pool)
@@ -703,4 +700,3 @@ pub async fn fetch_search_by_intent(
 
     Ok(tools)
 }
-

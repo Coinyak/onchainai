@@ -10,7 +10,7 @@ pub use blueprint::{agent_session_title, save_stack_to_blueprint, sync_blueprint
 pub use device::{device_approve, device_poll, device_start};
 pub use sync_tool::{link_required_payload, sync_tool};
 pub use tokens::{
-    count_active_tokens, hash_token, has_active_link, list_tokens, mint_token, resolve_bearer,
+    count_active_tokens, has_active_link, hash_token, list_tokens, mint_token, resolve_bearer,
     revoke_token,
 };
 pub use types::*;

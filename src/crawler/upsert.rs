@@ -14,10 +14,7 @@ pub enum UpsertTarget<'a> {
 
 /// Upsert one crawled tool row (used by [`upsert_tools`] and DB integration tests).
 
-pub fn gated_approval_status(
-    source_name: &str,
-    require_tool_approval: bool,
-) -> &'static str {
+pub fn gated_approval_status(source_name: &str, require_tool_approval: bool) -> &'static str {
     if source_name == "vendor_orgs" || source_name == "bazaar" {
         "pending"
     } else {

@@ -8,8 +8,8 @@ use super::normalizer;
 use super::settings;
 use super::sources::SourceCrawler;
 use super::upsert::{
-    count_raws_per_source, default_source_registry_url, persist_crawl_results, update_source_status,
-    upsert_tools, UpsertTarget,
+    count_raws_per_source, default_source_registry_url, persist_crawl_results,
+    update_source_status, upsert_tools, UpsertTarget,
 };
 
 /// Run a set of source crawlers in parallel, normalize + dedupe the results.
@@ -155,7 +155,6 @@ pub async fn run_all_sources(pool: &sqlx::PgPool) {
     }
 }
 
-
 pub async fn trigger_source(pool: &sqlx::PgPool, source: &str) {
     use crate::crawler::sources::{
         bazaar, clawhub, cryptoskill, github, mcp_registry, npm, pypi, vendor_orgs, web3mcp,
@@ -180,10 +179,7 @@ pub async fn trigger_source(pool: &sqlx::PgPool, source: &str) {
 ///
 /// `vendor_orgs` and `bazaar` always return `"pending"`, ignoring
 /// `require_tool_approval` (§4.2).
-pub fn gated_approval_status(
-    source_name: &str,
-    require_tool_approval: bool,
-) -> &'static str {
+pub fn gated_approval_status(source_name: &str, require_tool_approval: bool) -> &'static str {
     if source_name == "vendor_orgs" || source_name == "bazaar" {
         "pending"
     } else {

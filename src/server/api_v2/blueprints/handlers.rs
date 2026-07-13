@@ -16,8 +16,7 @@ use super::access::fetch_owned_blueprint;
 use super::export::agent_export_blueprint;
 use super::types::*;
 use super::validate::{
-    node_ids_from_value, prune_edges_for_nodes, validate_edges, validate_nodes,
-    validate_title,
+    node_ids_from_value, prune_edges_for_nodes, validate_edges, validate_nodes, validate_title,
 };
 
 pub fn router(state: AppState) -> Router {
@@ -38,7 +37,6 @@ pub fn router(state: AppState) -> Router {
         )
         .with_state(state)
 }
-
 
 async fn list_blueprints(
     State(state): State<AppState>,
@@ -200,4 +198,3 @@ async fn delete_blueprint(
 
     Ok(StatusCode::NO_CONTENT)
 }
-

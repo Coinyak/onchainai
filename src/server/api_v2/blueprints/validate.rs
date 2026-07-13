@@ -1,8 +1,8 @@
 //! Blueprint graph validation and node/edge normalization.
 use serde_json::Value;
 
-use super::types::*;
 use super::super::error::ApiError;
+use super::types::*;
 
 pub(crate) fn clamp_dim(value: Option<i32>, min: i32, max: i32) -> Option<i32> {
     value.map(|v| v.clamp(min, max))

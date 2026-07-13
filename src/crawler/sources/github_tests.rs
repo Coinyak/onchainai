@@ -46,9 +46,7 @@ async fn crawl_topics_with_custom_keywords_queries_live_settings() {
     Mock::given(method("GET"))
         .and(path("/search/repositories"))
         .and(query_param("q", "topic:defi-mcp"))
-        .respond_with(
-            ResponseTemplate::new(200).set_body_string(search_response_json("defi-mcp")),
-        )
+        .respond_with(ResponseTemplate::new(200).set_body_string(search_response_json("defi-mcp")))
         .mount(&server)
         .await;
 
@@ -76,9 +74,7 @@ async fn crawl_topics_queries_all_topics_and_parses_stars_pushed_at() {
         Mock::given(method("GET"))
             .and(path("/search/repositories"))
             .and(query_param("q", format!("topic:{topic}")))
-            .respond_with(
-                ResponseTemplate::new(200).set_body_string(search_response_json(topic)),
-            )
+            .respond_with(ResponseTemplate::new(200).set_body_string(search_response_json(topic)))
             .mount(&server)
             .await;
     }
@@ -256,10 +252,9 @@ async fn fetch_repo_api_parses_stars_and_pushed_at() {
         .build()
         .unwrap();
 
-    let repo =
-        fetch_repo_api_at_url(&client, None, &format!("{}/repos/owner/repo", server.uri()))
-            .await
-            .expect("repo API should succeed");
+    let repo = fetch_repo_api_at_url(&client, None, &format!("{}/repos/owner/repo", server.uri()))
+        .await
+        .expect("repo API should succeed");
 
     assert_eq!(repo.stargazers_count, 1234);
     assert_eq!(repo.pushed_at.as_deref(), Some("2026-06-24T18:00:00Z"));

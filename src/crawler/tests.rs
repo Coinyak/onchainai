@@ -619,8 +619,7 @@ async fn pipeline_empty_sources_returns_empty() {
 
 #[test]
 fn prepare_crawled_tools_pending_when_approval_required() {
-    let tools =
-        prepare_crawled_tools(&[raw("Pending Tool", None, 1, "bridge cross-chain")], true);
+    let tools = prepare_crawled_tools(&[raw("Pending Tool", None, 1, "bridge cross-chain")], true);
     assert_eq!(tools.len(), 1);
     assert_eq!(tools[0].approval_status, "pending");
     assert_eq!(tools[0].function, "bridge");

@@ -109,10 +109,6 @@ async fn cache_control_headers(
 
 /// Origins allowed for browser cross-origin API calls (Vercel, local Next.js, SIWX).
 #[cfg(feature = "ssr")]
-
-
-
-
 #[cfg(all(test, feature = "ssr"))]
 mod tests {
     use super::*;

@@ -1,6 +1,5 @@
 //! Tests for public_tools::fetch_install_guide_tests
 
-
 use super::*;
 
 fn require_db_tests() -> bool {
@@ -48,9 +47,7 @@ async fn fetch_public_install_guide_loads_approved_tool_from_db() {
 
     let guide = fetch_public_install_guide(&pool, &slug, "claude")
         .await
-        .unwrap_or_else(|error| {
-            panic!("fetch_public_install_guide failed for {slug}: {error}")
-        });
+        .unwrap_or_else(|error| panic!("fetch_public_install_guide failed for {slug}: {error}"));
 
     assert_eq!(guide.slug, slug);
     assert_eq!(guide.platform, "claude");

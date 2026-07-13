@@ -25,7 +25,6 @@ pub(crate) enum ToolsCallOutcome {
     Err((i32, String)),
 }
 
-
 async fn gate_tool_payment(
     pool: &PgPool,
     tool_name: &str,
@@ -37,19 +36,28 @@ async fn gate_tool_payment(
     if okx_gated {
         let client = okx_client.expect("okx_gated implies okx_client is Some");
         let description = tool_description_for_okx(tool_name);
-        match crate::server::okx_payment::require_okx_payment(client, tool_name, description, headers)
-            .await
+        match crate::server::okx_payment::require_okx_payment(
+            client,
+            tool_name,
+            description,
+            headers,
+        )
+        .await
         {
             Ok(_settlement) => return Ok(true),
             Err(response) => return Err(ToolsCallOutcome::Http(response)),
         }
     }
     if crate::server::mcp_x402::is_premium_mcp_tool(tool_name) {
-        if !crate::server::okx_payment::should_skip_cdp_for_okx(okx_premium_gate_active, tool_name) {
+        if !crate::server::okx_payment::should_skip_cdp_for_okx(okx_premium_gate_active, tool_name)
+        {
             let config = match crate::server::mcp_x402::load_mcp_premium_config(pool).await {
                 Ok(config) => config,
                 Err(e) => {
-                    return Err(ToolsCallOutcome::Err((-32603, format!("settings load failed: {e}"))))
+                    return Err(ToolsCallOutcome::Err((
+                        -32603,
+                        format!("settings load failed: {e}"),
+                    )))
                 }
             };
             if config.is_active() {
@@ -119,7 +127,6 @@ pub(crate) async fn tools_call(
         Err((code, msg)) => ToolsCallOutcome::Err((code, msg)),
     }
 }
-
 
 fn is_known_mcp_tool(name: &str) -> bool {
     matches!(

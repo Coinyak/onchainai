@@ -106,4 +106,3 @@ pub struct SyncBlueprintNodeResponse {
     pub skip_reason: Option<String>,
     pub updated_at: DateTime<Utc>,
 }
-

@@ -1,14 +1,9 @@
 //! MCP server — JSON-RPC 2.0 handler with public tools at POST /mcp.
 
-use crate::AppState;
 use crate::server::rate_limit::{check_mcp_ip_rate_limit, client_ip_from_parts};
-use axum::{
-    extract::State,
-    http::Request,
-    response::IntoResponse,
-    Json,
-};
+use crate::AppState;
 use axum::http::StatusCode;
+use axum::{extract::State, http::Request, response::IntoResponse, Json};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
@@ -222,7 +217,6 @@ fn error_response(id: Value, code: i32, message: &str) -> JsonRpcResponse {
         id,
     }
 }
-
 
 #[cfg(test)]
 mod tests;

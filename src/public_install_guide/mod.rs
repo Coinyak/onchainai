@@ -8,7 +8,9 @@ pub use build::{
     build_install_guide_for_platform, build_onchainai_connect_guide, build_public_install_guide,
     resolve_install_guide,
 };
-pub use commands::{add_mcp_action_label, http_mcp_universal_install_command, tool_has_install_path};
+pub use commands::{
+    add_mcp_action_label, http_mcp_universal_install_command, tool_has_install_path,
+};
 pub use types::*;
 
 #[cfg(test)]

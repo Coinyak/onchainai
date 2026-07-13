@@ -14,8 +14,8 @@ pub mod sources;
 pub mod upsert;
 
 // Re-export normalizer helpers so the public module API is easy to consume.
-pub use pipeline::{run_all_sources, run_pipeline, trigger_source};
 pub use pipeline::prepare_merged_crawl_tools;
+pub use pipeline::{run_all_sources, run_pipeline, trigger_source};
 pub use upsert::{
     count_raws_per_source, default_source_registry_url, gated_approval_status,
     persist_crawl_results, persist_crawl_results_gated, persist_crawl_results_gated_with_require,

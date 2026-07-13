@@ -215,7 +215,10 @@ pub async fn build_app(pool: sqlx::PgPool, config: Config) -> axum::Router {
             "/auth/siwx/challenge",
             axum::routing::post(crate::auth::siwx::challenge),
         )
-        .route("/auth/siwx/verify", axum::routing::post(crate::auth::siwx::verify))
+        .route(
+            "/auth/siwx/verify",
+            axum::routing::post(crate::auth::siwx::verify),
+        )
         .with_state(state.clone());
 
     let auth_routes = if relax_rate_limit {
@@ -227,7 +230,8 @@ pub async fn build_app(pool: sqlx::PgPool, config: Config) -> axum::Router {
     let mcp_routes = Router::new()
         .route(
             "/mcp",
-            axum::routing::post(crate::server::mcp::handle_mcp).get(crate::server::mcp::handle_mcp_info),
+            axum::routing::post(crate::server::mcp::handle_mcp)
+                .get(crate::server::mcp::handle_mcp_info),
         )
         .with_state(state.clone())
         .layer(mcp_rate_limit);

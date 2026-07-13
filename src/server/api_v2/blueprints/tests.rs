@@ -109,8 +109,7 @@ fn build_agent_export_markdown_includes_tools_notes_flow_and_task() {
         },
     );
 
-    let markdown =
-        build_agent_export_markdown("My Stack", &nodes, &edges, &tool_meta, "cursor");
+    let markdown = build_agent_export_markdown("My Stack", &nodes, &edges, &tool_meta, "cursor");
 
     assert!(markdown.starts_with("# My Stack\n"));
     assert!(markdown.contains("get_install_guide"));

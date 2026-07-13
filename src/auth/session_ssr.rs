@@ -777,4 +777,3 @@ struct ProfileRow {
 #[cfg(test)]
 #[path = "session_ssr_tests.rs"]
 mod tests;
-

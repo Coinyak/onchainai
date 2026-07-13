@@ -593,4 +593,3 @@ pub(crate) async fn fetch_tool_comment_counts(
 
     Ok(rows)
 }
-

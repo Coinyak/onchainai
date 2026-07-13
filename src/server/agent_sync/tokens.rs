@@ -245,4 +245,3 @@ pub async fn has_active_link(pool: &PgPool, user_id: Uuid) -> Result<bool, FnErr
     .map_err(|e| FnError::new(format!("link status failed: {e}")))?;
     Ok(count > 0)
 }
-

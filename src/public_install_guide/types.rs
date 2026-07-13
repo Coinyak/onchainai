@@ -152,4 +152,3 @@ pub fn copy_label_aria(copy_label: &str) -> &'static str {
         _ => "Copy to clipboard",
     }
 }
-
