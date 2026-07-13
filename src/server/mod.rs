@@ -10,6 +10,8 @@ pub mod api_v2;
 #[cfg(feature = "ssr")]
 pub mod gap_audit;
 #[cfg(feature = "ssr")]
+pub mod http_app;
+#[cfg(feature = "ssr")]
 pub mod m3_analytics;
 #[cfg(feature = "ssr")]
 pub mod mcp;
