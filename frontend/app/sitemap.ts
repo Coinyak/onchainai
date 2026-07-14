@@ -5,9 +5,11 @@ import {
 } from "@/lib/server-api";
 import { SITE_ORIGIN } from "@/lib/site";
 
-// Cache the generated sitemap for an hour. Without this the route renders per
-// request — every crawler hit becomes a serverless invocation that scans all
-// tool slugs + categories from Railway. Crawlers do not need sub-hour freshness.
+// Promote the sitemap to a prerendered ISR route (build: /sitemap.xml is ○
+// Static) so crawler hits are CDN reads, not a per-request serverless scan of
+// all tool slugs + categories from Railway. The 1h segment floor is capped down
+// to ~5m by the inner slug/category fetches (revalidate: 300) — fine, since
+// regeneration is shared across all crawlers, not per request.
 export const revalidate = 3600;
 
 const STATIC_ROUTES: Array<{
