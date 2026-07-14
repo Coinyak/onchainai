@@ -5,6 +5,11 @@ import {
 } from "@/lib/server-api";
 import { SITE_ORIGIN } from "@/lib/site";
 
+// Cache the generated sitemap for an hour. Without this the route renders per
+// request — every crawler hit becomes a serverless invocation that scans all
+// tool slugs + categories from Railway. Crawlers do not need sub-hour freshness.
+export const revalidate = 3600;
+
 const STATIC_ROUTES: Array<{
   path: string;
   changeFrequency: MetadataRoute.Sitemap[number]["changeFrequency"];
