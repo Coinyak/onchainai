@@ -1,7 +1,12 @@
 import Link from "next/link";
 import { getPublicDashboardServer } from "@/lib/server-api";
 
-export const dynamic = "force-dynamic";
+// 404 is served for every unmatched path (bots/scanners hammer these). Drop the
+// old `force-dynamic` so this is statically prerendered + ISR: a bogus URL is a
+// CDN hit, not a per-request serverless render + Railway fetch. The 1h segment
+// floor is capped down to ~5m by the popular-tools fetch (revalidate: 300),
+// which is fine — regeneration is shared across all 404s, not per request.
+export const revalidate = 3600;
 
 export default async function NotFound() {
   let popularTools: { slug: string; name: string }[] = [];

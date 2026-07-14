@@ -17,6 +17,12 @@ import {
 import { DEFAULT_OG_IMAGE_PATH, SEO_REVALIDATE_SECONDS } from "@/lib/site";
 import { serializeJsonLd } from "@/lib/json-ld";
 
+// On-demand ISR (revalidate below): each slug renders on first request then
+// caches. We intentionally do NOT generateStaticParams here — build-time
+// prerendering of many slugs couples deploy success to live backend latency
+// (a single slow tool-detail fetch fails the whole build). On-demand ISR
+// already bounds per-slug cost; the real MCP-proxy cost lever is edge routing.
+
 /** Must be a literal (Next segment config); keep in sync with SEO_REVALIDATE_SECONDS. */
 export const revalidate = 300;
 
