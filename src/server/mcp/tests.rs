@@ -74,7 +74,8 @@ fn mcp_info_lists_public_tools_and_endpoint() {
 #[test]
 fn mcp_okx_info_states_package_billing() {
     let rt = tokio::runtime::Runtime::new().unwrap();
-    let response = rt.block_on(handle_mcp_okx_info()).into_response();
+    // Gate inactive (local dev): GET keeps the discovery document.
+    let response = mcp_okx_get_response(false);
     assert_eq!(response.status(), StatusCode::OK);
     let body = rt
         .block_on(axum::body::to_bytes(response.into_body(), 1024 * 1024))

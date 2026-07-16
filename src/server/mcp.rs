@@ -212,8 +212,24 @@ pub async fn handle_mcp_info() -> impl IntoResponse {
     mcp_info_response(McpBillingMode::Public)
 }
 
-/// GET `/mcp/okx` — paid OKX A2MCP package discovery document.
-pub async fn handle_mcp_okx_info() -> impl IntoResponse {
+/// GET `/mcp/okx` — x402 402 challenge when the OKX package gate is active.
+///
+/// OKX's ASP endpoint review probes the listed URL and flags a 200 answer as
+/// "not a valid x402 service" (ASP #4609 rejection, 2026-07-16), so the paid
+/// package path must answer plain GETs with the same PAYMENT-REQUIRED
+/// challenge as an unpaid `tools/call`. MCP clients are unaffected — they
+/// POST JSON-RPC. Falls back to the discovery document when the gate is
+/// inactive (local dev without OKX credentials).
+pub async fn handle_mcp_okx_info(State(state): State<AppState>) -> impl IntoResponse {
+    mcp_okx_get_response(state.okx_premium_gate_active)
+}
+
+fn mcp_okx_get_response(okx_gate_active: bool) -> axum::response::Response {
+    if okx_gate_active {
+        if let Some(challenge) = crate::server::okx_payment::okx_package_probe_response() {
+            return challenge;
+        }
+    }
     mcp_info_response(McpBillingMode::OkxPackage)
 }
 

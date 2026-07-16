@@ -214,6 +214,51 @@ fn okx_payment_requirements_none_without_pay_to() {
     assert!(okx_payment_requirements().is_none());
 }
 
+// OKX's ASP review probes the listed endpoint with a plain request and requires
+// an x402 402 challenge; a 200 answer is rejected as "not a valid x402 service".
+#[test]
+fn okx_package_probe_is_402_challenge_when_configured() {
+    let _g = _lock_env();
+    std::env::set_var(
+        "OKX_PAY_TO_ADDRESS",
+        "0x2af05c1661da38a2919dc27b4c8b71cb91c30017",
+    );
+    std::env::remove_var("OKX_PREMIUM_PRICE_USD");
+    let response = okx_package_probe_response().expect("pay_to configured yields a challenge");
+    std::env::remove_var("OKX_PAY_TO_ADDRESS");
+
+    assert_eq!(response.status(), StatusCode::PAYMENT_REQUIRED);
+    assert!(response.headers().contains_key("payment-required"));
+
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let body = rt
+        .block_on(axum::body::to_bytes(response.into_body(), 1024 * 1024))
+        .unwrap();
+    let value: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(value["x402Version"], json!(2));
+    assert_eq!(
+        value["resource"]["url"],
+        "https://www.onchain-ai.xyz/mcp/okx"
+    );
+    let accepts = value["accepts"].as_array().expect("accepts array");
+    assert_eq!(accepts.len(), 1);
+    assert_eq!(accepts[0]["network"], "eip155:196");
+    assert_eq!(accepts[0]["asset"], XLAYER_USDT0_ADDRESS);
+    assert_eq!(accepts[0]["amount"], "100000"); // $0.1 → 6-decimal atomic
+    assert_eq!(
+        accepts[0]["payTo"],
+        "0x2af05c1661da38a2919dc27b4c8b71cb91c30017"
+    );
+}
+
+#[test]
+fn okx_package_probe_none_without_pay_to() {
+    let _g = _lock_env();
+    std::env::remove_var("OKX_PAY_TO_ADDRESS");
+    std::env::remove_var("X402_PAY_TO_ADDRESS");
+    assert!(okx_package_probe_response().is_none());
+}
+
 #[test]
 fn okx_gated_routes_includes_bundled_package_tools() {
     assert!(OKX_GATED_ROUTES.contains(&"search_tools"));

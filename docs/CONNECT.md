@@ -17,9 +17,9 @@ https://www.onchain-ai.xyz/mcp
 https://www.onchain-ai.xyz/mcp/okx
 ```
 
-- Transport: **streamable HTTP** (JSON-RPC 2.0 over `POST`; `GET` returns discovery JSON 200)
+- Transport: **streamable HTTP** (JSON-RPC 2.0 over `POST`). `GET /mcp` returns discovery JSON 200; plain `GET /mcp/okx` answers the **402 x402 challenge** when the OKX gate is active (OKX ASP endpoint review requires a non-200 x402 answer — a 200 discovery body got ASP #4609 rejected on 2026-07-16).
 - Auth: none on public tools. Rate limited per IP.
-- **Unmetered on both paths:** `GET`, `initialize`, `tools/list`.
+- **Unmetered on both paths:** `initialize`, `tools/list` (and `GET /mcp` discovery).
 - **Website UI browse** stays free (same catalog as free MCP discovery).
 - Agent Sync still needs a linked Bearer token (account link ≠ payment).
 - **Listing policy:** OKX (and any marketplace that requires a paid SKU) must use **`/mcp/okx`**. Smithery/mcp.so/etc. that mirror the free site path use `/mcp` and must not claim a paid discovery SKU for that URL. See `docs/listings/directory-forms.md` §Product policy.
@@ -203,7 +203,7 @@ Copy-paste payloads: `docs/listings/directory-forms.md`.
 | awesome-crypto-mcp-servers | [hive-intel/awesome-crypto-mcp-servers#209](https://github.com/hive-intel/awesome-crypto-mcp-servers/pull/209) | Open · switch copy to free `/mcp` blurb |
 | Self catalog | [onchain-ai.xyz/tools/onchainai](https://www.onchain-ai.xyz/tools/onchainai) | Seeded (official); site browse free |
 | Smithery / mcp.so / PulseMCP / Glama | `docs/listings/directory-forms.md` | Free `/mcp` blurb · publish with account login |
-| OKX AI Agent Marketplace | [okx.ai/agents](https://okx.ai/agents) — ASP #4609 | **Live endpoint `https://www.onchain-ai.xyz/mcp/okx`** · service id `33054` · fee `$0.1` · tx `0x15819294…` (2026-07-13) · approval: **Listing under review** |
+| OKX AI Agent Marketplace | [okx.ai/agents](https://okx.ai/agents) — ASP #4609 | **Live endpoint `https://www.onchain-ai.xyz/mcp/okx`** · service id `33054` · fee `$0.1` · tx `0x15819294…` (2026-07-13) · approval: rejected 2026-07-16 (endpoint check — GET answered 200, not a 402 x402 challenge) → GET now answers 402; **resubmitted 2026-07-17** |
 | x402 Bazaar (seller) | CDP merchant discovery | **Blocked** — needs `EVM_PRIVATE_KEY` (Base USDC) for one paid settle |
 | Base Builder Code | [dashboard.base.org](https://dashboard.base.org) | Applied `bc_ljttbnhv` |
 
@@ -212,6 +212,7 @@ Copy-paste payloads: `docs/listings/directory-forms.md`.
 | Symptom | Explanation |
 |---|---|
 | Browser shows JSON on GET `/mcp` | Expected discovery payload. Tool calls use POST JSON-RPC from an MCP client. |
+| HTTP 402 on GET `/mcp/okx` in a browser | Expected — the OKX package path answers plain GETs with the x402 PAYMENT-REQUIRED challenge (OKX endpoint review requirement). Free discovery JSON lives at GET `/mcp`. |
 | `429 Too Many Requests` | Per-IP rate limit. Back off and retry. |
 | Tool not found by slug | Slugs come from `search_tools` results — don't guess them. |
 | Client only supports stdio | Use the `mcp-remote` bridge above. |

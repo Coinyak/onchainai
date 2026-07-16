@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # OKX AI Agent Marketplace — single bundled A2MCP ASP register / re-submit (W6).
 #
-# One A2MCP service on POST /mcp. Listing copy is value-first (trust/install-risk);
-# fee is only the structured fee field (FEE=0.1 USDT0 / tools/call, OKX Broker).
+# One A2MCP service on POST /mcp/okx (paid package path; public /mcp stays free).
+# Listing copy is value-first (trust/install-risk); fee is only the structured
+# fee field (FEE=0.1 USDT0 / tools/call, OKX Broker).
 # Canonical text must stay in sync with docs/listings/directory-forms.md §OKX.
 #
 # Prerequisites:
@@ -78,23 +79,40 @@ echo "== pre-check (asp) =="
 precheck="$(onchainos agent pre-check --role asp)"
 echo "${precheck}"
 
-echo "== x402 endpoint check =="
-# Hybrid package: GET /mcp/okx returns discovery JSON 200; unpaid tools/call is 402.
-# Prefer live POST smoke (matches product) before optional onchainos probe.
+echo "== x402 endpoint check (all fatal — OKX review runs the same probes) =="
+# Package path contract: plain GET and unpaid tools/call both answer HTTP 402
+# with a PAYMENT-REQUIRED challenge. OKX's ASP review rejected a 200 discovery
+# answer as "unable to reach your Agent's service endpoint" (ASP #4609,
+# 2026-07-16), so never submit while any of these probes fail.
+get_code="$(curl -sS -o /tmp/okx_mcp_get.json -w '%{http_code}' "${ENDPOINT}" \
+  -H 'Accept: application/json' \
+  || true)"
+echo "GET  ${ENDPOINT} → HTTP ${get_code} (expect 402)"
+if [[ "${get_code}" != "402" ]]; then
+  echo "FATAL: expected HTTP 402 on plain GET (OKX x402-check); got ${get_code}" >&2
+  head -c 400 /tmp/okx_mcp_get.json 2>/dev/null || true
+  echo
+  exit 1
+fi
 smoke_code="$(curl -sS -o /tmp/okx_mcp_smoke.json -w '%{http_code}' -X POST "${ENDPOINT}" \
   -H 'Content-Type: application/json' \
   -H 'Accept: application/json' \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"search_tools","arguments":{"query":"bridge","limit":1}}}' \
   || true)"
-echo "POST ${ENDPOINT} tools/call search_tools → HTTP ${smoke_code} (expect 402 when OKX gate active)"
+echo "POST ${ENDPOINT} tools/call search_tools → HTTP ${smoke_code} (expect 402)"
 if [[ "${smoke_code}" != "402" ]]; then
-  echo "WARN: expected HTTP 402 on unpaid package tools/call; got ${smoke_code}" >&2
+  echo "FATAL: expected HTTP 402 on unpaid package tools/call; got ${smoke_code}" >&2
   head -c 400 /tmp/okx_mcp_smoke.json 2>/dev/null || true
   echo
+  exit 1
 fi
-# onchainos x402-check often GETs the URL and flags MCP discovery 200 as invalid — advisory only.
 x402_check="$(onchainos agent x402-check --endpoint "${ENDPOINT}" 2>/dev/null || true)"
 echo "${x402_check}"
+x402_valid="$(echo "${x402_check}" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('data',{}).get('valid', False))" 2>/dev/null || echo false)"
+if [[ "${x402_valid}" != "True" && "${x402_valid}" != "true" ]]; then
+  echo "FATAL: onchainos x402-check did not report valid=true — OKX review will reject." >&2
+  exit 1
+fi
 
 echo "== upload avatar =="
 upload_out="$(onchainos agent upload --file "${AVATAR}")"
