@@ -9,11 +9,11 @@
 | **Website** (`onchain-ai.xyz` UI) | N/A | Free catalog browse |
 | **Site / plugin / direct agents** | `POST https://www.onchain-ai.xyz/mcp` | **Free discovery** (`search_tools`, detail, install guide, categories, compare, …). **Premium on this path only:** `export_toolkit`, `recommend_verified_tool`, `gap_audit` = **$0.01 USDC** (Base); `check_endpoint_health` ≈ **$0.001 USDC**. |
 | **OKX marketplace A2MCP only** | `POST https://www.onchain-ai.xyz/mcp/okx` | **Paid package** — every `tools/call` ~**$0.1** X Layer USDT0 (OKX Broker) when gate active |
-| **Unmetered on both MCP paths** | — | `GET`, `initialize`, `tools/list` |
+| **Unmetered on both MCP paths** | — | `initialize`, `tools/list` (plus `GET /mcp` discovery; plain `GET /mcp/okx` answers the 402 x402 challenge — OKX endpoint review requirement) |
 
 **Rules**
 
-1. **OKX (and paid marketplaces):** list **`/mcp/okx` only**. Fee field / copy = pay-per-call $0.1. Smoke on that path: unpaid `tools/call` → **HTTP 402** + payment-required.
+1. **OKX (and paid marketplaces):** list **`/mcp/okx` only**. Fee field / copy = pay-per-call $0.1. Smoke on that path: plain `GET` → **HTTP 402** (OKX `x402-check` rejects 200 as "not a valid x402 service") and unpaid `tools/call` → **HTTP 402** + payment-required.
 2. **Free directories / site Connect / plugin / coding agents:** list **`/mcp`**. Claim free discovery. Do **not** point free listings or Claude/Cursor/plugin at `/mcp/okx`.
 3. Never use Railway hostname, bare http, or localhost in public listings.
 4. Value-first copy (trust / install-risk / vet before install). Lead with capability; fee only in the fee field (OKX path). On free listings, optional one-line note that a few premium tools may 402 is fine — do **not** say every `tools/call` is paid on `/mcp`.

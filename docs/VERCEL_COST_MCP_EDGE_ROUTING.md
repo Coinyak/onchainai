@@ -87,7 +87,7 @@ session cookies/CORS. If their bandwidth becomes material, give Railway a first-
 ## Verification checklist
 
 - [ ] `curl -sSI https://www.onchain-ai.xyz/mcp/okx` — after cutover shows Railway/Cloudflare, **no** `server: Vercel`.
-- [ ] `GET /mcp/okx` still 200 discovery; unpaid `POST /mcp/okx` still 402 (OKX gate unaffected).
+- [ ] `GET /mcp/okx` still 402 x402 challenge (OKX endpoint review); unpaid `POST /mcp/okx` still 402 (OKX gate unaffected).
 - [ ] Site pages still `server: Vercel` (unchanged).
 - [ ] MCP rate limit keys on real client IP (hit from two IPs; only the offending one 429s).
 - [ ] Vercel Usage: Edge Requests / Fast Data Transfer for `/mcp*` drop to ~0.

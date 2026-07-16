@@ -324,6 +324,34 @@ fn okx_resource_info(tool_name: &str, description: &str, resource_url: &str) -> 
     }
 }
 
+/// HTTP 402 challenge for plain (non-JSON-RPC) probes of the OKX package path,
+/// i.e. `GET`/`HEAD` on `/mcp/okx`.
+///
+/// OKX's ASP endpoint review (`onchainos agent x402-check`) fetches the listed
+/// URL and rejects any non-402 answer as "not a valid x402 service" — a 200
+/// discovery document got ASP #4609 refused with "unable to reach your Agent's
+/// service endpoint" (2026-07-16). Returns `None` when pay-to/price env is not
+/// configured, so local dev keeps the discovery document.
+pub fn okx_package_probe_response() -> Option<Response> {
+    let requirements = okx_payment_requirements()?;
+    let resource = ResourceInfo {
+        url: okx_a2mcp_endpoint(),
+        description: Some(format!(
+            "OnchainAI MCP OKX A2MCP package: every tools/call is pay-per-call ({}). \
+             POST JSON-RPC 2.0 (initialize / tools/list free) and settle the x402 \
+             challenge with a payment-signature header. Free discovery: {}/mcp",
+            okx_price(),
+            crate::config::SITE_ORIGIN,
+        )),
+        mime_type: Some("application/json".to_string()),
+    };
+    Some(okx_missing_payment_response(
+        "the OnchainAI A2MCP package",
+        resource,
+        requirements,
+    ))
+}
+
 /// Result of a successful OKX payment settlement.
 #[derive(Debug, Clone)]
 pub struct OkxSettlement {
