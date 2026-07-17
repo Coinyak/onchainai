@@ -42,7 +42,7 @@ Find, compare, and vet crypto tools with trust and install-risk before install. 
 | awesome-crypto-mcp-servers PR | https://github.com/hive-intel/awesome-crypto-mcp-servers/pull/209 |
 | GitHub repo topics | `mcp`, `x402`, `crypto`, `ai-agents`, `rust`, `nextjs`, `web3` |
 | `server.json` | **Published** — `io.github.Coinyak/onchainai` v0.2.0 (2026-07-04); republish if description still says all-paid (free `/mcp` blurb) |
-| OKX ASP #4609 | **Live 2026-07-13** endpoint `https://www.onchain-ai.xyz/mcp/okx` · service `33054` · fee `$0.1` · tx `0x15819294…` · Listing under review (OKX QA) |
+| OKX ASP #4609 | **LISTED on OKX.AI 2026-07-17** (passed review; visible/searchable/recommendable) · endpoint `https://www.onchain-ai.xyz/mcp/okx` · service `33054` · fee `$0.1` · tx `0x15819294…` · contract: GET + unpaid `tools/call` must keep answering 402 (guarded by `scripts/k2-prod-smoke.sh`; needs `OKX_*` env vars on Railway) |
 | awesome-crypto PR #209 | Switch fork copy to free `/mcp` blurb (see `awesome-crypto-mcp-servers.md`) |
 | web3-mcp-hub PR #1 | Switch fork copy to free `/mcp` blurb |
 | MCP HTTP proof | https://www.onchain-ai.xyz/.well-known/mcp-registry-auth (deployed) |
