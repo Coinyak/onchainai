@@ -4,11 +4,15 @@
 # Verifies on the live MCP endpoint (POST /mcp):
 #   - Discovery tools (search_tools, compare_tools) currently do NOT return HTTP 402 (advisory).
 #   - K2 check_endpoint_health returns HTTP 402 with PAYMENT-REQUIRED + accepts[] (no wallet).
+# And on the OKX.AI package endpoint (ASP #4609, listed 2026-07-17):
+#   - Plain GET and unpaid tools/call on /mcp/okx both answer HTTP 402 (listing contract).
 #
 # Environment:
 #   ONCHAINAI_MCP_URL   API origin for POST /mcp (no trailing slash).
 #                       Default: RAILWAY_API_URL or https://onchainai-production.up.railway.app
 #   RAILWAY_API_URL     Alias for ONCHAINAI_MCP_URL (same default chain).
+#   ONCHAINAI_OKX_PACKAGE_URL
+#                       OKX-registered package endpoint (default: https://www.onchain-ai.xyz/mcp/okx).
 #   ONCHAINAI_K2_PROBE_SLUG
 #                       Listed x402 tool slug for check_endpoint_health (default: goldrush-x402).
 #   ONCHAINAI_K2_COMPARE_SLUGS
@@ -159,4 +163,40 @@ fi
 
 mcp_cleanup
 
-echo "K2 SMOKE PASS ${MCP_URL} (slug=${PROBE_SLUG})"
+# OKX.AI listing contract (ASP #4609, listed 2026-07-17): the registered package
+# endpoint must answer HTTP 402 on plain GET and on unpaid tools/call. A 200 here
+# usually means the OKX gate env vars (OKX_API_KEY / OKX_SECRET_KEY /
+# OKX_PASSPHRASE / OKX_PAY_TO_ADDRESS) dropped off Railway — the live listing
+# then breaks silently. Same probes as the scripts/register-okx-asp.sh pre-check.
+OKX_PACKAGE_URL="${ONCHAINAI_OKX_PACKAGE_URL:-https://www.onchain-ai.xyz/mcp/okx}"
+
+echo "--- OKX package: plain GET ${OKX_PACKAGE_URL} (must 402) ---"
+okx_body="$(mktemp)"
+okx_code="$(curl -sS -o "$okx_body" -w "%{http_code}" -H "Accept: application/json" \
+  "$OKX_PACKAGE_URL")" || { rm -f "$okx_body"; k2_fail "GET ${OKX_PACKAGE_URL} curl failed"; }
+if [[ "$okx_code" != "402" ]]; then
+  head -20 "$okx_body" >&2
+  rm -f "$okx_body"
+  k2_fail "OKX package GET expected HTTP 402, got ${okx_code} — live OKX.AI listing contract; check OKX_* env vars on Railway"
+fi
+if ! grep -q '"x402Version"' "$okx_body"; then
+  head -20 "$okx_body" >&2
+  rm -f "$okx_body"
+  k2_fail "OKX package GET 402 body missing x402Version challenge"
+fi
+rm -f "$okx_body"
+
+echo "--- OKX package: unpaid tools/call (must 402) ---"
+okx_body="$(mktemp)"
+okx_code="$(curl -sS -o "$okx_body" -w "%{http_code}" \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"search_tools","arguments":{"query":"bridge","limit":1}}}' \
+  "$OKX_PACKAGE_URL")" || { rm -f "$okx_body"; k2_fail "POST ${OKX_PACKAGE_URL} curl failed"; }
+if [[ "$okx_code" != "402" ]]; then
+  head -20 "$okx_body" >&2
+  rm -f "$okx_body"
+  k2_fail "OKX package unpaid tools/call expected HTTP 402, got ${okx_code} — check OKX_* env vars on Railway"
+fi
+rm -f "$okx_body"
+
+echo "K2 SMOKE PASS ${MCP_URL} (slug=${PROBE_SLUG}) + OKX package 402 contract OK"

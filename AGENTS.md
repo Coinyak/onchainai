@@ -38,6 +38,7 @@ Also once after clone (macOS): `./scripts/install-disk-autoclean.sh` schedules a
 - Architecture/schema/crawler/MCP: `docs/MVP_DESIGN.md`
 - Disk/build cleanup: `docs/DISK_MAINTENANCE.md`
 - x402 정본: `docs/X402_OPEN_LISTING_SPEC.md` (open listing + K2 premium); referrals: `docs/X402_REFERRAL_SPEC.md`; free tier: `docs/superpowers/specs/2026-07-04-free-tier-guardian-spec.md`
+- OKX.AI listing (LIVE, ASP #4609): contract + re-submit runbook: `docs/listings/directory-forms.md` §OKX, `scripts/register-okx-asp.sh`; prod guard: `scripts/k2-prod-smoke.sh`
 - Public launch, plugin bundle (`plugin/onchainai/`), user connect surface: `docs/LAUNCH_READINESS_SPEC.md`, `docs/CONNECT.md`
 - Operator/admin behavior: `docs/OPERATOR_GUIDE.md`
 - Verified/official status requests: run `node scripts/verify-tool-official.mjs <slug> --apply` (rules: `docs/OPERATOR_GUIDE.md` §4) — never hand-set `tools.status`
@@ -58,11 +59,11 @@ Also once after clone (macOS): `./scripts/install-disk-autoclean.sh` schedules a
 - Never commit `.env`, `target/`, `.playwright-cli/`, `frontend/.next/`, or build artifacts.
 - Never expose `SUPABASE_SERVICE_KEY` or `JWT_SECRET` to client code.
 - Validate user input; use sqlx parameterized queries; do not inject raw HTML.
-- Third-party x402 in the catalog is metadata/attribution only. Hybrid MCP: public `/mcp` free discovery; premium `export_toolkit`/`recommend_verified_tool`/`gap_audit` ($0.01) + `check_endpoint_health` (~$0.001) when payee is our wallet; `/mcp/okx` = OKX package ($0.1 every tools/call). Never custody, third-party payment proxy/gateway, fund-moving for others, or undocumented `referrer`/`split` fields.
+- Third-party x402 in the catalog is metadata/attribution only. Hybrid MCP: public `/mcp` free discovery; premium `export_toolkit`/`recommend_verified_tool`/`gap_audit` ($0.01) + `check_endpoint_health` (~$0.001) when payee is our wallet; `/mcp/okx` = OKX package ($0.1 every tools/call) — LIVE on OKX.AI: plain GET and unpaid `tools/call` there must keep answering 402, and the `OKX_*` env vars on Railway must stay set. Never custody, third-party payment proxy/gateway, fund-moving for others, or undocumented `referrer`/`split` fields.
 - Auth is required for comments, upvotes, bookmarks, and admin routes; admin checks must be server-side.
 - After schema changes, run migrations and `sqlx prepare`.
 - Before commits/PRs, run relevant tests plus clippy/format, or state exactly why not.
-- Never auto-trigger review bots. Same-repo PRs to `main` auto-run only the fast `rust` job (fmt/clippy/test); heavy `agent-harness` + `ui-coherence` are `workflow_dispatch`-only. CodeRabbit/qodo are manual (`.coderabbit.yaml`, `.pr_agent.toml`) — run them only when the user asks for a specific PR/diff, never proactively. Pushing can wake them, so use `[skip ci]` when a push should run nothing.
+- Never auto-trigger review bots. Same-repo PRs to `main` auto-run only the fast `rust` job (fmt/clippy/test); heavy `agent-harness` + `ui-coherence` are `workflow_dispatch`-only. CodeRabbit/qodo are manual (`.coderabbit.yaml`, `.pr_agent.toml`) — run them only when the user asks for a specific PR/diff, never proactively. Pushing can wake them, so use `[skip ci]` when a push should run nothing — but never on a PR branch: the required `ci-success` check then never reports and the PR can't merge.
 
 ## Review Mode
 
